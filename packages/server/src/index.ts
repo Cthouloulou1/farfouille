@@ -43,6 +43,9 @@ const REVEAL = process.argv.includes("--reveler");
 
 setLayout(LAYOUT);
 
+/** Instant du demarrage : sert a reperer un serveur plus vieux que la page. */
+const DEMARRE_A = Date.now();
+
 // --nouvelle : la grille mondiale repart a zero. Rien n'est efface, les trois
 // fichiers sont mis de cote sous un meme horodatage.
 if (process.argv.includes("--nouvelle")) {
@@ -131,6 +134,7 @@ function publicState(s: Salon) {
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),
     createdAt: g.createdAt,
+    demarreA: DEMARRE_A,
     now: Date.now(),
   };
 }

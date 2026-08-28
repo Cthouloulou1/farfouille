@@ -74,6 +74,9 @@ h2 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .1em
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
 .dot.on { background: var(--accent); }
 
+.perime { flex: none; padding: 7px 16px; background: var(--warn-bg); color: var(--warn); font-size: 12.5px; border-bottom: 1px solid var(--rule); }
+.perime[hidden] { display: none; }
+.perime code { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 .rackbar { flex: none; display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); }
 .stat { flex: none; min-width: 72px; text-align: center; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 10px 4px; }
 .stat span { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); }
@@ -306,6 +309,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <button class="lien" id="quitter">Quitter</button>
     <span class="dot" id="dot"></span><span id="conn">connexion…</span>
   </div>
+</div>
+
+<div class="perime" id="perime" hidden>
+  Le serveur tourne une version plus ancienne que cette page — arrêtez-le et relancez
+  <code>npm run serve</code>, sinon les réglages n'auront aucun effet.
 </div>
 
 <div class="rackbar">

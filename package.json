@@ -19,8 +19,8 @@
     "typescript": "^7.0.2"
   },
   "scripts": {
-    "build": "esbuild packages/web/src/main.ts --bundle --format=esm --target=es2022 --outfile=packages/web/app.js",
-    "watch": "npm run build -- --watch",
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
     "serve": "node packages/server/src/index.ts",
     "nouvelle": "node packages/server/src/index.ts --nouvelle",
     "parties": "node packages/server/tools/parties.ts",

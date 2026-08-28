@@ -40,6 +40,9 @@ let cfg: ConfigPartie = configParDefaut();
 let finie = false;
 /** Duree d'un coup en secondes, quand la partie est chronometree. */
 let chrono: number | null = null;
+
+/** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
+declare const __COMPILE_A__: number;
 let tiles: Tile[] = [];
 let history: MoveInfo[] = [];
 let me = "";
@@ -863,7 +866,7 @@ function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
-  createdAt: number; now: number; servedAt: number;
+  createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   rack = s.rack ?? "";
   moveNumber = s.moveNumber;
@@ -877,6 +880,13 @@ function applyState(s: {
   $("sac").hidden = sac === "";
   if (sac !== "") $("sac").textContent = sac;
   chrono = s.chrono ?? null;
+  // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
+  // Sinon les reglages partent dans le vide et on croit a un bug du jeu.
+  // Un serveur qui ne dit rien est forcement anterieur a ce controle : c'est
+  // justement le cas qu'il faut attraper.
+  if (s.demarreA === undefined || s.demarreA < __COMPILE_A__) {
+    $("perime").hidden = false;
+  }
   if (s.finie === true && !finie) finieA = s.servedAt;
   finie = s.finie === true;
   online = s.online ?? [];
@@ -1145,8 +1155,11 @@ for (const b of $("r-grille").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cBornes = (b as HTMLElement).dataset["v"] === "infinie" ? null : 7;
     peuplerGrille();
-    // Le sac sans fin ne vaut que pour l'infini ; le sac simple prend le relais.
-    if (cBornes !== null && cPioche === "sac102boucle") cPioche = "sac102";
+    // Chaque grille a son tirage naturel : les probabilites ponderees ne
+    // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
+    // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
+    if (cBornes === null && cPioche === "sac102") cPioche = "probabilites";
+    if (cBornes !== null && cPioche !== "sac102") cPioche = "sac102";
     peuplerPioche();
   });
 }
