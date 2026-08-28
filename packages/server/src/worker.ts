@@ -14,16 +14,21 @@ import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { Board } from "../../engine/src/board.ts";
 import { generateMoves, pickTop } from "../../engine/src/movegen.ts";
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
+import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
 import { DAWG_PATH, GADDAG_PATH } from "../../engine/src/paths.ts";
 import type { Placement } from "../../engine/src/board.ts";
 
-const { layout, seed } = workerData as { layout: LayoutName; seed: string };
+const { layout, seed, config } = workerData as {
+  layout: LayoutName; seed: string; config: ConfigSerialisee;
+};
 setLayout(layout);
 
 const dawg = loadDict(DAWG_PATH);
 const gaddag = loadDict(GADDAG_PATH);
-const board = new Board(dawg);
+// La grille du solveur porte la MEME configuration que celle du serveur, sinon
+// il calculerait des tops pour une autre variante.
+const board = new Board(dawg, deserialiser(config));
 
 export interface SolveRequest {
   t: "solve";

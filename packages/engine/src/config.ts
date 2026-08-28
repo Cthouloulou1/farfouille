@@ -14,7 +14,7 @@
  * lisent la plutot que dans une variable partagee.
  */
 import { VALUES } from "./alphabet.ts";
-import { activeLayout, currentLayout, type LayoutFn, type LayoutName } from "./bonus.ts";
+import { activeLayout, currentLayout, LAYOUTS, type LayoutFn, type LayoutName } from "./bonus.ts";
 
 /**
  * Primes par nombre de caramels poses en un coup.
@@ -38,6 +38,12 @@ export interface ConfigPartie {
   primes: Readonly<Record<number, number>>;
   /** Valeur de chaque lettre. Change avec le dictionnaire. */
   valeurs: Readonly<Record<string, number>>;
+  /**
+   * D'ou viennent les caramels. Les probabilites ponderees ne s'epuisent
+   * jamais ; le sac de 102 est ce que reclament la partie joker et la fin de
+   * partie.
+   */
+  pioche: "probabilites" | "sac102";
   /** Le pavage des cases bonus. */
   pavage: LayoutFn;
   /** Nom du pavage, pour la sauvegarde et l'affichage. */
@@ -58,8 +64,44 @@ export function configParDefaut(): ConfigPartie {
     jouables: 7,
     primes: primesParDefaut(),
     valeurs: VALUES,
+    pioche: "probabilites",
     pavage: activeLayout(),
     pavageNom: currentLayout(),
+  };
+}
+
+/**
+ * La configuration sans sa fonction de pavage, donc transportable : sauvegarde
+ * sur disque, envoi a un fil de calcul, diffusion a un client.
+ */
+export interface ConfigSerialisee {
+  tirage: number;
+  jouables: number;
+  primes: Record<number, number>;
+  valeurs: Record<string, number>;
+  pioche: "probabilites" | "sac102";
+  pavageNom: LayoutName | "custom";
+}
+
+export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
+  return {
+    tirage: cfg.tirage, jouables: cfg.jouables,
+    primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
+    pioche: cfg.pioche, pavageNom: cfg.pavageNom,
+  };
+}
+
+/**
+ * Reconstruit une configuration. Le pavage est retrouve par son nom ; un pavage
+ * « custom » n'etant pas nommable, on retombe sur le pavage actif du module.
+ */
+export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
+  const nomme = plat.pavageNom !== "custom" ? LAYOUTS[plat.pavageNom] : undefined;
+  return {
+    tirage: plat.tirage, jouables: plat.jouables,
+    primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
+    pavage: nomme ?? activeLayout(),
+    pavageNom: plat.pavageNom,
   };
 }
 

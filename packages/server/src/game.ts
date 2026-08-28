@@ -30,6 +30,11 @@ import type { Dict } from "../../engine/src/dictionary.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import { Bag, DEFAULT_BAG } from "../../engine/src/bag.ts";
+import { SacFini, SAC_FRANCAIS, type Pioche } from "../../engine/src/sac.ts";
+import {
+  configParDefaut, serialiser, deserialiser,
+  type ConfigPartie, type ConfigSerialisee,
+} from "../../engine/src/config.ts";
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
 import { resolveTypedWord, PLAY_MESSAGE, type PlayError } from "../../engine/src/play.ts";
@@ -105,6 +110,8 @@ interface Saved {
    * ecrite, elle ne bouge plus -- c'est elle qui rend l'historique rejouable.
    */
   seed: string;
+  /** La variante jouee. Absente des parties d'avant les parties parametrables. */
+  config?: ConfigSerialisee;
   /** Instant de creation de la grille, pour l'age de la partie. */
   createdAt: number;
   moves: PlayedMove[];
@@ -126,7 +133,11 @@ export class Game {
   readonly layout: LayoutName;
   private readonly dawg: Dict;
   private readonly board: Board;
-  private bag!: Bag;
+  private bag!: Pioche;
+  /** La configuration de cette partie : tirage, pose, primes, pioche. */
+  readonly cfg: ConfigPartie;
+  /** La partie est terminee : le sac ne permet plus de jouer (SPEC.md §16). */
+  finie = false;
   /** Cree dans start(), une fois la graine connue. */
   private worker!: Worker;
   private readonly file: string;
@@ -157,12 +168,13 @@ export class Game {
   private pending = new Map<number, (r: any) => void>();
   private listeners: (() => void)[] = [];
 
-  constructor(gameId: string, layout: LayoutName) {
+  constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
     this.gameId = gameId;
     this.layout = layout;
     setLayout(layout);
+    this.cfg = cfg ?? configParDefaut();
     this.dawg = loadDict(DAWG_PATH);
-    this.board = new Board(this.dawg);
+    this.board = new Board(this.dawg, this.cfg);
     this.file = join(DATA_DIR, `${gameId}.json`);
     this.journal = join(DATA_DIR, `${gameId}.journal.jsonl`);
     this.lockFile = join(DATA_DIR, `${gameId}.verrou`);
@@ -241,6 +253,31 @@ export class Game {
     return out;
   }
 
+  /**
+   * La variante d'une partie deja commencee, lue sans la demarrer.
+   *
+   * Le serveur doit la connaitre avant de construire la grille : une partie
+   * reprise garde sa variante, on ne rejoue pas une 8 sur 8 en 7 sur 7.
+   */
+  static configEnregistree(gameId: string): ConfigSerialisee | null {
+    const journal = join(DATA_DIR, `${gameId}.journal.jsonl`);
+    if (existsSync(journal)) {
+      for (const ligne of readFileSync(journal, "utf8").split("\n")) {
+        if (ligne.trim() === "") continue;
+        try {
+          const e = JSON.parse(ligne) as Record<string, unknown>;
+          if (e["t"] === "grille") return (e["config"] as ConfigSerialisee) ?? null;
+        } catch { /* ligne illisible */ }
+      }
+      return null;
+    }
+    const instantane = join(DATA_DIR, `${gameId}.json`);
+    if (!existsSync(instantane)) return null;
+    try {
+      return (JSON.parse(readFileSync(instantane, "utf8")) as Saved).config ?? null;
+    } catch { return null; }
+  }
+
   onChange(fn: () => void): void { this.listeners.push(fn); }
   private emit(): void { for (const f of this.listeners) f(); }
 
@@ -272,7 +309,7 @@ export class Game {
     if (events.length === 0) {
       this.append({
         t: "grille", gameId: this.gameId, layout: this.layout,
-        seed: this.seed, createdAt: this.createdAt,
+        seed: this.seed, createdAt: this.createdAt, config: serialiser(this.cfg),
       });
       // Migration : une partie qui n'avait qu'un instantane se voit dotee d'un
       // journal complet, retroactivement.
@@ -282,10 +319,12 @@ export class Game {
         console.log(`[partie] journal cree a partir de l'instantane`);
       }
     }
-    this.bag = new Bag(DEFAULT_BAG, mulberry32(moveSeed(this.seed, 0)));
+    this.bag = this.cfg.pioche === "sac102"
+      ? new SacFini(SAC_FRANCAIS, mulberry32(moveSeed(this.seed, 0)), this.cfg.tirage)
+      : new Bag(DEFAULT_BAG, mulberry32(moveSeed(this.seed, 0)), undefined, this.cfg.tirage);
 
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData: { layout: this.layout, seed: this.seed },
+      workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
     });
     this.worker.on("message", (m: any) => {
       if (m.t !== "solved") return;
@@ -383,6 +422,16 @@ export class Game {
 
   /** Tire le prochain tirage et lance le calcul du top. */
   private async deal(): Promise<void> {
+    // Fin de partie (SPEC.md §16) : le sac ne permet plus de composer un tirage
+    // jouable. On ne distribue plus, et l'etat diffuse le dit.
+    if (this.bag.estFinie(this.reliquat)) {
+      this.finie = true;
+      this.solving = false;
+      this.canonicalTop = null;
+      console.log(`[partie] terminee apres ${this.moves.length} coups`);
+      this.emit();
+      return;
+    }
     const draw = this.bag.draw(this.reliquat);
     this.rack = draw.rack;
     this.rackNotation = draw.notation;
@@ -529,6 +578,7 @@ export class Game {
     }
     const data: Saved = {
       gameId: this.gameId, layout: this.layout, seed: this.seed,
+      config: serialiser(this.cfg),
       createdAt: this.createdAt,
       moves: this.moves, players: this.players, chat: this.chat,
     };

@@ -59,18 +59,26 @@ export interface DrawResult {
  * Regle de rejet (SPEC.md §4) : au moins 2 voyelles ET au moins 2 consonnes.
  * Y et joker sont NEUTRES, ils ne comptent d'aucun cote.
  *
+ * L'exigence S'ADAPTE A LA TAILLE DU TIRAGE. Telle quelle, la regle est
+ * insatisfiable en dessous de quatre caramels -- un tirage de deux ne peut pas
+ * contenir deux voyelles ET deux consonnes -- et la pioche bouclerait sans fin
+ * a chercher un tirage acceptable. On demande donc `min(2, tirage / 2)` de
+ * chaque cote : deux et deux des quatre caramels, un et un en dessous.
+ *
  * Fonction de politique remplacable, pas un `if` en dur : une variante
  * probabiliste doit pouvoir se substituer sans toucher au reste.
  */
 export type RejectPolicy = (rack: readonly string[]) => boolean;
 
 export const strictRejectPolicy: RejectPolicy = (rack) => {
+  const exige = Math.min(2, Math.floor(rack.length / 2));
+  if (exige === 0) return false;
   let v = 0, c = 0;
   for (const ch of rack) {
     if (isVowel(ch)) v++;
     else if (isConsonant(ch)) c++;
   }
-  return v < 2 || c < 2;
+  return v < exige || c < exige;
 };
 
 export class Bag {
@@ -81,11 +89,17 @@ export class Bag {
   /** Tirages ecoules depuis la derniere sortie de chaque lettre. */
   private k: number[];
   private reject: RejectPolicy;
+  /** Nombre de caramels par tirage -- le Y de « X sur Y ». */
+  private readonly tirage: number;
 
-  constructor(cfg: BagConfig, random: () => number, reject: RejectPolicy = strictRejectPolicy) {
+  constructor(
+    cfg: BagConfig, random: () => number,
+    reject: RejectPolicy = strictRejectPolicy, tirage = RACK_SIZE,
+  ) {
     this.cfg = cfg;
     this.random = random;
     this.reject = reject;
+    this.tirage = tirage;
     this.letters = [...Object.keys(cfg.weights), BLANK];
     this.base = [...Object.values(cfg.weights), cfg.blankWeight];
     this.k = new Array(this.letters.length).fill(0);
@@ -117,7 +131,7 @@ export class Bag {
   private fill(from: readonly string[]): string[] {
     const rack = [...from];
     let blanks = rack.filter((c) => c === BLANK).length;
-    while (rack.length < RACK_SIZE) {
+    while (rack.length < this.tirage) {
       const ch = this.drawOne(blanks);
       if (ch === BLANK) blanks++;
       rack.push(ch);
@@ -163,6 +177,16 @@ export class Bag {
   /** Compteurs de compensation, pour les tests. Un zero signifie "vient de sortir". */
   counters(): number[] {
     return [...this.k];
+  }
+
+  /** Rien ne s'epuise : une partie sur probabilites ponderees ne finit jamais. */
+  estFinie(): boolean {
+    return false;
+  }
+
+  /** Aucun reste a declarer : le sac est virtuel. */
+  restant(): Record<string, number> {
+    return {};
   }
 
   /** Le reliquat apres un coup : le tirage moins les caramels effectivement poses. */

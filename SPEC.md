@@ -1057,6 +1057,27 @@ serait jamais perdu.
 > celui qui ne le consomme pas** — sauf si cela termine la partie. Ce n'est plus
 > un départage arbitraire : le choix a des conséquences sur la suite.
 
+### La règle de rejet s'adapte au tirage
+
+Telle qu'elle est écrite — au moins 2 voyelles **et** 2 consonnes — la règle est
+**insatisfiable en dessous de quatre caramels** : un tirage de deux ne peut pas
+contenir quatre lettres, et la pioche boucle sans fin. L'exigence est donc
+`min(2, tirage / 2)` de chaque côté : deux et deux dès quatre caramels, un et un
+en dessous. Rien ne change pour le tirage de sept.
+
+### Essayer une variante en ligne de commande
+
+En attendant l'interface, une variante se lance directement :
+
+```
+npm run serve -- --partie essai --tirage 8 --jouables 8 --sac102
+```
+
+Une partie déjà commencée **garde sa variante** : elle est écrite dans l'en-tête
+de son journal et relue au démarrage. Vouloir la changer en cours de route est
+refusé, avec le message qui dit quoi faire — changer de variante fausserait tous
+les scores déjà joués.
+
 ### Le chrono
 
 **Super blitz 30 s · blitz 60 s · semi-rapide 2 min**, plus une option

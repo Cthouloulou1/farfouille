@@ -14,6 +14,8 @@ import { dirname, join, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
+import { avec, configParDefaut, deserialiser } from "../../engine/src/config.ts";
+import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import { DAWG_PATH } from "../../engine/src/paths.ts";
@@ -56,7 +58,54 @@ if (process.argv.includes("--nouvelle")) {
   }
 }
 
-const game = new Game(GAME_ID, LAYOUT);
+// Variante demandee en ligne de commande. Voir SPEC.md §16.
+//
+//   --tirage 8      caramels piochés par coup   (le Y de « X sur Y »)
+//   --jouables 7    caramels posables par coup  (le X)
+//   --sac102        sac fini de 102 caramels au lieu des probabilités
+//
+setLayout(LAYOUT);
+const demande = process.argv.some((a) =>
+  a === "--tirage" || a === "--jouables" || a === "--sac102");
+const enregistree = Game.configEnregistree(GAME_ID);
+
+if (enregistree !== null && demande) {
+  console.error(
+    `
+  La partie "${GAME_ID}" a deja une variante : ` +
+    `${enregistree.jouables} sur ${enregistree.tirage}, pioche ${enregistree.pioche}.` +
+    `
+  En changer fausserait tous les scores deja joues.` +
+    `
+  Lancez --nouvelle pour repartir a zero, ou --partie <autre-nom>.
+`,
+  );
+  process.exit(1);
+}
+
+const CFG = enregistree !== null ? deserialiser(enregistree) : (() => {
+  const base = configParDefaut();
+  const tirage = Number(arg("tirage", String(base.tirage)));
+  const jouables = Number(arg("jouables", String(tirage)));
+  if (!Number.isInteger(tirage) || tirage < 2 || tirage > 15) {
+    console.error(`
+  --tirage doit etre un entier de 2 a 15 (recu ${arg("tirage", "?")})
+`);
+    process.exit(1);
+  }
+  if (!Number.isInteger(jouables) || jouables < 2 || jouables > tirage) {
+    console.error(`
+  --jouables doit etre un entier de 2 a ${tirage} (recu ${arg("jouables", "?")})
+`);
+    process.exit(1);
+  }
+  return avec(base, {
+    tirage, jouables,
+    pioche: process.argv.includes("--sac102") ? "sac102" : base.pioche,
+  });
+})();
+
+const game = new Game(GAME_ID, LAYOUT, CFG);
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
