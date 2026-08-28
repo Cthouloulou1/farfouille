@@ -1,0 +1,511 @@
+FEUILLE DE ROUTE — partie "mondiale", 500 coups
+
+Les colonnes « temps mis », « joueur » et « mot tapé » sont absentes :
+le moteur joue son propre top, il n'y a aucun joueur à chronométrer.
+
+ coup │ tirage    │ mot retenu       │ position    │  pts │  cumul │ iso
+──────┼───────────┼──────────────────┼─────────────┼──────┼────────┼─────
+    1 │ AEILRRU   │ RUILERA          │ H 0,-4      │   66 │     66 │  24
+    2 │ EIMOOST   │ MOTORISE         │ V -4,-4     │   68 │    134 │   2
+    3 │ -AELRRRR  │ RALER            │ H 4,-8      │   32 │    166 │   3
+    4 │ -EEILOST  │ OEILLETS         │ V -6,1      │   90 │    256 │    
+    5 │ AACEINS   │ ACARIENS         │ V -8,1      │  114 │    370 │   2
+    6 │ AIOPRTU   │ EPOUTIRA         │ H 3,-4      │   90 │    460 │    
+    7 │ AAEEMOQ   │ EMANAT           │ H 7,-11     │   27 │    487 │   2
+    8 │ EOQ+GLNR  │ GRELON           │ H 2,-2      │   32 │    519 │    
+    9 │ -DEFISTZ  │ ZEFS             │ V 3,-3      │   40 │    559 │   2
+   10 │ DIT+NOSV  │ DEVETIONS        │ H 6,-9      │   73 │    632 │    
+   11 │ ?AHLORS   │ CHLORAS          │ V -9,-5     │   75 │    707 │   3
+   12 │ AEEEINS   │ ANEMIEES         │ H -4,-7     │   61 │    768 │    
+   13 │ ABDDEEL   │ BLEDARDE         │ H -1,-14    │   63 │    831 │    
+   14 │ ACEMOOT   │ COMATES          │ V 0,-10     │   39 │    870 │   2
+   15 │ O+ACEOOT  │ OCTANE           │ V -6,-8     │   32 │    902 │    
+   16 │ OO+BEINN  │ BIDONNE          │ V -11,-3    │   40 │    942 │    
+   17 │ O+AAACHL  │ ACHALA           │ V -8,-10    │   45 │    987 │    
+   18 │ O+AEEFIS  │ FIASCO           │ H -7,-10    │   45 │   1032 │    
+   19 │ AEE+EESV  │ ADAVS            │ V -9,5      │   45 │   1077 │    
+   20 │ -?CDERTU  │ TUCARDES         │ H -10,-11   │   94 │   1171 │    
+   21 │ EGHNOST   │ HOTES            │ H 4,-14     │   35 │   1206 │    
+   22 │ GN+AEISU  │ USINAGE          │ V 4,1       │   87 │   1293 │    
+   23 │ ADEIRSU   │ RADIEUSE         │ H 7,0       │  131 │   1424 │    
+   24 │ ACILPRT   │ TRIPLACE         │ V 7,0       │   89 │   1513 │    
+   25 │ EINOPPS   │ PEPIONS          │ V 5,-5      │   79 │   1592 │    
+   26 │ ?AAEINR   │ ACIERANT         │ H 6,6       │   98 │   1690 │   4
+   27 │ ADEGOTV   │ TORDAGE          │ V 10,4      │   44 │   1734 │    
+   28 │ V+ILNPSU  │ VULPINES         │ V -5,-16    │   84 │   1818 │    
+   29 │ CEIMRSZ   │ ESCRIMEZ         │ H -4,5      │   96 │   1914 │    
+   30 │ CEIMMRT   │ MERCIS           │ V 6,-9      │   40 │   1954 │    
+   31 │ MT+AEFIL  │ FILAMENT         │ H 2,-17     │   66 │   2020 │    
+   32 │ -AINOORT  │ HONORAIT         │ V -14,4     │   86 │   2106 │    
+   33 │ ?AELOSU   │ ALLOUEES         │ H -14,-7    │   98 │   2204 │    
+   34 │ EGHIIOR   │ HOIRIE           │ H 0,-18     │   36 │   2240 │    
+   35 │ G+DEELNS  │ DEGONFLES        │ V -17,-3    │  106 │   2346 │    
+   36 │ ACEEEIV   │ RECAVEE          │ H -7,6      │   48 │   2394 │    
+   37 │ I+ABRSST  │ BISTRAS          │ H 11,8      │   78 │   2472 │    
+   38 │ AAEIINP   │ INAPAISE         │ H 5,-23     │   90 │   2562 │    
+   39 │ AELNOOS   │ ECLORONS         │ V 8,-8      │   48 │   2610 │   2
+   40 │ A+?DIRTU  │ FRAUDAIT         │ V -21,0     │  140 │   2750 │    
+   41 │ -ACEHMNR  │ MARCHENT         │ V -11,-17   │  106 │   2856 │   2
+   42 │ AELNPST   │ PLANTES          │ V 13,-13    │   76 │   2932 │   3
+   43 │ ACEHORT   │ RETOUCHA         │ V -3,-18    │  102 │   3034 │    
+   44 │ AAGIPQT   │ QATARI           │ H -18,-7    │   42 │   3076 │    
+   45 │ GP+CEIRV  │ PICVERT          │ V -5,-24    │   56 │   3132 │    
+   46 │ G+ELRSTU  │ LUSTRAGE         │ H 9,-19     │   74 │   3206 │    
+   47 │ ?CFIMOR   │ CONFIRME         │ H -20,-12   │  126 │   3332 │    
+   48 │ AAEHIST   │ ASHANTIE         │ V -10,-24   │   97 │   3429 │    
+   49 │ ALMNSTU   │ MUSCLANT         │ H -22,-8    │  102 │   3531 │    
+   50 │ AGIIPRR   │ PARTI            │ H -19,-13   │   36 │   3567 │    
+   51 │ GIR+ABEN  │ ENGERBAI         │ V 11,-4     │   94 │   3661 │    
+   52 │ CEINNSV   │ CONVIENS         │ V -3,5      │   76 │   3737 │    
+   53 │ AACEGMS   │ AGACAMES         │ H -11,11    │   98 │   3835 │    
+   54 │ EILNTTU   │ TUILENT          │ H -10,17    │   72 │   3907 │    
+   55 │ AEFOQRS   │ RAQUER           │ V -7,-25    │   42 │   3949 │   4
+   56 │ FOS+EENZ  │ FESTNOZ          │ H 11,-17    │   76 │   4025 │    
+   57 │ E+AAELRT  │ ARANTELE         │ V 22,-13    │   90 │   4115 │    
+   58 │ ABDEGLS   │ BADGES           │ V 21,-18    │   41 │   4156 │    
+   59 │ L+EEEIPU  │ EPILEUSE         │ H -23,-16   │   78 │   4234 │    
+   60 │ AFLMNOR   │ MORFLANT         │ H 7,-28     │   89 │   4323 │    
+   61 │ -ACDERTU  │ DECRUAT          │ H -22,-22   │  102 │   4425 │    
+   62 │ -EIIIOST  │ IDIOTIES         │ V -22,-23   │   72 │   4497 │    
+   63 │ ?AABCDE   │ CLABAUDE         │ H -7,21     │  185 │   4682 │    
+   64 │ ABEEPSU   │ BEAUPRES         │ V -19,-27   │   80 │   4762 │    
+   65 │ CEEHORT   │ COHERITE         │ V -14,-28   │  134 │   4896 │   2
+   66 │ EFILRSS   │ FRISELIS         │ H -21,-28   │  164 │   5060 │    
+   67 │ DEEGIMN   │ DEMINAGE         │ V 25,-12    │   72 │   5132 │   4
+   68 │ AEEEIST   │ ETATISEE         │ V -1,-25    │   74 │   5206 │   2
+   69 │ ABCEITU   │ CUBAIENT         │ H -11,-17   │   76 │   5282 │    
+   70 │ AELPRST   │ PALASTRE         │ V -14,-14   │  116 │   5398 │   2
+   71 │ AEGHNTY   │ AY               │ V 12,1      │   66 │   5464 │    
+   72 │ -CEFMORZ  │ OCREZ            │ V -20,-20   │   76 │   5540 │    
+   73 │ FM+AEIRT  │ FERMAIT          │ H 10,-24    │  108 │   5648 │    
+   74 │ ?ACINRX   │ RINCEAUX         │ V -24,-25   │  122 │   5770 │    
+   75 │ DEEFLNR   │ FENTE            │ H -9,19     │   50 │   5820 │    
+   76 │ DLR+ABSU  │ CLUBARDS         │ V 21,-7     │  100 │   5920 │    
+   77 │ CEIOPST   │ COPISTES         │ V 14,7      │  128 │   6048 │    
+   78 │ AEFLNRU   │ FLANEURS         │ H 14,7      │   86 │   6134 │   2
+   79 │ AEEEIMS   │ ANEMIEES         │ H 11,-4     │   68 │   6202 │   2
+   80 │ EIOORST   │ ROBOTISE         │ H -4,19     │   82 │   6284 │    
+   81 │ AEELNOS   │ LOSANGEE         │ H 9,5       │   86 │   6370 │    
+   82 │ CDISTUU   │ DUCS             │ V 13,-1     │   34 │   6404 │    
+   83 │ ITU+ACEE  │ ECRITEAU         │ V 19,-6     │   74 │   6478 │    
+   84 │ EEEOSTZ   │ ZEROTEES         │ V -27,-23   │   78 │   6556 │    
+   85 │ AEFNRSU   │ FURANES          │ V 22,-23    │   96 │   6652 │   2
+   86 │ ADEEEOS   │ ERODEES          │ H -21,21    │   30 │   6682 │    
+   87 │ A+ADEILN  │ ALANDIER         │ H -25,-31   │   86 │   6768 │    
+   88 │ AEILMOU   │ AMOUILLE         │ V -4,-28    │   88 │   6856 │    
+   89 │ EEFNOPR   │ PROFANEE         │ H -28,-8    │   89 │   6945 │    
+   90 │ ?ALOORT   │ FORMOLAT         │ V 7,14      │   83 │   7028 │    
+   91 │ DEIIRTZ   │ RADIIEZ          │ H 20,6      │  148 │   7176 │   2
+   92 │ T+ABESUV  │ BOUVETAS         │ H 8,13      │   92 │   7268 │    
+   93 │ ACDINNN   │ CANDI            │ V 20,-24    │   42 │   7310 │    
+   94 │ -ACEORTU  │ ECROUTAT         │ V 18,3      │   94 │   7404 │   2
+   95 │ ACEILLS   │ CAILLES          │ V 0,-34     │   98 │   7502 │    
+   96 │ AAAFGMW   │ GAFFA            │ H -23,19    │   48 │   7550 │    
+   97 │ AAMW+?OX  │ WIMAX            │ H 12,-20    │   99 │   7649 │    
+   98 │ AO+CILRU  │ OCULAIRE         │ V 7,-14     │   89 │   7738 │    
+   99 │ ACEINSU   │ ENCULAIS         │ H -31,-4    │   90 │   7828 │    
+  100 │ ABEJRTT   │ JATTE            │ H -35,-4    │   90 │   7918 │   2
+  101 │ -ADNOSTU  │ TAUDONS          │ H -32,-10   │   94 │   8012 │   2
+  102 │ DEELNSV   │ VENDUES          │ V -8,-36    │   52 │   8064 │    
+  103 │ L+ACEEEI  │ ECLAIREE         │ H 5,13      │   76 │   8140 │    
+  104 │ CMNORTU   │ TURCOMAN         │ V -3,-41    │   72 │   8212 │   3
+  105 │ ?CCEHIT   │ CHICOTEE         │ H -35,-14   │  176 │   8388 │    
+  106 │ AELNORS   │ SALERON          │ H 6,20      │   90 │   8478 │    
+  107 │ AEEIRST   │ RETAISE          │ V -6,-40    │  101 │   8579 │    
+  108 │ ABBEELS   │ BARBELES         │ V 24,4      │  110 │   8689 │    
+  109 │ DELRRSU   │ HURDLERS         │ H -12,-3    │   66 │   8755 │    
+  110 │ AEEMRTZ   │ STREAMEZ         │ H 11,24     │  122 │   8877 │   2
+  111 │ EEFINNO   │ CONFINEE         │ H -38,-3    │   84 │   8961 │    
+  112 │ AEIMNRT   │ RENTAMAI         │ V 28,7      │  110 │   9071 │   2
+  113 │ AEENSTY   │ SAYNETE          │ V 5,-38     │  128 │   9199 │   2
+  114 │ ?ABEGLS   │ GABELLES         │ H -34,2     │  106 │   9305 │    
+  115 │ EENOPTU   │ EPOUSENT         │ V 9,-38     │   90 │   9395 │    
+  116 │ ACDERUZ   │ ZYDECO           │ H -36,4     │  108 │   9503 │    
+  117 │ ARU+AFIN  │ AURIFIA          │ V 9,17      │   40 │   9543 │   3
+  118 │ N+AEHSTT  │ THANATOSE        │ V 23,-27    │   84 │   9627 │    
+  119 │ ABEFIPR   │ BRIEFA           │ H -34,-16   │   51 │   9678 │    
+  120 │ P+CEELOX  │ COMPLEXE         │ V -1,9      │   86 │   9764 │    
+  121 │ AEEINST   │ TANISEE          │ H 17,-5     │   87 │   9851 │   6
+  122 │ CDEEFLU   │ FECULEZ          │ H -23,-33   │   44 │   9895 │    
+  123 │ D+DEIINR  │ DIANDRIE         │ V -4,15     │   72 │   9967 │    
+  124 │ HIMOPRR   │ ORPHIE           │ H 22,-9     │   44 │  10011 │    
+  125 │ MR+AILNR  │ MERRAIN          │ V -32,-24   │   36 │  10047 │    
+  126 │ L+AEORST  │ ROSTRALE         │ H 20,-8     │   90 │  10137 │    
+  127 │ ACENTUV   │ EVACUANT         │ H -20,-37   │  110 │  10247 │    
+  128 │ ?CDEILP   │ LAPICIDE         │ V -35,-21   │  167 │  10414 │    
+  129 │ AEFOOQR   │ FAQ              │ H 13,-19    │   41 │  10455 │    
+  130 │ EOOR+AER  │ CONFIRMERA       │ H -20,-12   │   25 │  10480 │    
+  131 │ EEOOR+NS  │ OESTRONE         │ H 12,11     │   70 │  10550 │   2
+  132 │ EEGIOSS   │ GENOISES         │ H -32,7     │   74 │  10624 │    
+  133 │ ACILNRT   │ MATRICLAN        │ V -18,12    │   76 │  10700 │    
+  134 │ AEEGSTU   │ GATEUSE          │ H 24,4      │   97 │  10797 │   2
+  135 │ -DEIMORS  │ MESSIDOR         │ V 14,-35    │  110 │  10907 │    
+  136 │ ACLMPTU   │ CLOPPAT          │ V -7,18     │   51 │  10958 │    
+  137 │ MU+ABNRS  │ BARNUMS          │ H 21,-24    │  106 │  11064 │    
+  138 │ ?EGIOUX   │ ORAGEUX          │ V -22,20    │  144 │  11208 │    
+  139 │ I+AAIRSS  │ RASSASIAI        │ H -17,17    │   86 │  11294 │    
+  140 │ ACELNOS   │ ENCLOUAS         │ V -20,16    │   98 │  11392 │   2
+  141 │ AEEIRTU   │ ZIEUTERA         │ V 31,11     │   84 │  11476 │   2
+  142 │ AAADEPT   │ ADAPTERA         │ V 3,-18     │   94 │  11570 │    
+  143 │ EILLORS   │ COLLIERS         │ H 17,-18    │   90 │  11660 │    
+  144 │ -AIIIPRZ  │ PARIIEZ          │ V -37,-25   │   72 │  11732 │    
+  145 │ I+BFNOSS  │ FINS             │ V 0,-21     │   59 │  11791 │    
+  146 │ BOS+CDIR  │ COBIERS          │ H -17,-31   │   44 │  11835 │    
+  147 │ D+ACRSTU  │ TUCARDS          │ V 4,-24     │   98 │  11933 │    
+  148 │ ?AEGPSS   │ EPISSAGE         │ V 0,17      │  101 │  12034 │    
+  149 │ ?ACEIKO   │ COKEFIA          │ V -36,-14   │  128 │  12162 │   2
+  150 │ -?EHNOTT  │ HOTTENT          │ H -7,-38    │  110 │  12272 │    
+  151 │ AEEFSYZ   │ FASEYEZ          │ V -34,-12   │  144 │  12416 │    
+  152 │ E+?BEPRS  │ SUPERBE          │ H 19,31     │  108 │  12524 │    
+  153 │ AEILRTU   │ RECULAIT         │ H -22,2     │   98 │  12622 │   4
+  154 │ ?ABENPR   │ PROBANTE         │ V -37,-9    │  104 │  12726 │    
+  155 │ DGILMOO   │ DOLOMIE          │ V 7,-42     │   33 │  12759 │    
+  156 │ G+ALSUUU  │ BUGUAS           │ V 36,19     │   36 │  12795 │    
+  157 │ LU+CEINT  │ LUTECIEN         │ V 34,16     │   98 │  12893 │    
+  158 │ CDEELRU   │ CREDULE          │ V 35,10     │   91 │  12984 │    
+  159 │ ?ENOSTU   │ ENVOUTAS         │ V 7,-28     │  122 │  13106 │   2
+  160 │ AAIILMO   │ DAIMIO           │ H -19,4     │   32 │  13138 │    
+  161 │ AL+DEINR  │ LANDIER          │ V 17,-3     │   86 │  13224 │    
+  162 │ AILNQST   │ ANIS             │ V 10,-39    │   44 │  13268 │    
+  163 │ LQT+EIOV  │ VITOLE           │ V 35,24     │   48 │  13316 │   2
+  164 │ Q+ACFMNO  │ COQ              │ V -36,-18   │   60 │  13376 │    
+  165 │ AFMN+EIR  │ ENFERMAI         │ H -34,14    │   90 │  13466 │   2
+  166 │ AABEMPU   │ EMPAUMA          │ V 19,-39    │   44 │  13510 │   2
+  167 │ B+EENSTT  │ BINETTES         │ V 21,-35    │  149 │  13659 │    
+  168 │ EILSTVZ   │ TELEVISEZ        │ H -17,-23   │   92 │  13751 │    
+  169 │ CEFLNOS   │ FICELONS         │ V -14,16    │   98 │  13849 │    
+  170 │ DEHRSTU   │ HURES            │ V 22,-38    │   62 │  13911 │    
+  171 │ DT+EIIRT  │ INTERDIT         │ H -4,-38    │   90 │  14001 │    
+  172 │ AEJOPRT   │ PROJETAI         │ H 14,21     │  125 │  14126 │    
+  173 │ EEFGJSU   │ REJUGES          │ V 22,14     │   62 │  14188 │    
+  174 │ F+BILOSS  │ SOLFIES          │ H 19,17     │   40 │  14228 │    
+  175 │ B+?ARSUZ  │ BRASQUEZ         │ H 24,-28    │  112 │  14340 │    
+  176 │ ACDILNP   │ PINACLES         │ V -21,-28   │   47 │  14387 │    
+  177 │ D+AEMQRT  │ DEROQUAT         │ H 18,4      │   64 │  14451 │   2
+  178 │ M+ADGILS  │ GIFLAS           │ V 20,17     │   40 │  14491 │   2
+  179 │ DM+MNOOT  │ NOMMAT           │ H 21,16     │   30 │  14521 │    
+  180 │ DO+EESSU  │ SOUDEES          │ V 36,6      │  100 │  14621 │    
+  181 │ ACDEFHR   │ DEFACHER         │ V -35,-5    │  101 │  14722 │   2
+  182 │ AAEGLOP   │ PALOTAGE         │ H 24,-11    │   94 │  14816 │    
+  183 │ AAENRTU   │ URANATE          │ V -34,2     │   90 │  14906 │    
+  184 │ ?ABILRT   │ ROUBLAIT         │ H 7,35      │  158 │  15064 │    
+  185 │ DEELMOQ   │ MODELE           │ V -35,4     │   48 │  15112 │    
+  186 │ Q+EILNPU  │ QUINONE          │ H 5,-39     │   56 │  15168 │    
+  187 │ -AACEIRS  │ REMACHAIS        │ H -38,17    │  122 │  15290 │    
+  188 │ ACEEFIT   │ FACETIE          │ H 10,-38    │  112 │  15402 │    
+  189 │ -EEOQRRV  │ REVOQUER         │ V -38,0     │   90 │  15492 │    
+  190 │ ACPRSTU   │ PERCUTAS         │ H 8,27      │   86 │  15578 │   2
+  191 │ BEENRTZ   │ ZEBRENT          │ V -30,-8    │  106 │  15684 │    
+  192 │ -AAAEFIL  │ FAILLEE          │ H 8,-39     │   39 │  15723 │    
+  193 │ AA+BCEEN  │ ENCABANE         │ H -3,-31    │  102 │  15825 │   2
+  194 │ EILMNQU   │ LIMNIQUE         │ V 8,-20     │   92 │  15917 │    
+  195 │ AACEERS   │ ARACEES          │ V -23,-9    │   99 │  16016 │    
+  196 │ DEEEEIS   │ DIERESE          │ H -8,-26    │   48 │  16064 │    
+  197 │ E+ACINRX  │ RINCEAUX         │ V 31,2      │   88 │  16152 │   2
+  198 │ -?AEGMPT  │ COMPTAGE         │ H -6,-23    │  110 │  16262 │    
+  199 │ -ABIORST  │ BOITERAS         │ H -32,17    │  102 │  16364 │    
+  200 │ EEELNTU   │ UNETELLE         │ V 22,1      │   70 │  16434 │   2
+  201 │ ACEEIIR   │ ACIERIES         │ V 25,-45    │   90 │  16524 │   2
+  202 │ EOORTUV   │ VOUERONT         │ V 2,-44     │   71 │  16595 │    
+  203 │ AEEMOST   │ ESCAMOTE         │ V -29,-5    │   81 │  16676 │    
+  204 │ AAEFNPY   │ RAYA             │ V -34,-4    │   73 │  16749 │   2
+  205 │ EFNP+EIZ  │ ENSIMEZ          │ V -21,-10   │   84 │  16833 │   2
+  206 │ -ACDEORS  │ BOCARDES         │ V 17,-32    │  102 │  16935 │   4
+  207 │ AAEEIQT   │ QAT              │ H -18,-18   │   42 │  16977 │    
+  208 │ -AIILNOU  │ POULINAI         │ V -11,24    │   90 │  17067 │    
+  209 │ EGIILMS   │ LIMOGEAIS        │ H -29,11    │   66 │  17133 │    
+  210 │ -ALORRSS  │ OSAS             │ V 24,-26    │   32 │  17165 │    
+  211 │ -EEINORU  │ ENOUERAI         │ V 33,2      │   82 │  17247 │    
+  212 │ ?ADILQT   │ LIQUIDAT         │ H 28,-12    │  119 │  17366 │    
+  213 │ -AAEEPST  │ ANAPESTES        │ V 17,11     │   94 │  17460 │    
+  214 │ ?ALNNRU   │ ANNULERAI        │ H -25,-19   │   82 │  17542 │   2
+  215 │ ABCEIRU   │ CUBERAI          │ H -45,-3    │  106 │  17648 │    
+  216 │ DEIORSS   │ DOSSIER          │ H 3,-31     │   94 │  17742 │    
+  217 │ BCEEGLX   │ GEX              │ V -16,-4    │   67 │  17809 │    
+  218 │ BCEL+EPR  │ PERCALE          │ V -18,-10   │   56 │  17865 │    
+  219 │ B+EINSST  │ BISSENT          │ H 25,-3     │   97 │  17962 │    
+  220 │ CCIIOSU   │ COUIC            │ H 9,-27     │   37 │  17999 │    
+  221 │ IS+AMNOR  │ NOMBRAIS         │ V -28,21    │  116 │  18115 │    
+  222 │ -ADEHITU  │ THIBAUDE         │ V 38,4      │  106 │  18221 │    
+  223 │ -ACEORSU  │ ECOEURAS         │ H 11,38     │   90 │  18311 │   2
+  224 │ ADELOST   │ SOLDATE          │ V 25,-31    │   94 │  18405 │    
+  225 │ BEHIOTV   │ EVOHE            │ H -42,21    │   45 │  18450 │   2
+  226 │ BIT+?AEO  │ BAISOTE          │ H -26,-12   │   93 │  18543 │    
+  227 │ -EEILNST  │ SELENITE         │ V -24,-4    │   81 │  18624 │    
+  228 │ -ADDENSU  │ DENUDAS          │ V 11,-45    │   90 │  18714 │    
+  229 │ EELORST   │ SOLERETS         │ V -25,24    │   82 │  18796 │    
+  230 │ AAACGLU   │ CALUGEA          │ V 0,-50     │   36 │  18832 │    
+  231 │ A+DELMRR  │ MOLARDER         │ V -30,2     │   75 │  18907 │    
+  232 │ BEELSTV   │ SIEVERTS         │ H -20,-1    │   44 │  18951 │    
+  233 │ BL+ACENO  │ BELCANTO         │ V 9,-28     │   76 │  19027 │   3
+  234 │ AGIOSSS   │ GOSSAIS          │ H 32,-14    │   81 │  19108 │    
+  235 │ AEEEMNT   │ RENTAMEE         │ H 28,-25    │   83 │  19191 │    
+  236 │ AEPRSTU   │ PASTEURS         │ V -8,30     │  114 │  19305 │    
+  237 │ ABEIIMT   │ IMITABLE         │ H -48,-6    │   76 │  19381 │    
+  238 │ AEOPRSS   │ PASSOIRE         │ V -4,-53    │   94 │  19475 │    
+  239 │ AEEFNVY   │ FASEYE           │ H 37,-10    │   72 │  19547 │    
+  240 │ NV+AADLR  │ DRAYA            │ V -6,34     │   60 │  19607 │    
+  241 │ -EEEIPTZ  │ REPETIEZ         │ H 35,-6     │  116 │  19723 │    
+  242 │ -EEILORU  │ FOULERIE         │ V -10,37    │   74 │  19797 │    
+  243 │ BHIMNOS   │ HUMIONS          │ V 32,18     │   54 │  19851 │    
+  244 │ -ELNORST  │ ENTRESOL         │ V -7,37     │   80 │  19931 │    
+  245 │ -AEEEIMS  │ ESSAIMEE         │ V -25,-18   │   79 │  20010 │   2
+  246 │ EHORSUV   │ VOUCHERS         │ H -44,22    │   82 │  20092 │    
+  247 │ EEGLMPR   │ PERMAGEL         │ V 18,-21    │   82 │  20174 │    
+  248 │ AEIMNOR   │ NORMERAI         │ V 28,-49    │  116 │  20290 │    
+  249 │ AADEFST   │ FADATES          │ V -5,-43    │   94 │  20384 │    
+  250 │ ABNNORU   │ RUBANONS         │ H -50,-11   │   90 │  20474 │   2
+  251 │ -ACEEIOT  │ ECOTERAI         │ H -47,23    │   74 │  20548 │    
+  252 │ AEMSTUX   │ MIXATES          │ H -14,-26   │   81 │  20629 │    
+  253 │ U+ILLNPQ  │ QUILLA           │ H -42,-10   │   63 │  20692 │    
+  254 │ -BEHIMRU  │ RHUMB            │ V 22,-51    │   57 │  20749 │    
+  255 │ EI+EIOST  │ TOILIERES        │ H 40,-13    │   65 │  20814 │    
+  256 │ DILRSSU   │ SURNOMMAT        │ H 21,13     │   33 │  20847 │    
+  257 │ DILS+?AE  │ SALADINE         │ V -7,-56    │  140 │  20987 │    
+  258 │ EFINTUZ   │ ENFUTIEZ         │ V 7,24      │  110 │  21097 │   2
+  259 │ ELOOTUY   │ OYE              │ V 12,-41    │   69 │  21166 │    
+  260 │ LOTU+CRV  │ VOULUT           │ H -49,18    │   39 │  21205 │    
+  261 │ CR+EEIST  │ CERITES          │ H -48,30    │  120 │  21325 │    
+  262 │ -ABEGLRT  │ BULGARE          │ V 20,-50    │   48 │  21373 │   2
+  263 │ T+?EIMOP  │ POMPISTE         │ V -4,32     │  116 │  21489 │    
+  264 │ BCELNRU   │ BLANCHEUR        │ H -13,-16   │   69 │  21558 │    
+  265 │ EGISTUX   │ EXIGUITES        │ V -33,8     │   92 │  21650 │    
+  266 │ AABELNR   │ BRANLERA         │ H -47,-10   │  100 │  21750 │    
+  267 │ DEEELTU   │ DELUTEE          │ H -49,35    │   88 │  21838 │    
+  268 │ ?ANOPTU   │ PATURON          │ H -50,30    │  116 │  21954 │    
+  269 │ CEEGHRR   │ RECHARGE         │ H -24,-41   │   82 │  22036 │    
+  270 │ EILRSSU   │ LISSEUR          │ V 42,-52    │  104 │  22140 │    
+  271 │ EEEORTT   │ OPERETTE         │ H -53,-5    │   70 │  22210 │    
+  272 │ ?AMNSUZ   │ OZONAS           │ H -21,9     │   72 │  22282 │    
+  273 │ MU+ACDEF  │ DECIMAL          │ V -2,14     │   41 │  22323 │    
+  274 │ -BEENRRT  │ REBURENT         │ V 38,-52    │   90 │  22413 │    
+  275 │ ADILNOR   │ ORDINAL          │ V -34,16    │   94 │  22507 │    
+  276 │ EHIORSU   │ HOUERAIS         │ H 21,-39    │   89 │  22596 │    
+  277 │ ?AELMTT   │ MANTELET         │ V -36,15    │   90 │  22686 │   4
+  278 │ ACDFNOY   │ FANCY            │ V -8,-48    │   78 │  22764 │    
+  279 │ ADO+EILR  │ IODLERA          │ V -6,44     │   94 │  22858 │   2
+  280 │ ?ACEEHU   │ CHEVREAU         │ V 18,-52    │  110 │  22968 │   2
+  281 │ -DGHNOTU  │ DOUGHNUT         │ V -10,-56   │   82 │  23050 │   2
+  282 │ EEFIRTV   │ VERIFIENT        │ H 3,26      │   65 │  23115 │    
+  283 │ BEIMORU   │ BIMOTEUR         │ H -9,9      │   74 │  23189 │   2
+  284 │ ACDEILS   │ ALCIDES          │ V 3,-59     │  112 │  23301 │    
+  285 │ ?AIMNRT   │ TRAMINER         │ H 49,-7     │  140 │  23441 │   2
+  286 │ EEENOTV   │ ENVOUTEE         │ H -42,-2    │   74 │  23515 │    
+  287 │ CEEEGOS   │ ECOGESTE         │ H 17,11     │   76 │  23591 │    
+  288 │ ?AAHLNP   │ GNAPHALE         │ V -14,32    │   92 │  23683 │   2
+  289 │ DDEGOQR   │ DEROQUE          │ H -47,37    │   48 │  23731 │    
+  290 │ DG+AGIRV  │ DEGIVRAI         │ H 19,-37    │   52 │  23783 │    
+  291 │ G+CEGIIR  │ REMIXATES        │ H -14,-28   │   38 │  23821 │    
+  292 │ CGGII+?T  │ SIC              │ H 12,38     │   38 │  23859 │    
+  293 │ GGIT+ELR  │ REGIT            │ H 51,-9     │   33 │  23892 │    
+  294 │ GL+AILOO  │ GRISOLLA         │ V -32,18    │   36 │  23928 │    
+  295 │ O+EFMSSY  │ MYOSIS           │ H -22,-41   │   72 │  24000 │    
+  296 │ EF+BEGNU  │ NEF              │ H -16,-18   │   41 │  24041 │   2
+  297 │ BEGU+DET  │ BUDGETER         │ V 17,-45    │  106 │  24147 │    
+  298 │ ADEILOP   │ DEPOLIRA         │ H 7,-44     │   90 │  24237 │    
+  299 │ AACCIMR   │ CRAMAI           │ H -21,-46   │   39 │  24276 │    
+  300 │ C+EEGHIO  │ CHOREGIE         │ V -45,-24   │   78 │  24354 │    
+  301 │ ADERSTV   │ DRIVATES         │ H -56,1     │   98 │  24452 │    
+  302 │ BELNORR   │ BRONZER          │ H 31,3      │   36 │  24488 │   7
+  303 │ L+EENOST  │ LETTONES         │ H 14,-35    │  104 │  24592 │    
+  304 │ DEFNOQR   │ FRONDEE          │ H -20,-51   │   48 │  24640 │    
+  305 │ Q+?AIIMN  │ QUINOA           │ V -49,-24   │   60 │  24700 │    
+  306 │ IM+EEEES  │ EMERISEE         │ V 4,28      │   72 │  24772 │   2
+  307 │ AHIIMNR   │ HUMAIN           │ H -42,10    │   42 │  24814 │   2
+  308 │ -EGPSSTU  │ ZEBUS            │ V 4,-36     │   43 │  24857 │    
+  309 │ -DEEIORT  │ OESTRIDE         │ H 33,2      │   86 │  24943 │   3
+  310 │ ACFIOSZ   │ SCHIZO           │ H -23,-47   │   60 │  25003 │   3
+  311 │ AF+?CIRV  │ VOCIFERA         │ V 5,-47     │   90 │  25093 │    
+  312 │ ?BELORT   │ TROUBLE          │ H 8,-50     │   95 │  25188 │   2
+  313 │ AINORST   │ TRAIRONS         │ V -49,7     │  131 │  25319 │    
+  314 │ -DEEEKRS  │ LEK              │ V -12,28    │   65 │  25384 │    
+  315 │ DEERS+TX  │ DEXTRES          │ H -8,28     │  127 │  25511 │    
+  316 │ AEEEHST   │ ACHETEES         │ H -50,-1    │   80 │  25591 │    
+  317 │ ILNORST   │ RUTILIONS        │ V 33,-51    │   90 │  25681 │    
+  318 │ DGORTTU   │ DEGOUT           │ V 33,-9     │   32 │  25713 │    
+  319 │ RT+EEFMV  │ VERMET           │ H -51,5     │   52 │  25765 │    
+  320 │ F+AIKOOR  │ KIFFA            │ V -51,-23   │   80 │  25845 │    
+  321 │ OOR+ENRT  │ DORERONT         │ V 8,33      │   94 │  25939 │    
+  322 │ EENOSST   │ STENOSE          │ H -18,-56   │   87 │  26026 │    
+  323 │ DEEIIIR   │ IRIDIEE          │ V -31,25    │   86 │  26112 │    
+  324 │ ?AACFIT   │ ACETIFIAI        │ H -22,-55   │  128 │  26240 │    
+  325 │ AENRSUU   │ NEURULAS         │ H 47,-11    │   82 │  26322 │    
+  326 │ BEHIIRT   │ EBAHIE           │ H 5,22      │   39 │  26361 │   3
+  327 │ IRT+ADES  │ DISSERTA         │ V -56,-21   │  104 │  26465 │   3
+  328 │ AEEGMQT   │ MAQUEE           │ V -47,5     │   52 │  26517 │    
+  329 │ GT+?EIIO  │ TRILOGIE         │ H 35,7      │  122 │  26639 │    
+  330 │ ADELNRT   │ DEALERONT        │ H 10,-7     │   87 │  26726 │    
+  331 │ ACEIJTV   │ EJECTAI          │ H -54,1     │   61 │  26787 │    
+  332 │ V+AHORRS  │ MOSHAV           │ V 8,-51     │   52 │  26839 │    
+  333 │ -ADGIMNP  │ MIGNARD          │ H 37,3      │   40 │  26879 │   3
+  334 │ P+EEIRUZ  │ EPURIEZ          │ V 7,40      │  136 │  27015 │    
+  335 │ AILMNOS   │ OSMANLIS         │ H -49,7     │  140 │  27155 │    
+  336 │ AEGIIOT   │ AGIOTIEZ         │ H 46,0      │   88 │  27243 │    
+  337 │ BEEELNN   │ TELEBENNE        │ V 25,11     │   72 │  27315 │    
+  338 │ CEILRST   │ TRICOLES         │ H -6,29     │   98 │  27413 │    
+  339 │ ?AEMORT   │ MEGOTERA         │ V 35,-7     │  131 │  27544 │   3
+  340 │ ABCEFFT   │ EFFACE           │ V 6,46      │   56 │  27600 │    
+  341 │ -AADFGLR  │ DEFLAGRA         │ H 51,5      │  102 │  27702 │    
+  342 │ EEIINRS   │ SENIORIE         │ V -31,10    │   95 │  27797 │    
+  343 │ ALORRTU   │ TOURA            │ H 52,3      │   36 │  27833 │   2
+  344 │ LR+AAEEE  │ CEREALE          │ V 30,8      │   30 │  27863 │    
+  345 │ AE+CCDEO  │ ACCORDEE         │ V 11,47     │   76 │  27939 │    
+  346 │ EEIORSW   │ WUS              │ H -12,6     │   53 │  27992 │    
+  347 │ EEIOR+EP  │ POELIERE         │ V 8,48      │  104 │  28096 │    
+  348 │ AAENSTV   │ EVASANT          │ V -17,25    │  100 │  28196 │    
+  349 │ ACINOOT   │ COACTION         │ H 49,11     │   89 │  28285 │    
+  350 │ ?ADERSV   │ DEVORAS          │ H 56,2      │  103 │  28388 │   6
+  351 │ AEILPPU   │ PEUPLAI          │ H -53,39    │  104 │  28492 │    
+  352 │ ABEENTZ   │ BENZOATE         │ H 12,-53    │   91 │  28583 │    
+  353 │ DEEISTY   │ YETS             │ H -8,12     │   69 │  28652 │   3
+  354 │ DEEI+GPU  │ DEGUERPIS        │ H 42,-15    │   76 │  28728 │    
+  355 │ ACEFIRU   │ FAUTRICE         │ H -3,32     │   85 │  28813 │    
+  356 │ -AGLOORV  │ VOLIGERA         │ H 10,-52    │   48 │  28861 │    
+  357 │ O+AEENST  │ ACETONES         │ V -31,-18   │   72 │  28933 │    
+  358 │ ?CEIOST   │ ECOTAIS          │ V 10,27     │  100 │  29033 │    
+  359 │ -?IRRTUV  │ ROUVRIT          │ H 50,17     │   89 │  29122 │    
+  360 │ CDEELMP   │ DECLAMPE         │ H 34,-18    │   76 │  29198 │    
+  361 │ ABCEORR   │ BRACERO          │ H 35,-24    │   99 │  29297 │    
+  362 │ -AEGIIMS  │ IMAGEAIS         │ V -22,33    │   98 │  29395 │   2
+  363 │ ACEFILN   │ FICELANT         │ V 23,43     │   84 │  29479 │    
+  364 │ -AIORSST  │ MORTAISES        │ V -20,28    │   98 │  29577 │    
+  365 │ DELORTU   │ DEROULAT         │ H 38,-28    │   74 │  29651 │    
+  366 │ EEIRRTU   │ EBRUITER         │ V -53,11    │   90 │  29741 │    
+  367 │ AEGIMNS   │ IGNAMES          │ V 11,25     │  135 │  29876 │    
+  368 │ CEINOPS   │ CREPIONS         │ V 21,49     │  185 │  30061 │    
+  369 │ ?ACIORU   │ COUDRAIS         │ V -28,35    │  110 │  30171 │   6
+  370 │ AADEFMT   │ DEFIAIT          │ H 33,-25    │   44 │  30215 │   4
+  371 │ AM+BEKQR  │ REMAKE           │ V -8,50     │   72 │  30287 │    
+  372 │ BQ+ADILO  │ QIBLA            │ H -46,-14   │   52 │  30339 │    
+  373 │ DO+DEPTU  │ DOPE             │ V 44,-50    │   33 │  30372 │   3
+  374 │ DTU+AHIS  │ DASHI            │ H 56,-10    │   50 │  30422 │   2
+  375 │ TU+?ANOR  │ TRAQUONS         │ V -14,-49   │  134 │  30556 │   3
+  376 │ AEEFHST   │ FADEES           │ V 27,-9     │   44 │  30600 │   2
+  377 │ HT+OPSUY  │ TYPHUS           │ V 34,29     │   82 │  30682 │   2
+  378 │ O+CDEEIV  │ DECOIVE          │ V 33,33     │  110 │  30792 │    
+  379 │ EGLMSTU   │ MEUGLATES        │ V 31,-55    │   86 │  30878 │    
+  380 │ AACELOT   │ TABACOLE         │ V -12,-48   │   70 │  30948 │    
+  381 │ ?AAIKNV   │ KAVAS            │ H -36,16    │   72 │  31020 │   2
+  382 │ AIN+EEFU  │ PEAUFINE         │ H -48,44    │  102 │  31122 │    
+  383 │ AAEMPRU   │ RAMPEAU          │ V 52,-52    │  116 │  31238 │    
+  384 │ ACEENNT   │ ENCANTEE         │ H 46,17     │   94 │  31332 │   2
+  385 │ AEEHNSY   │ HYENES           │ H 6,29      │   76 │  31408 │    
+  386 │ -AABCEIR  │ CARAIBE          │ H 53,-3     │   98 │  31506 │    
+  387 │ DEGINRV   │ DEGIVRANT        │ V 5,-62     │   82 │  31588 │    
+  388 │ ?ADEFSZ   │ DESAMEZ          │ H -50,48    │  148 │  31736 │    
+  389 │ F+CEEETU  │ EFFECTUEE        │ V 32,-4     │  143 │  31879 │    
+  390 │ AAEGHOP   │ PHAGE            │ V 6,-66     │   50 │  31929 │    
+  391 │ AO+ACIIR  │ CHOIRAI          │ H -65,5     │   48 │  31977 │    
+  392 │ A+LORSTZ  │ ERSATZ           │ V 51,-48    │   56 │  32033 │    
+  393 │ LO+EIINS  │ INVIOLES         │ H 38,31     │   98 │  32131 │    
+  394 │ AAEIPST   │ RETAPAIS         │ H 18,-53    │  102 │  32233 │    
+  395 │ DELNPRU   │ PENDULER         │ V 37,32     │   94 │  32327 │    
+  396 │ -AAELMRR  │ ALARMERA         │ V -50,16    │   94 │  32421 │   3
+  397 │ DEMNOPT   │ INDOMPTE         │ V 8,-65     │  106 │  32527 │    
+  398 │ CEEFRST   │ REFRACTES        │ V 0,49      │   80 │  32607 │    
+  399 │ ?EEEINZ   │ ENDEVIEZ         │ H 35,35     │  212 │  32819 │    
+  400 │ ABEEEIQ   │ BINA             │ V 36,33     │   36 │  32855 │   3
+  401 │ EEEQ+ERS  │ RESEQUEE         │ H 14,-58    │   82 │  32937 │    
+  402 │ EEINORT   │ ORIENTEE         │ H 21,-56    │  131 │  33068 │    
+  403 │ AEILNOU   │ MALOUINE         │ H -7,35     │   82 │  33150 │    
+  404 │ ABCEEGR   │ BOCAGERE         │ V 35,37     │   89 │  33239 │    
+  405 │ ABMRSUU   │ SUBSUMERA        │ H -11,-31   │   62 │  33301 │    
+  406 │ AEGINNO   │ ENGONCAI         │ V 19,41     │   78 │  33379 │    
+  407 │ -ADERRSU  │ DURERAS          │ V 34,44     │  105 │  33484 │    
+  408 │ ACEMNOV   │ MOUVANCE         │ V 42,9      │   80 │  33564 │    
+  409 │ -?ELRSTU  │ RESULTAT         │ H 49,28     │  122 │  33686 │   8
+  410 │ AELRRTT   │ LETTRERA         │ H 47,33     │   82 │  33768 │    
+  411 │ AEEMOTZ   │ AZOTEMIE         │ H 44,1      │   94 │  33862 │   3
+  412 │ ?ALNRSU   │ ALUNERAS         │ H -51,46    │   89 │  33951 │    
+  413 │ BEFIMNR   │ RENFORMIE        │ V 17,45     │   52 │  34003 │    
+  414 │ B+ABCFTU  │ CAFE             │ H 53,5      │   40 │  34043 │   2
+  415 │ BBTU+EGN  │ BAUGENT          │ V 10,-66    │   48 │  34091 │    
+  416 │ -AAEGRTU  │ OUTRAGEA         │ V -25,38    │   86 │  34177 │   2
+  417 │ FFIINRU   │ AFFIN            │ H 42,-25    │   45 │  34222 │    
+  418 │ IRU+AAER  │ RAQUERAI         │ V -10,-44   │   80 │  34302 │   2
+  419 │ ACEILNP   │ CALEPIN          │ H 39,25     │   98 │  34400 │   3
+  420 │ AEEHLRX   │ EXHALER          │ V 39,-45    │  130 │  34530 │   2
+  421 │ ABDIPST   │ BATTIS           │ V 36,44     │   48 │  34578 │   2
+  422 │ -GILNORU  │ ENGLOUTIR        │ H 30,-31    │   64 │  34642 │    
+  423 │ ?EELMRT   │ TREMELLE         │ V 28,35     │  110 │  34752 │    
+  424 │ ADEFHNR   │ FENDRA           │ H -38,34    │   42 │  34794 │    
+  425 │ H+ACOORS  │ HONORAS          │ V 36,-40    │   72 │  34866 │    
+  426 │ C+GINSTU  │ CONTIGUS         │ V 5,55      │   78 │  34944 │    
+  427 │ ?ABBEMO   │ BOMBANCE         │ H 42,14     │  128 │  35072 │    
+  428 │ ABDEGIR   │ BADGERAI         │ H -35,35    │  176 │  35248 │    
+  429 │ ADELOSS   │ DESSOLAS         │ H 62,2      │  102 │  35350 │    
+  430 │ AAEMORS   │ ARROSAMES        │ V -28,-15   │   83 │  35433 │    
+  431 │ AEGLNTU   │ BEUGLANTE        │ H -35,21    │   92 │  35525 │    
+  432 │ AEEEELR   │ REALESEE         │ V 9,57      │   68 │  35593 │    
+  433 │ DEEIJNP   │ DEJEUNAI         │ H -45,-18   │   70 │  35663 │    
+  434 │ P+ACEEEI  │ EMANCIPEE        │ H -61,7     │   86 │  35749 │    
+  435 │ LMOOSST   │ MOLESTONS        │ V -53,-25   │   86 │  35835 │    
+  436 │ -AENOTTU  │ BOUTANTE         │ V 35,-35    │   85 │  35920 │    
+  437 │ ?AAGIST   │ GLAISAT          │ H 65,5      │   96 │  36016 │   9
+  438 │ EEFLNRT   │ FELERENT         │ V 14,-66    │   98 │  36114 │   2
+  439 │ AINOPSU   │ PIAULIONS        │ V 11,-33    │   94 │  36208 │    
+  440 │ ACEIMST   │ CITAMES          │ H -8,36     │  105 │  36313 │    
+  441 │ AEHMNST   │ HANTAMES         │ H -42,35    │  128 │  36441 │    
+  442 │ ?ILORTV   │ VEROLAIT         │ V 38,46     │   94 │  36535 │   5
+  443 │ CENORTU   │ ENCOURT          │ V -20,42    │   92 │  36627 │    
+  444 │ AAEEELS   │ ALESEE           │ V -48,18    │   33 │  36660 │    
+  445 │ -AAEFHIO  │ HAIE             │ V 40,-40    │   41 │  36701 │    
+  446 │ AFO+?GRS  │ SOUFRAGE         │ V 21,35     │   95 │  36796 │   2
+  447 │ AEEENST   │ ATHENEES         │ V -7,54     │   75 │  36871 │    
+  448 │ AEELNRY   │ LAYERENT         │ V 10,-58    │  104 │  36975 │   4
+  449 │ ?AINRSV   │ ENERVAIS         │ H 63,7      │  154 │  37129 │    
+  450 │ EEIORTT   │ ETROITE          │ V -8,58     │   96 │  37225 │    
+  451 │ CEINNOR   │ CITRONNE         │ H 63,-10    │   92 │  37317 │    
+  452 │ ADERSTU   │ DURATES          │ V 22,30     │  104 │  37421 │    
+  453 │ EEOORTY   │ OCTROYEE         │ H 44,-21    │   89 │  37510 │    
+  454 │ ABIMRRS   │ BRAMERAIS        │ H 23,-52    │   98 │  37608 │    
+  455 │ -CHLORTU  │ TCHOULER         │ V 5,12      │   84 │  37692 │    
+  456 │ AAEEIRR   │ AERERAI          │ V -19,47    │   84 │  37776 │    
+  457 │ -BGMOOSS  │ BOOMS            │ V 20,33     │   44 │  37820 │    
+  458 │ GS+AEENN  │ ENGANES          │ H 11,-41    │   87 │  37907 │    
+  459 │ AGINNOU   │ GUINDONS         │ H 28,-35    │   33 │  37940 │   2
+  460 │ A+CELNRS  │ RENACLAS         │ H 52,-25    │  102 │  38042 │    
+  461 │ AELNOTT   │ ENTOLAT          │ V 39,53     │   82 │  38124 │   2
+  462 │ CEIRSUZ   │ CORSIEZ          │ V -6,62     │  152 │  38276 │   8
+  463 │ U+?EIMPR  │ IMPROUVE         │ H 56,35     │  116 │  38392 │    
+  464 │ -AABEGLO  │ ABLOCAGE         │ V -10,59    │  102 │  38494 │    
+  465 │ AINORUY   │ NOYAUTERAI       │ H 59,-13    │   88 │  38582 │    
+  466 │ EENPRTU   │ EPEURANT         │ V -22,47    │   98 │  38680 │    
+  467 │ -ADEKLNO  │ KNODEL           │ H 62,12     │   73 │  38753 │    
+  468 │ A+ACDRSS  │ CSARDAS          │ V 38,18     │  105 │  38858 │    
+  469 │ AEEFIRS   │ FRAISEE          │ V -3,55     │  110 │  38968 │   2
+  470 │ ABEINST   │ BETAINES         │ H 49,-28    │  149 │  39117 │    
+  471 │ CCEEORU   │ ECORCEUR         │ H -39,-17   │   98 │  39215 │    
+  472 │ CIILORS   │ CLITORIS         │ H -32,32    │   90 │  39305 │   2
+  473 │ ACDEEFT   │ DEFACHE          │ H -51,13    │   44 │  39349 │   2
+  474 │ -BDDINOR  │ BONDI            │ H 48,-12    │   39 │  39388 │    
+  475 │ DR+EEGRS  │ REGARDES         │ H -57,7     │   79 │  39467 │    
+  476 │ -AEILSVY  │ SYNOVIALE        │ V -11,45    │  134 │  39601 │    
+  477 │ ?ADMNTU   │ MINAUDAT         │ V 9,-5      │   84 │  39685 │    
+  478 │ AAEEFIN   │ FENIAN           │ V -5,61     │   48 │  39733 │    
+  479 │ AE+LRRSU  │ LASURER          │ V 18,60     │   99 │  39832 │    
+  480 │ ACFHIIL   │ FILOCHAI         │ V -17,41    │   82 │  39914 │    
+  481 │ ENNOTUV   │ VENTURON         │ H 39,16     │   72 │  39986 │    
+  482 │ -EIOORSZ  │ ODORISEZ         │ V -7,9      │  104 │  40090 │    
+  483 │ DEGKNOT   │ TEK              │ V 36,14     │   68 │  40158 │    
+  484 │ DGNO+INO  │ GONDIONS         │ V -56,7     │   86 │  40244 │    
+  485 │ -AELMQSS  │ SABLAMES         │ H 33,18     │   44 │  40288 │   2
+  486 │ Q+CEHIUY  │ YUE              │ H -34,26    │   67 │  40355 │    
+  487 │ CHIQ+EOS  │ COQS             │ H 54,-14    │   51 │  40406 │    
+  488 │ EHI+BEST  │ HABITEES         │ V 46,-49    │   86 │  40492 │    
+  489 │ AEEEHRS   │ MEHAREES         │ V 36,56     │   90 │  40582 │    
+  490 │ -?AAENTV  │ DEVANCAT         │ V -14,49    │  128 │  40710 │    
+  491 │ EIJMORS   │ EMOJIS           │ V 35,63     │   72 │  40782 │    
+  492 │ R+AAELSU  │ AUSTRALE         │ H -59,11    │   82 │  40864 │   6
+  493 │ CEEIOST   │ COTISEE          │ H -60,18    │   98 │  40962 │    
+  494 │ EEOPTTW   │ TWEETE           │ V 23,-65    │   60 │  41022 │   3
+  495 │ OP+CEIRS  │ PERCOIRS         │ H 64,16     │  122 │  41144 │    
+  496 │ -AAENQTU  │ BANQUETA         │ V -28,49    │  100 │  41244 │    
+  497 │ EILLRST   │ TREILLES         │ H -63,21    │  131 │  41375 │    
+  498 │ ACEMTUZ   │ CAMIEZ           │ V 21,61     │   84 │  41459 │    
+  499 │ TU+EEIOP  │ ETOUPIEZ         │ V 42,28     │   94 │  41553 │    
+  500 │ -?DEIMRT  │ DAMERAIT         │ H 62,20     │   94 │  41647 │    
+
+Total : 41647 points en 500 coups (moyenne 83.3).
+Les coups marqués dans la colonne « iso » avaient plusieurs tops à égalité ;
+le logiciel en a retenu un par tirage au sort déterministe.

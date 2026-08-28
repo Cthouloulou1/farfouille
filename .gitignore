@@ -1,0 +1,10 @@
+node_modules/
+packages/engine/data/*.bin
+*.log
+visualiseur.html
+grille.json
+apercu.html
+petit.json
+packages/web/app.js
+packages/server/data/
+layouts.json
