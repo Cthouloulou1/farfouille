@@ -845,9 +845,11 @@ qu'à l'intuition.
   > l'ordre d'arrivée, les joueurs géographiquement proches ont un avantage réel.
   > Sans importance pour un test, à revoir le jour où le classement comptera.
 
-- **Phase 2 — serveur et comptes.** Auth, WebSocket, état autoritaire, précalcul
-  en worker, rate-limit, table `moves`, statistiques, classement, feuille de
-  route.
+- **Phase 2 — parties paramétrables, comptes, statistiques.** Dans cet ordre :
+  le modèle de partie réglable (§16) — il débloque les variantes ET sert la
+  phase 3 —, puis le précalcul de 5 coups et le rate-limit, puis les comptes
+  optionnels et les statistiques, puis le domaine, la vérification par mail et
+  la mise en ligne.
 
 - **Phase 3 — les grilles multiples.** Modèle `Board`, grille mondiale et
   vérifiée, salons, mode battle.
@@ -976,3 +978,103 @@ croissance en périmètre qu'aurait donnée une forme compacte.
   identiques serait une ligne dans la politique de rejet.
 - Feuille de route complète de la partie : `feuille-de-route.txt`, produite par
   `node packages/engine/tools/roadmap.ts 500 mondiale`.
+
+---
+
+## 16. Les parties paramétrables
+
+Le topping infini est un cas particulier : grille sans bord, probabilités
+pondérées, 7 lettres, pas de chrono, et le coup avance dès que le top est
+trouvé. Tout cela devient réglable.
+
+### Ce qu'on règle en deux clics
+
+Le paramétrage courant tient en trois gestes : **le nombre de lettres piochées**
+(2 à 15, en boutons), **le nombre de lettres jouables** (2 à 15, en boutons), et
+**la case joker**. Le reste a des valeurs par défaut et vit derrière un bouton
+qu'il faut ouvrir exprès.
+
+### X sur Y
+
+On pioche Y lettres, on en pose au plus X. La prime dépend du **nombre de
+lettres posées**, pas du fait de vider le tirage.
+
+| lettres posées | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|
+| prime par défaut | 50 | 75 | 100 | 125 | 150 |
+
+En dessous de 7 lettres, la prime par défaut est **nulle**. Le pas est de 25.
+La prime s'ajoute **après** les multiplicateurs de mot, comme au jeu classique.
+
+**7 sur 8** est le format classique : on pioche 8, on pose au plus 7, prime à 50.
+**8 sur 8** autorise 8 lettres posées, donc un sextuple dès le premier coup ;
+poser 8 vaut 75, poser 7 vaut toujours 50.
+
+La fenêtre de paramétrage des primes permet d'attribuer **un nombre de points
+libre à chaque nombre de lettres posées**. Sur une partie 3 sur 6 sans prime par
+défaut, on peut décider que poser 2 lettres vaut 15 et poser 3 lettres vaut 25.
+
+### La partie joker
+
+Le tirage contient **toujours un joker** : à 7 lettres, c'est 6 vraies lettres
+plus le joker.
+
+Quand le top emploie le joker comme un R, il compte **0 point** — mais ce qui se
+pose sur la grille est un **vrai R sorti du sac**, et le joker reste au tirage.
+Le R posé est un R ordinaire : il **vaut 1 point pour tous les coups suivants**.
+C'est tout l'intérêt de la variante, la grille ne se couvre pas de cases mortes.
+
+S'il ne reste **aucun R dans le sac**, le joker lui-même se pose (à zéro, pour
+toujours) et on prend le **second joker**. Les deux jokers posés, la partie
+continue sans.
+
+> La variante suppose un **sac fini** : « il ne reste plus de R » n'a aucun sens
+> avec des probabilités pondérées, où rien ne s'épuise. Le sac se consomme
+> exactement comme dans une vraie partie — la lettre tirée pour remplacer le
+> joker en sort comme les autres.
+
+Rien n'interdit le mécanisme sur grille infinie : simplement, aucun joker n'y
+serait jamais perdu.
+
+> ⚠️ **Règle d'isotop propre à cette variante.** Entre deux coups de même score
+> dont l'un consomme le joker et l'autre non, on retient **systématiquement
+> celui qui ne le consomme pas** — sauf si cela termine la partie. Ce n'est plus
+> un départage arbitraire : le choix a des conséquences sur la suite.
+
+### Le chrono
+
+**Super blitz 30 s · blitz 60 s · semi-rapide 2 min**, plus une option
+**personnalisé** qui couvre aussi l'**absence de chrono** : il faut alors
+trouver le top pour avancer, comme sur le topping infini.
+
+### Ce qui se passe à l'échéance
+
+Deux régimes, et ils ne se ressemblent pas.
+
+**En duplicate**, on attend **toujours** la fin du temps avant d'afficher le top,
+même si quelqu'un l'a trouvé plus tôt. Chaque joueur marque **le score de sa
+meilleure solution**, et son écart au top est son **négatif**. Le score de chaque
+joueur est noté **à chaque coup**.
+
+**En topping collaboratif / battle**, le premier qui trouve le top le fait
+afficher immédiatement et marque **1 point**, comme sur le topping infini. Si
+personne ne le trouve avant l'échéance, le top s'affiche quand même, et le
+joueur qui a soumis **la solution la plus rentable, le plus vite**, marque
+**un demi-point**.
+
+### Statistiques
+
+Les moyennes de temps n'ont de sens que **globalement**, jamais par joueur : on
+ignore combien de temps quelqu'un a cherché sans trouver, et un coup remporté en
+2 minutes peut suivre 4 heures de recherche infructueuse d'un autre.
+
+Pour un joueur, on ne retient donc que ce qu'on sait mesurer : le temps mis sur
+les coups **qu'il a remportés** (moyenne, médiane, le plus rapide, le plus lent),
+ses séries, et un **indice de difficulté**.
+
+L'indice rapporte la vitesse à la taille de la grille, mesurée par le **nombre
+d'ancrages** — la seule grandeur qui dise vraiment combien d'endroits il fallait
+examiner. Elle croît d'environ **8 ancrages par coup joué**, soit un facteur
+2 300 entre le premier coup et le trois-centième : un rapport linéaire écraserait
+tout. La forme retenue est donc `√ancrages / temps`, à calibrer sur de vraies
+parties.
