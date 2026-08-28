@@ -583,7 +583,7 @@ function likeButton(m: MoveInfo): HTMLButtonElement {
                 `<span class="n">${m.likes ?? 0}</span>`;
   b.addEventListener("click", (e) => {
     e.stopPropagation();
-    ws?.send(JSON.stringify({ t: "like", n: m.n }));
+    envoyer({ t: "like", n: m.n });
   });
   return b;
 }
@@ -625,6 +625,7 @@ $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
 function paintJournal(): void {
   const box = $("journal");
   $("journal-bloc").hidden = history.length === 0;
+  $("journal-n").textContent = String(history.length);
   box.replaceChildren();
   for (const m of [...history].reverse()) {
     const r = document.createElement("button");
@@ -679,7 +680,7 @@ function sendChat(withCell: boolean) {
   const text = input.value.trim();
   const cell = withCell && cursor !== null ? { x: cursor.x, y: cursor.y } : undefined;
   if (!text && !cell) return;
-  ws?.send(JSON.stringify({ t: "say", text, cell }));
+  envoyer({ t: "say", text, cell });
   input.value = "";
 }
 $("chat-send").addEventListener("click", () => sendChat(false));
@@ -722,7 +723,7 @@ cv.addEventListener("pointerdown", (e) => {
     holdTimer = window.setTimeout(() => {
       if (press === null || press.moved) return;
       press = null;
-      ws?.send(JSON.stringify({ t: "say", text: "", cell: { x: gx, y: gy } }));
+      envoyer({ t: "say", text: "", cell: { x: gx, y: gy } });
       flash(`case ${gx},${gy} partagée`, "ok");
     }, 550);
   }
@@ -831,11 +832,11 @@ function submit() {
   if (best === null || r.move.score > best.score) {
     best = { word: r.move.word, score: r.move.score, dir: r.move.dir, x: r.move.x, y: r.move.y };
   }
-  ws?.send(JSON.stringify({ t: "try", dir: cursor.dir, x: cursor.x, y: cursor.y, typed }));
+  envoyer({ t: "try", dir: cursor.dir, x: cursor.x, y: cursor.y, typed });
   typed = ""; paintRack(); paintSide(); draw();
 }
 
-$("reveal").addEventListener("click", () => ws?.send(JSON.stringify({ t: "reveal" })));
+$("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
 
 // ---------------------------------------------------------------- chronos
 
@@ -923,6 +924,22 @@ function fermerConnexion(): Promise<void> {
     // Filet : une fermeture qui ne se signale pas ne doit pas bloquer le jeu.
     setTimeout(fini, 1200);
   });
+}
+
+/**
+ * Envoie un message au serveur, ou le dit quand c'est impossible.
+ *
+ * `ws?.send` se perdait sans bruit tant que la liaison n'etait pas ouverte :
+ * un reglage applique juste apres etre entre dans un salon ne partait jamais,
+ * et rien ne le signalait -- on croyait le reglage casse.
+ */
+function envoyer(msg: unknown): boolean {
+  if (ws === null || ws.readyState !== WebSocket.OPEN) {
+    flash("pas encore connecté au salon", "bad");
+    return false;
+  }
+  ws.send(JSON.stringify(msg));
+  return true;
 }
 
 function connect() {
@@ -1316,25 +1333,27 @@ $("reglages-open").addEventListener("click", ouvrirReglages);
 $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
 
 $("r-appliquer").addEventListener("click", () => {
-  ws?.send(JSON.stringify({
+  envoyer({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
     joker: ($("r-joker") as HTMLInputElement).checked,
     primes: cPrimes,
     chrono: cChrono,
     bornes: cBornes,
-  }));
+  });
   $("reglages").hidden = true;
 });
 
 // Quitter le salon sans le detruire : on revient a l'accueil, la partie continue.
-$("quitter").addEventListener("click", () => {
+function quitterSalon(): void {
   void fermerConnexion();
   $("dot").classList.remove("on");
   $("reglages").hidden = true;
   $("roadmap").hidden = true;
   $("join").hidden = false;
   void peuplerSalons();
-});
+}
+
+$("quitter").addEventListener("click", quitterSalon);
 
 $("creer-open").addEventListener("click", () => {
   const ouvert = $("creer").hidden;
@@ -1378,6 +1397,18 @@ $("creer").addEventListener("submit", async (e) => {
 $("joinform").addEventListener("submit", (e) => {
   e.preventDefault();
   rejoindre(salonChoisi || "");
+});
+
+$("journal-tete").addEventListener("click", () => {
+  const ouvert = $("journal").hidden;
+  $("journal").hidden = !ouvert;
+  $("journal-tri").textContent = ouvert ? "▾" : "▸";
+  $("journal-tete").setAttribute("aria-expanded", String(ouvert));
+});
+
+/** Le titre ramene aux salons, sans rien detruire. */
+$("accueil").addEventListener("click", () => {
+  if ($("join").hidden) quitterSalon();
 });
 
 /** Quitte l'accueil et entre dans un salon. */

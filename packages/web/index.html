@@ -64,7 +64,7 @@ h2 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .1em
 .none { color: var(--ink-faint); font-size: 12.5px; }
 
 .bar { flex: none; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--rule); }
-.wordmark { font-family: "Instrument Serif", Georgia, serif; font-size: 23px; line-height: 1; }
+.wordmark { padding: 0; background: none; border: 0; cursor: pointer; font-family: "Instrument Serif", Georgia, serif; font-size: 23px; line-height: 1; }
 .wordmark em { font-style: italic; color: var(--accent); }
 .chrono { display: flex; gap: 22px; }
 .chrono div { display: flex; flex-direction: column; }
@@ -99,9 +99,16 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 
 .fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; text-align: center; letter-spacing: .04em; }
 .fin[hidden] { display: none; }
-.journal { flex: none; border-top: 1px solid var(--rule); padding: 10px 15px 8px; }
+.journal { flex: none; border-top: 1px solid var(--rule); padding: 8px 15px 8px; }
 .journal[hidden] { display: none; }
-.journal-liste { display: flex; flex-direction: column; gap: 1px; max-height: 132px; overflow: auto; }
+.journal-tete { display: flex; align-items: center; gap: 6px; width: 100%; padding: 2px 3px 5px; background: none; border: 0; font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); cursor: pointer; }
+.journal-tete:hover { color: var(--accent); }
+.journal-tete .tri { font-size: 10px; letter-spacing: 0; }
+.journal-tete .num { margin-left: auto; letter-spacing: 0; text-transform: none; font-family: "IBM Plex Mono", monospace; }
+/* Plafond dur : passe une poignee de coups, la liste defile au lieu de
+   repousser le chat hors de l'ecran. */
+.journal-liste { display: flex; flex-direction: column; gap: 1px; max-height: 112px; overflow-y: auto; }
+.journal-liste[hidden] { display: none; }
 .jrow { display: grid; grid-template-columns: 26px minmax(0, 1fr) 54px 24px 54px; gap: 5px; align-items: center; width: 100%; text-align: left; padding: 1px 3px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .jrow:hover { background: var(--hover); }
 .jrow .n { color: var(--ink-faint); }
@@ -299,7 +306,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 </div>
 
 <div class="bar">
-  <div class="wordmark">Topping <em>infini</em></div>
+  <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
   <div class="chrono">
     <div><span>Grille</span><b id="age">—</b></div>
     <div><span>Coup en cours</span><b id="elapsed">—</b></div>
@@ -367,7 +374,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     </div>
 
     <div class="block journal" id="journal-bloc" hidden>
-      <h2>Coups joués</h2>
+      <button class="journal-tete" id="journal-tete" aria-expanded="true">
+        <span class="tri" id="journal-tri">▾</span>Coups joués<span class="num" id="journal-n"></span>
+      </button>
       <div class="journal-liste" id="journal"></div>
     </div>
 
