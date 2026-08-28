@@ -38,6 +38,8 @@ let board: Board;
 let cfg: ConfigPartie = configParDefaut();
 /** La partie est terminee : plus de tirage, plus de chrono, plus de saisie. */
 let finie = false;
+/** Duree d'un coup en secondes, quand la partie est chronometree. */
+let chrono: number | null = null;
 let tiles: Tile[] = [];
 let history: MoveInfo[] = [];
 let me = "";
@@ -79,7 +81,26 @@ function resize() {
   cv.width = Math.round(W * dpr);
   cv.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cadrer();
   draw();
+}
+
+/**
+ * Une grille bornee tient toute a l'ecran, centree, et n'en bouge plus.
+ *
+ * Il n'y a rien a explorer : le plateau est entierement visible. Pouvoir le
+ * deplacer ou le dezoomer n'apporte que des reglages a refaire et des lignes
+ * qui bougent sous les yeux du joueur.
+ */
+function cadrer(): void {
+  const b = cfg.bornes;
+  if (b === null) return;
+  const cotes = b * 2 + 1;
+  const RULE = 34;   // place laissee aux regles, en haut et a gauche
+  cell = Math.max(12, Math.floor(Math.min(W - RULE - 12, H - RULE - 12) / cotes));
+  const taille = cell * cotes;
+  ox = RULE + Math.max(0, (W - RULE - taille) / 2) + b * cell;
+  oy = RULE + Math.max(0, (H - RULE - taille) / 2) + b * cell;
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -383,6 +404,8 @@ function flyTo(word: string, dir: Dir, x: number, y: number) {
 
 /** Ne bouge la camera QUE si la cible est hors champ : sinon on a le mal de mer. */
 function reveal(word: string, dir: Dir, x: number, y: number) {
+  // Sur un plateau ferme, tout est deja visible : il n'y a nulle part ou aller.
+  if (cfg.bornes !== null) { draw(); return; }
   if (!alreadyVisible(word, dir, x, y)) flyTo(word, dir, x, y);
   else draw();
 }
@@ -595,6 +618,28 @@ $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
 
 // ---------------------------------------------------------------- chat
 
+/** Les coups joues, du plus recent au plus ancien. */
+function paintJournal(): void {
+  const box = $("journal");
+  $("journal-bloc").hidden = history.length === 0;
+  box.replaceChildren();
+  for (const m of [...history].reverse()) {
+    const r = document.createElement("button");
+    r.className = "jrow";
+    r.type = "button";
+    r.innerHTML =
+      `<span class="n">${m.n}</span><span class="w">${m.word}</span>` +
+      `<span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
+      `<span class="s">${m.score}</span>` +
+      `<span class="t">${fmtTime(m.ms)}</span>`;
+    r.title = `${m.word} · ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} · ${m.score} pts · ` +
+      `${m.player ?? "révélé"} · trouvé en ${fmtTime(m.ms)}`;
+    r.addEventListener("click", () => focusMove(m));
+    box.appendChild(r);
+  }
+  box.scrollTop = 0;
+}
+
 function paintChat(msgs: Chat[]) {
   const log = $("chat-log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
@@ -686,6 +731,7 @@ cv.addEventListener("pointermove", (e) => {
   if (!press.moved && Math.hypot(dx, dy) < 4) return;
   press.moved = true;
   clearTimeout(holdTimer);
+  if (cfg.bornes !== null) return;   // plateau ferme : rien a faire glisser
   if (anim) { cancelAnimationFrame(anim); anim = 0; }
   ox += dx; oy += dy;
   press.x = e.clientX; press.y = e.clientY;
@@ -724,10 +770,12 @@ addEventListener("keydown", (e) => {
 
   if (e.key === "Escape") { typed = ""; paintRack(); paintCurrent(); draw(); return; }
   if (e.key === " " || e.code === "Space") {
-    // Pivoter en cours de mot retournerait tout ce qui est deja pose.
-    if (cursor !== null && typed.length === 0) {
+    // On pivote, et le mot en cours s'efface : le retourner tel quel poserait
+    // les memes caramels dans l'autre sens, ce qui n'a aucun sens.
+    if (cursor !== null) {
       cursor = { ...cursor, dir: cursor.dir === "H" ? "V" : "H" };
-      draw();
+      typed = "";
+      paintRack(); paintCurrent(); draw();
     }
     e.preventDefault();
     return;
@@ -754,6 +802,7 @@ addEventListener("keydown", (e) => {
 
 cv.addEventListener("wheel", (e) => {
   e.preventDefault();
+  if (cfg.bornes !== null) return;   // plateau ferme : le cadrage est fixe
   if (anim) { cancelAnimationFrame(anim); anim = 0; }
   const r = cv.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -770,7 +819,9 @@ function submit() {
   if (solving) { flash("le coup n'est pas encore prêt", "bad"); return; }
   const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack);
   if (!r.ok) {
-    flash(PLAY_MESSAGE[r.error], "bad");
+    flash(r.error === "TROP_DE_CARAMELS"
+      ? `C'est une partie ${cfg.jouables} sur ${cfg.tirage}`
+      : PLAY_MESSAGE[r.error], "bad");
     typed = ""; paintRack(); paintCurrent(); draw();
     return;
   }
@@ -798,7 +849,12 @@ setInterval(() => {
     return;
   }
   $("age").textContent = fmtTime(now - createdAt);
-  $("elapsed").textContent = solving ? "…" : fmtTime(now - servedAt);
+  if (solving) { $("elapsed").textContent = "…"; return; }
+  if (chrono === null) { $("elapsed").textContent = fmtTime(now - servedAt); return; }
+  // Compte a rebours : c'est le temps qui reste qui interesse le joueur.
+  const reste = Math.max(0, servedAt + chrono * 1000 - now);
+  $("elapsed").textContent = `${(reste / 1000).toFixed(1)} s`;
+  $("elapsed").style.color = reste < 6000 ? "var(--warn)" : "";
 }, 200);
 
 // ---------------------------------------------------------------- reseau
@@ -806,7 +862,7 @@ setInterval(() => {
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
-  likes?: Record<string, number>; sac?: string; finie?: boolean;
+  likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   createdAt: number; now: number; servedAt: number;
 }) {
   rack = s.rack ?? "";
@@ -820,6 +876,7 @@ function applyState(s: {
   const sac = s.sac ?? "";
   $("sac").hidden = sac === "";
   if (sac !== "") $("sac").textContent = sac;
+  chrono = s.chrono ?? null;
   if (s.finie === true && !finie) finieA = s.servedAt;
   finie = s.finie === true;
   online = s.online ?? [];
@@ -893,6 +950,7 @@ function connect() {
       $("conn").textContent = `${me} · ${m.nomSalon}`;
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       paintChat(chat);
+      paintJournal();
       applyState(m.state);
       if (tiles.length > 0 && last !== null) flyTo(last.word, last.dir, last.x, last.y);
       return;
@@ -915,6 +973,7 @@ function connect() {
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       typed = ""; ghost = null; best = null; finie = false; finieA = 0;
       paintChat(chat);
+      paintJournal();
       applyState(m.state);
       ox = W / 2 - cell / 2;
       oy = H / 2 - cell / 2;
@@ -948,6 +1007,7 @@ function connect() {
       typed = "";
       ghost = null;
       applyState(m.state);
+      paintJournal();
       if (!$("roadmap").hidden) paintRoadmap();
 
       // La camera NE BOUGE PAS. Se faire deplacer sans l'avoir demande, en
@@ -1069,6 +1129,38 @@ async function peuplerSalons(): Promise<void> {
 let cTirage = 7, cJouables = 7, cPioche = "probabilites";
 /** Primes en cours d'edition : points par nombre de caramels poses. */
 let cPrimes: Record<number, number> = {};
+/** Chrono en cours d'edition, en secondes. null = sans chrono. */
+let cChrono: number | null = null;
+
+/** Les quatre reglages proposes, plus la saisie libre. */
+function peuplerChrono(): void {
+  const perso = $("r-perso") as HTMLInputElement;
+  let reconnu = false;
+  for (const b of $("r-chrono").querySelectorAll("button")) {
+    const v = (b as HTMLElement).dataset["v"]!;
+    const choisi = v === "libre" ? cChrono === null : Number(v) === cChrono;
+    b.setAttribute("aria-pressed", String(choisi));
+    if (choisi) reconnu = true;
+  }
+  // Une duree qui ne tombe sur aucun bouton s'affiche dans la case libre.
+  perso.value = !reconnu && cChrono !== null ? String(cChrono) : "";
+}
+
+for (const b of $("r-chrono").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    const v = (b as HTMLElement).dataset["v"]!;
+    cChrono = v === "libre" ? null : Number(v);
+    peuplerChrono();
+  });
+}
+
+($("r-perso") as HTMLInputElement).addEventListener("input", () => {
+  const v = Number(($("r-perso") as HTMLInputElement).value);
+  cChrono = Number.isFinite(v) && v >= 5 ? Math.round(v) : null;
+  for (const b of $("r-chrono").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", "false");
+  }
+});
 
 /** La table habituelle : 50 a sept caramels, puis 25 de plus par caramel. */
 function primesHabituelles(): Record<number, number> {
@@ -1175,6 +1267,8 @@ function ouvrirReglages(): void {
   cJouables = cfg.jouables;
   cPioche = cfg.pioche;
   cPrimes = { ...cfg.primes };
+  cChrono = cfg.chrono;
+  peuplerChrono();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = "Primes de scrabble…";
@@ -1192,6 +1286,7 @@ $("r-appliquer").addEventListener("click", () => {
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
     joker: ($("r-joker") as HTMLInputElement).checked,
     primes: cPrimes,
+    chrono: cChrono,
   }));
   $("reglages").hidden = true;
 });

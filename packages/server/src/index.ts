@@ -125,6 +125,7 @@ function publicState(s: Salon) {
     finie: g.finie,
     solving: g.solving,
     servedAt: g.servedAt,
+    chrono: g.cfg.chrono,
     players: g.players,
     likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
@@ -154,6 +155,11 @@ function publicMove(m: PlayedMove) {
 /** Branche la diffusion d'etat d'un salon. A refaire apres chaque relance. */
 function surveiller(s: Salon): void {
   s.partie.onChange(() => broadcast(s.id, { t: "state", state: publicState(s) }));
+  // Tout coup pose part aux clients du salon, qu'il vienne d'un joueur, d'une
+  // revelation ou de l'echeance du chrono.
+  s.partie.onMove((m) => broadcast(s.id, {
+    t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
+  }));
 }
 
 // ---------------------------------------------------------------- ouverture
@@ -397,17 +403,10 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.t === "try") {
-      const before = s.partie.moveNumber;
       const r = await s.partie.attempt(
         moi.nom, msg.dir as Dir, Number(msg.x), Number(msg.y), String(msg.typed ?? ""),
       );
       send(ws, { t: "result", ...r });
-      if (s.partie.moveNumber !== before) {
-        const m = s.partie.moves[s.partie.moves.length - 1]!;
-        broadcast(s.id, {
-          t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
-        });
-      }
       return;
     }
 
@@ -438,8 +437,11 @@ wss.on("connection", (ws) => {
           if (pts > 0) primes[n] = pts;
         }
       }
+      const chrono = msg.chrono === null || msg.chrono === undefined ? null
+        : Math.max(5, Math.min(3600, Math.round(Number(msg.chrono))));
       const archives = await relancer(s, avec(base, {
         tirage, jouables, pioche, joker,
+        chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));
       surveiller(s);
@@ -461,14 +463,7 @@ wss.on("connection", (ws) => {
 
     if (msg.t === "reveal") {
       if (!REVEAL) return;   // inerte sauf si le serveur tourne avec --reveler
-      const before = s.partie.moveNumber;
       await s.partie.reveal();
-      if (s.partie.moveNumber !== before) {
-        const m = s.partie.moves[s.partie.moves.length - 1]!;
-        broadcast(s.id, {
-          t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
-        });
-      }
     }
   });
 

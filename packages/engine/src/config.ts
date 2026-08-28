@@ -50,6 +50,11 @@ export interface ConfigPartie {
    */
   joker: boolean;
   /**
+   * Duree d'un coup en secondes. `null` = pas de chrono : il faut trouver le
+   * top pour avancer, comme sur le topping infini (SPEC.md §16).
+   */
+  chrono: number | null;
+  /**
    * Demi-cote de la grille, en cases. 7 donne un plateau de 15x15 centre sur
    * l'origine ; `null` laisse la grille infinie.
    */
@@ -76,6 +81,7 @@ export function configParDefaut(): ConfigPartie {
     valeurs: VALUES,
     pioche: "probabilites",
     joker: false,
+    chrono: null,
     bornes: null,
     pavage: activeLayout(),
     pavageNom: currentLayout(),
@@ -93,6 +99,7 @@ export interface ConfigSerialisee {
   valeurs: Record<string, number>;
   pioche: "probabilites" | "sac102" | "sac102boucle";
   joker: boolean;
+  chrono: number | null;
   bornes: number | null;
   pavageNom: LayoutName | "custom";
 }
@@ -101,7 +108,8 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, joker: cfg.joker, bornes: cfg.bornes, pavageNom: cfg.pavageNom,
+    pioche: cfg.pioche, joker: cfg.joker, chrono: cfg.chrono,
+    bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
 
@@ -115,6 +123,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     tirage: plat.tirage, jouables: plat.jouables,
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
     joker: plat.joker === true,
+    chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),
     pavageNom: plat.pavageNom,

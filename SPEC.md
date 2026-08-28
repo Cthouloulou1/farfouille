@@ -1057,6 +1057,11 @@ Hors du plateau, on ne pose rien — mais le bord **reste une fin de mot valide*
 un mot a le droit de s'appuyer contre lui. Ce n'est pas la même chose qu'une
 case occupée, et le générateur distingue les deux.
 
+**Une grille bornée ne se déplace pas et ne se zoome pas.** Le plateau tient
+tout entier à l'écran, centré, avec ses règles fixes. Il n'y a rien à explorer :
+pouvoir le déplacer n'apporterait que des réglages à refaire et des repères qui
+bougent sous les yeux du joueur.
+
 **L'affichage peint le pavage de LA PARTIE, pas le réglage global.** Sans quoi
 un salon 15×15 montrait le pavage infini répété au-delà de ses bornes — la
 partie était bien bornée, mais elle avait l'air infinie. Le damier s'arrête aux
@@ -1076,6 +1081,12 @@ lettres posées**, pas du fait de vider le tirage.
 
 En dessous de 7 lettres, la prime par défaut est **nulle**. Le pas est de 25.
 La prime s'ajoute **après** les multiplicateurs de mot, comme au jeu classique.
+
+> ⚠️ **La limite vaut aussi à la saisie.** Le générateur la respectait depuis
+> toujours, mais un mot tapé ne la vérifiait pas : en posant plus de caramels
+> que permis, un joueur dépassait le score du top et remportait le coup sans
+> l'avoir trouvé. Le refus rappelle la variante — « C'est une partie 5 sur 7 »
+> — parce que le joueur ne sait pas forcément combien il a le droit d'en poser.
 
 **7 sur 8** est le format classique : on pioche 8, on pose au plus 7, prime à 50.
 **8 sur 8** autorise 8 lettres posées, donc un sextuple dès le premier coup ;
@@ -1187,8 +1198,15 @@ a plus rien qui s'épuise.
 ### Le chrono
 
 **Super blitz 30 s · blitz 60 s · semi-rapide 2 min**, plus une option
-**personnalisé** qui couvre aussi l'**absence de chrono** : il faut alors
-trouver le top pour avancer, comme sur le topping infini.
+**personnalisé** en secondes et **sans chrono** : il faut alors trouver le top
+pour avancer, comme sur le topping infini.
+
+Le temps restant s'affiche en **compte à rebours**, et passe en couleur d'alerte
+dans les six dernières secondes.
+
+> Un coup posé par l'échéance part aux clients **comme n'importe quel autre**.
+> Diffuser depuis le point d'entrée du message laissait les coups du chrono
+> invisibles : la grille avançait sans que personne ne reçoive les caramels.
 
 ### Ce qui se passe à l'échéance
 

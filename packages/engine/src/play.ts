@@ -25,6 +25,7 @@ export type PlayError =
   | "HORS_TIRAGE"
   | "PAS_DE_CONTACT"
   | "PREMIER_COUP_HORIZONTAL"
+  | "TROP_DE_CARAMELS"
   | "HORS_GRILLE"
   | "DOIT_COUVRIR_ORIGINE";
 
@@ -37,6 +38,7 @@ export const PLAY_MESSAGE: Readonly<Record<PlayError, string>> = {
   HORS_TIRAGE: "lettre absente du tirage",
   PAS_DE_CONTACT: "le mot ne touche rien",
   HORS_GRILLE: "le mot sort de la grille",
+  TROP_DE_CARAMELS: "trop de caramels posés",
   PREMIER_COUP_HORIZONTAL: "le premier coup est horizontal",
   DOIT_COUVRIR_ORIGINE: "le premier coup doit couvrir l'origine",
 };
@@ -152,6 +154,14 @@ export function resolveTypedWord(
   const word = cells.map((c) => c.letter).join("");
   const placed = cells.filter((c) => c.isNew);
   if (placed.length === 0) return { ok: false, error: "AUCUNE_LETTRE" };
+
+  // « X sur Y » : on pioche Y caramels, on n'en pose que X. Le generateur le
+  // respecte depuis toujours ; la SAISIE ne le verifiait pas, si bien qu'un
+  // joueur posant plus de caramels que permis obtenait un score superieur au
+  // top et remportait le coup sans l'avoir trouve.
+  if (placed.length > board.cfg.jouables) {
+    return { ok: false, error: "TROP_DE_CARAMELS", word };
+  }
 
   // 3. Le premier coup a ses regles propres (SPEC.md §3).
   if (board.isEmpty) {

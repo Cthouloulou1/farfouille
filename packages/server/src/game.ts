@@ -169,11 +169,14 @@ export class Game {
   private canonicalTop: Move | null = null;
   /** Instant ou le tirage courant a ete diffuse. Le chrono du coup part de la. */
   servedAt = 0;
+  /** Minuterie du coup en cours, quand la partie est chronometree. */
+  private echeance: ReturnType<typeof setTimeout> | null = null;
   solving = false;
 
   private nextId = 1;
   private pending = new Map<number, (r: any) => void>();
   private listeners: (() => void)[] = [];
+  private surCoup: ((m: PlayedMove) => void)[] = [];
 
   constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
     this.gameId = gameId;
@@ -231,10 +234,12 @@ export class Game {
    * et le verrou empecherait la nouvelle partie de s'ouvrir.
    */
   async stop(): Promise<void> {
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.releaseLock();
     for (const [, done] of this.pending) done({ result: null, ms: 0 });
     this.pending.clear();
     this.listeners = [];
+    this.surCoup = [];
     if (this.worker !== undefined) await this.worker.terminate();
   }
 
@@ -301,6 +306,16 @@ export class Game {
   }
 
   onChange(fn: () => void): void { this.listeners.push(fn); }
+
+  /**
+   * Prevenu a chaque coup pose, QUELLE QUE SOIT SON ORIGINE.
+   *
+   * Un coup remporte par un joueur, revele a la main ou pose par le minuteur
+   * doit atteindre les clients de la meme facon. Diffuser depuis le point
+   * d'entree du message laissait les coups du chrono invisibles : la grille
+   * avancait sans que personne ne recoive les caramels.
+   */
+  onMove(fn: (m: PlayedMove) => void): void { this.surCoup.push(fn); }
   private emit(): void { for (const f of this.listeners) f(); }
 
   /** Rejoue le journal, puis prepare le coup courant. */
@@ -516,6 +531,13 @@ export class Game {
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
     this.servedAt = Date.now();
+    // Partie chronometree : a l'echeance le top se pose et on enchaine, sans
+    // vainqueur. Le demi-point du mode collaboratif n'est pas encore compte.
+    if (this.echeance !== null) clearTimeout(this.echeance);
+    this.echeance = this.cfg.chrono === null ? null : setTimeout(() => {
+      this.echeance = null;
+      void this.reveal();
+    }, this.cfg.chrono * 1000);
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
     // clients, mais quelqu'un qui regarde le terminal de l'hote les lirait.
@@ -561,7 +583,12 @@ export class Game {
     }
     const r = resolveTypedWord(this.board, this.dawg, dir, x, y, typed.toUpperCase(), this.rack);
     if (!r.ok) {
-      return { ok: false, message: PLAY_MESSAGE[r.error as PlayError], word: r.word };
+      // Le rappel de la variante vaut mieux qu'un « trop de caramels » sec :
+      // le joueur ne sait pas forcement combien il a le droit d'en poser.
+      const message = r.error === "TROP_DE_CARAMELS"
+        ? `C'est une partie ${this.cfg.jouables} sur ${this.cfg.tirage}`
+        : PLAY_MESSAGE[r.error as PlayError];
+      return { ok: false, message, word: r.word };
     }
     if (r.move.score < this.bestScore) {
       return { ok: true, message: "", word: r.move.word, score: r.move.score, top: false };
@@ -596,6 +623,7 @@ export class Game {
       isotops: this.isotops,
       tiers: this.tiers as Tier[],
     };
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.moves.push(move);
     if (player !== null) this.players[player] = (this.players[player] ?? 0) + 1;
     // Le reliquat se calcule sur le tirage TEL QU'IL A ETE DISTRIBUE, avant
@@ -608,6 +636,7 @@ export class Game {
     // meme si la machine s'eteint dans la seconde.
     this.append({ t: "coup", move });
     this.save();
+    for (const f of this.surCoup) f(move);
     // Ici le coup est joue : tout est devenu public, on peut l'ecrire.
     console.log(
       `[partie] coup ${move.n} remporte par ${player ?? "personne"} : ` +
