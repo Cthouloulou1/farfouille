@@ -798,20 +798,50 @@ function applyState(s: {
   draw();
 }
 
+/** Vrai quand c'est NOUS qui avons ferme : pas de reconnexion automatique. */
+let quitteVolontairement = false;
+
+/**
+ * Ferme la connexion en cours et attend qu'elle le soit VRAIMENT.
+ *
+ * Sans cette attente, changer de salon rouvrait une connexion pendant que
+ * l'ancienne vivait encore : le serveur voyait deux fois le meme pseudo et
+ * refusait le second avec « Ce nom d'utilisateur n'est pas disponible ». On
+ * n'entrait donc jamais dans le salon suivant.
+ */
+function fermerConnexion(): Promise<void> {
+  const vieux = ws;
+  ws = null;
+  if (vieux === null) return Promise.resolve();
+  quitteVolontairement = true;
+  if (vieux.readyState === WebSocket.CLOSED) return Promise.resolve();
+  return new Promise((res) => {
+    const fini = (): void => res();
+    vieux.addEventListener("close", fini, { once: true });
+    vieux.close();
+    // Filet : une fermeture qui ne se signale pas ne doit pas bloquer le jeu.
+    setTimeout(fini, 1200);
+  });
+}
+
 function connect() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}`);
-  ws.addEventListener("open", () => {
+  quitteVolontairement = false;
+  const moi = new WebSocket(`${proto}://${location.host}`);
+  ws = moi;
+  moi.addEventListener("open", () => {
     $("dot").classList.add("on");
     $("conn").textContent = me;
-    ws!.send(JSON.stringify({ t: "join", name: me, salon: salonChoisi }));
+    moi.send(JSON.stringify({ t: "join", name: me, salon: salonChoisi }));
   });
-  ws.addEventListener("close", () => {
+  moi.addEventListener("close", () => {
+    // Une connexion remplacee ou fermee expres ne se rouvre pas toute seule.
+    if (quitteVolontairement || ws !== moi) return;
     $("dot").classList.remove("on");
     $("conn").textContent = "déconnecté — reconnexion…";
     setTimeout(connect, 1500);
   });
-  ws.addEventListener("message", (ev) => {
+  moi.addEventListener("message", (ev) => {
     const m = JSON.parse(ev.data as string);
 
     if (m.t === "hello") {
@@ -834,8 +864,7 @@ function connect() {
       return;
     }
     if (m.t === "refus") {
-      ws?.close();
-      ws = null;
+      void fermerConnexion();
       $("join").hidden = false;
       void peuplerSalons();
       $("join-error").textContent = m.message;
@@ -1004,6 +1033,53 @@ async function peuplerSalons(): Promise<void> {
 
 /** Les reglages en cours d'edition dans le salon. */
 let cTirage = 7, cJouables = 7, cPioche = "probabilites";
+/** Primes en cours d'edition : points par nombre de caramels poses. */
+let cPrimes: Record<number, number> = {};
+
+/** La table habituelle : 50 a sept caramels, puis 25 de plus par caramel. */
+function primesHabituelles(): Record<number, number> {
+  const t: Record<number, number> = {};
+  for (let n = 7; n <= 15; n++) t[n] = 50 + (n - 7) * 25;
+  return t;
+}
+
+/**
+ * Une case par nombre de caramels posables. On ne montre que ce qui est
+ * atteignable : au-dela de `jouables`, la prime ne servirait jamais.
+ */
+function peuplerPrimes(): void {
+  const box = $("r-primes-grille");
+  box.replaceChildren();
+  for (let n = 2; n <= cJouables; n++) {
+    const l = document.createElement("label");
+    l.className = "prime";
+    const champ = document.createElement("input");
+    champ.type = "number";
+    champ.min = "0";
+    champ.max = "9999";
+    champ.value = String(cPrimes[n] ?? 0);
+    champ.addEventListener("input", () => {
+      const v = Math.max(0, Math.min(9999, Math.round(Number(champ.value) || 0)));
+      cPrimes[n] = v;
+    });
+    const b = document.createElement("b");
+    b.textContent = String(n);
+    l.append(b, champ);
+    box.appendChild(l);
+  }
+}
+
+$("r-primes-open").addEventListener("click", () => {
+  const ouvert = $("r-primes").hidden;
+  $("r-primes").hidden = !ouvert;
+  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de scrabble…";
+  if (ouvert) peuplerPrimes();
+});
+
+$("r-primes-defaut").addEventListener("click", () => {
+  cPrimes = primesHabituelles();
+  peuplerPrimes();
+});
 
 function peuplerNombres(): void {
   for (const [id, get] of [["r-tirage", () => cTirage], ["r-jouables", () => cJouables]] as const) {
@@ -1023,6 +1099,7 @@ function peuplerNombres(): void {
           if (cJouables > n) cJouables = n;
         } else cJouables = n;
         peuplerNombres();
+        if (!$("r-primes").hidden) peuplerPrimes();
       });
       box.appendChild(b);
     }
@@ -1063,7 +1140,10 @@ function ouvrirReglages(): void {
   cTirage = cfg.tirage;
   cJouables = cfg.jouables;
   cPioche = cfg.pioche;
+  cPrimes = { ...cfg.primes };
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
+  $("r-primes").hidden = true;
+  $("r-primes-open").textContent = "Primes de scrabble…";
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;
@@ -1077,14 +1157,14 @@ $("r-appliquer").addEventListener("click", () => {
   ws?.send(JSON.stringify({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
     joker: ($("r-joker") as HTMLInputElement).checked,
+    primes: cPrimes,
   }));
   $("reglages").hidden = true;
 });
 
 // Quitter le salon sans le detruire : on revient a l'accueil, la partie continue.
 $("quitter").addEventListener("click", () => {
-  ws?.close();
-  ws = null;
+  void fermerConnexion();
   $("dot").classList.remove("on");
   $("reglages").hidden = true;
   $("roadmap").hidden = true;
@@ -1150,6 +1230,8 @@ async function rejoindre(id: string): Promise<void> {
   try { localStorage.setItem("pseudo", me); } catch { /* navigation privee */ }
   $("join-error").hidden = true;
   $("join").hidden = true;
+
+  await fermerConnexion();
 
   if (!dictCharge) {
     const bytes = await (await fetch("/dawg.bin")).arrayBuffer();

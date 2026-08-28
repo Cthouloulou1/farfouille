@@ -427,7 +427,21 @@ wss.on("connection", (ws) => {
       // La partie joker a besoin d'un sac : « il ne reste plus de R » n'a aucun
       // sens avec des probabilites qui ne s'epuisent pas.
       const joker = msg.joker === true && pioche !== "probabilites";
-      const archives = await relancer(s, avec(base, { tirage, jouables, pioche, joker }));
+      // Primes personnalisees : un nombre de caramels poses, des points. On
+      // ne garde que des entiers positifs sur un nombre de caramels plausible.
+      const primes: Record<number, number> = {};
+      if (msg.primes !== null && typeof msg.primes === "object") {
+        for (const [k, v] of Object.entries(msg.primes as Record<string, unknown>)) {
+          const n = Number(k), pts = Math.round(Number(v));
+          if (!Number.isInteger(n) || n < 1 || n > 15) continue;
+          if (!Number.isFinite(pts) || pts < 0 || pts > 9999) continue;
+          if (pts > 0) primes[n] = pts;
+        }
+      }
+      const archives = await relancer(s, avec(base, {
+        tirage, jouables, pioche, joker,
+        primes: Object.keys(primes).length > 0 ? primes : base.primes,
+      }));
       surveiller(s);
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
         `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
