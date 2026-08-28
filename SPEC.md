@@ -1073,16 +1073,47 @@ joueur qui a soumis **la solution la plus rentable, le plus vite**, marque
 
 ### Les salons
 
-Le duplicate suppose un groupe stable : on ne peut pas comparer des joueurs qui
-n'ont pas vu les mêmes tirages.
+**Le salon est un lieu, la partie est ce qui tourne dedans.** C'est la
+distinction qui porte tout le reste.
 
-Les joueurs se réunissent donc dans un **salon** avant le début. Celui qui le
-crée le paramètre ; s'il s'en va, le réglage passe à un autre joueur présent.
-**Quiconque arrive après la fin du premier coup n'est pas comptabilisé.**
+| | ce qu'il détient |
+|---|---|
+| **Salon** | identifiant, membres, propriétaire, chat, configuration courante |
+| **Partie** | grille, sac, graine, journal, scores |
 
-En topping collaboratif et en battle, rien de tout cela : le score par coup n'est
-pas noté, seuls comptent les points et demi-points, et **on rejoint un salon en
-cours de route sans que ça pose problème**.
+Une partie qui se termine — ou un propriétaire qui change les réglages — en
+lance une nouvelle **dans le même salon**. Les gens et le chat restent, la partie
+change : on passe du duplicate à la battle sans que personne se redonne
+rendez-vous. Le paramétrage se fait **depuis l'intérieur** du salon.
+
+Le propriétaire est celui qui a créé le salon ; s'il part, le réglage passe à un
+autre joueur présent.
+
+**La grille mondiale est un salon comme un autre** : permanent, public, sans
+chrono. Elle n'a pas de propriétaire et sa configuration est **verrouillée** —
+aucun visiteur ne doit pouvoir la reparamétrer ou la relancer.
+
+**Qui arrive en cours de duplicate joue sans être compté.** On ne le refuse pas :
+il voit la grille, il cherche, et **s'il trouve le top il figure dans la liste
+des trouveurs**. Il entre au classement à la partie suivante. Son statut
+hors-classement doit être visible, pour que personne ne s'étonne de son absence
+du tableau.
+
+En topping collaboratif et en battle, le score par coup n'est pas noté du tout —
+seuls comptent les points et demi-points — et **on rejoint en cours de route sans
+que ça pose problème**.
+
+### Un fil de calcul par salon actif
+
+Le solveur garde sa propre copie de la grille pour que son cache de
+cross-checks reste chaud ; c'est ce qui rend les coups instantanés. On ne peut
+donc pas faire tourner plusieurs parties dans un fil commun sans perdre cet
+avantage.
+
+**Un fil par salon actif**, avec un plafond d'une dizaine et libération des fils
+restés inactifs. Le coût est d'environ 4 Mo de dictionnaire par fil, plus la
+grille. Une vingtaine de salons tiennent sur une machine de maison ; des
+milliers, non.
 
 ### La fin d'une partie
 
