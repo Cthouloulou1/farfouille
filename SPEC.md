@@ -1015,12 +1015,31 @@ sa propre grille, donc sur sa propre configuration, sans rien partager.
 > majore donc par la **plus forte prime atteignable avec au plus n caramels**,
 > jamais par la prime de n exactement.
 
-### Ce qu'on règle en deux clics
+### Créer un salon, puis le régler
 
-Le paramétrage courant tient en trois gestes : **le nombre de lettres piochées**
-(2 à 15, en boutons), **le nombre de lettres jouables** (2 à 15, en boutons), et
-**la case joker**. Le reste a des valeurs par défaut et vit derrière un bouton
-qu'il faut ouvrir exprès.
+**Créer un salon ne demande que son nom.** On obtient une partie normale :
+plateau du commerce **15×15**, sac de 102, 7 sur 7. Une case à cocher donne la
+grille infinie à la place. C'est tout ce que l'accueil demande.
+
+**Tout le reste se règle à l'intérieur du salon**, par son propriétaire : le
+nombre de caramels piochés et posables (2 à 15, en petits boutons carrés), le
+tirage des lettres, la partie joker. Appliquer relance une partie neuve dans le
+salon — l'ancienne est archivée, jamais effacée.
+
+Le **tirage des lettres** offre trois choix : probabilités pondérées, sac de 102
+lettres, et sac de 102 sans fin. Le troisième est réservé aux grilles infinies :
+sur un plateau fermé la partie s'arrête avant qu'il ait à se recharger.
+
+### La grille 15×15
+
+Le **plateau du commerce**, non pavé : ses quinze colonnes sont distinctes,
+contrairement au pavage `classique` qui les répète avec une période de 14 en
+faisant coïncider les bords. Les quatre coins sont des mots comptent triple,
+le centre porte l'étoile.
+
+Hors du plateau, on ne pose rien — mais le bord **reste une fin de mot valide** :
+un mot a le droit de s'appuyer contre lui. Ce n'est pas la même chose qu'une
+case occupée, et le générateur distingue les deux.
 
 ### X sur Y
 
@@ -1078,8 +1097,9 @@ contenir quatre lettres, et la pioche boucle sans fin.
 La convention retenue : **2 voyelles et 2 consonnes à partir de 7 caramels, une
 seule de chaque en dessous.** Rien ne change pour le tirage classique.
 
-**Sur un sac fini, la règle se relâche au coup 15** : une seule voyelle et une
-seule consonne suffisent alors, mais il en faut toujours au moins une de chaque.
+**Sur un sac fini, la règle se relâche à partir du coup 16** : les quinze
+premiers tirages exigent 2 et 2, ensuite une seule voyelle et une seule consonne
+suffisent, mais il en faut toujours au moins une de chaque.
 Sans ce relâchement la fin de partie serait injouable — il ne reste plus assez
 de chaque sorte pour composer un tirage acceptable. Le topping infini n'en a pas
 besoin, rien ne s'y épuise.

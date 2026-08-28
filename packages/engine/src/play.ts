@@ -25,6 +25,7 @@ export type PlayError =
   | "HORS_TIRAGE"
   | "PAS_DE_CONTACT"
   | "PREMIER_COUP_HORIZONTAL"
+  | "HORS_GRILLE"
   | "DOIT_COUVRIR_ORIGINE";
 
 /** Message destine au joueur, tel qu'il s'affiche. */
@@ -35,6 +36,7 @@ export const PLAY_MESSAGE: Readonly<Record<PlayError, string>> = {
   COLLAGE_INCONNU: "collage non valide",
   HORS_TIRAGE: "lettre absente du tirage",
   PAS_DE_CONTACT: "le mot ne touche rien",
+  HORS_GRILLE: "le mot sort de la grille",
   PREMIER_COUP_HORIZONTAL: "le premier coup est horizontal",
   DOIT_COUVRIR_ORIGINE: "le premier coup doit couvrir l'origine",
 };
@@ -141,6 +143,12 @@ export function resolveTypedWord(
   }
 
   if (cells.length > MAX_WORD) return { ok: false, error: "MOT_TROP_LONG" };
+  // Sur une grille bornee, un mot ne deborde pas du plateau.
+  for (const c of cells) {
+    if (!board.dansLesBornes(c.x, c.y)) {
+      return { ok: false, error: "HORS_GRILLE", word: cells.map((q) => q.letter).join("") };
+    }
+  }
   const word = cells.map((c) => c.letter).join("");
   const placed = cells.filter((c) => c.isNew);
   if (placed.length === 0) return { ok: false, error: "AUCUNE_LETTRE" };

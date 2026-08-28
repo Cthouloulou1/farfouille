@@ -267,8 +267,21 @@ const PREMIERS: LayoutFn = (x, y) =>
 
 // --------------------------------------------------------------------- API
 
+/**
+ * Le plateau du commerce, NON pave : une seule grille de 15x15 centree sur
+ * l'origine. Le pavage `classique` repete le motif a l'infini avec une periode
+ * de 14, ce qui fait coincider les bords ; sur une grille bornee il faut au
+ * contraire les quinze colonnes distinctes.
+ */
+export const CLASSIQUE_15: LayoutFn = (x, y) => {
+  const i = y + 7, j = x + 7;
+  if (i < 0 || i > 14 || j < 0 || j > 14) return ".";
+  return CLASSIQUE[i]![j]!;
+};
+
 export const LAYOUTS = {
   classique: tiled(CLASSIQUE),
+  classique15: CLASSIQUE_15,
   croixCourte: tiled(CROIX_COURTE),
   pave1: tiled(PAVE_1),
   croixEnrichie: tiled(CROIX_ENRICHIE),

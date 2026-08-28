@@ -316,6 +316,14 @@ export function generateMoves(
   let dir: Dir = "H";
 
   const occupied = (pos: number): boolean => board.occupied(ax + dx * pos, ay + dy * pos);
+  /**
+   * La case est-elle sur le plateau ? Sur une grille bornee, on ne descend pas
+   * au-dela du bord. Attention : hors bornes n'est PAS occupe -- un mot a le
+   * droit de commencer contre le bord, donc `occupied` doit continuer a
+   * repondre faux la-bas.
+   */
+  const surLePlateau = (pos: number): boolean =>
+    board.dansLesBornes(ax + dx * pos, ay + dy * pos);
 
   /**
    * Le score arrive DEJA CALCULE : il a ete accumule pendant la descente, case
@@ -388,6 +396,9 @@ export function generateMoves(
     left: number, right: number, placed: number,
     sc: number, mult: number, cross: number,
   ): void {
+    // Hors du plateau : rien a poser ici, ni au-dela.
+    if (!surLePlateau(pos)) return;
+
     const nPlaced = placed + (isNew ? 1 : 0);
     // « X sur Y » : on pioche Y caramels mais on n'en pose que X au plus. Toute
     // descente qui depasserait X est abandonnee ici -- inutile de la poursuivre,
@@ -516,6 +527,7 @@ export function generateMoves(
   for (const k of board.anchors) {
     const x = keyX(k);
     const y = keyY(k);
+    if (!board.dansLesBornes(x, y)) continue;
     for (const d of dirs) tasks.push({ x, y, d, bound: Infinity });
   }
 

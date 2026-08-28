@@ -18,8 +18,9 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
-  salonsEnregistres, slug, MAX_SALONS, type Salon,
+  salonsEnregistres, fermerSalon, slug, MAX_SALONS, type Salon,
 } from "./salons.ts";
+import { LAYOUTS } from "../../engine/src/bonus.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
@@ -158,7 +159,7 @@ function surveiller(s: Salon): void {
 // ---------------------------------------------------------------- ouverture
 
 const salonMondial = await ouvrirSalon({
-  id: GAME_ID, nom: "Grille mondiale", proprietaire: null, prive: false,
+  id: GAME_ID, nom: "Topping infini", proprietaire: null, prive: false,
   layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
 });
 surveiller(salonMondial);
@@ -187,6 +188,31 @@ const MIME: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".bin": "application/octet-stream",
 };
+
+/**
+ * La partie qu'on trouve en entrant dans un salon neuf.
+ *
+ * Grille bornee : le plateau du commerce et son sac de 102, c'est-a-dire une
+ * partie que tout le monde reconnait. Grille infinie : les probabilites
+ * ponderees, qui ne s'epuisent jamais.
+ */
+function configDeDepart(infinie: boolean) {
+  const base = configParDefaut();
+  return infinie
+    ? avec(base, { bornes: null, pioche: "probabilites" })
+    : avec(base, {
+        bornes: 7, pioche: "sac102",
+        pavage: LAYOUTS.classique15, pavageNom: "classique15",
+      });
+}
+
+/** Un identifiant de salon libre : on suffixe tant que le nom est pris. */
+function identifiantLibre(nom: string): string {
+  let id = slug(nom);
+  let n = 2;
+  while (salon(id) !== undefined) id = `${slug(nom)}-${n++}`;
+  return id;
+}
 
 function json(res: ServerResponse, code: number, corps: unknown): void {
   const s = JSON.stringify(corps);
@@ -231,27 +257,43 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const c = await corpsJson(req);
       const nom = String(c.nom ?? "").trim().slice(0, 40) || "Salon";
       const proprietaire = String(c.proprietaire ?? "").trim().slice(0, 24) || "anonyme";
-      const base = configParDefaut();
-      const tirage = Math.max(2, Math.min(15, Number(c.tirage ?? base.tirage)));
-      const jouables = Math.max(2, Math.min(tirage, Number(c.jouables ?? tirage)));
-      const pioche = c.pioche === "sac102" ? "sac102" : "probabilites";
-
-      // Un identifiant libre : on suffixe tant que le nom est pris.
-      let id = slug(nom);
-      let n = 2;
-      while (salon(id) !== undefined) id = `${slug(nom)}-${n++}`;
-
+      // Creer un salon ouvre une partie NORMALE : 15x15, plateau du commerce,
+      // 7 sur 7, sac de 102. Tout le reste se regle a l'interieur du salon.
       const s = await ouvrirSalon({
-        id, nom, proprietaire, prive: c.prive === true, layout: LAYOUT,
-        cfg: avec(base, { tirage, jouables, pioche }), nouveau: true,
+        id: identifiantLibre(nom), nom, proprietaire, prive: c.prive === true,
+        layout: LAYOUT, cfg: configDeDepart(c.infinie === true), nouveau: true,
       });
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
-        `${jouables} sur ${tirage}, pioche ${pioche}`);
+        `${s.partie.cfg.bornes === null ? "grille infinie" : "15x15"}`);
       json(res, 200, resume(s, 0));
     } catch (e) {
       json(res, 400, { erreur: (e as Error).message });
     }
+    return;
+  }
+
+  if (url.startsWith("/api/salon/") && req.method === "DELETE") {
+    const id = decodeURIComponent(url.slice("/api/salon/".length));
+    const s = salon(id);
+    if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
+    if (s.proprietaire === null) {
+      json(res, 403, { erreur: "le salon Topping infini est permanent" });
+      return;
+    }
+    const par = String(req.headers["x-pseudo"] ?? "");
+    if (par !== s.proprietaire) {
+      json(res, 403, { erreur: "seul le créateur du salon peut le supprimer" });
+      return;
+    }
+    // Le salon disparait de la liste ; ses FICHIERS RESTENT. On ne detruit
+    // jamais une partie jouee, meme close.
+    for (const [ws, v] of clients) {
+      if (v.salon === id) send(ws, { t: "refus", message: "Ce salon a été supprimé" });
+    }
+    await fermerSalon(id);
+    console.log(`[salon] "${s.nom}" (${id}) supprime par ${par} -- fichiers conserves`);
+    json(res, 200, { ok: true });
     return;
   }
 
@@ -379,8 +421,10 @@ wss.on("connection", (ws) => {
       const base = s.partie.cfg;
       const tirage = Math.max(2, Math.min(15, Number(msg.tirage ?? base.tirage)));
       const jouables = Math.max(2, Math.min(tirage, Number(msg.jouables ?? tirage)));
-      const pioche = msg.pioche === "sac102" ? "sac102" : msg.pioche === "probabilites"
-        ? "probabilites" : base.pioche;
+      // Le sac sans fin n'existe pas encore : on retombe sur le sac simple
+      // plutot que de promettre un comportement absent.
+      const pioche = msg.pioche === "sac102" || msg.pioche === "sac102boucle" ? "sac102"
+        : msg.pioche === "probabilites" ? "probabilites" : base.pioche;
       const archives = await relancer(s, avec(base, { tirage, jouables, pioche }));
       surveiller(s);
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +

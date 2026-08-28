@@ -44,6 +44,11 @@ export interface ConfigPartie {
    * partie.
    */
   pioche: "probabilites" | "sac102";
+  /**
+   * Demi-cote de la grille, en cases. 7 donne un plateau de 15x15 centre sur
+   * l'origine ; `null` laisse la grille infinie.
+   */
+  bornes: number | null;
   /** Le pavage des cases bonus. */
   pavage: LayoutFn;
   /** Nom du pavage, pour la sauvegarde et l'affichage. */
@@ -65,6 +70,7 @@ export function configParDefaut(): ConfigPartie {
     primes: primesParDefaut(),
     valeurs: VALUES,
     pioche: "probabilites",
+    bornes: null,
     pavage: activeLayout(),
     pavageNom: currentLayout(),
   };
@@ -80,6 +86,7 @@ export interface ConfigSerialisee {
   primes: Record<number, number>;
   valeurs: Record<string, number>;
   pioche: "probabilites" | "sac102";
+  bornes: number | null;
   pavageNom: LayoutName | "custom";
 }
 
@@ -87,7 +94,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, pavageNom: cfg.pavageNom,
+    pioche: cfg.pioche, bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
 
@@ -100,6 +107,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
   return {
     tirage: plat.tirage, jouables: plat.jouables,
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
+    bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),
     pavageNom: plat.pavageNom,
   };

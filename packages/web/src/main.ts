@@ -824,6 +824,9 @@ function connect() {
       // posent, ce que vaut chaque lettre et quelle prime recompense quoi.
       cfg = m.config ? deserialiser(m.config) : configParDefaut();
       board = new Board(dict, cfg);
+      // Seul le proprietaire regle son salon. La grille permanente n'en a pas.
+      $("reglages-open").hidden = m.proprietaire !== me;
+      $("conn").textContent = `${me} · ${m.nomSalon}`;
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       paintChat(chat);
       applyState(m.state);
@@ -838,6 +841,22 @@ function connect() {
       $("join-error").textContent = m.message;
       $("join-error").hidden = false;
       ($("name") as HTMLInputElement).select();
+      return;
+    }
+    if (m.t === "relance") {
+      cfg = m.config ? deserialiser(m.config) : cfg;
+      tiles = m.tiles ?? [];
+      history = [];
+      chat = m.chat ?? [];
+      board = new Board(dict, cfg);
+      board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
+      typed = ""; ghost = null; best = null; finie = false; finieA = 0;
+      paintChat(chat);
+      applyState(m.state);
+      ox = W / 2 - cell / 2;
+      oy = H / 2 - cell / 2;
+      flash("nouvelle partie dans ce salon", "ok");
+      draw();
       return;
     }
     if (m.t === "state") { applyState(m.state); return; }
@@ -894,12 +913,29 @@ let salonChoisi = new URLSearchParams(location.search).get("salon") ?? "";
 interface ResumeSalon {
   id: string; nom: string; proprietaire: string | null; mondiale: boolean;
   coups: number; finie: boolean; connectes: number;
-  config: { tirage: number; jouables: number; pioche: string };
+  config: { tirage: number; jouables: number; pioche: string; bornes: number | null };
+}
+
+function nomPioche(p: string): string {
+  return p === "sac102" ? "sac de 102" : p === "sac102boucle" ? "sac de 102 sans fin"
+    : "probabilités pondérées";
 }
 
 function decritVariante(c: ResumeSalon["config"]): string {
-  const pioche = c.pioche === "sac102" ? "sac de 102" : "probabilités";
-  return `${c.jouables} sur ${c.tirage} · ${pioche}`;
+  const grille = c.bornes === null ? "grille infinie" : `${c.bornes * 2 + 1}×${c.bornes * 2 + 1}`;
+  return `${grille} · ${c.jouables} sur ${c.tirage} · ${nomPioche(c.pioche)}`;
+}
+
+/** Deux icones : la grille sans bord, et le plateau ferme. */
+function icone(infinie: boolean): string {
+  return infinie
+    ? `<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2">
+         <path d="M1 5.5h14M1 10.5h14M5.5 1v14M10.5 1v14" stroke-dasharray="2 1.6"/>
+       </svg>`
+    : `<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2">
+         <rect x="1.6" y="1.6" width="12.8" height="12.8" rx="1"/>
+         <path d="M1.6 6h12.8M1.6 10h12.8M6 1.6v12.8M10 1.6v12.8"/>
+       </svg>`;
 }
 
 async function peuplerSalons(): Promise<void> {
@@ -915,19 +951,44 @@ async function peuplerSalons(): Promise<void> {
     return;
   }
   box.replaceChildren();
+  const moi = ($("name") as HTMLInputElement).value.trim();
   for (const s of data.salons) {
-    const b = document.createElement("button");
-    b.type = "button";
+    const b = document.createElement("div");
     b.className = "salon";
-    const qui = s.mondiale ? '<span class="mondiale">permanente</span>'
-      : `par ${s.proprietaire}`;
-    const etat = s.finie ? "terminée"
-      : `${s.coups} coup${s.coups > 1 ? "s" : ""}`;
+    b.setAttribute("role", "button");
+    b.tabIndex = 0;
+    const qui = s.mondiale ? '<span class="mondiale">permanent</span>' : `par ${s.proprietaire}`;
+    const etat = s.finie ? "terminée" : `${s.coups} coup${s.coups > 1 ? "s" : ""}`;
     b.innerHTML =
+      `<span class="icone">${icone(s.config.bornes === null)}</span>` +
       `<span class="nom">${s.nom}</span>` +
       `<span class="qui">${qui}<br>${s.connectes} connecté${s.connectes > 1 ? "s" : ""}</span>` +
       `<span class="quoi">${decritVariante(s.config)} · ${etat}</span>`;
     b.addEventListener("click", () => rejoindre(s.id));
+    b.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") rejoindre(s.id);
+    });
+    // Le createur peut retirer son salon. Ses fichiers restent sur le disque.
+    if (!s.mondiale && s.proprietaire === moi && moi !== "") {
+      const jeter = document.createElement("button");
+      jeter.type = "button";
+      jeter.className = "jeter";
+      jeter.textContent = "Supprimer";
+      jeter.title = "Retire le salon de la liste. La partie jouée reste sur le disque.";
+      jeter.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const r = await fetch(`/api/salon/${encodeURIComponent(s.id)}`, {
+          method: "DELETE", headers: { "x-pseudo": moi },
+        });
+        if (!r.ok) {
+          const d = await r.json();
+          $("join-error").textContent = d.erreur ?? "suppression impossible";
+          $("join-error").hidden = false;
+        }
+        void peuplerSalons();
+      });
+      b.appendChild(jeter);
+    }
     box.appendChild(b);
   }
   if (data.salons.length === 0) {
@@ -937,11 +998,11 @@ async function peuplerSalons(): Promise<void> {
   }
 }
 
-/** Les rangees de boutons 2 a 15 du formulaire de creation. */
+/** Les reglages en cours d'edition dans le salon. */
 let cTirage = 7, cJouables = 7, cPioche = "probabilites";
 
 function peuplerNombres(): void {
-  for (const [id, get] of [["c-tirage", () => cTirage], ["c-jouables", () => cJouables]] as const) {
+  for (const [id, get] of [["r-tirage", () => cTirage], ["r-jouables", () => cJouables]] as const) {
     const box = $(id);
     box.replaceChildren();
     for (let n = 2; n <= 15; n++) {
@@ -951,9 +1012,9 @@ function peuplerNombres(): void {
       b.dataset["n"] = String(n);
       b.setAttribute("aria-pressed", String(get() === n));
       // On ne peut pas poser plus de caramels qu'on n'en pioche.
-      if (id === "c-jouables") (b as HTMLButtonElement).disabled = n > cTirage;
+      if (id === "r-jouables") (b as HTMLButtonElement).disabled = n > cTirage;
       b.addEventListener("click", () => {
-        if (id === "c-tirage") {
+        if (id === "r-tirage") {
           cTirage = n;
           if (cJouables > n) cJouables = n;
         } else cJouables = n;
@@ -964,21 +1025,69 @@ function peuplerNombres(): void {
   }
 }
 
-for (const b of $("c-pioche").querySelectorAll("button")) {
+for (const b of $("r-pioche").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cPioche = (b as HTMLElement).dataset["v"] ?? "probabilites";
-    for (const q of $("c-pioche").querySelectorAll("button")) {
-      q.setAttribute("aria-pressed", String(q === b));
-    }
+    peuplerPioche();
   });
 }
+
+/**
+ * Les trois tirages possibles. Le sac sans fin n'a de sens que sur une grille
+ * infinie : sur un plateau ferme la partie s'arrete avant qu'il ne se recharge.
+ */
+function peuplerPioche(): void {
+  for (const b of $("r-pioche").querySelectorAll("button")) {
+    const v = (b as HTMLElement).dataset["v"]!;
+    b.setAttribute("aria-pressed", String(v === cPioche));
+    const interdit = v === "sac102boucle" && cfg.bornes !== null;
+    (b as HTMLButtonElement).disabled = interdit;
+    (b as HTMLButtonElement).title = interdit
+      ? "réservé aux grilles infinies" : "";
+  }
+}
+
+/** Ouvre les reglages sur l'etat courant de la partie. */
+function ouvrirReglages(): void {
+  cTirage = cfg.tirage;
+  cJouables = cfg.jouables;
+  cPioche = cfg.pioche;
+  peuplerNombres();
+  peuplerPioche();
+  $("r-error").hidden = true;
+  $("reglages").hidden = false;
+}
+
+$("reglages-open").addEventListener("click", ouvrirReglages);
+$("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
+
+$("r-appliquer").addEventListener("click", () => {
+  ws?.send(JSON.stringify({
+    t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
+  }));
+  $("reglages").hidden = true;
+});
+
+// Quitter le salon sans le detruire : on revient a l'accueil, la partie continue.
+$("quitter").addEventListener("click", () => {
+  ws?.close();
+  ws = null;
+  $("dot").classList.remove("on");
+  $("reglages").hidden = true;
+  $("roadmap").hidden = true;
+  $("join").hidden = false;
+  void peuplerSalons();
+});
 
 $("creer-open").addEventListener("click", () => {
   const ouvert = $("creer").hidden;
   $("creer").hidden = !ouvert;
   $("creer-open").textContent = ouvert ? "Annuler" : "Créer un salon";
-  if (ouvert) peuplerNombres();
 });
+
+// Le pseudo commande l'affichage des boutons Supprimer : on rafraichit la liste
+// des qu'il change, sinon le createur ne verrait pas ses propres salons.
+$("name").addEventListener("input", () => void peuplerSalons());
 
 $("creer").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -996,7 +1105,7 @@ $("creer").addEventListener("submit", async (e) => {
     body: JSON.stringify({
       nom: ($("c-nom") as HTMLInputElement).value.trim() || "Salon",
       proprietaire: pseudo,
-      tirage: cTirage, jouables: cJouables, pioche: cPioche,
+      infinie: ($("c-infinie") as HTMLInputElement).checked,
       prive: ($("c-prive") as HTMLInputElement).checked,
     }),
   });
@@ -1043,7 +1152,6 @@ async function rejoindre(id: string): Promise<void> {
 }
 
 void peuplerSalons();
-peuplerNombres();
 
 try {
   const saved = localStorage.getItem("pseudo");

@@ -12,14 +12,14 @@ import { type DrawResult, type RejectPolicy } from "./bag.ts";
 /**
  * Le tirage se relache passe un certain nombre de coups. Voir SPEC.md §16.
  *
- * Au debut il faut 2 voyelles ET 2 consonnes ; a partir du COUP 15 une seule de
+ * Au debut il faut 2 voyelles ET 2 consonnes ; a partir du COUP 16 une seule de
  * chaque suffit, mais il en faut toujours au moins une. Sans ce relachement, la
  * fin de partie d'un sac fini serait injouable : il ne reste plus assez de
  * chaque sorte pour composer un tirage acceptable.
  *
  * Le topping infini n'en a pas besoin -- rien ne s'y epuise.
  */
-export const COUP_RELACHEMENT = 15;
+export const COUP_RELACHEMENT = 16;
 
 export function politiqueSacFini(coup: () => number): RejectPolicy {
   return (rack) => {

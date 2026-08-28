@@ -77,6 +77,18 @@ export class Board {
     return this.tiles.get(key(x, y));
   }
 
+  /**
+   * La case est-elle SUR le plateau ? Toujours vrai sur une grille infinie.
+   *
+   * Hors bornes, on ne peut rien poser -- mais la case reste un bord de mot
+   * valide : un mot a le droit de commencer contre le bord. Ce n'est donc pas
+   * la meme chose qu'une case occupee.
+   */
+  dansLesBornes(x: number, y: number): boolean {
+    const b = this.cfg.bornes;
+    return b === null || (x >= -b && x <= b && y >= -b && y <= b);
+  }
+
   occupied(x: number, y: number): boolean {
     return this.tiles.has(key(x, y));
   }
@@ -108,7 +120,7 @@ export class Board {
       this.anchors.delete(k);
       for (const [dx, dy] of NEIGHBOURS) {
         const nx = p.x + dx, ny = p.y + dy;
-        if (!this.occupied(nx, ny)) this.anchors.add(key(nx, ny));
+        if (!this.occupied(nx, ny) && this.dansLesBornes(nx, ny)) this.anchors.add(key(nx, ny));
       }
     }
     for (const p of placements) this.invalidateAround(p.x, p.y);
