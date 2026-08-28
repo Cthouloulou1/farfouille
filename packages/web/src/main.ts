@@ -1131,6 +1131,25 @@ let cTirage = 7, cJouables = 7, cPioche = "probabilites";
 let cPrimes: Record<number, number> = {};
 /** Chrono en cours d'edition, en secondes. null = sans chrono. */
 let cChrono: number | null = null;
+/** Grille en cours d'edition : demi-cote, ou null pour l'infini. */
+let cBornes: number | null = 7;
+
+function peuplerGrille(): void {
+  for (const b of $("r-grille").querySelectorAll("button")) {
+    const v = (b as HTMLElement).dataset["v"]!;
+    b.setAttribute("aria-pressed", String(v === "infinie" ? cBornes === null : cBornes !== null));
+  }
+}
+
+for (const b of $("r-grille").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    cBornes = (b as HTMLElement).dataset["v"] === "infinie" ? null : 7;
+    peuplerGrille();
+    // Le sac sans fin ne vaut que pour l'infini ; le sac simple prend le relais.
+    if (cBornes !== null && cPioche === "sac102boucle") cPioche = "sac102";
+    peuplerPioche();
+  });
+}
 
 /** Les quatre reglages proposes, plus la saisie libre. */
 function peuplerChrono(): void {
@@ -1247,7 +1266,7 @@ function peuplerPioche(): void {
   for (const b of $("r-pioche").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
     b.setAttribute("aria-pressed", String(v === cPioche));
-    const interdit = v === "sac102boucle" && cfg.bornes !== null;
+    const interdit = v === "sac102boucle" && cBornes !== null;
     (b as HTMLButtonElement).disabled = interdit;
     (b as HTMLButtonElement).title = interdit
       ? "réservé aux grilles infinies" : "";
@@ -1268,7 +1287,9 @@ function ouvrirReglages(): void {
   cPioche = cfg.pioche;
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
+  cBornes = cfg.bornes;
   peuplerChrono();
+  peuplerGrille();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = "Primes de scrabble…";
@@ -1287,6 +1308,7 @@ $("r-appliquer").addEventListener("click", () => {
     joker: ($("r-joker") as HTMLInputElement).checked,
     primes: cPrimes,
     chrono: cChrono,
+    bornes: cBornes,
   }));
   $("reglages").hidden = true;
 });
@@ -1327,7 +1349,6 @@ $("creer").addEventListener("submit", async (e) => {
     body: JSON.stringify({
       nom: ($("c-nom") as HTMLInputElement).value.trim() || "Salon",
       proprietaire: pseudo,
-      infinie: ($("c-infinie") as HTMLInputElement).checked,
       prive: ($("c-prive") as HTMLInputElement).checked,
     }),
   });
@@ -1335,6 +1356,7 @@ $("creer").addEventListener("submit", async (e) => {
   if (!r.ok) {
     $("c-error").textContent = s.erreur ?? "création impossible";
     $("c-error").hidden = false;
+    $("c-error").scrollIntoView({ block: "nearest" });
     return;
   }
   rejoindre(s.id);

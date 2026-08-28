@@ -267,7 +267,9 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       // 7 sur 7, sac de 102. Tout le reste se regle a l'interieur du salon.
       const s = await ouvrirSalon({
         id: identifiantLibre(nom), nom, proprietaire, prive: c.prive === true,
-        layout: LAYOUT, cfg: configDeDepart(c.infinie === true), nouveau: true,
+        // Un salon neuf est une partie normale : plateau 15x15. La grille
+        // infinie se choisit ensuite, dans les reglages du salon.
+        layout: LAYOUT, cfg: configDeDepart(false), nouveau: true,
       });
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
@@ -439,8 +441,21 @@ wss.on("connection", (ws) => {
       }
       const chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(5, Math.min(3600, Math.round(Number(msg.chrono))));
+      // Changer de grille change aussi le pavage : le plateau du commerce n'a
+      // de sens que borne, le pavage infini que sans bord.
+      // `null` VEUT DIRE quelque chose ici -- la grille infinie -- et ne peut
+      // donc pas signifier « non fourni ». Seule l'absence de la cle laisse le
+      // reglage inchange.
+      const bornes = msg.bornes === undefined ? base.bornes
+        : msg.bornes === null ? null
+        : Math.max(3, Math.min(60, Math.round(Number(msg.bornes))));
+      const pavage = bornes === null ? LAYOUTS[s.layout] : LAYOUTS.classique15;
+      const pavageNom = bornes === null ? s.layout : "classique15" as const;
       const archives = await relancer(s, avec(base, {
-        tirage, jouables, pioche, joker,
+        tirage, jouables, joker,
+        // Le sac sans fin ne vaut que sur une grille infinie.
+        pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
+        bornes, pavage, pavageNom,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));

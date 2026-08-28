@@ -1034,12 +1034,16 @@ sa propre grille, donc sur sa propre configuration, sans rien partager.
 ### Créer un salon, puis le régler
 
 **Créer un salon ne demande que son nom.** On obtient une partie normale :
-plateau du commerce **15×15**, sac de 102, 7 sur 7. Une case à cocher donne la
-grille infinie à la place. C'est tout ce que l'accueil demande.
+plateau du commerce **15×15**, sac de 102, 7 sur 7. C'est tout ce que l'accueil
+demande — le **type de grille se choisit à l'intérieur**, comme le reste.
 
-**Tout le reste se règle à l'intérieur du salon**, par son propriétaire : le
-nombre de caramels piochés et posables (2 à 15, en petits boutons carrés), le
-tirage des lettres, la partie joker. Appliquer relance une partie neuve dans le
+**Tout le reste se règle à l'intérieur du salon**, par son propriétaire : la
+grille (plateau 15×15 ou infinie), le nombre de caramels piochés et posables
+(2 à 15, en petits boutons carrés), le temps par coup, le tirage des lettres,
+la partie joker et les primes.
+
+Changer de grille change aussi le pavage : le plateau du commerce n'a de sens
+que borné, le pavage infini que sans bord. Appliquer relance une partie neuve dans le
 salon — l'ancienne est archivée, jamais effacée.
 
 Le **tirage des lettres** offre trois choix : probabilités pondérées, sac de 102

@@ -286,9 +286,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
     <form class="creer" id="creer" hidden autocomplete="off">
       <input id="c-nom" maxlength="40" placeholder="Nom du salon" autocomplete="off">
-      <label class="case"><input type="checkbox" id="c-infinie"> Grille infinie (sinon 15×15)</label>
       <label class="case"><input type="checkbox" id="c-prive"> Salon privé (absent de la liste)</label>
-      <p class="apres">Une partie normale, 7 sur 7. Tout se règle ensuite dans le salon.</p>
+      <p class="apres">Une partie normale sur plateau 15×15, 7 sur 7. Tout se règle ensuite
+        dans le salon, y compris le passage à la grille infinie.</p>
       <div class="join-error" id="c-error" hidden></div>
       <button type="submit">Créer et rejoindre</button>
     </form>
@@ -382,6 +382,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <button id="rg-close">Fermer</button>
     </header>
     <div class="rg-corps">
+      <label>Grille</label>
+      <div class="choix" id="r-grille">
+        <button type="button" data-v="15">Plateau 15×15<br><em>jeu de société</em></button>
+        <button type="button" data-v="infinie">Grille infinie<br><em>sans bord</em></button>
+      </div>
+
       <label>Caramels piochés par coup</label>
       <div class="nombres" id="r-tirage"></div>
 
