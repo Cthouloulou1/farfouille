@@ -1057,6 +1057,14 @@ Hors du plateau, on ne pose rien — mais le bord **reste une fin de mot valide*
 un mot a le droit de s'appuyer contre lui. Ce n'est pas la même chose qu'une
 case occupée, et le générateur distingue les deux.
 
+**L'affichage peint le pavage de LA PARTIE, pas le réglage global.** Sans quoi
+un salon 15×15 montrait le pavage infini répété au-delà de ses bornes — la
+partie était bien bornée, mais elle avait l'air infinie. Le damier s'arrête aux
+bornes, le dehors prend un fond mat, et un trait franc marque le bord.
+
+Les règles portent alors **les repères du jeu de société** : les lignes de A à O,
+les colonnes de 1 à 15, chacune numérotée puisqu'elles ne sont que quinze.
+
 ### X sur Y
 
 On pioche Y lettres, on en pose au plus X. La prime dépend du **nombre de

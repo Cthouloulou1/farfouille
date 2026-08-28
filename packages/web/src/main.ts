@@ -132,6 +132,7 @@ function draw() {
     edge: css("--tile-edge"), ink: css("--tile-ink"), accent: css("--accent"),
     cursor: css("--cursor"), mark: css("--mark"), faint: css("--ink-faint"),
     panel: css("--panel"), rule: css("--rule"), abg: css("--accent-bg"), dark: css("--ink"),
+    ground: css("--ground"), bord: css("--ink-soft"),
     jface: css("--joker-face"), jedge: css("--joker-edge"),
     T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
   };
@@ -140,14 +141,27 @@ function draw() {
 
   const gx0 = Math.floor(-ox / cell) - 1, gx1 = Math.ceil((W - ox) / cell) + 1;
   const gy0 = Math.floor(-oy / cell) - 1, gy1 = Math.ceil((H - oy) / cell) + 1;
+  // Sur une grille bornee, on ne peint que le plateau : au-dela il n'y a rien,
+  // et une grille qui continue au-dela du bord donne l'impression d'etre infinie.
+  const b = cfg.bornes;
+  const px0 = b === null ? gx0 : Math.max(gx0, -b), px1 = b === null ? gx1 : Math.min(gx1, b);
+  const py0 = b === null ? gy0 : Math.max(gy0, -b), py1 = b === null ? gy1 : Math.min(gy1, b);
   // Bords arrondis au pixel : sinon deux cases voisines tombent sur des
   // fractions differentes et laissent des lisieres irregulieres.
   const eX = (x: number) => Math.round(ox + x * cell);
   const eY = (y: number) => Math.round(oy + y * cell);
 
-  for (let y = gy0; y <= gy1; y++) {
-    for (let x = gx0; x <= gx1; x++) {
-      const ch = bonusChar(x, y);
+  if (b !== null) {
+    // Hors plateau : un fond mat, distinct du damier.
+    ctx.fillStyle = C.ground;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = C.field;
+    ctx.fillRect(eX(-b), eY(-b), eX(b + 1) - eX(-b), eY(b + 1) - eY(-b));
+  }
+
+  for (let y = py0; y <= py1; y++) {
+    for (let x = px0; x <= px1; x++) {
+      const ch = bonusChar(x, y, cfg.pavage);
       if (ch === ".") continue;
       ctx.fillStyle = (C as Record<string, string>)[ch === "*" ? "D" : ch] ?? C.D;
       ctx.fillRect(eX(x), eY(y), eX(x + 1) - eX(x), eY(y + 1) - eY(y));
@@ -157,9 +171,23 @@ function draw() {
   ctx.strokeStyle = C.line;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let x = gx0; x <= gx1; x++) { const p = eX(x) + .5; ctx.moveTo(p, 0); ctx.lineTo(p, H); }
-  for (let y = gy0; y <= gy1; y++) { const p = eY(y) + .5; ctx.moveTo(0, p); ctx.lineTo(W, p); }
+  const ly0 = b === null ? 0 : eY(-b), ly1 = b === null ? H : eY(b + 1);
+  const lx0 = b === null ? 0 : eX(-b), lx1 = b === null ? W : eX(b + 1);
+  for (let x = px0; x <= px1 + (b === null ? 0 : 1); x++) {
+    const p = eX(x) + .5; ctx.moveTo(p, ly0); ctx.lineTo(p, ly1);
+  }
+  for (let y = py0; y <= py1 + (b === null ? 0 : 1); y++) {
+    const p = eY(y) + .5; ctx.moveTo(lx0, p); ctx.lineTo(lx1, p);
+  }
   ctx.stroke();
+
+  // Le bord du plateau, trace franc pour qu'on voie ou la grille s'arrete.
+  if (b !== null) {
+    ctx.strokeStyle = C.bord;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(eX(-b) - 1, eY(-b) - 1, eX(b + 1) - eX(-b) + 2, eY(b + 1) - eY(-b) + 2);
+    ctx.lineWidth = 1;
+  }
 
   if (tiles.length === 0) {
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2;
@@ -279,7 +307,9 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   ctx.moveTo(LEFT + .5, 0); ctx.lineTo(LEFT + .5, H);
   ctx.stroke();
 
-  const stepBy = Math.max(1, Math.ceil(30 / cell));
+  // Sur un plateau ferme, chaque ligne porte son repere : quinze suffisent.
+  const bornes = cfg.bornes;
+  const stepBy = bornes !== null ? 1 : Math.max(1, Math.ceil(30 / cell));
   ctx.font = '500 10px "IBM Plex Mono", monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -288,16 +318,20 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     if (!on && x % stepBy !== 0) continue;
     const px = ox + x * cell + cell / 2;
     if (px < LEFT + 9 || px > W - 4) continue;
+    if (bornes !== null && (x < -bornes || x > bornes)) continue;
     ctx.fillStyle = on ? C.dark! : C.faint!;
-    ctx.fillText(String(x), px, TOP / 2);
+    ctx.fillText(bornes === null ? String(x) : String(x + bornes + 1), px, TOP / 2);
   }
   for (let y = gy0; y <= gy1; y++) {
     const on = mark !== null && y >= mark.y0 && y <= mark.y1;
     if (!on && y % stepBy !== 0) continue;
     const py = oy + y * cell + cell / 2;
     if (py < TOP + 7 || py > H - 4) continue;
+    if (bornes !== null && (y < -bornes || y > bornes)) continue;
     ctx.fillStyle = on ? C.dark! : C.faint!;
-    ctx.fillText(String(y), LEFT / 2, py);
+    ctx.fillText(
+      bornes === null ? String(y) : String.fromCharCode(65 + y + bornes), LEFT / 2, py,
+    );
   }
 }
 

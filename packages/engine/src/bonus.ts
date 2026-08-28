@@ -322,8 +322,13 @@ export function activeLayout(): LayoutFn {
 }
 
 /** Symbole brut de la case, pour l'affichage et les tests. '.' = case nue. */
-export function bonusChar(x: number, y: number): string {
-  return active(x, y);
+/**
+ * Symbole brut de la case. `pavage` permet de repondre pour une partie donnee
+ * plutot que pour le reglage global -- sans quoi l'affichage peint le motif
+ * d'une autre variante que celle qui se joue.
+ */
+export function bonusChar(x: number, y: number, pavage: LayoutFn = active): string {
+  return pavage(x, y);
 }
 
 const PLAIN: Bonus = Object.freeze({ letter: 1, word: 1 });
