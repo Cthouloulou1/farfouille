@@ -1081,8 +1081,9 @@ seule de chaque en dessous.** Rien ne change pour le tirage classique.
 ### Les lettres restantes s'affichent
 
 Sur une pioche à sac fini, ce qui reste est **public** — au duplicate on suit
-les lettres restantes pour anticiper les tirages. Une ligne en haut à gauche de
-la grille les donne, triées, précédées du compte.
+les lettres restantes pour anticiper les tirages. Elles occupent une **ligne
+mince au-dessus des numéros de colonnes**, entre la barre du coup et la grille :
+autour du plateau, jamais par-dessus.
 
 Rien ne s'affiche sur les probabilités pondérées : elles ne s'épuisent pas, il
 n'y a pas de reste à montrer.
@@ -1099,6 +1100,21 @@ Une partie déjà commencée **garde sa variante** : elle est écrite dans l'en-
 de son journal et relue au démarrage. Vouloir la changer en cours de route est
 refusé, avec le message qui dit quoi faire — changer de variante fausserait tous
 les scores déjà joués.
+
+### En réserve : le sac qui se recharge
+
+Une troisième pioche, **pas encore construite**, notée pour ne pas être oubliée.
+
+On tire au hasard parmi les 102 caramels, et dès qu'il ne reste plus que **2
+voyelles ou 2 consonnes dans le sac et les reliquats réunis**, le sac est
+**complété pour retrouver sa composition d'origine** — on y remet les caramels
+qui manquent, jusqu'aux 102 lettres du départ.
+
+Elle donne une grille infinie avec la distribution du jeu classique, au lieu des
+probabilités pondérées. Ce n'est pas le format principal.
+
+> Le seuil est celui de la fin de partie, mais l'effet est inverse : au lieu de
+> s'arrêter, la partie recharge et continue.
 
 ### Le chrono
 
