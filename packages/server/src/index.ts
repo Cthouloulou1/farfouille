@@ -18,7 +18,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
-  salonsEnregistres, fermerSalon, slug, MAX_SALONS, type Salon,
+  salonsEnregistres, fermerSalon, identifiantPris, slug, MAX_SALONS, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
@@ -216,11 +216,14 @@ function configDeDepart(infinie: boolean) {
       });
 }
 
-/** Un identifiant de salon libre : on suffixe tant que le nom est pris. */
+/**
+ * Un identifiant de salon libre : on suffixe tant que le nom est pris, par un
+ * salon ouvert OU par une partie deja sur le disque.
+ */
 function identifiantLibre(nom: string): string {
   let id = slug(nom);
   let n = 2;
-  while (salon(id) !== undefined) id = `${slug(nom)}-${n++}`;
+  while (identifiantPris(id)) id = `${slug(nom)}-${n++}`;
   return id;
 }
 

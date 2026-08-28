@@ -71,6 +71,22 @@ export function salon(id: string): Salon | undefined {
   return salons.get(id);
 }
 
+/**
+ * Cet identifiant est-il deja pris ?
+ *
+ * Pas seulement par un salon ouvert : par des FICHIERS aussi. Supprimer un
+ * salon laisse sa partie sur le disque -- c'est voulu, on ne detruit jamais une
+ * partie jouee. Mais recreer un salon du meme nom rouvrait alors l'ancienne
+ * partie, avec sa variante et ses coups, au lieu de la partie normale attendue.
+ */
+export function identifiantPris(id: string): boolean {
+  if (salons.has(id)) return true;
+  for (const suffixe of [".json", ".journal.jsonl"]) {
+    if (existsSync(join(DATA_DIR, `${id}${suffixe}`))) return true;
+  }
+  return false;
+}
+
 export function tousLesSalons(): Salon[] {
   return [...salons.values()].sort((a, b) => a.creeLe - b.creeLe);
 }

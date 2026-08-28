@@ -1033,9 +1033,15 @@ sa propre grille, donc sur sa propre configuration, sans rien partager.
 
 ### Créer un salon, puis le régler
 
-**Créer un salon ne demande que son nom.** On obtient une partie normale :
-plateau du commerce **15×15**, sac de 102, 7 sur 7. C'est tout ce que l'accueil
-demande — le **type de grille se choisit à l'intérieur**, comme le reste.
+**Créer un salon ne demande que son nom.** On obtient **toujours** une partie
+normale : plateau du commerce **15×15**, sac de 102, 7 sur 7. C'est tout ce que
+l'accueil demande — le **type de grille se choisit à l'intérieur**, comme le
+reste.
+
+> Un salon supprimé laisse sa partie sur le disque : on ne détruit jamais une
+> partie jouée. L'identifiant d'un salon neuf évite donc les fichiers existants
+> autant que les salons ouverts — sans quoi recréer un salon du même nom
+> rouvrait l'ancienne partie, avec sa variante et ses coups.
 
 **Tout le reste se règle à l'intérieur du salon**, par son propriétaire : la
 grille (plateau 15×15 ou infinie), le nombre de caramels piochés et posables
