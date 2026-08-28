@@ -999,9 +999,9 @@ qu'il faut ouvrir exprès.
 On pioche Y lettres, on en pose au plus X. La prime dépend du **nombre de
 lettres posées**, pas du fait de vider le tirage.
 
-| lettres posées | 7 | 8 | 9 | 10 | 11 |
-|---|---|---|---|---|---|
-| prime par défaut | 50 | 75 | 100 | 125 | 150 |
+| lettres posées | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+|---|---|---|---|---|---|---|---|---|---|
+| prime par défaut | 50 | 75 | 100 | 125 | 150 | 175 | 200 | 225 | 250 |
 
 En dessous de 7 lettres, la prime par défaut est **nulle**. Le pas est de 25.
 La prime s'ajoute **après** les multiplicateurs de mot, comme au jeu classique.
@@ -1056,11 +1056,53 @@ même si quelqu'un l'a trouvé plus tôt. Chaque joueur marque **le score de sa
 meilleure solution**, et son écart au top est son **négatif**. Le score de chaque
 joueur est noté **à chaque coup**.
 
+Rien ne filtre pendant le coup : aucune annonce, aucun décompte de trouveurs.
+Savoir que le top est atteint apprendrait aux autres que leur solution ne l'est
+pas. À l'échéance, **la liste de ceux qui ont trouvé le top s'affiche dans le
+chat**, et on enchaîne aussitôt — pas de temps mort entre l'affichage et le coup
+suivant.
+
+Le classement se fait sur le **total de points**, avec une colonne **négatif
+total**. Un joueur dont le négatif est nul s'affiche **TOP**.
+
 **En topping collaboratif / battle**, le premier qui trouve le top le fait
 afficher immédiatement et marque **1 point**, comme sur le topping infini. Si
 personne ne le trouve avant l'échéance, le top s'affiche quand même, et le
 joueur qui a soumis **la solution la plus rentable, le plus vite**, marque
 **un demi-point**.
+
+### Les salons
+
+Le duplicate suppose un groupe stable : on ne peut pas comparer des joueurs qui
+n'ont pas vu les mêmes tirages.
+
+Les joueurs se réunissent donc dans un **salon** avant le début. Celui qui le
+crée le paramètre ; s'il s'en va, le réglage passe à un autre joueur présent.
+**Quiconque arrive après la fin du premier coup n'est pas comptabilisé.**
+
+En topping collaboratif et en battle, rien de tout cela : le score par coup n'est
+pas noté, seuls comptent les points et demi-points, et **on rejoint un salon en
+cours de route sans que ça pose problème**.
+
+### La fin d'une partie
+
+Une partie s'arrête quand il ne reste plus, dans le **sac et les reliquats**,
+que des voyelles ou que des consonnes. **Les jokers doivent être joués** : tant
+qu'il en reste un, il peut fournir la lettre manquante et la partie continue.
+
+Le Y est la lettre qui bascule, parce qu'il peut tenir le rôle de la voyelle :
+
+| ce qui reste | on |
+|---|---|
+| voyelles seules, avec ou sans Y | **arrête** |
+| consonnes seules **avec** le Y | continue jusqu'à ce que le Y soit joué ou qu'il n'y ait plus de consonne |
+| le Y seul | **arrête** |
+
+> C'est une **convention**, pas une constatation. Sur une grille remplie, une
+> voyelle isolée se colle presque toujours quelque part — le dictionnaire compte
+> d'ailleurs 11 mots de voyelles seules (EAU, OIE, OUIE…) et 8 de consonnes
+> seules (PSST, BRRR…). Attendre que le moteur ne trouve vraiment plus rien
+> ferait traîner la fin sur des coups sans intérêt.
 
 ### Statistiques
 
