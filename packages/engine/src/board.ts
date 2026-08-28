@@ -10,7 +10,8 @@
  * on n'invalide que le voisinage du mot qui vient d'etre pose.
  */
 import { key, keyX, keyY, type Dir } from "./coords.ts";
-import { valueOf, LETTERS, code } from "./alphabet.ts";
+import { LETTERS, code } from "./alphabet.ts";
+import { configParDefaut, valeurDe, type ConfigPartie } from "./config.ts";
 import type { Dict } from "./dictionary.ts";
 
 export interface Tile {
@@ -51,9 +52,16 @@ export class Board {
   private readonly crossH = new Map<number, CrossCheck>();
   private readonly crossV = new Map<number, CrossCheck>();
   private readonly dict: Dict;
+  /**
+   * La configuration de la partie jouee sur cette grille. Elle voyage avec elle
+   * pour que deux salons voisins puissent jouer des variantes differentes dans
+   * le meme processus (SPEC.md §16).
+   */
+  readonly cfg: ConfigPartie;
 
-  constructor(dict: Dict) {
+  constructor(dict: Dict, cfg: ConfigPartie = configParDefaut()) {
     this.dict = dict;
+    this.cfg = cfg;
     this.anchors.add(key(0, 0));
   }
 
@@ -170,12 +178,12 @@ export class Board {
     for (let i = 1; i <= MAX_WORD; i++) {
       const t = this.at(x - dx * i, y - dy * i);
       if (t === undefined) break;
-      if (!t.blank) s += valueOf(t.letter);
+      if (!t.blank) s += valeurDe(this.cfg, t.letter);
     }
     for (let i = 1; i <= MAX_WORD; i++) {
       const t = this.at(x + dx * i, y + dy * i);
       if (t === undefined) break;
-      if (!t.blank) s += valueOf(t.letter);
+      if (!t.blank) s += valeurDe(this.cfg, t.letter);
     }
     return s;
   }
@@ -191,14 +199,14 @@ export class Board {
       const t = this.at(x - dx * i, y - dy * i);
       if (t === undefined) break;
       before = t.letter + before;
-      if (!t.blank) score += valueOf(t.letter);
+      if (!t.blank) score += valeurDe(this.cfg, t.letter);
     }
     let after = "";
     for (let i = 1; i <= MAX_WORD; i++) {
       const t = this.at(x + dx * i, y + dy * i);
       if (t === undefined) break;
       after += t.letter;
-      if (!t.blank) score += valueOf(t.letter);
+      if (!t.blank) score += valeurDe(this.cfg, t.letter);
     }
 
     if (before === "" && after === "") return FREE;

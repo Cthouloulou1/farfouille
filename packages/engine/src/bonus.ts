@@ -300,6 +300,14 @@ export function currentLayout(): LayoutName {
   return activeName;
 }
 
+/**
+ * Le pavage actif, sous forme de fonction. Sert a figer le reglage courant dans
+ * la configuration d'une partie au moment ou sa grille est creee.
+ */
+export function activeLayout(): LayoutFn {
+  return active;
+}
+
 /** Symbole brut de la case, pour l'affichage et les tests. '.' = case nue. */
 export function bonusChar(x: number, y: number): string {
   return active(x, y);
@@ -307,8 +315,13 @@ export function bonusChar(x: number, y: number): string {
 
 const PLAIN: Bonus = Object.freeze({ letter: 1, word: 1 });
 
-export function bonusAt(x: number, y: number): Bonus {
-  switch (active(x, y)) {
+/**
+ * Le bonus d'une case. `pavage` permet de repondre pour une partie donnee
+ * plutot que pour le reglage global -- indispensable des que plusieurs salons
+ * tournent dans le meme processus.
+ */
+export function bonusAt(x: number, y: number, pavage: LayoutFn = active): Bonus {
+  switch (pavage(x, y)) {
     case "T": return { letter: 1, word: 3 };
     case "D": case "*": return { letter: 1, word: 2 };
     case "t": return { letter: 3, word: 1 };

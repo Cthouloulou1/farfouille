@@ -10,7 +10,8 @@
  * qu'un mot accepte a l'ecran ne soit jamais refuse par le serveur.
  */
 import type { Dict } from "./dictionary.ts";
-import { code, valueOf, BLANK } from "./alphabet.ts";
+import { code, BLANK } from "./alphabet.ts";
+import { configParDefaut, valeurDe, type ConfigPartie } from "./config.ts";
 import { step, type Dir } from "./coords.ts";
 import { MAX_WORD, type Board, type Placement } from "./board.ts";
 import { bonusAt } from "./bonus.ts";
@@ -167,10 +168,10 @@ export function resolveTypedWord(
   }
 
   let mainMult = 1;
-  for (const c of placed) mainMult *= bonusAt(c.x, c.y).word;
+  for (const c of placed) mainMult *= bonusAt(c.x, c.y, board.cfg.pavage).word;
 
   const weight = (c: Cell): number => {
-    const b = bonusAt(c.x, c.y);
+    const b = bonusAt(c.x, c.y, board.cfg.pavage);
     const cc = board.crossCheck(dir, c.x, c.y);
     return b.letter * (mainMult + (cc.has ? b.word : 0));
   };
@@ -244,6 +245,6 @@ export function rackAfter(rack: string, placements: readonly Placement[]): strin
 }
 
 /** Valeur d'un caramel dans le tirage, pour l'affichage. */
-export function tileValue(ch: string): number {
-  return ch === BLANK ? 0 : valueOf(ch);
+export function tileValue(ch: string, cfg: ConfigPartie = configParDefaut()): number {
+  return ch === BLANK ? 0 : valeurDe(cfg, ch);
 }

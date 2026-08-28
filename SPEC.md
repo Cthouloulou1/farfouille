@@ -987,6 +987,22 @@ Le topping infini est un cas particulier : grille sans bord, probabilités
 pondérées, 7 lettres, pas de chrono, et le coup avance dès que le top est
 trouvé. Tout cela devient réglable.
 
+### La configuration voyage avec la grille
+
+Elle n'est **pas** un réglage global. Un serveur héberge plusieurs salons à la
+fois, et deux salons voisins peuvent jouer des variantes différentes — un
+duplicate français 15×15 et une battle anglaise sur grille infinie. Une variable
+de module les mélangerait.
+
+Chaque `Board` porte donc sa `ConfigPartie`, et le score, le générateur et la
+résolution d'un mot tapé la lisent là. Le fil de calcul d'un salon travaille sur
+sa propre grille, donc sur sa propre configuration, sans rien partager.
+
+> Le majorant d'élagage doit rester valide quelle que soit la table des primes,
+> y compris réglée de travers — plus généreuse à deux caramels qu'à trois. Il
+> majore donc par la **plus forte prime atteignable avec au plus n caramels**,
+> jamais par la prime de n exactement.
+
 ### Ce qu'on règle en deux clics
 
 Le paramétrage courant tient en trois gestes : **le nombre de lettres piochées**

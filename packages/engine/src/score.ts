@@ -6,11 +6,15 @@
  * multiplicateur de mot de cette case.
  */
 import { bonusAt } from "./bonus.ts";
-import { valueOf } from "./alphabet.ts";
+import { primeDe, valeurDe } from "./config.ts";
 import { step, type Dir } from "./coords.ts";
 import type { Board, Placement } from "./board.ts";
 
-/** Prime pour les 7 caramels poses en un coup. */
+/**
+ * Prime du jeu classique, gardee pour les outils qui raisonnent encore sur le
+ * format a sept caramels. La regle qui fait foi est la table `primes` de la
+ * configuration : elle donne 50 a sept caramels, puis 25 de plus par caramel.
+ */
 export const BINGO_BONUS = 50;
 export const RACK_SIZE = 7;
 
@@ -52,7 +56,7 @@ export function scoreWord(
     const cy = y + dy * i;
     const letter = word[i]!;
     const isBlank = blankAt[i] === true;
-    const raw = isBlank ? 0 : valueOf(letter);
+    const raw = isBlank ? 0 : valeurDe(board.cfg, letter);
 
     if (!newAt[i]) {
       // Tuile preexistante : aucun bonus, elle a deja servi.
@@ -61,7 +65,7 @@ export function scoreWord(
     }
 
     placed++;
-    const b = bonusAt(cx, cy);
+    const b = bonusAt(cx, cy, board.cfg.pavage);
     const here = raw * b.letter;
     main += here;
     mainMult *= b.word;
@@ -70,7 +74,9 @@ export function scoreWord(
     if (cc.has) cross += (cc.score + here) * b.word;
   }
 
-  return main * mainMult + cross + (placed === RACK_SIZE ? BINGO_BONUS : 0);
+  // La prime depend du NOMBRE de caramels poses, pas du fait de vider le
+  // tirage : en 8 sur 8, poser 7 vaut encore 50 et poser 8 vaut 75.
+  return main * mainMult + cross + primeDe(board.cfg, placed);
 }
 
 /** Score d'un coup deja construit. Le plateau doit etre dans l'etat AVANT le coup. */
@@ -104,7 +110,7 @@ export function blankWeight(
   cy: number,
   mainWordMult: number,
 ): number {
-  const b = bonusAt(cx, cy);
+  const b = bonusAt(cx, cy, board.cfg.pavage);
   const cc = board.crossCheck(dir, cx, cy);
   return b.letter * (mainWordMult + (cc.has ? b.word : 0));
 }

@@ -15,15 +15,29 @@ import { code, letterOf, valueOf } from "./alphabet.ts";
 import { keyX, keyY, step, type Dir } from "./coords.ts";
 import { bonusAt } from "./bonus.ts";
 import { MAX_WORD, type Board, type Placement } from "./board.ts";
-import { BINGO_BONUS, RACK_SIZE, type Move } from "./score.ts";
+import { type Move } from "./score.ts";
+import { primeDe, valeurDe, type ConfigPartie } from "./config.ts";
 
 const SEP_CODE = 27;
-/** Valeur de chaque lettre, indexee par code. Evite un valueOf() par case posee. */
-const VAL = (() => {
-  const v = new Int32Array(28);
-  for (let c = 1; c <= 26; c++) v[c] = valueOf(letterOf(c));
-  return v;
-})();
+/** Nombre maximum de caramels posables, toutes variantes confondues. */
+const MAX_PLACE = 15;
+
+/**
+ * Tables derivees d'une configuration, calculees une fois par appel.
+ *
+ * `val` evite un acces par nom a chaque case posee. `primeMax[n]` donne la plus
+ * forte prime atteignable avec AU PLUS n caramels : le majorant doit rester
+ * valide meme si la table des primes est reglee n'importe comment, par exemple
+ * plus genereuse a deux caramels qu'a trois.
+ */
+function tables(cfg: ConfigPartie): { val: Int32Array; primeMax: Int32Array } {
+  const val = new Int32Array(28);
+  for (let c = 1; c <= 26; c++) val[c] = valeurDe(cfg, letterOf(c));
+  const primeMax = new Int32Array(MAX_PLACE + 1);
+  let m = 0;
+  for (let n = 0; n <= MAX_PLACE; n++) { m = Math.max(m, primeDe(cfg, n)); primeMax[n] = m; }
+  return { val, primeMax };
+}
 /** Decalage pour indexer des positions relatives negatives dans un tableau plat. */
 const OFF = 20;
 
@@ -46,7 +60,9 @@ const OFF = 20;
  */
 export function anchorBound(
   board: Board, ax: number, ay: number, dir: Dir, rackValues: readonly number[],
+  primeMax: Int32Array = tables(board.cfg).primeMax,
 ): number {
+  const jouables = Math.min(board.cfg.jouables, MAX_PLACE);
   const { dx, dy } = step(dir);
   const { isOcc, occVal, cLm, cWm, cCs, topCross } = SCRATCH;
 
@@ -57,25 +73,26 @@ export function anchorBound(
     const t = board.at(x, y);
     if (t !== undefined) {
       isOcc[i] = 1;
-      occVal[i] = t.blank ? 0 : valueOf(t.letter);
+      occVal[i] = t.blank ? 0 : valeurDe(board.cfg, t.letter);
       continue;
     }
-    const b = bonusAt(x, y);
+    const b = bonusAt(x, y, board.cfg.pavage);
     isOcc[i] = 0;
     cLm[i] = b.letter;
     cWm[i] = b.word;
     cCs[i] = board.crossScoreQuick(dir, x, y);
   }
 
-  // Les sept plus gros mots perpendiculaires de toute la portee. Majorer par la
+  // Les plus gros mots perpendiculaires de toute la portee -- autant qu'on peut
+  // poser de caramels. Majorer par la
   // portee entiere plutot que par fenetre est plus lache, mais ces scores sont
   // nuls presque partout sur une grille creuse, et ca evite de les faire glisser.
   topCross.fill(0);
   for (let i = 0; i < SPAN; i++) {
     if (isOcc[i] === 1) continue;
     const v = cCs[i]!;
-    if (v > topCross[RACK_SIZE - 1]!) {
-      let j = RACK_SIZE - 1;
+    if (v > topCross[jouables - 1]!) {
+      let j = jouables - 1;
       while (j > 0 && topCross[j - 1]! < v) { topCross[j] = topCross[j - 1]!; j--; }
       topCross[j] = v;
     }
@@ -113,7 +130,7 @@ export function anchorBound(
   for (let sIdx = 0; sIdx <= MAX_WORD - 1; sIdx++) {
     if (sIdx > 0) { leave(sIdx - 1); enter(sIdx + MAX_WORD - 1); }
 
-    const n = Math.min(RACK_SIZE, empties);
+    const n = Math.min(jouables, empties);
     if (n === 0) continue;
 
     // Comptages entiers plutot qu'un produit glissant : pas de division, donc
@@ -133,9 +150,9 @@ export function anchorBound(
       crossPart += (here + topCross[i]!) * wordMult;
     }
 
-    // La prime de scrabble n'a de sens que si sept cases libres tiennent ici.
-    const bingo = empties >= RACK_SIZE ? BINGO_BONUS : 0;
-    const b = (existing + letters) * wordMult + crossPart + bingo;
+    // On ne peut esperer que la meilleure prime atteignable avec le nombre de
+    // cases libres qui tiennent ici.
+    const b = (existing + letters) * wordMult + crossPart + primeMax[n]!;
     if (b > best) best = b;
   }
   return best;
@@ -151,7 +168,7 @@ const SCRATCH = {
   cLm: new Int32Array(SPAN),
   cWm: new Int32Array(SPAN),
   cCs: new Int32Array(SPAN),
-  topCross: new Int32Array(RACK_SIZE),
+  topCross: new Int32Array(MAX_PLACE),
 };
 
 export interface GenOptions {
@@ -233,6 +250,9 @@ export function generateMoves(
   const maxMoves = Math.max(1, opts.maxMoves ?? Infinity);
   const t0 = performance.now();
   const E = gaddag.edges;
+  // Tables de la partie jouee sur CETTE grille -- valeurs des lettres et primes.
+  const { val: VAL, primeMax } = tables(board.cfg);
+  const jouables = Math.min(board.cfg.jouables, MAX_PLACE);
 
   const counts = new Int32Array(27);
   let blanks = 0;
@@ -368,17 +388,22 @@ export function generateMoves(
     left: number, right: number, placed: number,
     sc: number, mult: number, cross: number,
   ): void {
+    const nPlaced = placed + (isNew ? 1 : 0);
+    // « X sur Y » : on pioche Y caramels mais on n'en pose que X au plus. Toute
+    // descente qui depasserait X est abandonnee ici -- inutile de la poursuivre,
+    // aucun mot plus long ne redeviendrait legal.
+    if (nPlaced > jouables) return;
+
     const i = pos + OFF;
     cellCode[i] = c;
     cellNew[i] = isNew ? 1 : 0;
     cellBlank[i] = isBlank ? 1 : 0;
-    const nPlaced = placed + (isNew ? 1 : 0);
 
     // Score accumule case par case, exactement comme scoreWord() le ferait a la
     // fin -- mais le prefixe est partage par tous les mots qui en descendent.
     let nsc: number, nmult = mult, ncross = cross;
     if (isNew) {
-      const b = bonusAt(ax + dx * pos, ay + dy * pos);
+      const b = bonusAt(ax + dx * pos, ay + dy * pos, board.cfg.pavage);
       const here = (isBlank ? 0 : VAL[c]!) * b.letter;
       nsc = sc + here;
       nmult = mult * b.word;
@@ -387,7 +412,7 @@ export function generateMoves(
     } else {
       nsc = sc + (isBlank ? 0 : VAL[c]!);
     }
-    const total = nsc * nmult + ncross + (nPlaced === RACK_SIZE ? BINGO_BONUS : 0);
+    const total = nsc * nmult + ncross + primeDe(board.cfg, nPlaced);
 
     if (pos <= 0) {
       const nLeft = pos;
@@ -482,7 +507,9 @@ export function generateMoves(
 
   // Valeurs du tirage, triees decroissant : le majorant les apparie aux
   // meilleurs multiplicateurs a portee. Un joker vaut 0.
-  const rackValues = [...rack].map((c) => (c === "?" ? 0 : valueOf(c))).sort((a, b) => b - a);
+  const rackValues = [...rack]
+    .map((c) => (c === "?" ? 0 : valeurDe(board.cfg, c)))
+    .sort((a, b) => b - a);
 
   interface Task { x: number; y: number; d: Dir; bound: number }
   const tasks: Task[] = [];
@@ -531,7 +558,9 @@ export function generateMoves(
   if (prune && i < tasks.length && producedPerTask > PRUNE_WORTH_IT) {
     {
       for (let j = i; j < tasks.length; j++) {
-        tasks[j]!.bound = anchorBound(board, tasks[j]!.x, tasks[j]!.y, tasks[j]!.d, rackValues);
+        tasks[j]!.bound = anchorBound(
+          board, tasks[j]!.x, tasks[j]!.y, tasks[j]!.d, rackValues, primeMax,
+        );
       }
       const rest = tasks.slice(i);
       rest.sort((a, b) => b.bound - a.bound);
