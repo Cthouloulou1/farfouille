@@ -62,8 +62,8 @@ export interface DrawResult {
  * L'exigence S'ADAPTE A LA TAILLE DU TIRAGE. Telle quelle, la regle est
  * insatisfiable en dessous de quatre caramels -- un tirage de deux ne peut pas
  * contenir deux voyelles ET deux consonnes -- et la pioche bouclerait sans fin
- * a chercher un tirage acceptable. On demande donc `min(2, tirage / 2)` de
- * chaque cote : deux et deux des quatre caramels, un et un en dessous.
+ * a chercher un tirage acceptable. La convention retenue : deux de chaque cote
+ * A PARTIR DE SEPT caramels, une seule de chaque en dessous.
  *
  * Fonction de politique remplacable, pas un `if` en dur : une variante
  * probabiliste doit pouvoir se substituer sans toucher au reste.
@@ -71,8 +71,8 @@ export interface DrawResult {
 export type RejectPolicy = (rack: readonly string[]) => boolean;
 
 export const strictRejectPolicy: RejectPolicy = (rack) => {
-  const exige = Math.min(2, Math.floor(rack.length / 2));
-  if (exige === 0) return false;
+  const exige = rack.length >= 7 ? 2 : 1;
+  if (rack.length < 2) return false;
   let v = 0, c = 0;
   for (const ch of rack) {
     if (isVowel(ch)) v++;

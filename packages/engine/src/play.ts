@@ -70,6 +70,21 @@ export function resolveTypedWord(
   rack: string,
   /** Garde-fou de la bascule d'orientation ci-dessous. Ne pas passer. */
   flipped = false,
+  /**
+   * Apercu pendant la frappe : le mot n'a pas encore a toucher la grille.
+   *
+   * Un mot commence presque toujours par flotter dans le vide avant d'atteindre
+   * un caramel deja pose. Refuser « le mot ne touche rien » a la deuxieme lettre
+   * n'apprend rien et empeche d'afficher le score en cours. Le contact n'est
+   * exige qu'a la validation.
+   */
+  apercu = false,
+  /**
+   * L'emplacement du premier coup est deja arrete : on ne cherche plus le
+   * meilleur, on valide celui-la. Sert a la recherche de `premierCoup`, qui
+   * s'appellerait sinon sans fin.
+   */
+  origineFixee = false,
 ): PlayOutcome {
   if (typed.length === 0) return { ok: false, error: "AUCUNE_LETTRE" };
   const { dx, dy } = step(dir);
@@ -132,16 +147,22 @@ export function resolveTypedWord(
 
   // 3. Le premier coup a ses regles propres (SPEC.md §3).
   if (board.isEmpty) {
+    // Le joueur tape ou il veut : le logiciel replace le mot a l'horizontale et
+    // le fait passer par l'origine, en choisissant l'emplacement qui rapporte
+    // le plus. Exiger de viser la case centrale au premier coup, sur une grille
+    // vide ou rien ne sert de repere, n'aurait aucun interet.
+    if (!origineFixee) return premierCoup(board, dawg, word, rack);
     if (dir !== "H") return { ok: false, error: "PREMIER_COUP_HORIZONTAL", word };
-    const covers = cells.some((c) => c.x === 0 && c.y === 0);
-    if (!covers) return { ok: false, error: "DOIT_COUVRIR_ORIGINE", word };
+    if (!cells.some((c) => c.x === 0 && c.y === 0)) {
+      return { ok: false, error: "DOIT_COUVRIR_ORIGINE", word };
+    }
   } else {
     // Sinon le mot doit toucher l'existant : soit il absorbe un caramel, soit
     // l'une de ses lettres forme un mot perpendiculaire.
     const touches =
       cells.some((c) => !c.isNew) ||
       placed.some((c) => board.crossCheck(dir, c.x, c.y).has);
-    if (!touches) return { ok: false, error: "PAS_DE_CONTACT", word };
+    if (!touches && !apercu) return { ok: false, error: "PAS_DE_CONTACT", word };
   }
 
   if (!dawg.contains(word)) return { ok: false, error: "MOT_INCONNU", word };
@@ -204,6 +225,26 @@ export function resolveTypedWord(
   );
 
   return { ok: true, move: { dir, x: start.x, y: start.y, word, placements, score } };
+}
+
+/**
+ * Le premier coup, pose au mieux.
+ *
+ * Le mot est horizontal et doit couvrir l'origine : il reste `longueur`
+ * emplacements possibles, du mot commencant tout a gauche de l'origine a celui
+ * qui commence dessus. On les evalue tous et on garde le plus rentable. A score
+ * egal, le plus a gauche, pour que le choix soit reproductible.
+ */
+function premierCoup(board: Board, dawg: Dict, word: string, rack: string): PlayOutcome {
+  if (!dawg.contains(word)) return { ok: false, error: "MOT_INCONNU", word };
+  let best: PlayOutcome | null = null;
+  let bestScore = -1;
+  for (let x = -(word.length - 1); x <= 0; x++) {
+    const essai = resolveTypedWord(board, dawg, "H", x, 0, word, rack, true, false, true);
+    if (!essai.ok) { best ??= essai; continue; }
+    if (essai.move.score > bestScore) { bestScore = essai.move.score; best = essai; }
+  }
+  return best ?? { ok: false, error: "DOIT_COUVRIR_ORIGINE", word };
 }
 
 /**

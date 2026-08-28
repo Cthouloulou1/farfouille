@@ -61,8 +61,21 @@ for (let g = 1; g <= GAMES; g++) {
         fail(`partie ${g} coup ${n} : "${typed}" en ${m.dir} ${m.x},${m.y} refuse (${PLAY_MESSAGE[r.error]}), attendu ${m.word} ${m.score} pts`);
         continue;
       }
-      if (r.move.word !== m.word) fail(`mot different : ${r.move.word} au lieu de ${m.word}`);
-      else if (r.move.score !== m.score) {
+      if (r.move.word !== m.word) { fail(`mot different : ${r.move.word} au lieu de ${m.word}`); continue; }
+
+      if (board.isEmpty) {
+        // Au premier coup, le logiciel REPLACE le mot au meilleur endroit, quel
+        // que soit l'endroit tape (SPEC.md §9). On ne verifie donc pas qu'il
+        // rend la position demandee, mais qu'il rend bien la MEILLEURE : le
+        // score doit egaler le maximum du generateur pour ce mot-la.
+        const best = Math.max(...gen.moves.filter((q) => q.word === m.word).map((q) => q.score));
+        if (r.move.score !== best) {
+          fail(`premier coup ${m.word} : ${r.move.score} au lieu du meilleur ${best}`);
+        }
+        if (r.move.dir !== "H" || r.move.y !== 0) {
+          fail(`premier coup ${m.word} : place en ${r.move.dir} ${r.move.x},${r.move.y}`);
+        }
+      } else if (r.move.score !== m.score) {
         fail(`score different sur ${m.word} en ${m.dir} ${m.x},${m.y} : ${r.move.score} au lieu de ${m.score}`);
       }
     }
@@ -77,10 +90,18 @@ for (let g = 1; g <= GAMES; g++) {
 // Quelques refus attendus, sur une grille fraiche.
 const b2 = new Board(dawg);
 const cases: [string, string, string][] = [];
-const r1 = resolveTypedWord(b2, dawg, "V", 0, 0, "AB", "ABCDEFG");
-cases.push(["premier coup vertical", r1.ok ? "accepte" : r1.error, "PREMIER_COUP_HORIZONTAL"]);
+// Au premier coup, le sens et l'endroit tapes ne comptent plus : le logiciel
+// replace le mot a l'horizontale, a travers l'origine, la ou il rapporte le
+// plus (SPEC.md §9). Ces deux cas ne sont donc plus des refus.
+const r1 = resolveTypedWord(b2, dawg, "V", 0, 0, "MER", "EMRTUIO");
+cases.push(["premier coup tape a la verticale", r1.ok ? `${r1.move.dir} y=${r1.move.y}` : r1.error, "H y=0"]);
 const r2 = resolveTypedWord(b2, dawg, "H", 20, 20, "MER", "EMRTUIO");
-cases.push(["premier coup loin de l'origine", r2.ok ? "accepte" : r2.error, "DOIT_COUVRIR_ORIGINE"]);
+cases.push(["premier coup tape loin de l'origine",
+  r2.ok ? (r2.move.x <= 0 && r2.move.x + 2 >= 0 ? "passe par l'origine" : `x=${r2.move.x}`) : r2.error,
+  "passe par l'origine"]);
+// Le mot lui-meme reste juge : replacer n'est pas absoudre.
+const r2b = resolveTypedWord(b2, dawg, "V", 3, 9, "AB", "ABCDEFG");
+cases.push(["premier coup, mot inexistant", r2b.ok ? "accepte" : r2b.error, "MOT_INCONNU"]);
 const r3 = resolveTypedWord(b2, dawg, "H", 0, 0, "XQZ", "XQZAEIO");
 cases.push(["mot inexistant", r3.ok ? "accepte" : r3.error, "MOT_INCONNU"]);
 const r4 = resolveTypedWord(b2, dawg, "H", 0, 0, "MER", "ABCDEFG");

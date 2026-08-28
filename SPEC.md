@@ -472,6 +472,18 @@ A derrière `LASSER` forme `LASSERA` que le curseur soit horizontal ou vertical 
 avec une seule case, l'orientation ne veut rien dire. Le moteur bascule tout
 seul dans l'autre sens quand le mot obtenu n'a qu'une lettre.
 
+**« Le mot ne touche rien » n'apparaît qu'à la validation.** Un mot commence
+presque toujours par flotter dans le vide avant d'atteindre un caramel déjà
+posé ; refuser à la deuxième lettre n'apprend rien et empêche d'afficher le
+score en cours. Pendant la frappe, le score s'affiche quand même ; le contact
+n'est exigé qu'à l'appui sur Entrée.
+
+**Au premier coup, on tape où on veut.** Le sens et l'endroit sont ignorés : le
+logiciel replace le mot à l'horizontale, à travers l'origine, **à l'emplacement
+qui rapporte le plus**. À score égal, le plus à gauche, pour que le choix soit
+reproductible. Viser une case centrale sur une grille vide, où rien ne sert de
+repère, n'aurait aucun intérêt.
+
 Une lettre absente du tirage est **ignorée à la frappe** — sauf si un joker
 reste, qui la prend. Aucun message : il ne se passe simplement rien.
 
@@ -1061,9 +1073,19 @@ serait jamais perdu.
 
 Telle qu'elle est écrite — au moins 2 voyelles **et** 2 consonnes — la règle est
 **insatisfiable en dessous de quatre caramels** : un tirage de deux ne peut pas
-contenir quatre lettres, et la pioche boucle sans fin. L'exigence est donc
-`min(2, tirage / 2)` de chaque côté : deux et deux dès quatre caramels, un et un
-en dessous. Rien ne change pour le tirage de sept.
+contenir quatre lettres, et la pioche boucle sans fin.
+
+La convention retenue : **2 voyelles et 2 consonnes à partir de 7 caramels, une
+seule de chaque en dessous.** Rien ne change pour le tirage classique.
+
+### Les lettres restantes s'affichent
+
+Sur une pioche à sac fini, ce qui reste est **public** — au duplicate on suit
+les lettres restantes pour anticiper les tirages. Une ligne en haut à gauche de
+la grille les donne, triées, précédées du compte.
+
+Rien ne s'affiche sur les probabilités pondérées : elles ne s'épuisent pas, il
+n'y a pas de reste à montrer.
 
 ### Essayer une variante en ligne de commande
 

@@ -116,7 +116,7 @@ function nextFree(): { x: number; y: number } | null {
 function blankPositions(): Set<string> {
   const out = new Set<string>();
   if (cursor === null || typed.length === 0) return out;
-  const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack);
+  const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack, false, true);
   if (!r.ok) return out;
   for (const p of r.move.placements) if (p.blank) out.add(`${p.x},${p.y}`);
   return out;
@@ -394,7 +394,7 @@ function paintCurrent() {
   bad.hidden = true;
 
   if (cursor !== null && typed.length > 0) {
-    const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack);
+    const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack, false, true);
     if (r.ok) {
       w.className = "word";
       w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
@@ -756,7 +756,7 @@ setInterval(() => {
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
-  likes?: Record<string, number>;
+  likes?: Record<string, number>; sac?: string; finie?: boolean;
   createdAt: number; now: number; servedAt: number;
 }) {
   rack = s.rack ?? "";
@@ -765,6 +765,13 @@ function applyState(s: {
   solving = s.solving;
   players = s.players ?? {};
   likes = s.likes ?? {};
+  // Les lettres qui restent dans le sac. Rien a montrer sur une pioche
+  // ponderee : elle ne s'epuise pas, il n'y a pas de reste.
+  const sac = s.sac ?? "";
+  $("sac").hidden = sac === "";
+  if (sac !== "") {
+    $("sac").innerHTML = `<b>${sac.length} caramel${sac.length > 1 ? "s" : ""} · </b>${sac}`;
+  }
   online = s.online ?? [];
   last = s.last ?? null;
   createdAt = s.createdAt;

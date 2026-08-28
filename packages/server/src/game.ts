@@ -479,6 +479,18 @@ export class Game {
   get moveNumber(): number { return this.moves.length; }
   get cumul(): number { return this.moves.reduce((a, m) => a + m.score, 0); }
 
+  /**
+   * Ce qui reste dans le sac, lettres triees. Information PUBLIQUE et attendue :
+   * au duplicate on suit les lettres restantes pour deviner les tirages a venir.
+   * Vide sur une pioche ponderee, ou rien ne s'epuise.
+   */
+  restantDuSac(): string {
+    const r = this.bag.restant();
+    let out = "";
+    for (const lettre of Object.keys(r).sort()) out += lettre.repeat(r[lettre]!);
+    return out;
+  }
+
   tiles(): { x: number; y: number; l: string; b: 0 | 1; n: number }[] {
     const out: { x: number; y: number; l: string; b: 0 | 1; n: number }[] = [];
     for (const m of this.moves) {

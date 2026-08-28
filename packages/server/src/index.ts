@@ -158,6 +158,8 @@ function publicState() {
     rack: game.rack,
     notation: game.rackNotation,
     cumul: game.cumul,
+    sac: game.restantDuSac(),
+    finie: game.finie,
     solving: game.solving,
     servedAt: game.servedAt,
     players: game.players,
