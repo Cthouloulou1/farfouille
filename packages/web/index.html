@@ -187,6 +187,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* Un selecteur de classe bat l'attribut hidden : sans cette regle, masquer
    l'ecran d'accueil ne fait rien et il reste par-dessus le jeu. */
 .join[hidden] { display: none; }
+.join-error { color: var(--warn); background: var(--warn-bg); border-radius: 3px; padding: 6px 10px; font-size: 12.5px; }
+.join-error[hidden] { display: none; }
 .join form { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 26px 28px; width: min(380px, 90vw); box-shadow: 0 8px 30px var(--shadow); }
 .join h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 30px; margin: 0 0 6px; }
 .join h1 em { font-style: italic; color: var(--accent); }
@@ -205,6 +207,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <h1>Topping <em>infini</em></h1>
     <p>Une grille sans bord, un tirage, et le premier qui trouve le top le pose pour tout le monde.</p>
     <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off" autofocus>
+    <div class="join-error" id="join-error" hidden></div>
     <button type="submit">Rejoindre la grille</button>
   </form>
 </div>

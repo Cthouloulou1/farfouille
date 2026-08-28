@@ -148,6 +148,15 @@ wss.on("connection", (ws) => {
 
     if (msg.t === "join") {
       const name = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
+      // Deux joueurs du meme nom rendent le classement faux et les statistiques
+      // inexploitables : on ne saurait plus a qui attribuer un coup. Tant qu'il
+      // n'y a pas de comptes, l'unicite ne vaut que parmi les connectes ; elle
+      // s'etendra aux pseudos enregistres quand ils existeront.
+      const pris = [...clients.entries()].some(([c, n]) => c !== ws && n === name);
+      if (pris) {
+        send(ws, { t: "refus", message: "Ce nom d'utilisateur n'est pas disponible" });
+        return;
+      }
       clients.set(ws, name);
       send(ws, {
         t: "hello",

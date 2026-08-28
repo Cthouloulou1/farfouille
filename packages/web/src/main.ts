@@ -801,6 +801,15 @@ function connect() {
       if (tiles.length > 0 && last !== null) flyTo(last.word, last.dir, last.x, last.y);
       return;
     }
+    if (m.t === "refus") {
+      ws?.close();
+      ws = null;
+      $("join").hidden = false;
+      $("join-error").textContent = m.message;
+      $("join-error").hidden = false;
+      ($("name") as HTMLInputElement).select();
+      return;
+    }
     if (m.t === "state") { applyState(m.state); return; }
     // Un "j'aime" est arrive : on met a jour le coup concerne, partout.
     if (m.t === "likes") {
@@ -851,6 +860,7 @@ $("joinform").addEventListener("submit", async (e) => {
   e.preventDefault();
   me = ($("name") as HTMLInputElement).value.trim() || "anonyme";
   try { localStorage.setItem("pseudo", me); } catch { /* navigation privee */ }
+  $("join-error").hidden = true;
   $("join").hidden = true;
 
   const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
