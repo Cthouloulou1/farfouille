@@ -1,0 +1,29 @@
+{
+  "name": "topping-infini",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "fastify": "^5.12.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "build": "esbuild packages/web/src/main.ts --bundle --format=esm --target=es2022 --outfile=packages/web/app.js",
+    "watch": "npm run build -- --watch",
+    "serve": "node packages/server/src/index.ts",
+    "nouvelle": "node packages/server/src/index.ts --nouvelle",
+    "parties": "node packages/server/tools/parties.ts",
+    "check": "tsc --noEmit -p tsconfig.json"
+  }
+}
