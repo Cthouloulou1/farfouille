@@ -94,6 +94,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .flash.ok { background: var(--panel); color: var(--ink); border: 1px solid var(--rule); }
 .flash.top { background: var(--accent-bg); color: var(--accent); }
 
+.fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; text-align: center; letter-spacing: .04em; }
+.fin[hidden] { display: none; }
 .sac { flex: none; padding: 3px 10px 4px; background: var(--panel); border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; line-height: 1.35; letter-spacing: .07em; color: var(--ink-soft); word-break: break-all; }
 .sac[hidden] { display: none; }
 .sac b { color: var(--ink-faint); font-weight: 500; letter-spacing: 0; }
@@ -193,7 +195,30 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .join[hidden] { display: none; }
 .join-error { color: var(--warn); background: var(--warn-bg); border-radius: 3px; padding: 6px 10px; font-size: 12.5px; }
 .join-error[hidden] { display: none; }
-.join form { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 26px 28px; width: min(380px, 90vw); box-shadow: 0 8px 30px var(--shadow); }
+.join { overflow: auto; place-items: start center; padding: 28px 16px; }
+.lobby { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 24px 26px 22px; width: min(520px, 94vw); box-shadow: 0 8px 30px var(--shadow); }
+.lobby h2 { font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 20px 0 8px; }
+.salons { display: flex; flex-direction: column; gap: 6px; }
+.salon { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; align-items: center; width: 100%; text-align: left; padding: 9px 11px; background: var(--ground); border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); cursor: pointer; }
+.salon:hover { border-color: var(--accent); background: var(--hover); }
+.salon .nom { font-weight: 500; font-size: 13.5px; }
+.salon .quoi { grid-column: 1; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
+.salon .qui { grid-column: 2; grid-row: 1 / 3; text-align: right; font-size: 11.5px; color: var(--ink-soft); }
+.salon .mondiale { color: var(--accent); }
+.salons .none { padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
+.creer-open { width: 100%; margin-top: 12px; padding: 8px; font-size: 13px; }
+.creer { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.creer[hidden] { display: none; }
+.creer label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 12px 0 5px; }
+.creer label.case { display: flex; align-items: center; gap: 7px; margin: 14px 0 4px; color: var(--ink-soft); font-size: 12.5px; }
+.creer label.case input { width: auto; margin: 0; }
+.nombres { display: flex; flex-wrap: wrap; gap: 4px; }
+.nombres button, .choix button { padding: 5px 0; min-width: 30px; font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--ground); }
+.nombres button[aria-pressed="true"], .choix button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 500; }
+.nombres button:disabled { opacity: .3; cursor: default; }
+.choix { display: flex; gap: 6px; }
+.choix button { flex: 1; padding: 6px 8px; font-family: inherit; font-size: 12.5px; }
+.join form { background: none; border: 0; padding: 0; width: auto; box-shadow: none; }
 .join h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 30px; margin: 0 0 6px; }
 .join h1 em { font-style: italic; color: var(--accent); }
 .join p { margin: 0 0 18px; color: var(--ink-soft); font-size: 13.5px; }
@@ -207,13 +232,40 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <body>
 
 <div class="join" id="join">
-  <form id="joinform">
+  <div class="lobby">
     <h1>Topping <em>infini</em></h1>
-    <p>Une grille sans bord, un tirage, et le premier qui trouve le top le pose pour tout le monde.</p>
-    <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off" autofocus>
-    <div class="join-error" id="join-error" hidden></div>
-    <button type="submit">Rejoindre la grille</button>
-  </form>
+    <p>Une grille, un tirage, et le premier qui trouve le top le pose pour tout le monde.</p>
+
+    <form id="joinform" autocomplete="off">
+      <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off" autofocus>
+      <div class="join-error" id="join-error" hidden></div>
+    </form>
+
+    <h2>Salons ouverts</h2>
+    <div class="salons" id="salons"><div class="none">chargement…</div></div>
+
+    <button class="creer-open" id="creer-open" type="button">Créer un salon</button>
+
+    <form class="creer" id="creer" hidden autocomplete="off">
+      <input id="c-nom" maxlength="40" placeholder="Nom du salon" autocomplete="off">
+
+      <label>Caramels piochés par coup</label>
+      <div class="nombres" id="c-tirage"></div>
+
+      <label>Caramels posables par coup</label>
+      <div class="nombres" id="c-jouables"></div>
+
+      <label>D'où viennent les caramels</label>
+      <div class="choix" id="c-pioche">
+        <button type="button" data-v="probabilites" aria-pressed="true">Probabilités pondérées</button>
+        <button type="button" data-v="sac102" aria-pressed="false">Sac de 102 caramels</button>
+      </div>
+
+      <label class="case"><input type="checkbox" id="c-prive"> Salon privé (absent de la liste)</label>
+      <div class="join-error" id="c-error" hidden></div>
+      <button type="submit">Créer et rejoindre</button>
+    </form>
+  </div>
 </div>
 
 <div class="bar">
@@ -240,6 +292,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
   <div class="side">
     <div class="panel" id="panel-live">
+      <div class="block fin" id="fin" hidden>Partie terminée</div>
       <div class="block">
         <div class="word none" id="cur-word">—</div>
         <div class="sub" id="cur-meta"></div>

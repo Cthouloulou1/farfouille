@@ -31,9 +31,13 @@ interface MoveInfo {
 interface Chat { at: number; who: string; text: string; cell?: { x: number; y: number } }
 
 let dict: Dict;
+/** Le dictionnaire n'est telecharge qu'une fois, au premier salon rejoint. */
+let dictCharge = false;
 let board: Board;
 /** La variante jouee, envoyee par le serveur a la connexion. */
 let cfg: ConfigPartie = configParDefaut();
+/** La partie est terminee : plus de tirage, plus de chrono, plus de saisie. */
+let finie = false;
 let tiles: Tile[] = [];
 let history: MoveInfo[] = [];
 let me = "";
@@ -423,7 +427,8 @@ function paintCurrent() {
 }
 
 function paintSide() {
-  $("rb-move").textContent = solving ? "…" : String(moveNumber + 1);
+  $("rb-move").textContent = finie ? "—" : solving ? "…" : String(moveNumber + 1);
+  $("fin").hidden = !finie;
   $("rb-cumul").textContent = cumul.toLocaleString("fr");
   paintCurrent();
 
@@ -696,7 +701,7 @@ addEventListener("keydown", (e) => {
   if (e.key === "Backspace") { typed = typed.slice(0, -1); paintRack(); paintCurrent(); draw(); e.preventDefault(); return; }
   if (e.key === "Enter") { submit(); e.preventDefault(); return; }
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
-    if (cursor === null) return;
+    if (cursor === null || finie) return;
     if (typed.length >= 15) return;
     const ch = e.key.toUpperCase();
     const left = remaining();
@@ -727,6 +732,7 @@ cv.addEventListener("wheel", (e) => {
 
 function submit() {
   if (cursor === null || typed.length === 0) return;
+  if (finie) { flash("la partie est terminée", "bad"); return; }
   if (solving) { flash("le coup n'est pas encore prêt", "bad"); return; }
   const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack);
   if (!r.ok) {
@@ -745,8 +751,18 @@ $("reveal").addEventListener("click", () => ws?.send(JSON.stringify({ t: "reveal
 
 // ---------------------------------------------------------------- chronos
 
+/** Instant du dernier coup d'une partie terminee : l'age se fige dessus. */
+let finieA = 0;
+
 setInterval(() => {
   const now = Date.now() + clockSkew;
+  if (finie) {
+    // Partie close : l'age s'arrete au dernier coup, et il n'y a plus de coup
+    // en cours dont on pourrait chronometrer la recherche.
+    $("age").textContent = fmtTime((finieA || servedAt) - createdAt);
+    $("elapsed").textContent = "—";
+    return;
+  }
   $("age").textContent = fmtTime(now - createdAt);
   $("elapsed").textContent = solving ? "…" : fmtTime(now - servedAt);
 }, 200);
@@ -769,9 +785,9 @@ function applyState(s: {
   // ponderee : elle ne s'epuise pas, il n'y a pas de reste.
   const sac = s.sac ?? "";
   $("sac").hidden = sac === "";
-  if (sac !== "") {
-    $("sac").innerHTML = `<b>${sac.length} caramel${sac.length > 1 ? "s" : ""} · </b>${sac}`;
-  }
+  if (sac !== "") $("sac").textContent = sac;
+  if (s.finie === true && !finie) finieA = s.servedAt;
+  finie = s.finie === true;
   online = s.online ?? [];
   last = s.last ?? null;
   createdAt = s.createdAt;
@@ -788,7 +804,7 @@ function connect() {
   ws.addEventListener("open", () => {
     $("dot").classList.add("on");
     $("conn").textContent = me;
-    ws!.send(JSON.stringify({ t: "join", name: me }));
+    ws!.send(JSON.stringify({ t: "join", name: me, salon: salonChoisi }));
   });
   ws.addEventListener("close", () => {
     $("dot").classList.remove("on");
@@ -818,6 +834,7 @@ function connect() {
       ws?.close();
       ws = null;
       $("join").hidden = false;
+      void peuplerSalons();
       $("join-error").textContent = m.message;
       $("join-error").hidden = false;
       ($("name") as HTMLInputElement).select();
@@ -869,22 +886,164 @@ function connect() {
 
 // ---------------------------------------------------------------- amorçage
 
-$("joinform").addEventListener("submit", async (e) => {
+// ---------------------------------------------------------------- accueil
+
+/** Le salon qu'on rejoint. Vient de l'adresse, ou du salon clique. */
+let salonChoisi = new URLSearchParams(location.search).get("salon") ?? "";
+
+interface ResumeSalon {
+  id: string; nom: string; proprietaire: string | null; mondiale: boolean;
+  coups: number; finie: boolean; connectes: number;
+  config: { tirage: number; jouables: number; pioche: string };
+}
+
+function decritVariante(c: ResumeSalon["config"]): string {
+  const pioche = c.pioche === "sac102" ? "sac de 102" : "probabilités";
+  return `${c.jouables} sur ${c.tirage} · ${pioche}`;
+}
+
+async function peuplerSalons(): Promise<void> {
+  const box = $("salons");
+  let data: { salons: ResumeSalon[] };
+  try {
+    data = await (await fetch("/api/salons")).json();
+  } catch {
+    box.replaceChildren();
+    const e = document.createElement("div");
+    e.className = "none"; e.textContent = "serveur injoignable";
+    box.appendChild(e);
+    return;
+  }
+  box.replaceChildren();
+  for (const s of data.salons) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "salon";
+    const qui = s.mondiale ? '<span class="mondiale">permanente</span>'
+      : `par ${s.proprietaire}`;
+    const etat = s.finie ? "terminée"
+      : `${s.coups} coup${s.coups > 1 ? "s" : ""}`;
+    b.innerHTML =
+      `<span class="nom">${s.nom}</span>` +
+      `<span class="qui">${qui}<br>${s.connectes} connecté${s.connectes > 1 ? "s" : ""}</span>` +
+      `<span class="quoi">${decritVariante(s.config)} · ${etat}</span>`;
+    b.addEventListener("click", () => rejoindre(s.id));
+    box.appendChild(b);
+  }
+  if (data.salons.length === 0) {
+    const e = document.createElement("div");
+    e.className = "none"; e.textContent = "aucun salon ouvert";
+    box.appendChild(e);
+  }
+}
+
+/** Les rangees de boutons 2 a 15 du formulaire de creation. */
+let cTirage = 7, cJouables = 7, cPioche = "probabilites";
+
+function peuplerNombres(): void {
+  for (const [id, get] of [["c-tirage", () => cTirage], ["c-jouables", () => cJouables]] as const) {
+    const box = $(id);
+    box.replaceChildren();
+    for (let n = 2; n <= 15; n++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = String(n);
+      b.dataset["n"] = String(n);
+      b.setAttribute("aria-pressed", String(get() === n));
+      // On ne peut pas poser plus de caramels qu'on n'en pioche.
+      if (id === "c-jouables") (b as HTMLButtonElement).disabled = n > cTirage;
+      b.addEventListener("click", () => {
+        if (id === "c-tirage") {
+          cTirage = n;
+          if (cJouables > n) cJouables = n;
+        } else cJouables = n;
+        peuplerNombres();
+      });
+      box.appendChild(b);
+    }
+  }
+}
+
+for (const b of $("c-pioche").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    cPioche = (b as HTMLElement).dataset["v"] ?? "probabilites";
+    for (const q of $("c-pioche").querySelectorAll("button")) {
+      q.setAttribute("aria-pressed", String(q === b));
+    }
+  });
+}
+
+$("creer-open").addEventListener("click", () => {
+  const ouvert = $("creer").hidden;
+  $("creer").hidden = !ouvert;
+  $("creer-open").textContent = ouvert ? "Annuler" : "Créer un salon";
+  if (ouvert) peuplerNombres();
+});
+
+$("creer").addEventListener("submit", async (e) => {
   e.preventDefault();
-  me = ($("name") as HTMLInputElement).value.trim() || "anonyme";
+  const pseudo = ($("name") as HTMLInputElement).value.trim();
+  if (pseudo === "") {
+    $("c-error").textContent = "Entrez d'abord votre pseudo";
+    $("c-error").hidden = false;
+    ($("name") as HTMLInputElement).focus();
+    return;
+  }
+  $("c-error").hidden = true;
+  const r = await fetch("/api/salons", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      nom: ($("c-nom") as HTMLInputElement).value.trim() || "Salon",
+      proprietaire: pseudo,
+      tirage: cTirage, jouables: cJouables, pioche: cPioche,
+      prive: ($("c-prive") as HTMLInputElement).checked,
+    }),
+  });
+  const s = await r.json();
+  if (!r.ok) {
+    $("c-error").textContent = s.erreur ?? "création impossible";
+    $("c-error").hidden = false;
+    return;
+  }
+  rejoindre(s.id);
+});
+
+$("joinform").addEventListener("submit", (e) => {
+  e.preventDefault();
+  rejoindre(salonChoisi || "");
+});
+
+/** Quitte l'accueil et entre dans un salon. */
+async function rejoindre(id: string): Promise<void> {
+  const pseudo = ($("name") as HTMLInputElement).value.trim();
+  if (pseudo === "") {
+    $("join-error").textContent = "Entrez votre pseudo pour rejoindre";
+    $("join-error").hidden = false;
+    ($("name") as HTMLInputElement).focus();
+    return;
+  }
+  me = pseudo;
+  salonChoisi = id;
   try { localStorage.setItem("pseudo", me); } catch { /* navigation privee */ }
   $("join-error").hidden = true;
   $("join").hidden = true;
 
-  const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
-  dict = Dict.fromBytes(bytes);
+  if (!dictCharge) {
+    const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
+    dict = Dict.fromBytes(bytes);
+    dictCharge = true;
+    new ResizeObserver(resize).observe(cv);
+  }
   board = new Board(dict);
-  new ResizeObserver(resize).observe(cv);
   resize();
   ox = W / 2 - cell / 2;
   oy = H / 2 - cell / 2;
   connect();
-});
+}
+
+void peuplerSalons();
+peuplerNombres();
 
 try {
   const saved = localStorage.getItem("pseudo");

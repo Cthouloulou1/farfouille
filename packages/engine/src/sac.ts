@@ -7,7 +7,32 @@
  * part, et la **fin de partie**, qui demande que quelque chose s'epuise.
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
-import { strictRejectPolicy, type DrawResult, type RejectPolicy } from "./bag.ts";
+import { type DrawResult, type RejectPolicy } from "./bag.ts";
+
+/**
+ * Le tirage se relache passe un certain nombre de coups. Voir SPEC.md §16.
+ *
+ * Au debut il faut 2 voyelles ET 2 consonnes ; a partir du COUP 15 une seule de
+ * chaque suffit, mais il en faut toujours au moins une. Sans ce relachement, la
+ * fin de partie d'un sac fini serait injouable : il ne reste plus assez de
+ * chaque sorte pour composer un tirage acceptable.
+ *
+ * Le topping infini n'en a pas besoin -- rien ne s'y epuise.
+ */
+export const COUP_RELACHEMENT = 15;
+
+export function politiqueSacFini(coup: () => number): RejectPolicy {
+  return (rack) => {
+    const exige = coup() >= COUP_RELACHEMENT ? 1 : (rack.length >= 7 ? 2 : 1);
+    if (rack.length < 2) return false;
+    let v = 0, c = 0;
+    for (const ch of rack) {
+      if (isVowel(ch)) v++;
+      else if (isConsonant(ch)) c++;
+    }
+    return v < exige || c < exige;
+  };
+}
 
 /** Distribution francaise classique : 100 lettres et 2 jokers. */
 export const SAC_FRANCAIS: Readonly<Record<string, number>> = {
@@ -31,16 +56,18 @@ export class SacFini implements Pioche {
   private readonly reject: RejectPolicy;
   /** Caramels restants, une entree par exemplaire. */
   private caramels: string[] = [];
+  /** Numero du tirage en cours, pour le relachement de la regle de rejet. */
+  private coup = 0;
 
   constructor(
     distribution: Readonly<Record<string, number>> = SAC_FRANCAIS,
     random: () => number = Math.random,
     tirage = 7,
-    reject: RejectPolicy = strictRejectPolicy,
+    reject?: RejectPolicy,
   ) {
     this.random = random;
     this.tirage = tirage;
-    this.reject = reject;
+    this.reject = reject ?? politiqueSacFini(() => this.coup);
     for (const [lettre, n] of Object.entries(distribution)) {
       for (let i = 0; i < n; i++) this.caramels.push(lettre);
     }
@@ -81,6 +108,7 @@ export class SacFini implements Pioche {
    * la regle de rejet (SPEC.md §4).
    */
   draw(reliquat: readonly string[]): DrawResult {
+    this.coup++;
     const avant = [...this.caramels];
     const premier = this.completer(reliquat);
     if (!this.reject(premier) || this.caramels.length === 0) {

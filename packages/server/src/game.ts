@@ -30,6 +30,7 @@ import type { Dict } from "../../engine/src/dictionary.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import { Bag, DEFAULT_BAG } from "../../engine/src/bag.ts";
+import { BLANK } from "../../engine/src/alphabet.ts";
 import { SacFini, SAC_FRANCAIS, type Pioche } from "../../engine/src/sac.ts";
 import {
   configParDefaut, serialiser, deserialiser,
@@ -443,6 +444,14 @@ export class Game {
       this.finie = true;
       this.solving = false;
       this.canonicalTop = null;
+      // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
+      // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
+      // qui restent dans le sac ne sont pas piochés : ils ne serviront plus.
+      this.rack = "";
+      this.rackNotation = "";
+      this.bestScore = -1;
+      this.isotops = 0;
+      this.tiers = [];
       console.log(`[partie] terminee apres ${this.moves.length} coups`);
       this.emit();
       return;
@@ -502,7 +511,12 @@ export class Game {
   restantDuSac(): string {
     const r = this.bag.restant();
     let out = "";
-    for (const lettre of Object.keys(r).sort()) out += lettre.repeat(r[lettre]!);
+    // Les jokers a la FIN : ils ne sont pas des lettres, les voir en tete de
+    // ligne brouille la lecture du reliquat.
+    for (const lettre of Object.keys(r).sort()) {
+      if (lettre !== BLANK) out += lettre.repeat(r[lettre]!);
+    }
+    if (r[BLANK] !== undefined) out += BLANK.repeat(r[BLANK]);
     return out;
   }
 

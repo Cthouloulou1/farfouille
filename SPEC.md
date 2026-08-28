@@ -1078,12 +1078,31 @@ contenir quatre lettres, et la pioche boucle sans fin.
 La convention retenue : **2 voyelles et 2 consonnes à partir de 7 caramels, une
 seule de chaque en dessous.** Rien ne change pour le tirage classique.
 
+**Sur un sac fini, la règle se relâche au coup 15** : une seule voyelle et une
+seule consonne suffisent alors, mais il en faut toujours au moins une de chaque.
+Sans ce relâchement la fin de partie serait injouable — il ne reste plus assez
+de chaque sorte pour composer un tirage acceptable. Le topping infini n'en a pas
+besoin, rien ne s'y épuise.
+
 ### Les lettres restantes s'affichent
 
 Sur une pioche à sac fini, ce qui reste est **public** — au duplicate on suit
 les lettres restantes pour anticiper les tirages. Elles occupent une **ligne
 mince au-dessus des numéros de colonnes**, entre la barre du coup et la grille :
 autour du plateau, jamais par-dessus.
+
+Rien que les lettres, sans compte ni décoration, et **les jokers à la fin** :
+ce ne sont pas des lettres, les voir en tête brouille la lecture.
+
+### Ce qui se passe quand la partie s'arrête
+
+Le tirage **disparaît**. Les caramels qui restent dans le sac ne sont pas
+piochés, le chrono de la grille se fige sur le dernier coup, il n'y a plus de
+chrono de coup en cours, et un bandeau dit « Partie terminée ». Rien ne se tape
+plus.
+
+> Laisser le tirage en place après le dernier coup permettait de taper des mots
+> sur une partie close, sans que rien n'indique qu'elle était finie.
 
 Rien ne s'affiche sur les probabilités pondérées : elles ne s'épuisent pas, il
 n'y a pas de reste à montrer.
