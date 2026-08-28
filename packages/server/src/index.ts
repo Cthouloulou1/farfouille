@@ -1,19 +1,25 @@
 /**
- * Le serveur de la grille. Un processus, une partie, l'etat en memoire et sur
- * disque, les joueurs relies en WebSocket.
+ * Le serveur. Un processus, PLUSIEURS salons, l'etat en memoire et sur disque,
+ * les joueurs relies en WebSocket.
  *
  *     node packages/server/src/index.ts [--port 3000] [--partie mondiale]
+ *
+ * La grille mondiale est un salon comme un autre, mais permanent et sans
+ * proprietaire : personne ne peut la reregler ni la relancer (SPEC.md §16).
  *
  * Pour ouvrir aux autres sans toucher a la box :
  *     cloudflared tunnel --url http://localhost:3000
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync as fileExists, renameSync } from "node:fs";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
+import {
+  ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
+  salonsEnregistres, slug, MAX_SALONS, type Salon,
+} from "./salons.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
@@ -34,69 +40,45 @@ const LAYOUT = arg("pavage", "pave1") as LayoutName;
 /** Bouton "reveler le top" : commodite de test, absente pour les joueurs. */
 const REVEAL = process.argv.includes("--reveler");
 
-// --nouvelle : on met l'ancienne partie de cote plutot que de l'effacer, et on
-// repart sur une grille vierge avec une graine tiree au hasard.
-//
-// LES TROIS FICHIERS partent ensemble, sous le meme horodatage. Oublier le
-// journal ne donnerait pas une partie neuve : c'est lui qui fait foi, il serait
-// relu au demarrage et l'ancienne partie reviendrait.
+setLayout(LAYOUT);
+
+// --nouvelle : la grille mondiale repart a zero. Rien n'est efface, les trois
+// fichiers sont mis de cote sous un meme horodatage.
 if (process.argv.includes("--nouvelle")) {
-  const dir = join(here, "..", "data");
-  const stamp = Date.now();
-  const archived: string[] = [];
-  for (const suffix of [".json", ".journal.jsonl", ".secours.json"]) {
-    const f = join(dir, `${GAME_ID}${suffix}`);
-    if (!fileExists(f)) continue;
-    renameSync(f, join(dir, `${GAME_ID}.${stamp}${suffix}`));
-    archived.push(`${GAME_ID}.${stamp}${suffix}`);
-  }
-  if (archived.length > 0) {
-    console.log(`  partie precedente archivee : ${archived.join(", ")}`);
-    console.log(`  (rien n'est efface -- pour la rouvrir : --partie ${GAME_ID}.${stamp})`);
+  const faits = archiver(GAME_ID);
+  if (faits.length > 0) {
+    console.log(`  partie precedente archivee : ${faits.join(", ")}`);
+    console.log(`  (rien n'est efface -- pour la rouvrir : --partie ${faits[0]!.split(".")[1]})`);
   } else {
     console.log(`  aucune partie "${GAME_ID}" a archiver, on part de zero`);
   }
 }
 
-// Variante demandee en ligne de commande. Voir SPEC.md §16.
-//
-//   --tirage 8      caramels piochés par coup   (le Y de « X sur Y »)
-//   --jouables 7    caramels posables par coup  (le X)
-//   --sac102        sac fini de 102 caramels au lieu des probabilités
-//
-setLayout(LAYOUT);
-const demande = process.argv.some((a) =>
-  a === "--tirage" || a === "--jouables" || a === "--sac102");
-const enregistree = Game.configEnregistree(GAME_ID);
+/** Variante de la grille mondiale, demandee en ligne de commande (SPEC.md §16). */
+const CFG_MONDIALE = (() => {
+  const enregistree = Game.configEnregistree(GAME_ID);
+  const demande = process.argv.some((a) =>
+    a === "--tirage" || a === "--jouables" || a === "--sac102");
+  if (enregistree !== null && demande) {
+    console.error(
+      `\n  La partie "${GAME_ID}" a deja une variante : ` +
+      `${enregistree.jouables} sur ${enregistree.tirage}, pioche ${enregistree.pioche}.` +
+      `\n  En changer fausserait tous les scores deja joues.` +
+      `\n  Lancez --nouvelle pour repartir a zero, ou --partie <autre-nom>.\n`,
+    );
+    process.exit(1);
+  }
+  if (enregistree !== null) return deserialiser(enregistree);
 
-if (enregistree !== null && demande) {
-  console.error(
-    `
-  La partie "${GAME_ID}" a deja une variante : ` +
-    `${enregistree.jouables} sur ${enregistree.tirage}, pioche ${enregistree.pioche}.` +
-    `
-  En changer fausserait tous les scores deja joues.` +
-    `
-  Lancez --nouvelle pour repartir a zero, ou --partie <autre-nom>.
-`,
-  );
-  process.exit(1);
-}
-
-const CFG = enregistree !== null ? deserialiser(enregistree) : (() => {
   const base = configParDefaut();
   const tirage = Number(arg("tirage", String(base.tirage)));
   const jouables = Number(arg("jouables", String(tirage)));
   if (!Number.isInteger(tirage) || tirage < 2 || tirage > 15) {
-    console.error(`
-  --tirage doit etre un entier de 2 a 15 (recu ${arg("tirage", "?")})
-`);
+    console.error(`\n  --tirage doit etre un entier de 2 a 15 (recu ${arg("tirage", "?")})\n`);
     process.exit(1);
   }
   if (!Number.isInteger(jouables) || jouables < 2 || jouables > tirage) {
-    console.error(`
-  --jouables doit etre un entier de 2 a ${tirage} (recu ${arg("jouables", "?")})
-`);
+    console.error(`\n  --jouables doit etre un entier de 2 a ${tirage} (recu ${arg("jouables", "?")})\n`);
     process.exit(1);
   }
   return avec(base, {
@@ -105,7 +87,99 @@ const CFG = enregistree !== null ? deserialiser(enregistree) : (() => {
   });
 })();
 
-const game = new Game(GAME_ID, LAYOUT, CFG);
+// ---------------------------------------------------------------- transport
+
+/** Qui est connecte, sous quel pseudo, et dans quel salon. */
+interface Client { nom: string; salon: string }
+const clients = new Map<WebSocket, Client>();
+
+const send = (ws: WebSocket, msg: unknown): void => {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+};
+
+/** Diffuse a ceux qui sont DANS ce salon, et a eux seuls. */
+const broadcast = (salonId: string, msg: unknown): void => {
+  const s = JSON.stringify(msg);
+  for (const [ws, c] of clients) {
+    if (c.salon === salonId && ws.readyState === ws.OPEN) ws.send(s);
+  }
+};
+
+const occupants = (salonId: string): string[] =>
+  [...new Set([...clients.values()].filter((c) => c.salon === salonId).map((c) => c.nom))]
+    .filter((n) => n !== "");
+
+/** Etat public : jamais le top, jamais la liste des coups jouables (SPEC.md §7). */
+function publicState(s: Salon) {
+  const g = s.partie;
+  return {
+    salon: s.id,
+    nomSalon: s.nom,
+    proprietaire: s.proprietaire,
+    moveNumber: g.moveNumber,
+    rack: g.rack,
+    notation: g.rackNotation,
+    cumul: g.cumul,
+    sac: g.restantDuSac(),
+    finie: g.finie,
+    solving: g.solving,
+    servedAt: g.servedAt,
+    players: g.players,
+    likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
+    last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
+    online: occupants(s.id),
+    createdAt: g.createdAt,
+    now: Date.now(),
+  };
+}
+
+/**
+ * Un coup, tel qu'il part aux clients.
+ *
+ * Ni les PALIERS ni le nombre d'ISOTOPS n'y figurent : ils restent dans le
+ * fichier de partie, pour l'analyse d'apres-coup, et ne sont jamais diffuses.
+ * Ce qui n'est pas envoye ne peut pas etre lu dans la console.
+ */
+function publicMove(m: PlayedMove) {
+  return {
+    n: m.n, word: m.word, dir: m.dir, x: m.x, y: m.y, score: m.score,
+    player: m.player, ms: m.ms, notation: m.notation, rack: m.rack,
+    playerWord: m.playerWord, playerDir: m.playerDir, playerX: m.playerX, playerY: m.playerY,
+    likes: m.likes?.length ?? 0,
+    likers: m.likes ?? [],
+  };
+}
+
+/** Branche la diffusion d'etat d'un salon. A refaire apres chaque relance. */
+function surveiller(s: Salon): void {
+  s.partie.onChange(() => broadcast(s.id, { t: "state", state: publicState(s) }));
+}
+
+// ---------------------------------------------------------------- ouverture
+
+const salonMondial = await ouvrirSalon({
+  id: GAME_ID, nom: "Grille mondiale", proprietaire: null, prive: false,
+  layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
+});
+surveiller(salonMondial);
+
+// Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
+for (const e of salonsEnregistres()) {
+  if (e["id"] === GAME_ID) continue;
+  try {
+    const s = await ouvrirSalon({
+      id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? null,
+      prive: e["prive"] === true, layout: (e["layout"] ?? LAYOUT) as LayoutName,
+      cfg: e["config"] ? deserialiser(e["config"]) : configParDefaut(),
+      nouveau: false, creeLe: e["creeLe"],
+    });
+    surveiller(s);
+  } catch (err) {
+    console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
+  }
+}
+
+// ---------------------------------------------------------------- http
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -114,8 +188,72 @@ const MIME: Record<string, string> = {
   ".bin": "application/octet-stream",
 };
 
-const http = createServer((req: IncomingMessage, res: ServerResponse) => {
+function json(res: ServerResponse, code: number, corps: unknown): void {
+  const s = JSON.stringify(corps);
+  res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+  res.end(s);
+}
+
+async function corpsJson(req: IncomingMessage): Promise<any> {
+  const morceaux: Buffer[] = [];
+  let taille = 0;
+  for await (const c of req) {
+    taille += (c as Buffer).length;
+    if (taille > 8192) throw new Error("corps trop gros");
+    morceaux.push(c as Buffer);
+  }
+  return JSON.parse(Buffer.concat(morceaux).toString("utf8"));
+}
+
+const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = (req.url ?? "/").split("?")[0]!;
+
+  if (url === "/api/salons" && req.method === "GET") {
+    json(res, 200, {
+      salons: tousLesSalons()
+        .filter((s) => !s.prive)
+        .map((s) => resume(s, occupants(s.id).length)),
+      max: MAX_SALONS,
+    });
+    return;
+  }
+
+  // Un salon prive ne figure pas dans la liste, mais s'ouvre par son adresse.
+  if (url.startsWith("/api/salon/") && req.method === "GET") {
+    const s = salon(decodeURIComponent(url.slice("/api/salon/".length)));
+    if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
+    json(res, 200, resume(s, occupants(s.id).length));
+    return;
+  }
+
+  if (url === "/api/salons" && req.method === "POST") {
+    try {
+      const c = await corpsJson(req);
+      const nom = String(c.nom ?? "").trim().slice(0, 40) || "Salon";
+      const proprietaire = String(c.proprietaire ?? "").trim().slice(0, 24) || "anonyme";
+      const base = configParDefaut();
+      const tirage = Math.max(2, Math.min(15, Number(c.tirage ?? base.tirage)));
+      const jouables = Math.max(2, Math.min(tirage, Number(c.jouables ?? tirage)));
+      const pioche = c.pioche === "sac102" ? "sac102" : "probabilites";
+
+      // Un identifiant libre : on suffixe tant que le nom est pris.
+      let id = slug(nom);
+      let n = 2;
+      while (salon(id) !== undefined) id = `${slug(nom)}-${n++}`;
+
+      const s = await ouvrirSalon({
+        id, nom, proprietaire, prive: c.prive === true, layout: LAYOUT,
+        cfg: avec(base, { tirage, jouables, pioche }), nouveau: true,
+      });
+      surveiller(s);
+      console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
+        `${jouables} sur ${tirage}, pioche ${pioche}`);
+      json(res, 200, resume(s, 0));
+    } catch (e) {
+      json(res, 400, { erreur: (e as Error).message });
+    }
+    return;
+  }
 
   if (url === "/dawg.bin") {
     const buf = readFileSync(DAWG_PATH);
@@ -140,127 +278,122 @@ const http = createServer((req: IncomingMessage, res: ServerResponse) => {
   res.end(readFileSync(file));
 });
 
+// ---------------------------------------------------------------- websocket
+
 const wss = new WebSocketServer({ server: http });
-const clients = new Map<WebSocket, string>();
-
-const send = (ws: WebSocket, msg: unknown) => {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-};
-const broadcast = (msg: unknown) => {
-  const s = JSON.stringify(msg);
-  for (const ws of clients.keys()) if (ws.readyState === ws.OPEN) ws.send(s);
-};
-
-/** Etat public : jamais le top, jamais la liste des coups jouables (SPEC.md §7). */
-function publicState() {
-  return {
-    moveNumber: game.moveNumber,
-    rack: game.rack,
-    notation: game.rackNotation,
-    cumul: game.cumul,
-    sac: game.restantDuSac(),
-    finie: game.finie,
-    solving: game.solving,
-    servedAt: game.servedAt,
-    players: game.players,
-    likes: Object.fromEntries(Object.keys(game.players).map((p) => [p, game.likesOf(p)])),
-    last: game.moves.length > 0 ? publicMove(game.moves[game.moves.length - 1]!) : null,
-    online: [...new Set(clients.values())],
-    createdAt: game.createdAt,
-    now: Date.now(),
-  };
-}
-
-/**
- * Un coup, tel qu'il part aux clients.
- *
- * Ni les PALIERS ni le nombre d'ISOTOPS n'y figurent : ils restent dans le
- * fichier de partie, pour l'analyse d'apres-coup, et ne sont jamais diffuses.
- * Ce qui n'est pas envoye ne peut pas etre lu dans la console.
- */
-function publicMove(m: PlayedMove) {
-  return {
-    n: m.n, word: m.word, dir: m.dir, x: m.x, y: m.y, score: m.score,
-    player: m.player, ms: m.ms, notation: m.notation, rack: m.rack,
-    playerWord: m.playerWord, playerDir: m.playerDir, playerX: m.playerX, playerY: m.playerY,
-    likes: m.likes?.length ?? 0,
-    likers: m.likes ?? [],
-  };
-}
-
-game.onChange(() => broadcast({ t: "state", state: publicState() }));
 
 wss.on("connection", (ws) => {
-  clients.set(ws, "");
+  clients.set(ws, { nom: "", salon: "" });
 
   ws.on("message", async (raw) => {
     let msg: any;
     try { msg = JSON.parse(String(raw)); } catch { return; }
+    const moi = clients.get(ws);
+    if (moi === undefined) return;
+    const s = salon(moi.salon);
 
     if (msg.t === "join") {
-      const name = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
+      const nom = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
+      const cible = salon(String(msg.salon ?? GAME_ID));
+      if (cible === undefined) {
+        send(ws, { t: "refus", message: "Ce salon n'existe plus" });
+        return;
+      }
       // Deux joueurs du meme nom rendent le classement faux et les statistiques
       // inexploitables : on ne saurait plus a qui attribuer un coup. Tant qu'il
       // n'y a pas de comptes, l'unicite ne vaut que parmi les connectes ; elle
       // s'etendra aux pseudos enregistres quand ils existeront.
-      const pris = [...clients.entries()].some(([c, n]) => c !== ws && n === name);
+      const pris = [...clients.entries()].some(([c, v]) => c !== ws && v.nom === nom);
       if (pris) {
         send(ws, { t: "refus", message: "Ce nom d'utilisateur n'est pas disponible" });
         return;
       }
-      clients.set(ws, name);
+      clients.set(ws, { nom, salon: cible.id });
       send(ws, {
         t: "hello",
-        you: name,
-        gameId: game.gameId,
-        layout: game.layout,
+        you: nom,
+        gameId: cible.partie.gameId,
+        salon: cible.id,
+        nomSalon: cible.nom,
+        proprietaire: cible.proprietaire,
+        layout: cible.partie.layout,
         // Le client rejoue le calcul du score a chaque frappe : sans la
         // variante, il afficherait la prime d'une autre partie.
-        config: serialiser(game.cfg),
+        config: serialiser(cible.partie.cfg),
         reveal: REVEAL,
-        tiles: game.tiles(),
-        moves: game.moves.map(publicMove),
-        chat: game.chat,
-        state: publicState(),
+        tiles: cible.partie.tiles(),
+        moves: cible.partie.moves.map(publicMove),
+        chat: cible.partie.chat,
+        state: publicState(cible),
       });
-      broadcast({ t: "state", state: publicState() });
+      broadcast(cible.id, { t: "state", state: publicState(cible) });
       return;
     }
+
+    if (s === undefined) return;
 
     // "j'aime" sur un coup : le like va au joueur qui a trouve le top. On ne
     // peut ni s'aimer soi-meme, ni aimer un coup revele sans vainqueur.
     if (msg.t === "like") {
       const n = Number(msg.n);
-      const name = clients.get(ws) || "anonyme";
-      if (game.like(name, n)) {
-        broadcast({ t: "likes", n, likers: game.moves.find((q) => q.n === n)?.likes ?? [] });
+      if (s.partie.like(moi.nom, n)) {
+        broadcast(s.id, {
+          t: "likes", n, likers: s.partie.moves.find((q) => q.n === n)?.likes ?? [],
+        });
       }
       return;
     }
 
     if (msg.t === "say") {
-      const name = clients.get(ws) || "anonyme";
       const text = String(msg.text ?? "").trim();
       const cell = msg.cell && Number.isFinite(msg.cell.x) && Number.isFinite(msg.cell.y)
         ? { x: Math.round(msg.cell.x), y: Math.round(msg.cell.y) }
         : undefined;
       if (text.length === 0 && cell === undefined) return;
-      broadcast({ t: "said", msg: game.say(name, text, cell) });
+      broadcast(s.id, { t: "said", msg: s.partie.say(moi.nom, text, cell) });
       return;
     }
 
     if (msg.t === "try") {
-      const name = clients.get(ws) || "anonyme";
-      const before = game.moveNumber;
-      const r = await game.attempt(name, msg.dir as Dir, Number(msg.x), Number(msg.y), String(msg.typed ?? ""));
+      const before = s.partie.moveNumber;
+      const r = await s.partie.attempt(
+        moi.nom, msg.dir as Dir, Number(msg.x), Number(msg.y), String(msg.typed ?? ""),
+      );
       send(ws, { t: "result", ...r });
-      if (game.moveNumber !== before) {
-        const m = game.moves[game.moves.length - 1]!;
-        broadcast({
-          t: "placed",
-          move: publicMove(m),
-          placements: m.placements,
-          state: publicState(),
+      if (s.partie.moveNumber !== before) {
+        const m = s.partie.moves[s.partie.moves.length - 1]!;
+        broadcast(s.id, {
+          t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
+        });
+      }
+      return;
+    }
+
+    // Relance : reservee au proprietaire du salon. La grille mondiale n'en a
+    // pas, donc personne ne peut la relancer.
+    if (msg.t === "relancer") {
+      if (s.proprietaire === null || s.proprietaire !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul le propriétaire relance le salon" });
+        return;
+      }
+      const base = s.partie.cfg;
+      const tirage = Math.max(2, Math.min(15, Number(msg.tirage ?? base.tirage)));
+      const jouables = Math.max(2, Math.min(tirage, Number(msg.jouables ?? tirage)));
+      const pioche = msg.pioche === "sac102" ? "sac102" : msg.pioche === "probabilites"
+        ? "probabilites" : base.pioche;
+      const archives = await relancer(s, avec(base, { tirage, jouables, pioche }));
+      surveiller(s);
+      console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
+        `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
+      for (const [c, v] of clients) {
+        if (v.salon !== s.id) continue;
+        send(c, {
+          t: "relance",
+          tiles: s.partie.tiles(),
+          moves: [],
+          chat: s.partie.chat,
+          config: serialiser(s.partie.cfg),
+          state: publicState(s),
         });
       }
       return;
@@ -268,42 +401,43 @@ wss.on("connection", (ws) => {
 
     if (msg.t === "reveal") {
       if (!REVEAL) return;   // inerte sauf si le serveur tourne avec --reveler
-      const before = game.moveNumber;
-      await game.reveal();
-      if (game.moveNumber !== before) {
-        const m = game.moves[game.moves.length - 1]!;
-        broadcast({
-          t: "placed",
-          move: publicMove(m),
-          placements: m.placements,
-          state: publicState(),
+      const before = s.partie.moveNumber;
+      await s.partie.reveal();
+      if (s.partie.moveNumber !== before) {
+        const m = s.partie.moves[s.partie.moves.length - 1]!;
+        broadcast(s.id, {
+          t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
         });
       }
     }
   });
 
-  ws.on("close", () => { clients.delete(ws); broadcast({ t: "state", state: publicState() }); });
+  ws.on("close", () => {
+    const moi = clients.get(ws);
+    clients.delete(ws);
+    const s = moi ? salon(moi.salon) : undefined;
+    if (s !== undefined) broadcast(s.id, { t: "state", state: publicState(s) });
+  });
 });
 
-// Le verrou doit partir quand le serveur s'arrete, quelle qu'en soit la raison.
-// Un SIGKILL ne laisse rien passer : le verrou reste, et le prochain demarrage
-// le reconnaitra comme perime puisque son processus n'existe plus.
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
-  process.on(signal, () => { game.releaseLock(); process.exit(0); });
-}
-process.on("exit", () => game.releaseLock());
-process.on("uncaughtException", (e) => { game.releaseLock(); throw e; });
+// ---------------------------------------------------------------- arret
 
-try {
-  await game.start();
-} catch (e) {
-  console.error(`
-  ${(e as Error).message}
-`);
-  process.exit(1);
+// Les verrous doivent partir quand le serveur s'arrete, quelle qu'en soit la
+// raison. Un SIGKILL ne laisse rien passer : ils restent, et le prochain
+// demarrage les reconnait comme perimes puisque leur processus n'existe plus.
+const rendreLesVerrous = (): void => {
+  for (const s of tousLesSalons()) s.partie.releaseLock();
+};
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
+  process.on(signal, () => { rendreLesVerrous(); process.exit(0); });
 }
+process.on("exit", rendreLesVerrous);
+process.on("uncaughtException", (e) => { rendreLesVerrous(); throw e; });
+
 http.listen(PORT, () => {
+  const n = tousLesSalons().length;
   console.log(`\n  Grille "${GAME_ID}" sur le pavage "${LAYOUT}"`);
+  console.log(`  ${n} salon${n > 1 ? "s" : ""} ouvert${n > 1 ? "s" : ""}`);
   console.log(`  http://localhost:${PORT}\n`);
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');

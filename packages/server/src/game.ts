@@ -216,6 +216,21 @@ export class Game {
     this.holdsLock = true;
   }
 
+/**
+   * Arrete la partie : le fil de calcul se termine et le verrou est rendu.
+   *
+   * Indispensable quand un salon relance une partie : sans cela le fil du
+   * solveur precedent survivrait, avec sa grille et ses 4 Mo de dictionnaires,
+   * et le verrou empecherait la nouvelle partie de s'ouvrir.
+   */
+  async stop(): Promise<void> {
+    this.releaseLock();
+    for (const [, done] of this.pending) done({ result: null, ms: 0 });
+    this.pending.clear();
+    this.listeners = [];
+    if (this.worker !== undefined) await this.worker.terminate();
+  }
+
   /** Rend le verrou. Sans effet s'il ne nous appartient pas. */
   releaseLock(): void {
     if (!this.holdsLock) return;
