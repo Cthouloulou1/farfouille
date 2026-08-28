@@ -707,18 +707,29 @@ function flash(text: string, kind: "bad" | "ok" | "top") {
 
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 
-let press: { x: number; y: number; button: number; moved: boolean; at: number } | null = null;
+/**
+ * L'appui en cours. `cx`/`cy` retiennent la case visee AU MOMENT DE L'APPUI :
+ * c'est elle qui compte, pas celle qu'on survole en relachant. Un doigt qui
+ * frémit ne doit pas poser le curseur une case plus loin.
+ */
+let press: {
+  x: number; y: number; button: number; moved: boolean; at: number;
+  cx: number; cy: number;
+} | null = null;
 let holdTimer = 0;
 
 cv.addEventListener("pointerdown", (e) => {
-  press = { x: e.clientX, y: e.clientY, button: e.button, moved: false, at: Date.now() };
+  const r0 = cv.getBoundingClientRect();
+  press = {
+    x: e.clientX, y: e.clientY, button: e.button, moved: false, at: Date.now(),
+    cx: Math.floor((e.clientX - r0.left - ox) / cell),
+    cy: Math.floor((e.clientY - r0.top - oy) / cell),
+  };
   cv.setPointerCapture(e.pointerId);
   if (e.button === 1) e.preventDefault();
   // Clic droit MAINTENU : proposition de partager la case dans le chat.
   if (e.button === 2) {
-    const r = cv.getBoundingClientRect();
-    const gx = Math.floor((e.clientX - r.left - ox) / cell);
-    const gy = Math.floor((e.clientY - r.top - oy) / cell);
+    const gx = press.cx, gy = press.cy;
     clearTimeout(holdTimer);
     holdTimer = window.setTimeout(() => {
       if (press === null || press.moved) return;
@@ -733,9 +744,11 @@ cv.addEventListener("pointermove", (e) => {
   if (press === null) return;
   const dx = e.clientX - press.x, dy = e.clientY - press.y;
   if (!press.moved && Math.hypot(dx, dy) < 4) return;
-  press.moved = true;
   clearTimeout(holdTimer);
-  if (cfg.bornes !== null) return;   // plateau ferme : rien a faire glisser
+  // Plateau ferme : il n'y a rien a faire glisser, donc rien qui puisse
+  // transformer un clic en deplacement. Le clic reste un clic.
+  if (cfg.bornes !== null) return;
+  press.moved = true;
   if (anim) { cancelAnimationFrame(anim); anim = 0; }
   ox += dx; oy += dy;
   press.x = e.clientX; press.y = e.clientY;
@@ -751,9 +764,8 @@ cv.addEventListener("pointerup", (e) => {
   try { cv.releasePointerCapture(e.pointerId); } catch { /* deja relache */ }
   if (p === null || p.moved || p.button === 1) return;
 
-  const r = cv.getBoundingClientRect();
-  const x = Math.floor((e.clientX - r.left - ox) / cell);
-  const y = Math.floor((e.clientY - r.top - oy) / cell);
+  // La case retenue est celle de l'APPUI, pas celle du relachement.
+  const x = p.cx, y = p.cy;
   marks = [];
   if (cursor !== null && cursor.x === x && cursor.y === y) {
     // Recliquer la meme case fait pivoter le sens -- mais pas au milieu d'un mot.

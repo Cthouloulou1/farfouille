@@ -1067,6 +1067,11 @@ Hors du plateau, on ne pose rien — mais le bord **reste une fin de mot valide*
 un mot a le droit de s'appuyer contre lui. Ce n'est pas la même chose qu'une
 case occupée, et le générateur distingue les deux.
 
+**Le curseur se pose sur la case de l'APPUI, pas sur celle du relâchement.**
+Une souris qui frémit entre les deux ne doit pas décaler le repère d'une case.
+Et sur un plateau fermé, où il n'y a rien à faire glisser, un léger mouvement
+ne transforme jamais un clic en déplacement : le clic reste un clic.
+
 **Une grille bornée ne se déplace pas et ne se zoome pas.** Le plateau tient
 tout entier à l'écran, centré, avec ses règles fixes. Il n'y a rien à explorer :
 pouvoir le déplacer n'apporterait que des réglages à refaire et des repères qui
