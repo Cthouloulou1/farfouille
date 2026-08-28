@@ -9,6 +9,7 @@
  */
 import { Dict } from "../../engine/src/dictionary.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
+import { configParDefaut, deserialiser, type ConfigPartie } from "../../engine/src/config.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { valueOf, BLANK } from "../../engine/src/alphabet.ts";
 import { step, formatMove, type Dir } from "../../engine/src/coords.ts";
@@ -31,6 +32,8 @@ interface Chat { at: number; who: string; text: string; cell?: { x: number; y: n
 
 let dict: Dict;
 let board: Board;
+/** La variante jouee, envoyee par le serveur a la connexion. */
+let cfg: ConfigPartie = configParDefaut();
 let tiles: Tile[] = [];
 let history: MoveInfo[] = [];
 let me = "";
@@ -794,7 +797,10 @@ function connect() {
       tiles = m.tiles;
       history = m.moves;
       chat = m.chat ?? [];
-      board = new Board(dict);
+      // La variante vient du serveur : c'est elle qui dit combien de caramels se
+      // posent, ce que vaut chaque lettre et quelle prime recompense quoi.
+      cfg = m.config ? deserialiser(m.config) : configParDefaut();
+      board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       paintChat(chat);
       applyState(m.state);

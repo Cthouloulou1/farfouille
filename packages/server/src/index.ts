@@ -14,7 +14,7 @@ import { dirname, join, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
-import { avec, configParDefaut, deserialiser } from "../../engine/src/config.ts";
+import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
@@ -212,6 +212,9 @@ wss.on("connection", (ws) => {
         you: name,
         gameId: game.gameId,
         layout: game.layout,
+        // Le client rejoue le calcul du score a chaque frappe : sans la
+        // variante, il afficherait la prime d'une autre partie.
+        config: serialiser(game.cfg),
         reveal: REVEAL,
         tiles: game.tiles(),
         moves: game.moves.map(publicMove),
