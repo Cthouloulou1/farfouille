@@ -50,7 +50,9 @@ parentPort!.on("message", (msg: SolveRequest | PlaceRequest) => {
   }
   const t0 = performance.now();
   const gen = generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
-  const top = pickTop(gen.moves, mulberry32(moveSeed(seed, msg.moveNumber)));
+  const top = pickTop(
+    gen.moves, mulberry32(moveSeed(seed, msg.moveNumber)), board.cfg.joker,
+  );
   parentPort!.postMessage({
     t: "solved",
     id: msg.id,

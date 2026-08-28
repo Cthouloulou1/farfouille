@@ -54,6 +54,18 @@ export class SacFini implements Pioche {
   private readonly random: () => number;
   private readonly tirage: number;
   private readonly reject: RejectPolicy;
+  private readonly distribution: Readonly<Record<string, number>>;
+  /**
+   * Le sac se recharge-t-il ? Voir SPEC.md §16.
+   *
+   * Des qu'il ne reste plus que deux voyelles ou deux consonnes dans le sac et
+   * le reliquat reunis, il retrouve sa composition d'origine. La partie ne
+   * s'arrete alors jamais : c'est la pioche des grilles infinies qui veulent la
+   * distribution du jeu classique plutot que des probabilites.
+   */
+  recharge = false;
+  /** Nombre de rechargements, pour les statistiques et les tests. */
+  rechargements = 0;
   /** Caramels restants, une entree par exemplaire. */
   private caramels: string[] = [];
   /** Numero du tirage en cours, pour le relachement de la regle de rejet. */
@@ -68,9 +80,30 @@ export class SacFini implements Pioche {
     this.random = random;
     this.tirage = tirage;
     this.reject = reject ?? politiqueSacFini(() => this.coup);
-    for (const [lettre, n] of Object.entries(distribution)) {
+    this.distribution = distribution;
+    this.remplir();
+  }
+
+  /** Remet dans le sac la composition d'origine, entiere. */
+  private remplir(): void {
+    this.caramels = [];
+    for (const [lettre, n] of Object.entries(this.distribution)) {
       for (let i = 0; i < n; i++) this.caramels.push(lettre);
     }
+  }
+
+  /**
+   * Compte ce qui reste, voyelles et consonnes. Le Y et le joker sont neutres,
+   * comme partout ailleurs.
+   */
+  private compte(reliquat: readonly string[]): { v: number; c: number } {
+    let v = 0, c = 0;
+    for (const ch of [...this.caramels, ...reliquat]) {
+      if (ch === "Y" || ch === BLANK) continue;
+      if (isVowel(ch)) v++;
+      else if (isConsonant(ch)) c++;
+    }
+    return { v, c };
   }
 
   get reste(): number { return this.caramels.length; }
@@ -109,6 +142,12 @@ export class SacFini implements Pioche {
    */
   draw(reliquat: readonly string[]): DrawResult {
     this.coup++;
+    // Sac rechargeable : on le remet a neuf AVANT de piocher, des qu'il devient
+    // trop pauvre d'un cote ou de l'autre.
+    if (this.recharge) {
+      const { v, c } = this.compte(reliquat);
+      if (v <= 2 || c <= 2) { this.remplir(); this.rechargements++; }
+    }
     const avant = [...this.caramels];
     const premier = this.completer(reliquat);
     if (!this.reject(premier) || this.caramels.length === 0) {
@@ -153,6 +192,8 @@ export class SacFini implements Pioche {
    * voyelle : avec des consonnes et lui, on joue encore.
    */
   estFinie(reliquat: readonly string[]): boolean {
+    // Un sac qui se recharge ne s'epuise jamais : la partie ne finit pas.
+    if (this.recharge) return false;
     const restes = [...this.caramels, ...reliquat];
     // Un joker peut fournir la lettre manquante : tant qu'il en reste un, on joue.
     if (restes.includes(BLANK)) return false;

@@ -43,7 +43,12 @@ export interface ConfigPartie {
    * jamais ; le sac de 102 est ce que reclament la partie joker et la fin de
    * partie.
    */
-  pioche: "probabilites" | "sac102";
+  pioche: "probabilites" | "sac102" | "sac102boucle";
+  /**
+   * Partie joker : le tirage contient toujours un joker, et la lettre qu'il
+   * joue est remplacee par une vraie sortie du sac. Voir SPEC.md §16.
+   */
+  joker: boolean;
   /**
    * Demi-cote de la grille, en cases. 7 donne un plateau de 15x15 centre sur
    * l'origine ; `null` laisse la grille infinie.
@@ -70,6 +75,7 @@ export function configParDefaut(): ConfigPartie {
     primes: primesParDefaut(),
     valeurs: VALUES,
     pioche: "probabilites",
+    joker: false,
     bornes: null,
     pavage: activeLayout(),
     pavageNom: currentLayout(),
@@ -85,7 +91,8 @@ export interface ConfigSerialisee {
   jouables: number;
   primes: Record<number, number>;
   valeurs: Record<string, number>;
-  pioche: "probabilites" | "sac102";
+  pioche: "probabilites" | "sac102" | "sac102boucle";
+  joker: boolean;
   bornes: number | null;
   pavageNom: LayoutName | "custom";
 }
@@ -94,7 +101,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, bornes: cfg.bornes, pavageNom: cfg.pavageNom,
+    pioche: cfg.pioche, joker: cfg.joker, bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
 
@@ -107,6 +114,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
   return {
     tirage: plat.tirage, jouables: plat.jouables,
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
+    joker: plat.joker === true,
     bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),
     pavageNom: plat.pavageNom,

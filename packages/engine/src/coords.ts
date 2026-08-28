@@ -40,27 +40,44 @@ export function perpendicular(dir: Dir): Dir {
 }
 
 /**
- * Notation d'un coup : le sens DEVANT, puis la coordonnee CONSTANTE d'abord.
+ * Notation d'un coup sur la grille INFINIE : le sens devant, puis toujours
+ * LIGNE PUIS COLONNE, quel que soit le sens.
  *
- * C'est l'usage du duplicate, celui de la notation A5 / 5A : un mot horizontal
- * tient sur une seule LIGNE, donc la ligne vient en tete ; un mot vertical tient
- * sur une seule COLONNE, donc la colonne vient en tete.
+ *   "H 0,-4"    mot horizontal, ligne 0, depuis la colonne -4
+ *   "V -3,12"   mot vertical, depuis la ligne -3, colonne 12
  *
- *   H ligne,colonne     "H 0,-4"   mot horizontal, ligne 0, depuis la colonne -4
- *   V colonne,ligne     "V 12,-3"  mot vertical, colonne 12, depuis la ligne -3
- *
- * L'ordre de la paire depend donc du sens : c'est voulu, et c'est ce que lit un
- * joueur de duplicate.
+ * L'ordre ne depend plus du sens : une paire qui change de signification selon
+ * la lettre qui la precede se lit mal.
  */
 export function formatMove(dir: Dir, x: number, y: number): string {
-  return dir === "H" ? `H ${y},${x}` : `V ${x},${y}`;
+  return `${dir} ${y},${x}`;
 }
 
 export function parseMove(s: string): { dir: Dir; x: number; y: number } | null {
   const m = /^([HV])\s+(-?\d+),(-?\d+)$/.exec(s.trim());
   if (!m) return null;
-  const dir = m[1] as Dir;
-  const a = Number(m[2]);
-  const b = Number(m[3]);
-  return dir === "H" ? { dir, x: b, y: a } : { dir, x: a, y: b };
+  return { dir: m[1] as Dir, x: Number(m[3]), y: Number(m[2]) };
+}
+
+/**
+ * Notation d'un coup sur une grille BORNEE : celle du jeu de societe.
+ *
+ * Les lignes portent des lettres a partir de A, les colonnes des numeros a
+ * partir de 1. Un mot horizontal tient sur une ligne, donc sa LETTRE vient en
+ * tete ; un mot vertical tient sur une colonne, donc son NUMERO vient en tete.
+ *
+ *   "B13"   mot horizontal, ligne B, depuis la colonne 13
+ *   "13B"   mot vertical, colonne 13, depuis la ligne B
+ *
+ * Sur un plateau de 15, les lignes vont de A a O et les colonnes de 1 a 15.
+ */
+export function formatMoveBorne(dir: Dir, x: number, y: number, bornes: number): string {
+  const ligne = String.fromCharCode(65 + y + bornes);
+  const colonne = x + bornes + 1;
+  return dir === "H" ? `${ligne}${colonne}` : `${colonne}${ligne}`;
+}
+
+/** La notation qui convient a la grille : bornee ou infinie. */
+export function noteCoup(dir: Dir, x: number, y: number, bornes: number | null): string {
+  return bornes === null ? formatMove(dir, x, y) : formatMoveBorne(dir, x, y, bornes);
 }

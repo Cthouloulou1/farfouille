@@ -421,11 +421,13 @@ wss.on("connection", (ws) => {
       const base = s.partie.cfg;
       const tirage = Math.max(2, Math.min(15, Number(msg.tirage ?? base.tirage)));
       const jouables = Math.max(2, Math.min(tirage, Number(msg.jouables ?? tirage)));
-      // Le sac sans fin n'existe pas encore : on retombe sur le sac simple
-      // plutot que de promettre un comportement absent.
-      const pioche = msg.pioche === "sac102" || msg.pioche === "sac102boucle" ? "sac102"
+      const pioche = msg.pioche === "sac102" ? "sac102"
+        : msg.pioche === "sac102boucle" ? "sac102boucle"
         : msg.pioche === "probabilites" ? "probabilites" : base.pioche;
-      const archives = await relancer(s, avec(base, { tirage, jouables, pioche }));
+      // La partie joker a besoin d'un sac : « il ne reste plus de R » n'a aucun
+      // sens avec des probabilites qui ne s'epuisent pas.
+      const joker = msg.joker === true && pioche !== "probabilites";
+      const archives = await relancer(s, avec(base, { tirage, jouables, pioche, joker }));
       surveiller(s);
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
         `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);

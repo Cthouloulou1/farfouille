@@ -39,7 +39,7 @@ import {
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
 import { resolveTypedWord, PLAY_MESSAGE, type PlayError } from "../../engine/src/play.ts";
-import { formatMove, type Dir } from "../../engine/src/coords.ts";
+import { noteCoup, type Dir } from "../../engine/src/coords.ts";
 import { DAWG_PATH } from "../../engine/src/paths.ts";
 import type { Move } from "../../engine/src/score.ts";
 
@@ -139,6 +139,12 @@ export class Game {
   readonly cfg: ConfigPartie;
   /** La partie est terminee : le sac ne permet plus de jouer (SPEC.md §16). */
   finie = false;
+  /**
+   * Jokers encore disponibles, en partie joker. Ils ne sont PAS dans le sac :
+   * ils vivent au tirage, et n'en sortent que le jour ou aucune vraie lettre ne
+   * peut les remplacer sur la grille.
+   */
+  jokersEnReserve = 0;
   /** Cree dans start(), une fois la graine connue. */
   private worker!: Worker;
   private readonly file: string;
@@ -335,9 +341,23 @@ export class Game {
         console.log(`[partie] journal cree a partir de l'instantane`);
       }
     }
-    this.bag = this.cfg.pioche === "sac102"
-      ? new SacFini(SAC_FRANCAIS, mulberry32(moveSeed(this.seed, 0)), this.cfg.tirage)
-      : new Bag(DEFAULT_BAG, mulberry32(moveSeed(this.seed, 0)), undefined, this.cfg.tirage);
+    // En partie joker, le tirage contient toujours un joker : le sac ne
+    // distribue donc que `tirage - 1` lettres, et les deux jokers sont mis de
+    // cote. Ils ne sont pas piochables, ils accompagnent le tirage.
+    this.jokersEnReserve = this.cfg.joker ? 2 : 0;
+    const parTirage = this.cfg.tirage - (this.cfg.joker ? 1 : 0);
+    const alea = mulberry32(moveSeed(this.seed, 0));
+
+    if (this.cfg.pioche === "probabilites") {
+      this.bag = new Bag(DEFAULT_BAG, alea, undefined, parTirage);
+    } else {
+      const distribution = this.cfg.joker
+        ? Object.fromEntries(Object.entries(SAC_FRANCAIS).filter(([l]) => l !== BLANK))
+        : SAC_FRANCAIS;
+      const sac = new SacFini(distribution, alea, parTirage);
+      sac.recharge = this.cfg.pioche === "sac102boucle";
+      this.bag = sac;
+    }
 
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
       workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
@@ -456,9 +476,15 @@ export class Game {
       this.emit();
       return;
     }
-    const draw = this.bag.draw(this.reliquat);
-    this.rack = draw.rack;
-    this.rackNotation = draw.notation;
+    // Le joker ne repasse pas par le sac : on le retire du reliquat avant de
+    // completer, et on le remet ensuite.
+    const gardeJoker = this.cfg.joker && this.jokersEnReserve > 0;
+    const reliquatSansJoker = gardeJoker
+      ? this.reliquat.filter((c) => c !== BLANK)
+      : this.reliquat;
+    const draw = this.bag.draw(reliquatSansJoker);
+    this.rack = gardeJoker ? [...draw.rack, BLANK].sort().join("") : draw.rack;
+    this.rackNotation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
     this.bestScore = -1;
     this.canonicalTop = null;
     this.isotops = 0;
@@ -572,9 +598,12 @@ export class Game {
     };
     this.moves.push(move);
     if (player !== null) this.players[player] = (this.players[player] ?? 0) + 1;
+    // Le reliquat se calcule sur le tirage TEL QU'IL A ETE DISTRIBUE, avant
+    // toute substitution de joker : c'est bien un joker qui a quitte le tirage.
+    this.reliquat = Bag.remainder(this.rack, top.placements);
+    if (this.cfg.joker) this.substituerJokers(top.placements);
     this.board.place(top.placements);
     this.worker.postMessage({ t: "place", placements: top.placements });
-    this.reliquat = Bag.remainder(this.rack, top.placements);
     // Le journal d'abord, force sur le disque : a partir d'ici le coup existe,
     // meme si la machine s'eteint dans la seconde.
     this.append({ t: "coup", move });
@@ -582,7 +611,7 @@ export class Game {
     // Ici le coup est joue : tout est devenu public, on peut l'ecrire.
     console.log(
       `[partie] coup ${move.n} remporte par ${player ?? "personne"} : ` +
-      `${move.word} ${formatMove(move.dir, move.x, move.y)} ${move.score} pts ` +
+      `${move.word} ${noteCoup(move.dir, move.x, move.y, this.cfg.bornes)} ${move.score} pts ` +
       `en ${(ms / 1000).toFixed(1)} s` +
       (move.isotops > 1 ? ` (${move.isotops} isotops)` : ""),
     );
@@ -596,6 +625,36 @@ export class Game {
     this.append({ t: "chat", msg });
     this.save();
     return msg;
+  }
+
+/**
+   * Partie joker : la lettre jouee par le joker devient une VRAIE lettre.
+   *
+   * Le joker a compte zero pour le coup qui vient d'etre joue -- c'est deja
+   * fait, le score est calcule. Mais ce qui se pose sur la grille est un vrai R
+   * sorti du sac, qui vaudra un point pour tous les coups suivants, et le joker
+   * revient au tirage.
+   *
+   * Si le sac n'a plus de R, le joker se pose lui-meme, a zero pour toujours,
+   * et la reserve perd une unite. Les deux jokers poses, la partie continue
+   * sans (SPEC.md §16).
+   */
+  private substituerJokers(placements: Placement[]): void {
+    const sac = this.bag as SacFini;
+    if (typeof sac.retirer !== "function") return;   // pioche ponderee : rien a faire
+    for (const p of placements) {
+      if (!p.blank) continue;
+      if (sac.retirer(p.letter)) {
+        p.blank = false;   // un vrai caramel prend sa place, le joker est garde
+        console.log(`[partie] le joker joue ${p.letter} : un vrai ${p.letter} sort du sac`);
+      } else {
+        this.jokersEnReserve--;
+        console.log(
+          `[partie] plus de ${p.letter} dans le sac : le joker reste sur la grille` +
+          ` (${this.jokersEnReserve} joker${this.jokersEnReserve > 1 ? "s" : ""} en reserve)`,
+        );
+      }
+    }
   }
 
   /** Revele le top sans vainqueur. Commodite de test en solo. */

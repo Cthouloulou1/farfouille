@@ -92,9 +92,25 @@ l'usage du duplicate, celui de la notation `A5` / `5A` : un mot horizontal tient
 sur une seule **ligne**, donc la ligne vient en tête ; un mot vertical tient sur
 une seule **colonne**, donc la colonne vient en tête.
 
+**Grille infinie** — le sens devant, puis toujours **ligne puis colonne**, quel
+que soit le sens. Une paire dont la signification change selon la lettre qui la
+précède se lit mal.
+
 ```
-H ligne,colonne     H 0,-4     horizontal, ligne 0, à partir de la colonne -4
-V colonne,ligne     V 12,-3    vertical, colonne 12, à partir de la ligne -3
+H 0,-4      horizontal, ligne 0, à partir de la colonne -4
+V -3,12     vertical, à partir de la ligne -3, colonne 12
+```
+
+**Grille bornée** — la notation du jeu de société. Les lignes portent des
+lettres à partir de A, les colonnes des numéros à partir de 1 ; sur un plateau
+de 15, A à O et 1 à 15. Un mot horizontal tient sur une ligne, donc sa **lettre**
+vient en tête ; un mot vertical tient sur une colonne, donc son **numéro** vient
+en tête.
+
+```
+B13    horizontal, ligne B, à partir de la colonne 13
+13B    vertical, colonne 13, à partir de la ligne B
+H8     le centre, horizontalement        8H    le centre, verticalement
 ```
 
 L'ordre de la paire dépend donc du sens. C'est voulu : c'est ce que lit un
@@ -1084,9 +1100,15 @@ Rien n'interdit le mécanisme sur grille infinie : simplement, aucun joker n'y
 serait jamais perdu.
 
 > ⚠️ **Règle d'isotop propre à cette variante.** Entre deux coups de même score
-> dont l'un consomme le joker et l'autre non, on retient **systématiquement
-> celui qui ne le consomme pas** — sauf si cela termine la partie. Ce n'est plus
-> un départage arbitraire : le choix a des conséquences sur la suite.
+> dont l'un emploie le joker et l'autre non, on retient **systématiquement celui
+> qui ne l'emploie pas**. Ce n'est plus un départage arbitraire : garder le
+> joker a des conséquences sur toute la suite.
+>
+> Le solveur ignore ce qu'il reste dans le sac — il ne peut donc pas savoir si
+> l'emploi du joker le **consommera** vraiment. Il préfère donc, plus largement,
+> les isotops qui ne l'emploient pas du tout : jamais pire, et cela couvre le
+> cas visé. Les isotops employant le joker restent listés, ils sont simplement
+> moins bons à jouer.
 
 ### La règle de rejet s'adapte au tirage
 
@@ -1140,20 +1162,19 @@ de son journal et relue au démarrage. Vouloir la changer en cours de route est
 refusé, avec le message qui dit quoi faire — changer de variante fausserait tous
 les scores déjà joués.
 
-### En réserve : le sac qui se recharge
+### Le sac qui se recharge
 
-Une troisième pioche, **pas encore construite**, notée pour ne pas être oubliée.
-
-On tire au hasard parmi les 102 caramels, et dès qu'il ne reste plus que **2
-voyelles ou 2 consonnes dans le sac et les reliquats réunis**, le sac est
-**complété pour retrouver sa composition d'origine** — on y remet les caramels
-qui manquent, jusqu'aux 102 lettres du départ.
+Troisième pioche. On tire au hasard parmi les 102 caramels, et dès qu'il ne
+reste plus que **2 voyelles ou 2 consonnes dans le sac et les reliquats
+réunis**, le sac **retrouve sa composition d'origine**.
 
 Elle donne une grille infinie avec la distribution du jeu classique, au lieu des
-probabilités pondérées. Ce n'est pas le format principal.
+probabilités pondérées. Une partie ainsi tirée **ne se termine jamais** : il n'y
+a plus rien qui s'épuise.
 
 > Le seuil est celui de la fin de partie, mais l'effet est inverse : au lieu de
-> s'arrêter, la partie recharge et continue.
+> s'arrêter, la partie recharge et continue. Mesuré : un rechargement tous les
+> vingt coups environ.
 
 ### Le chrono
 

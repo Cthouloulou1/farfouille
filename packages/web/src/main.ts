@@ -12,7 +12,7 @@ import { Board, type Placement } from "../../engine/src/board.ts";
 import { configParDefaut, deserialiser, type ConfigPartie } from "../../engine/src/config.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { valueOf, BLANK } from "../../engine/src/alphabet.ts";
-import { step, formatMove, type Dir } from "../../engine/src/coords.ts";
+import { step, noteCoup, type Dir } from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -402,7 +402,7 @@ function paintCurrent() {
     if (r.ok) {
       w.className = "word";
       w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
-      meta.textContent = formatMove(r.move.dir, r.move.x, r.move.y);
+      meta.textContent = noteCoup(r.move.dir, r.move.x, r.move.y, cfg.bornes);
       return;
     }
     w.className = "word";
@@ -418,7 +418,7 @@ function paintCurrent() {
   if (best !== null) {
     w.className = "word";
     w.innerHTML = `<span>${best.word}</span><span class="pts">${best.score}</span>`;
-    meta.textContent = `${formatMove(best.dir, best.x, best.y)} · votre meilleure solution`;
+    meta.textContent = `${noteCoup(best.dir, best.x, best.y, cfg.bornes)} · votre meilleure solution`;
     return;
   }
   w.className = "word none";
@@ -438,7 +438,7 @@ function paintSide() {
   else {
     lw.className = "word";
     lw.innerHTML = `<span>${last.word}</span><span class="pts">${last.score}</span>`;
-    lm.textContent = `${formatMove(last.dir, last.x, last.y)} · ${last.player ?? "révélé"} · ${fmtTime(last.ms)}`;
+    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${last.player ?? "révélé"} · ${fmtTime(last.ms)}`;
     ll.appendChild(likeButton(last));
   }
 
@@ -548,7 +548,7 @@ function paintRoadmap() {
     r.className = "rmrow";
     r.innerHTML =
       `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
-      `<span class="w">${m.word}</span><span class="p">${formatMove(m.dir, m.x, m.y)}</span>` +
+      `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
       `<span class="s">${m.score}</span><span class="who">${m.player ?? "—"}</span>` +
       `<span class="t">${fmtTime(m.ms)}</span>`;
     r.addEventListener("click", () => focusMove(m));
@@ -913,7 +913,7 @@ let salonChoisi = new URLSearchParams(location.search).get("salon") ?? "";
 interface ResumeSalon {
   id: string; nom: string; proprietaire: string | null; mondiale: boolean;
   coups: number; finie: boolean; connectes: number;
-  config: { tirage: number; jouables: number; pioche: string; bornes: number | null };
+  config: { tirage: number; jouables: number; pioche: string; bornes: number | null; joker?: boolean };
 }
 
 function nomPioche(p: string): string {
@@ -921,9 +921,13 @@ function nomPioche(p: string): string {
     : "probabilités pondérées";
 }
 
+function decritJoker(j: boolean): string {
+  return j ? " · joker" : "";
+}
+
 function decritVariante(c: ResumeSalon["config"]): string {
   const grille = c.bornes === null ? "grille infinie" : `${c.bornes * 2 + 1}×${c.bornes * 2 + 1}`;
-  return `${grille} · ${c.jouables} sur ${c.tirage} · ${nomPioche(c.pioche)}`;
+  return `${grille} · ${c.jouables} sur ${c.tirage} · ${nomPioche(c.pioche)}${decritJoker(c.joker === true)}`;
 }
 
 /** Deux icones : la grille sans bord, et le plateau ferme. */
@@ -1045,6 +1049,13 @@ function peuplerPioche(): void {
     (b as HTMLButtonElement).title = interdit
       ? "réservé aux grilles infinies" : "";
   }
+  // La partie joker demande un sac : sans sac, « il ne reste plus de R » n'a
+  // aucun sens, rien ne s'epuise.
+  const sansSac = cPioche === "probabilites";
+  const cj = $("r-joker") as HTMLInputElement;
+  cj.disabled = sansSac;
+  if (sansSac) cj.checked = false;
+  $("r-joker-note").textContent = sansSac ? "(demande un sac de 102)" : "";
 }
 
 /** Ouvre les reglages sur l'etat courant de la partie. */
@@ -1052,6 +1063,7 @@ function ouvrirReglages(): void {
   cTirage = cfg.tirage;
   cJouables = cfg.jouables;
   cPioche = cfg.pioche;
+  ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;
@@ -1064,6 +1076,7 @@ $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
 $("r-appliquer").addEventListener("click", () => {
   ws?.send(JSON.stringify({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
+    joker: ($("r-joker") as HTMLInputElement).checked,
   }));
   $("reglages").hidden = true;
 });

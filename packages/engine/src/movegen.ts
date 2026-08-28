@@ -624,7 +624,18 @@ export interface TopResult {
  * la graine vient de (idPartie, numeroDeCoup), sans quoi l'historique n'est pas
  * rejouable et deux serveurs divergent (SPEC.md §5).
  */
-export function pickTop(moves: readonly Move[], random: () => number): TopResult | null {
+export function pickTop(
+  moves: readonly Move[], random: () => number,
+  /**
+   * Partie joker : a score egal, on retient un coup qui n'emploie PAS le joker
+   * plutot qu'un coup qui l'emploie (SPEC.md §16). Ce n'est plus un departage
+   * arbitraire -- garder le joker a des consequences sur toute la suite.
+   *
+   * Les isotops employant le joker restent listes : ils existent, ils sont
+   * simplement moins bons a jouer.
+   */
+  menagerLeJoker = false,
+): TopResult | null {
   if (moves.length === 0) return null;
   let bestScore = -1;
   for (const m of moves) if (m.score > bestScore) bestScore = m.score;
@@ -636,7 +647,13 @@ export function pickTop(moves: readonly Move[], random: () => number): TopResult
       ? a.x !== b.x ? a.x - b.x : a.y !== b.y ? a.y - b.y : a.word < b.word ? -1 : a.word > b.word ? 1 : 0
       : a.dir < b.dir ? -1 : 1,
   );
-  const top = isotops[Math.floor(random() * isotops.length)]!;
+  const candidats = menagerLeJoker
+    ? (() => {
+        const sans = isotops.filter((m) => !m.placements.some((p) => p.blank));
+        return sans.length > 0 ? sans : isotops;
+      })()
+    : isotops;
+  const top = candidats[Math.floor(random() * candidats.length)]!;
 
   // Regroupement en paliers complets : on n'affiche jamais une partie d'un
   // palier sans le reste (SPEC.md §10).
