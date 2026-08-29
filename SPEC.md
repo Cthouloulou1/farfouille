@@ -615,6 +615,23 @@ Un **palier** est un score, avec **tous** les coups qui le réalisent :
 Le nombre d'isotops n'est pas diffusé non plus : c'est une indication sur la
 forme du coup, donc sur le coup.
 
+**Un palier n'est jamais coupé par le milieu.** Montrer trois coups à 34 points
+sur les neuf qui existent, sans le dire, donne une liste qui a l'air complète et
+ne l'est pas. Le plafond, quand il y en a un, tombe donc entre deux paliers.
+
+**Sur un plateau borné, il n'y a pas de plafond du tout** : toutes les solutions
+du coup sont gardées. Mesuré sur trois parties de 15×15, une position en compte
+**537 en moyenne, 18 655 au pire**, pour 4,7 ms de calcul au lieu de 4,1 et
+**0,5 Mo par partie entière**.
+
+**Sur une grille infinie il en faut un** : la grille grandit sans fin, donc le
+nombre d'ancrages aussi. Même mesure : **15 333 solutions par position en
+moyenne, 166 659 au pire, 35 Mo pour cent vingt coups**. On s'y arrête à quarante
+paliers ou cent vingt solutions, le premier atteint.
+
+C'est la seule différence de fond entre les deux grilles sur ce point, et elle
+vient d'un rapport de trente entre les deux.
+
 **Un clic sur un coup passé amène la caméra dessus** et le met en évidence,
 avec dézoom puis zoom s'il est hors champ. Rien de plus.
 
@@ -1429,13 +1446,36 @@ les paliers d'une partie qui se joue, quoi que demande le client.
 
 Le rejeu remonte la partie coup par coup. Pour chaque coup il montre le tirage,
 le mot posé et qui l'a trouvé, puis **les paliers** : le top et ses isotops
-d'abord, les sous-tops ensuite, **cent solutions au plus** — au-delà, personne
-ne lit. Le coup réellement joué y est surligné.
+d'abord, les sous-tops ensuite — **toutes les solutions** sur un plateau borné,
+les mieux classées sur une grille infinie. Le coup réellement joué y est
+surligné.
+
+Chaque ligne porte son **écart au top** : `MUCRONE 74 −2` quand le top fait 76.
+C'est l'écart qui dit ce qu'a coûté une solution, pas son score nu. Le top et
+ses isotops portent `top` plutôt que `0`.
+
+Un **champ de recherche**, à droite du tirage, filtre sur les lettres du mot et
+affiche « 43 sur 100 ». C'est ce qui rend une liste de plusieurs milliers de
+lignes utilisable.
+
+Seules les lignes **visibles** sont posées dans la page. Les poser toutes coûtait
+2,4 secondes de mise en page pour un coup à 18 655 solutions — l'essentiel pour
+des lignes que personne ne regarde.
 
 La grille se **rembobine** : on ne voit que les caramels posés *avant* le coup
 examiné, c'est-à-dire ce que voyaient les joueurs au moment de chercher. Un clic
-sur une solution la montre sur la grille. Les flèches, ou les touches ← et →,
-passent d'un coup à l'autre.
+sur une solution la montre sur la grille.
+
+Au clavier : **↑ et ↓** parcourent les solutions, **← et →** passent d'un coup à
+l'autre. Les deux premières marchent aussi depuis le champ de recherche ; ← et →
+y restent au curseur, sinon on ne pourrait plus se corriger.
+
+Pendant le rejeu, **le journal des coups joués disparaît** — il montre l'état
+final de la partie, si bien qu'y cliquer depuis le coup 1 posait un mot du coup
+40 au milieu de nulle part. Le chat, lui, se replie sans disparaître.
+
+Le rejeu **se ferme tout seul** quand la partie qu'il regarde n'existe plus :
+relance du salon, ou départ vers un autre salon.
 
 ### Les salons
 

@@ -470,7 +470,12 @@ function flyTo(word: string, dir: Dir, x: number, y: number) {
 function reveal(word: string, dir: Dir, x: number, y: number) {
   // Sur un plateau ferme, tout est deja visible : il n'y a nulle part ou aller.
   if (cfg.bornes !== null) { draw(); return; }
-  if (!alreadyVisible(word, dir, x, y)) flyTo(word, dir, x, y);
+  // Un vol DEJA EN COURS vise ailleurs. Le juger « deja visible » et le laisser
+  // finir emportait la camera loin de ce qu'on venait de demander : en entrant
+  // dans un salon, la vue part vers le dernier coup, et ouvrir le rejeu dans la
+  // seconde qui suit laissait ce vol-la atterrir par-dessus. On refait donc le
+  // trajet, ce qui annule l'autre au passage.
+  if (anim !== 0 || !alreadyVisible(word, dir, x, y)) flyTo(word, dir, x, y);
   else draw();
 }
 
@@ -737,22 +742,31 @@ function voirLeCoup(n: number): void {
   const m = history.find((q) => q.n === borne);
   $("panel-live").hidden = true;
   $("panel-rejeu").hidden = false;
+  // Le journal des coups joues n'a pas sa place ici : il montre l'etat FINAL
+  // de la partie, si bien qu'y cliquer depuis le coup 1 posait un mot du coup
+  // 40 au milieu de nulle part. Le chat se replie sans disparaitre.
+  document.querySelector(".side")!.classList.add("rejeu");
+  $("journal-bloc").hidden = true;
   $("rj-titre").textContent = `Coup ${borne}`;
   for (const [id, off] of [["rj-debut", borne <= 1], ["rj-avant", borne <= 1],
                            ["rj-apres", borne >= history.length], ["rj-fin", borne >= history.length]] as const) {
     ($(id) as HTMLButtonElement).disabled = off;
   }
+  ($("rj-q") as HTMLInputElement).value = "";
+  $("rj-compte").textContent = "";
   $("rj-top").innerHTML = m === undefined ? "" :
     `<b>${m.word}</b> ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} ` +
     `<span class="pts">${m.score} pts</span><br>` +
     `<span class="g">${m.notation ?? m.rack ?? ""}</span>`;
-  const box = $("rj-sols");
-  box.replaceChildren();
+  const piste = $("rj-piste");
+  piste.style.height = "";
+  piste.replaceChildren();
   const attente = document.createElement("div");
   attente.className = "none";
   attente.style.padding = "10px 15px";
   attente.textContent = "chargement des solutions…";
-  box.appendChild(attente);
+  piste.appendChild(attente);
+  $("rj-sols").scrollTop = 0;
   $("rj-qui").hidden = true;
   ghost = m ? [m.word, m.dir, m.x, m.y] : null;
   envoyer({ t: "tiers", n: borne });
@@ -795,70 +809,225 @@ function montrerQui(m: MoveInfo, titre: string, noms: string[]): void {
   box.hidden = false;
 }
 
+/** Une solution du coup examine, prete a l'affichage. */
+interface Solution {
+  word: string; dir: Dir; x: number; y: number; score: number;
+  /** Ecart au top : 0 pour le top lui-meme, negatif pour tous les autres. */
+  ecart: number;
+  /** Coup joue par quelqu'un mais absent des paliers enregistres. */
+  hors: boolean;
+  noms: string[];
+}
+
+/** Toutes les solutions du coup examine, dans l'ordre des paliers. */
+let solutions: Solution[] = [];
+/** Celles que le filtre laisse passer, dans le meme ordre. */
+let solutionsVues: Solution[] = [];
+/** Index dans `solutionsVues` de la ligne selectionnee, -1 si aucune. */
+let choisie = -1;
+
+const echapper = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 /** Affiche les paliers recus : le top et ses isotops, puis les sous-tops. */
 function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): void {
   if (rejeu === null || rejeu.n !== n) return;
   rejeu.paliers = paliers;
-  const box = $("rj-sols");
-  box.replaceChildren();
   const joue = history.find((q) => q.n === n);
+  solutions = [];
+  solutionsVues = [];
+  choisie = -1;
+
   if (paliers === null || paliers.length === 0) {
+    const piste = $("rj-piste");
+    piste.style.height = "";
+    piste.replaceChildren();
     const e = document.createElement("div");
     e.className = "none";
     e.style.padding = "10px 15px";
     e.textContent = refus ?? "solutions non enregistrées pour ce coup";
-    box.appendChild(e);
+    piste.appendChild(e);
+    $("rj-compte").textContent = "";
+    return;
   }
-  const meilleur = paliers && paliers.length > 0 ? paliers[0]!.score : 0;
+
+  // Qui a joue quoi, indexe UNE fois : la liste peut compter des milliers de
+  // lignes, et refouiller les propositions a chacune serait quadratique.
+  const parCase = new Map<string, string[]>();
+  for (const [nom, p] of Object.entries(joue?.propositions ?? {})) {
+    const cle = `${p.word}|${p.dir}|${p.x}|${p.y}`;
+    const l = parCase.get(cle);
+    if (l === undefined) parCase.set(cle, [nom]); else l.push(nom);
+  }
+  for (const l of parCase.values()) l.sort();
+
+  const meilleur = paliers[0]!.score;
   const vus = new Set<string>();
-
-  const ligne = (word: string, dir: Dir, x: number, y: number, score: number,
-                 best: boolean, hors: boolean): void => {
-    vus.add(`${word}|${dir}|${x}|${y}`);
-    const noms = joue ? joueursDuMot(joue, word, dir, x, y) : [];
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "sol" + (best ? " best" : "") + (hors ? " hors" : "");
-    b.innerHTML = `<span class="w">${word}</span>` +
-      `<span class="p">${noteCoup(dir, x, y, cfg.bornes)}</span>` +
-      `<span class="s">${score}</span>` +
-      `<span class="n">${noms.length > 0 ? noms.length : ""}</span>`;
-    if (joue !== undefined && word === joue.word && dir === joue.dir
-        && x === joue.x && y === joue.y) {
-      b.setAttribute("aria-current", "true");
+  for (const p of paliers) {
+    for (const [word, dir, x, y] of p.moves) {
+      const cle = `${word}|${dir}|${x}|${y}`;
+      vus.add(cle);
+      solutions.push({
+        word, dir, x, y, score: p.score, ecart: p.score - meilleur,
+        hors: false, noms: parCase.get(cle) ?? [],
+      });
     }
-    b.title = noms.length > 0 ? `joué par ${noms.join(", ")}` : "personne n'a joué ce mot";
-    b.addEventListener("click", () => {
-      for (const q of box.querySelectorAll(".sol")) q.setAttribute("aria-current", "false");
-      b.setAttribute("aria-current", "true");
-      ghost = [word, dir, x, y];
-      reveal(word, dir, x, y);
-      if (joue !== undefined) montrerQui(joue, `${word} — ${noms.length} joueur${noms.length > 1 ? "s" : ""}`, noms);
-    });
-    box.appendChild(b);
-  };
-
-  for (const p of paliers ?? []) {
-    for (const [word, dir, x, y] of p.moves) ligne(word, dir, x, y, p.score, p.score === meilleur, false);
   }
 
-  // Un mot joue qui ne figure dans AUCUN palier -- au-dela des cent retenues --
-  // doit rester consultable : c'est le coup de quelqu'un.
+  // Un mot joue qui ne figure dans AUCUN palier -- au-dela du plafond que
+  // gardent les grilles infinies -- reste consultable : c'est le coup de
+  // quelqu'un.
   if (joue !== undefined) {
     for (const [, p] of Object.entries(joue.propositions ?? {})) {
-      if (vus.has(`${p.word}|${p.dir}|${p.x}|${p.y}`)) continue;
-      ligne(p.word, p.dir, p.x, p.y, p.score, false, true);
+      const cle = `${p.word}|${p.dir}|${p.x}|${p.y}`;
+      if (vus.has(cle)) continue;
+      vus.add(cle);
+      solutions.push({
+        word: p.word, dir: p.dir, x: p.x, y: p.y, score: p.score,
+        ecart: p.score - meilleur, hors: true, noms: parCase.get(cle) ?? [],
+      });
     }
     // Et par defaut, le tableau montre ce que TOUT le monde a joue.
     montrerQui(joue, "Ce que les joueurs ont joué", Object.keys(joue.propositions ?? {}).sort());
   }
+
+  peindreSolutions();
+
+  // On ouvre sur le coup qui a effectivement ete joue.
+  if (joue !== undefined) {
+    const i = solutionsVues.findIndex((s) => s.word === joue.word && s.dir === joue.dir
+                                          && s.x === joue.x && s.y === joue.y);
+    if (i >= 0) { choisie = i; marquerLaChoisie(true); }
+  }
 }
+
+/**
+ * Hauteur d'une ligne de solution, fixee en dur dans la feuille de style.
+ *
+ * Elle doit etre CONNUE a l'avance : c'est elle qui permet de savoir quelles
+ * lignes tombent dans la fenetre visible sans avoir a les poser toutes.
+ */
+const H_SOL = 26;
+
+/** Marge de lignes peintes hors champ, pour que le defilement ne clignote pas. */
+const MARGE_SOL = 12;
+
+/**
+ * Peint la liste, filtree par le champ de recherche.
+ *
+ * Seules les lignes VISIBLES sont posees. Sur un plateau borne, le serveur
+ * garde maintenant toutes les solutions du coup : une position ouverte en
+ * compte 18 655 au pire, et les poser toutes demandait 2,4 secondes de mise en
+ * page -- l'essentiel pour des lignes que personne ne regarde. Ici on en pose
+ * une quarantaine, quel que soit le total, et la piste porte la hauteur
+ * complete pour que la barre de defilement dise la verite.
+ */
+function peindreSolutions(): void {
+  const q = ($("rj-q") as HTMLInputElement).value.trim().toUpperCase();
+  solutionsVues = q === "" ? solutions : solutions.filter((s) => s.word.includes(q));
+
+  const box = $("rj-sols");
+  const piste = $("rj-piste");
+  box.scrollTop = 0;
+  if (solutionsVues.length === 0) {
+    piste.style.height = "";
+    piste.innerHTML = `<div class="none" style="padding:10px 15px">aucun mot ne contient « ${echapper(q)} »</div>`;
+  } else {
+    piste.style.height = `${solutionsVues.length * H_SOL}px`;
+    peindreLaFenetre();
+  }
+
+  const total = solutions.length;
+  $("rj-compte").textContent = q === ""
+    ? `${total} solution${total > 1 ? "s" : ""}`
+    : `${solutionsVues.length} sur ${total}`;
+}
+
+/** Pose les lignes qui tombent dans la partie visible de la liste. */
+function peindreLaFenetre(): void {
+  if (solutionsVues.length === 0) return;
+  const box = $("rj-sols");
+  const debut = Math.max(0, Math.floor(box.scrollTop / H_SOL) - MARGE_SOL);
+  const fin = Math.min(solutionsVues.length,
+    Math.ceil((box.scrollTop + box.clientHeight) / H_SOL) + MARGE_SOL);
+
+  let html = "";
+  for (let i = debut; i < fin; i++) {
+    const s = solutionsVues[i]!;
+    html +=
+      `<button type="button" class="sol${s.ecart === 0 ? " best" : ""}${s.hors ? " hors" : ""}"` +
+      `${i === choisie ? ' aria-current="true"' : ""} data-i="${i}" style="top:${i * H_SOL}px"` +
+      `${s.noms.length > 0 ? ` title="joué par ${echapper(s.noms.join(", "))}"` : ""}>` +
+      `<span class="w">${echapper(s.word)}</span>` +
+      `<span class="p">${noteCoup(s.dir, s.x, s.y, cfg.bornes)}</span>` +
+      `<span class="s">${s.score}</span>` +
+      `<span class="d">${s.ecart === 0 ? "top" : s.ecart}</span>` +
+      `<span class="n">${s.noms.length > 0 ? s.noms.length : ""}</span>` +
+      `</button>`;
+  }
+  $("rj-piste").innerHTML = html;
+}
+
+$("rj-sols").addEventListener("scroll", () => {
+  if (solutionsVues.length > 0) peindreLaFenetre();
+});
+
+/** Souligne la ligne choisie, la pose sur la grille, et la fait defiler. */
+function marquerLaChoisie(deroule = false): void {
+  const s = solutionsVues[choisie];
+  if (s === undefined) return;
+  const box = $("rj-sols");
+  if (deroule) {
+    // Ramener la ligne dans le champ, sans bouger si elle y est deja.
+    const haut = choisie * H_SOL;
+    if (haut < box.scrollTop) box.scrollTop = haut;
+    else if (haut + H_SOL > box.scrollTop + box.clientHeight) {
+      box.scrollTop = haut + H_SOL - box.clientHeight;
+    }
+  }
+  peindreLaFenetre();
+  ghost = [s.word, s.dir, s.x, s.y];
+  reveal(s.word, s.dir, s.x, s.y);
+  const ici = rejeu;
+  const joue = ici === null ? undefined : history.find((h) => h.n === ici.n);
+  if (joue !== undefined && s.noms.length > 0) {
+    montrerQui(joue, `${s.word} — ${s.noms.length} joueur${s.noms.length > 1 ? "s" : ""}`, s.noms);
+  }
+}
+
+/** Les fleches haut et bas parcourent la liste des solutions. */
+function deplacerDansLaListe(pas: number): void {
+  if (solutionsVues.length === 0) return;
+  choisie = choisie < 0
+    ? (pas > 0 ? 0 : solutionsVues.length - 1)
+    : Math.max(0, Math.min(solutionsVues.length - 1, choisie + pas));
+  marquerLaChoisie(true);
+}
+
+$("rj-sols").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest(".sol") as HTMLElement | null;
+  if (b === null) return;
+  choisie = Number(b.dataset["i"]);
+  marquerLaChoisie();
+});
+
+($("rj-q") as HTMLInputElement).addEventListener("input", () => {
+  choisie = -1;
+  peindreSolutions();
+});
 
 function fermerLeRejeu(): void {
   rejeu = null;
   ghost = null;
+  solutions = [];
+  solutionsVues = [];
+  choisie = -1;
+  ($("rj-q") as HTMLInputElement).value = "";
   $("panel-rejeu").hidden = true;
   $("panel-live").hidden = false;
+  // Le journal et le chat pleine hauteur reviennent : ils sont du direct.
+  document.querySelector(".side")!.classList.remove("rejeu");
+  paintJournal();
   draw();
 }
 
@@ -902,7 +1071,8 @@ $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
 /** Les coups joues, du plus recent au plus ancien. */
 function paintJournal(): void {
   const box = $("journal");
-  $("journal-bloc").hidden = history.length === 0;
+  // Muet pendant le rejeu : `voirLeCoup` l'a cache expres.
+  $("journal-bloc").hidden = history.length === 0 || rejeu !== null;
   $("journal-n").textContent = String(history.length);
   box.replaceChildren();
   for (const m of [...history].reverse()) {
@@ -1069,9 +1239,20 @@ addEventListener("keydown", (e) => {
   // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
   // avale par le jeu et n'effacait rien dans les champs des reglages.
   const cible = document.activeElement;
-  if (cible instanceof HTMLInputElement || cible instanceof HTMLTextAreaElement) return;
+  if (cible instanceof HTMLInputElement || cible instanceof HTMLTextAreaElement) {
+    // Une exception : depuis le champ de recherche du rejeu, haut et bas
+    // parcourent la liste, comme dans une liste de suggestions. Gauche et
+    // droite restent au curseur, sinon on ne pourrait plus se corriger.
+    if (cible.id === "rj-q" && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      deplacerDansLaListe(e.key === "ArrowUp" ? -1 : 1);
+      e.preventDefault();
+    }
+    return;
+  }
   if (!$("panel-rejeu").hidden) {
     if (e.key === "Escape") { fermerLeRejeu(); return; }
+    if (e.key === "ArrowUp") { deplacerDansLaListe(-1); e.preventDefault(); return; }
+    if (e.key === "ArrowDown") { deplacerDansLaListe(1); e.preventDefault(); return; }
     if (e.key === "ArrowLeft" && rejeu) { voirLeCoup(rejeu.n - 1); e.preventDefault(); return; }
     if (e.key === "ArrowRight" && rejeu) { voirLeCoup(rejeu.n + 1); e.preventDefault(); return; }
     return;
@@ -1344,6 +1525,10 @@ function connect() {
       return;
     }
     if (m.t === "relance") {
+      // Le rejeu portait sur la partie precedente : il n'a plus d'objet, et sa
+      // liste de solutions renvoie a une grille qui vient peut-etre de changer
+      // de taille.
+      if (rejeu !== null) fermerLeRejeu();
       cfg = m.config ? deserialiser(m.config) : cfg;
       tiles = m.tiles ?? [];
       history = [];
@@ -1871,6 +2056,9 @@ $("r-appliquer").addEventListener("click", () => {
 // Quitter le salon sans le detruire : on revient a l'accueil, la partie continue.
 function quitterSalon(): void {
   void fermerConnexion();
+  // Le rejeu regarde une partie qu'on quitte : il n'a plus d'objet, et le
+  // laisser ouvert le ferait reapparaitre par-dessus le salon suivant.
+  if (rejeu !== null) fermerLeRejeu();
   $("dot").classList.remove("on");
   $("reglages").hidden = true;
   $("roadmap").hidden = true;
@@ -1960,6 +2148,7 @@ async function rejoindre(id: string): Promise<void> {
   // restait affichee jusqu'a l'arrivee de `hello` : on voyait ses caramels,
   // parfois HORS des bornes du nouveau plateau, comme si des mots avaient deja
   // ete joues. La camera, elle, gardait le cadrage de l'ancienne grille.
+  if (rejeu !== null) fermerLeRejeu();
   tiles = [];
   history = [];
   chat = [];

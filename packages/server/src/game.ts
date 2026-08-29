@@ -669,10 +669,13 @@ export class Game {
     const id = this.nextId++;
     const reply: any = await new Promise((res) => {
       this.pending.set(id, res);
-      // Autant de paliers ENTIERS que tiennent dans 120 solutions -- le meme
-      // reglage que le visualiseur, pour que l'inspection montre la meme chose.
+      // Sur un plateau borne, on garde TOUT : le rejeu peut alors montrer
+      // chaque solution du coup, et pas seulement le haut du classement. La
+      // grille ne grandit pas, donc le nombre de solutions reste modeste.
+      // Sur une grille infinie il faut plafonner -- voir worker.ts.
       this.worker.postMessage({
-        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1, tiers: 40,
+        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1,
+        tiers: 40, tousLesPaliers: this.cfg.bornes !== null,
       });
     });
 

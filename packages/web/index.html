@@ -192,6 +192,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .inspect-head .g { flex: 1; font-size: 11.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
 
 .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+.side.rejeu .chat { flex: none; height: 108px; }
+.side.rejeu .chat > h2 { padding: 5px 15px 2px; font-size: 10px; }
+.side.rejeu .chat #chat-log { font-size: 11px; }
+.side.rejeu .chat-in { padding: 4px 12px 7px; }
+.side.rejeu .chat-in input { font-size: 11.5px; padding: 3px 7px; }
+.side.rejeu .chat-in button { padding: 3px 7px; font-size: 11px; }
 .chat > h2 { padding: 10px 15px 6px; }
 #chat-log { flex: 1; overflow-y: auto; padding: 0 15px 8px; display: flex; flex-direction: column; gap: 5px; }
 .msg { font-size: 12.5px; line-height: 1.4; word-break: break-word; }
@@ -241,7 +247,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .salon .jeter { grid-column: 4; grid-row: 1 / 3; padding: 4px 8px; font-size: 11px; color: var(--ink-faint); background: none; }
 .salon .jeter:hover { color: var(--warn); border-color: var(--warn); }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: 11.5px; color: var(--ink-faint); line-height: 1.45; }
-#panel-rejeu { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#panel-rejeu { flex: 1; max-height: none; display: flex; flex-direction: column; min-height: 0; }
 #panel-rejeu[hidden] { display: none; }
 .rj-tete { flex: none; display: flex; align-items: center; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
 .rj-tete b { flex: 1; text-align: center; font-size: 12.5px; font-weight: 500; }
@@ -253,16 +259,27 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .qrow:hover { background: var(--hover); }
 .qrow .qui { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qrow .s { text-align: right; color: var(--accent); }
-.sol .n { min-width: 22px; text-align: right; color: var(--ink-faint); font-size: 10.5px; }
+.sol .n { min-width: 20px; text-align: right; color: var(--ink-faint); font-size: 10.5px; }
+.sol .s { text-align: right; }
+/* L'ecart au top : zero pour le top lui-meme, negatif pour tout le reste. */
+.sol .d { text-align: right; color: var(--ink-faint); font-size: 11px; }
+.sol.best .d { color: var(--accent); }
 .sol.hors { color: var(--ink-faint); font-style: italic; }
-.rj-top { flex: none; padding: 9px 15px; border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-soft); }
+.rj-top { flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 15px; border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-soft); }
+.rj-top > div:first-child { flex: 1; min-width: 0; }
+.rj-chercher { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.rj-chercher input { width: 118px; padding: 4px 7px; font-family: inherit; font-size: 11.5px; border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); color: var(--ink); }
+.rj-chercher input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rj-chercher input::-webkit-search-cancel-button { cursor: pointer; }
+.rj-chercher span { font-size: 10.5px; color: var(--ink-faint); }
 .rj-top b { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
 .rj-top .pts { color: var(--accent); font-weight: 500; }
 .fleche { padding: 2px 9px; font-size: 13px; line-height: 1; background: none; }
 .fleche:disabled { opacity: .3; cursor: default; }
 #rj-titre { min-width: 92px; }
-.sols { overflow: auto; padding: 6px 0 10px; }
-.sol { display: grid; grid-template-columns: minmax(0, 1fr) 62px 40px 26px; gap: 8px; align-items: baseline; width: 100%; text-align: left; padding: 3px 15px; background: transparent; border: 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.sols { flex: 1; min-height: 0; overflow: auto; padding: 6px 0 10px; }
+.sols-piste { position: relative; }
+.sol { position: absolute; left: 0; right: 0; height: 26px; display: grid; grid-template-columns: minmax(0, 1fr) 62px 34px 34px 24px; gap: 7px; align-items: center; width: 100%; text-align: left; padding: 0 15px; background: transparent; border: 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .sol:hover { background: var(--hover); }
 .sol[aria-current="true"] { background: var(--accent-bg); color: var(--accent); }
 .sol.best .w { color: var(--ink); font-weight: 500; }
@@ -451,8 +468,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button class="fleche" id="rj-fin" title="Dernier coup">⏭</button>
         <button id="rj-close">Fermer</button>
       </div>
-      <div class="rj-top" id="rj-top"></div>
-      <div class="sols" id="rj-sols"></div>
+      <div class="rj-top">
+        <div id="rj-top"></div>
+        <div class="rj-chercher">
+          <input id="rj-q" type="search" placeholder="chercher un mot…" autocomplete="off" spellcheck="false">
+          <span id="rj-compte"></span>
+        </div>
+      </div>
+      <div class="sols" id="rj-sols"><div class="sols-piste" id="rj-piste"></div></div>
       <div class="rj-qui" id="rj-qui" hidden></div>
     </div>
 

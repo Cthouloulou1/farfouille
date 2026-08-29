@@ -469,15 +469,13 @@ wss.on("connection", (ws) => {
         return;
       }
       const m = s.partie.moves.find((q) => q.n === Number(msg.n));
-      // On s'arrete a cent solutions : au-dela, personne ne lit.
-      let reste = 100;
-      const paliers = (m?.tiers ?? []).map((g) => {
-        const pris = g.moves.slice(0, Math.max(0, reste));
-        reste -= pris.length;
-        return { score: g.score, moves: pris };
-      }).filter((g) => g.moves.length > 0);
+      // Tout ce qui est enregistre part, sans nouveau plafond ici. Le plafond
+      // est pose une fois pour toutes a la generation (worker.ts) : complet sur
+      // un plateau borne, plafonne sur une grille infinie. En recouper un
+      // second ici cassait des paliers par le milieu -- on affichait trois
+      // coups a 34 points sur les neuf qui existaient, sans le dire.
       send(ws, {
-        t: "tiers", n: Number(msg.n), tiers: paliers,
+        t: "tiers", n: Number(msg.n), tiers: m?.tiers ?? [],
         rack: m?.notation ?? m?.rack ?? "", mot: m?.word, score: m?.score,
       });
       return;
