@@ -132,11 +132,9 @@ function publicState(s: Salon) {
     nomSalon: s.nom,
     proprietaire: s.proprietaire,
     moveNumber: g.moveNumber,
-    // Pendant le decompte, le tirage n'est pas encore servi : « 3, 2, 1 » est
-    // un depart, et partir en ayant deja lu les lettres n'en est pas un. Il ne
-    // suffit pas de le cacher a l'ecran -- il serait lisible dans la console.
-    rack: g.decompteJusqua > Date.now() ? "" : g.rack,
-    notation: g.decompteJusqua > Date.now() ? "" : g.rackNotation,
+    // Muets pendant le decompte : la regle vit dans la partie.
+    rack: g.rackPublic,
+    notation: g.notationPublique,
     cumul: g.cumul,
     sac: g.restantDuSac(),
     finie: g.finie,

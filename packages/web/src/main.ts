@@ -1169,59 +1169,86 @@ function paintRoadmap() {
   const ordre = cfg.bornes !== null ? history : [...history].reverse();
   // Le cumul se compte dans l'ordre de la partie, quel que soit celui de
   // l'affichage : c'est le temps ecoule depuis le premier coup.
-  const cumulAu = new Map<number, number>();
+  cumulRoute.clear();
   let somme = 0;
-  for (const m of history) { somme += Math.max(0, m.ms); cumulAu.set(m.n, somme); }
+  for (const m of history) { somme += Math.max(0, m.ms); cumulRoute.set(m.n, somme); }
 
-  for (const m of ordre) {
-    const r = document.createElement("div");
-    r.className = "rmrow";
-    r.tabIndex = 0;
-    // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
-    // de l'echeance et n'apprendrait rien.
-    const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
-                             : m.player !== null || m.demiPoint !== undefined;
-    let queue: string;
-    if (duplicate) {
-      const mien = m.scores?.[me];
-      const ecart = mien === undefined ? null : mien - m.score;
-      const trouveurs = m.trouveurs
-        ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n);
-      const presents = Object.keys(m.scores ?? {}).length;
-      queue =
-        `<span class="d${ecart === 0 ? " top" : ""}">` +
-        `${ecart === null ? "—" : ecart === 0 ? "top" : ecart}</span>` +
-        `<span class="sur">${presents === 0 ? "" : `${trouveurs.length}/${presents}`}</span>`;
-    } else {
-      queue =
-        `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>` +
-        `<span class="cum">${fmtTime(cumulAu.get(m.n) ?? 0)}</span>`;
-    }
-    r.innerHTML =
-      `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
-      `<span class="r"></span>` +
-      `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-      `<span class="s">${m.score}</span>` +
-      `<span class="who">${quiLaTrouve(m)}</span>` + queue;
-    r.addEventListener("click", () => focusMove(m));
-    // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
-    // refuse les paliers, et le rejeu n'aurait rien a montrer.
-    if (finie) {
-      const rb = document.createElement("button");
-      rb.type = "button";
-      rb.className = "rm-rejouer";
-      rb.textContent = "R";
-      rb.title = `revoir le coup ${m.n}`;
-      rb.addEventListener("click", (e) => {
-        e.stopPropagation();
-        $("roadmap").hidden = true;
-        voirLeCoup(m.n);
-      });
-      r.querySelector(".r")!.replaceWith(rb);
-    }
-    r.appendChild(likeButton(m));
-    body.appendChild(r);
+  for (const m of ordre) body.appendChild(ligneDeRoute(m));
+}
+
+/** Temps ecoule au terme de chaque coup, pour la colonne de cumul. */
+const cumulRoute = new Map<number, number>();
+
+/**
+ * Ajoute le coup qui vient d'etre joue a la feuille de route DEJA OUVERTE.
+ *
+ * Sans cela, elle se reconstruisait entierement a chaque coup : 400 ms sur une
+ * partie de 2 568 coups, une fois par seconde sur une partie chronometree a la
+ * seconde. Les lignes deja posees ne changent pas -- le cumul est croissant, le
+ * reste est fige -- il n'y a donc qu'une ligne a poser, du cote ou elle va.
+ */
+function ajouterALaRoute(m: MoveInfo): void {
+  const body = $("rm-body");
+  $("rm-tete").innerHTML = enTeteDeLaRoute();
+  if (history.length === 1) { paintRoadmap(); return; }
+  const precedent = cumulRoute.get(m.n - 1) ?? 0;
+  cumulRoute.set(m.n, precedent + Math.max(0, m.ms));
+  const ligne = ligneDeRoute(m);
+  // Plateau borne : la liste monte, le nouveau coup va en bas. Grille infinie :
+  // elle descend, il va en haut.
+  if (cfg.bornes !== null) body.appendChild(ligne);
+  else body.insertBefore(ligne, body.firstChild);
+}
+
+/** Une ligne de la feuille de route. */
+function ligneDeRoute(m: MoveInfo): HTMLElement {
+  const r = document.createElement("div");
+  r.className = "rmrow";
+  r.tabIndex = 0;
+  // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
+  // de l'echeance et n'apprendrait rien.
+  const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
+                           : m.player !== null || m.demiPoint !== undefined;
+  let queue: string;
+  if (duplicate) {
+    const mien = m.scores?.[me];
+    const ecart = mien === undefined ? null : mien - m.score;
+    const trouveurs = m.trouveurs
+      ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n);
+    const presents = Object.keys(m.scores ?? {}).length;
+    queue =
+      `<span class="d${ecart === 0 ? " top" : ""}">` +
+      `${ecart === null ? "—" : ecart === 0 ? "top" : ecart}</span>` +
+      `<span class="sur">${presents === 0 ? "" : `${trouveurs.length}/${presents}`}</span>`;
+  } else {
+    queue =
+      `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>` +
+      `<span class="cum">${fmtTime(cumulRoute.get(m.n) ?? 0)}</span>`;
   }
+  r.innerHTML =
+    `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
+    `<span class="r"></span>` +
+    `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
+    `<span class="s">${m.score}</span>` +
+    `<span class="who">${quiLaTrouve(m)}</span>` + queue;
+  r.addEventListener("click", () => focusMove(m));
+  // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
+  // refuse les paliers, et le rejeu n'aurait rien a montrer.
+  if (finie) {
+    const rb = document.createElement("button");
+    rb.type = "button";
+    rb.className = "rm-rejouer";
+    rb.textContent = "R";
+    rb.title = `revoir le coup ${m.n}`;
+    rb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      $("roadmap").hidden = true;
+      voirLeCoup(m.n);
+    });
+    r.querySelector(".r")!.replaceWith(rb);
+  }
+  r.appendChild(likeButton(m));
+  return r;
 }
 $("rm-open").addEventListener("click", () => { paintRoadmap(); $("roadmap").hidden = false; });
 $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
@@ -1288,33 +1315,43 @@ function paintChat(msgs: Chat[]) {
   const log = $("chat-log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.replaceChildren();
-  for (const m of msgs) {
-    const el = document.createElement("div");
-    el.className = "msg";
-    const who = document.createElement("span");
-    who.className = "who"; who.textContent = m.who;
-    el.appendChild(who);
-    if (m.text) el.appendChild(document.createTextNode(m.text));
-    if (m.cell) {
-      const b = document.createElement("button");
-      b.className = "cellref";
-      // Sur un plateau borne, la case se nomme comme au jeu de societe.
-      b.textContent = cfg.bornes === null
-        ? `${m.cell.x},${m.cell.y}`
-        : noteCoup("H", m.cell.x, m.cell.y, cfg.bornes);
-      b.addEventListener("click", () => {
-        marks = [m.cell!];
-        flyTo("A", "H", m.cell!.x, m.cell!.y);
-      });
-      el.appendChild(b);
-    }
-    const at = document.createElement("span");
-    at.className = "at";
-    at.textContent = new Date(m.at).toLocaleTimeString("fr", { hour: "2-digit", minute: "2-digit" });
-    el.appendChild(at);
-    log.appendChild(el);
-  }
+  for (const m of msgs) log.appendChild(ligneDeChat(m));
   if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+/** Ajoute un seul message, en gardant le defilement s'il etait en bas. */
+function ajouterAuChat(m: Chat): void {
+  const log = $("chat-log");
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  log.appendChild(ligneDeChat(m));
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function ligneDeChat(m: Chat): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "msg";
+  const who = document.createElement("span");
+  who.className = "who"; who.textContent = m.who;
+  el.appendChild(who);
+  if (m.text) el.appendChild(document.createTextNode(m.text));
+  if (m.cell) {
+    const b = document.createElement("button");
+    b.className = "cellref";
+    // Sur un plateau borne, la case se nomme comme au jeu de societe.
+    b.textContent = cfg.bornes === null
+      ? `${m.cell.x},${m.cell.y}`
+      : noteCoup("H", m.cell.x, m.cell.y, cfg.bornes);
+    b.addEventListener("click", () => {
+      marks = [m.cell!];
+      flyTo("A", "H", m.cell!.x, m.cell!.y);
+    });
+    el.appendChild(b);
+  }
+  const at = document.createElement("span");
+  at.className = "at";
+  at.textContent = new Date(m.at).toLocaleTimeString("fr", { hour: "2-digit", minute: "2-digit" });
+  el.appendChild(at);
+  return el;
 }
 
 let chat: Chat[] = [];
@@ -1760,7 +1797,10 @@ function connect() {
       if (!$("roadmap").hidden) paintRoadmap();
       return;
     }
-    if (m.t === "said") { chat.push(m.msg); paintChat(chat); return; }
+    // Une ligne de plus, pas tout le journal : en duplicate le moteur poste un
+    // message PAR COUP, et repeindre les 2 568 precedents a chaque fois coutait
+    // 135 ms -- pour ajouter une ligne.
+    if (m.t === "said") { chat.push(m.msg); ajouterAuChat(m.msg); return; }
 
     if (m.t === "placed") {
       const mv = m.move as MoveInfo;
@@ -1774,7 +1814,7 @@ function connect() {
       ghost = null;
       applyState(m.state);
       paintJournal();
-      if (!$("roadmap").hidden) paintRoadmap();
+      if (!$("roadmap").hidden) ajouterALaRoute(mv);
 
       // La camera NE BOUGE PAS. Se faire deplacer sans l'avoir demande, en
       // pleine recherche, donne le mal de mer : c'est au joueur de cliquer le

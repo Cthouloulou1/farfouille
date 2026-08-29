@@ -55,6 +55,9 @@ const reste = g.decompteJusqua - Date.now();
 verifie("le premier coup ouvre sur un decompte", g.decompteJusqua > 0,
   `${(reste / 1000).toFixed(1)} s`);
 verifie("il dure autour de trois secondes", reste > 2000 && reste <= 3000);
+verifie("le tirage n'est pas public pendant le decompte",
+  g.rack !== "" && g.rackPublic === "" && g.notationPublique === "",
+  "il est tire, mais il ne sort pas");
 
 const servedAvant = g.servedAt;
 await dors(1000);
@@ -65,6 +68,7 @@ verifie("le chrono ne court pas pendant le decompte",
 await dors(2600);
 verifie("le decompte fini, le chrono part", g.decompteJusqua === 0
   && g.servedAt > servedAvant);
+verifie("et le tirage sort", g.rackPublic === g.rack && g.rackPublic !== "", g.rackPublic);
 
 // Deuxieme coup : le tirage tombe, et rien ne doit s'interposer.
 await g.reveal();

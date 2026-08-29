@@ -217,6 +217,23 @@ export class Game {
   decompteJusqua = 0;
   /** Instant du premier tirage. Sert a mesurer la duree d'une partie bornee. */
   debutDeLaPartie = 0;
+
+  /**
+   * Le tirage, tel qu'il part aux clients.
+   *
+   * VIDE pendant le decompte. « 3, 2, 1 » est un depart, et partir en ayant
+   * deja lu ses lettres n'en est pas un. La regle est ici, dans la partie, et
+   * non dans le transport : le tirage ne doit pas etre public, pas seulement
+   * ne pas s'afficher -- cache a l'ecran, il resterait lisible dans la console.
+   */
+  get rackPublic(): string {
+    return this.decompteJusqua > Date.now() ? "" : this.rack;
+  }
+
+  /** La notation du tirage, muette elle aussi pendant le decompte. */
+  get notationPublique(): string {
+    return this.decompteJusqua > Date.now() ? "" : this.rackNotation;
+  }
   /**
    * Y a-t-il quelqu'un dans le salon ?
    *
