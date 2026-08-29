@@ -8,3 +8,6 @@ petit.json
 packages/web/app.js
 packages/server/data/
 layouts.json
+
+# Fichiers d essai jetables
+*.tmp.mjs
