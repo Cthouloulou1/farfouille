@@ -212,6 +212,14 @@ export class Game {
    */
   actif = false;
   /**
+   * La partie a-t-elle commence ?
+   *
+   * Un salon neuf s'ouvre sur ses reglages : ni tirage, ni chrono, tant que
+   * son proprietaire n'a pas valide la variante. Entrer quelque part ne doit
+   * pas lancer une partie qu'on n'a pas choisie.
+   */
+  demarree = false;
+  /**
    * Qui est dans le salon. Tenu a jour par le transport : le moteur n'a pas de
    * WebSocket, mais le duplicate a besoin de savoir QUI etait la au moment du
    * tirage -- c'est ce qui distingue un joueur compte d'un visiteur arrive en
@@ -468,6 +476,9 @@ export class Game {
     } else {
       console.log(`[partie] nouvelle grille, graine ${this.seed.slice(0, 8)}`);
     }
+    // Une partie qui a deja des coups a evidemment commence : on ne va pas
+    // redemander ses reglages a celui qui la reprend.
+    this.demarree = this.moves.length > 0;
     // On ne pioche PAS ici : le premier joueur qui entre declenchera le
     // calcul. Distribuer au demarrage faisait calculer le top de chaque salon
     // enregistre, y compris ceux que personne n'ouvrira.
@@ -714,6 +725,22 @@ export class Game {
   }
 
   /**
+   * Duree d'un coup clos par l'ECHEANCE, et non par un joueur.
+   *
+   * `setTimeout` promet de ne pas se declencher AVANT le delai, jamais de se
+   * declencher exactement dessus : la boucle d'evenements finit ce qu'elle
+   * faisait, et rend la main quelques millisecondes plus tard. Mesurer
+   * `Date.now() - servedAt` donnait donc 5,00 s le plus souvent, mais 5,01 s
+   * quand le reveil avait tarde -- alors que la regle du jeu, elle, dit cinq
+   * secondes tout rond.
+   *
+   * On note donc le temps IMPARTI, qui est la verite du coup.
+   */
+  private dureeDuCoup(): number {
+    return this.cfg.chrono !== null ? this.cfg.chrono * 1000 : Date.now() - this.servedAt;
+  }
+
+  /**
    * TOPPING chronometre : l'echeance tombe sans que personne ait trouve.
    *
    * Le top se pose quand meme, et un DEMI-POINT va au joueur qui avait propose
@@ -722,6 +749,8 @@ export class Game {
    */
   private async cloreParDefaut(): Promise<void> {
     if (this.canonicalTop === null) return;
+    // Le coup a dure le temps IMPARTI, pas le temps que la minuterie a mis a
+    // se reveiller. Voir dureeDuCoup().
     let meilleur: { joueur: string; word: string; score: number; at: number } | null = null;
     for (const [joueur, p] of this.propositions) {
       if (meilleur === null || p.score > meilleur.score
@@ -729,7 +758,7 @@ export class Game {
         meilleur = { joueur, word: p.word, score: p.score, at: p.at };
       }
     }
-    await this.commit(null, Date.now() - this.servedAt, undefined, undefined,
+    await this.commit(null, this.dureeDuCoup(), undefined, undefined,
       meilleur === null ? undefined
         : { joueur: meilleur.joueur, word: meilleur.word, score: meilleur.score });
   }
@@ -761,7 +790,7 @@ export class Game {
 
     const n = this.moveNumber + 1;
     const top = this.bestScore;
-    await this.commit(null, Date.now() - this.servedAt, undefined, { scores, trouveurs });
+    await this.commit(null, this.dureeDuCoup(), undefined, { scores, trouveurs });
     this.say("", trouveurs.length === 0
       ? `Coup ${n} — personne n'a trouvé le top (${top} pts)`
       : `Coup ${n} — top trouvé par ${trouveurs.join(", ")} (${top} pts)`);
@@ -867,13 +896,22 @@ export class Game {
   async reveiller(): Promise<void> {
     if (this.actif) return;
     this.actif = true;
-    if (this.finie) return;
+    if (this.finie || !this.demarree) { this.emit(); return; }
     if (this.canonicalTop === null && !this.solving) {
       await this.deal();
       return;
     }
     this.armerLeChrono();
     this.emit();
+  }
+
+  /** Lance la partie : premier tirage, et le chrono si la variante en a un. */
+  async demarrer(): Promise<void> {
+    if (this.demarree) return;
+    this.demarree = true;
+    if (this.actif && !this.finie && this.canonicalTop === null && !this.solving) {
+      await this.deal();
+    } else this.emit();
   }
 
   /** La salle s'est vidée : le coup en cours gele, rien ne se calcule plus. */

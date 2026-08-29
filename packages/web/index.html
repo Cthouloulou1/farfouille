@@ -99,6 +99,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 
 .decompte { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: "Instrument Serif", Georgia, serif; font-size: clamp(90px, 22vh, 220px); line-height: 1; color: var(--accent); text-shadow: 0 4px 30px var(--shadow); pointer-events: none; }
 .decompte[hidden] { display: none; }
+.attente { color: var(--accent); background: var(--accent-bg); text-align: center; line-height: 1.5; }
+.attente[hidden] { display: none; }
 .fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; text-align: center; letter-spacing: .04em; }
 .fin[hidden] { display: none; }
 .journal { flex: none; border-top: 1px solid var(--rule); padding: 8px 15px 8px; }
@@ -169,6 +171,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pmove .w { color: var(--ink); letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
 .pmove .s { color: var(--accent); }
 .pmove .t { text-align: right; color: var(--ink-faint); white-space: nowrap; }
+.pmove .t.top { color: var(--accent); font-weight: 500; }
 .pmove .s { text-align: right; }
 /* Le coeur se fait discret dans une liste : il ne doit pas gonfler la ligne. */
 .pmove .like { padding: 0 3px; font-size: 10px; border-color: transparent; gap: 2px; }
@@ -301,15 +304,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="salons" id="salons"><div class="none">chargement…</div></div>
 
     <button class="creer-open" id="creer-open" type="button">Créer un salon</button>
-
-    <form class="creer" id="creer" hidden autocomplete="off">
-      <input id="c-nom" maxlength="40" placeholder="Nom du salon" autocomplete="off">
-      <label class="case"><input type="checkbox" id="c-prive"> Salon privé (absent de la liste)</label>
-      <p class="apres">Une partie normale sur plateau 15×15, 7 sur 7. Tout se règle ensuite
-        dans le salon, y compris le passage à la grille infinie.</p>
-      <div class="join-error" id="c-error" hidden></div>
-      <button type="submit">Créer et rejoindre</button>
-    </form>
+    <div class="join-error" id="c-error" hidden></div>
   </div>
 </div>
 
@@ -348,6 +343,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="side">
     <div class="panel" id="panel-live">
       <div class="block fin" id="fin" hidden>Partie terminée</div>
+      <div class="block attente" id="attente" hidden>
+        Partie non commencée — réglez la variante, puis <b>Appliquer</b>.
+      </div>
       <div class="block">
         <div class="word none" id="cur-word">—</div>
         <div class="sub" id="cur-meta"></div>
@@ -459,7 +457,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <div class="alerte" id="r-alerte" hidden></div>
       <p class="apres">Appliquer relance une partie neuve dans ce salon. L'ancienne est archivée, jamais effacée.</p>
       <div class="join-error" id="r-error" hidden></div>
-      <button class="appliquer" id="r-appliquer">Appliquer et relancer</button>
+      <button class="appliquer" id="r-appliquer">Appliquer et lancer la partie</button>
     </div>
   </div>
 </div>

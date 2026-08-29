@@ -1320,6 +1320,41 @@ fois, avant le premier coup**. C'est un signal de départ, pas une pause avant
 chaque coup. Le chrono ne part qu'après — personne ne perd de temps sur le
 décompte, et la saisie est gelée pendant.
 
+### Créer un salon, y entrer, le régler
+
+**Le bouton crée le salon et y entre**, sans rien demander. Le nom est tiré au
+hasard — deux mots accolés, « Caramel calme », « Tirage franc » — assez pour
+distinguer les salons et plus mémorable qu'un numéro. On le renommera plus tard.
+
+**Un salon neuf n'a pas de partie en cours** : ni tirage, ni chrono, ni coup.
+Il s'ouvre sur ses réglages, et la partie commence quand son propriétaire les
+valide. Entrer quelque part ne doit pas lancer une partie qu'on n'a pas choisie.
+
+Une partie qui a déjà des coups derrière elle a évidemment commencé : on ne
+redemande pas ses réglages à qui la reprend. La grille permanente, elle, démarre
+d'office — elle est le jeu par défaut du site.
+
+### Le temps d'un coup clos par l'échéance
+
+`setTimeout` promet de ne pas se déclencher **avant** le délai, jamais de se
+déclencher **dessus** : la boucle d'événements finit ce qu'elle faisait avant de
+rendre la main. Mesurer l'écart réel donnait donc 5,00 s le plus souvent, mais
+5,01 s quand le réveil avait tardé.
+
+On note donc le **temps imparti**, qui est la vérité du coup : cinq secondes
+tout rond. Et un compte rond s'écrit rond — « 5 s », pas « 5.00 s ».
+
+### En réserve : les records du site
+
+**À ne pas construire maintenant.** Noté pour ne pas être oublié.
+
+Une **partie topée** est une partie dont *tous* les coups ont été trouvés par des
+joueurs. On voudra classer :
+
+- les parties normales (7 sur 7) topées **le plus vite** — et les dix premières ;
+- la partie topée avec le **moins de secondes par coup**, annoncée comme
+  « partie topée en 5 secondes par coup par xxx, xxx, xxx ».
+
 ### Changer de salon efface tout
 
 Entrer dans un salon **vide d'abord l'état du précédent** : caramels, historique,

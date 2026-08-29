@@ -18,7 +18,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
-  salonsEnregistres, fermerSalon, identifiantPris, slug, MAX_SALONS, type Salon,
+  salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
+  MAX_SALONS, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
@@ -128,6 +129,7 @@ function publicState(s: Salon) {
     finie: g.finie,
     solving: g.solving,
     actif: g.actif,
+    demarree: g.demarree,
     decompteJusqua: g.decompteJusqua,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
@@ -159,6 +161,9 @@ function publicMove(m: PlayedMove) {
     player: m.player, ms: m.ms, notation: m.notation, rack: m.rack,
     playerWord: m.playerWord, playerDir: m.playerDir, playerX: m.playerX, playerY: m.playerY,
     demiPoint: m.demiPoint,
+    // DUPLICATE : le score de chacun sur ce coup, pour que le classement
+    // puisse se deplier. L'information est publique une fois le coup joue.
+    scores: m.scores,
     likes: m.likes?.length ?? 0,
     likers: m.likes ?? [],
   };
@@ -195,6 +200,9 @@ async function ouvrirLesSalons(): Promise<void> {
     layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
   });
   surveiller(salonMondial);
+  // La grille permanente n'a pas de proprietaire pour la regler : elle demarre
+  // d'office, elle est le jeu par defaut du site.
+  salonMondial.partie.demarree = true;
 
   // Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
   for (const e of salonsEnregistres()) {
@@ -297,7 +305,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url === "/api/salons" && req.method === "POST") {
     try {
       const c = await corpsJson(req);
-      const nom = String(c.nom ?? "").trim().slice(0, 40) || "Salon";
+      // Pas de nom demande : on en tire un au hasard, distinct des autres.
+      const nom = String(c.nom ?? "").trim().slice(0, 40) || nomAuHasard();
       const proprietaire = String(c.proprietaire ?? "").trim().slice(0, 24) || "anonyme";
       // Creer un salon ouvre une partie NORMALE : 15x15, plateau du commerce,
       // 7 sur 7, sac de 102. Tout le reste se regle a l'interieur du salon.
@@ -523,6 +532,8 @@ wss.on("connection", (ws) => {
       // les deux, sinon le duplicate ne compterait personne sur son premier coup.
       for (const nom of occupants(s.id)) s.partie.presents.add(nom);
       if (occupants(s.id).length > 0) await s.partie.reveiller();
+      // Valider les reglages, c'est lancer la partie.
+      await s.partie.demarrer();
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
         `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
       for (const [c, v] of clients) {

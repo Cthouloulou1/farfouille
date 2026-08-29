@@ -27,6 +27,8 @@ interface MoveInfo {
   playerWord?: string; playerDir?: Dir; playerX?: number; playerY?: number;
   /** Demi-point : personne n'a trouve le top, celui-ci s'en est le plus approche. */
   demiPoint?: { joueur: string; word: string; score: number };
+  /** DUPLICATE : ce que chaque joueur a marque sur ce coup. */
+  scores?: Record<string, number>;
   /** Nombre de "j'aime" recus, et qui les a donnes. */
   likes?: number; likers?: string[];
 }
@@ -52,6 +54,8 @@ let negatif: Record<string, number> = {};
 let nonTrouves = 0;
 /** Fin du decompte d'avant-coup, 0 s'il n'y en a pas. */
 let decompteJusqua = 0;
+/** La partie du salon a-t-elle commence ? Un salon neuf attend ses reglages. */
+let demarree = true;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -475,7 +479,9 @@ function paintRack() {
  */
 function fmtTime(ms: number): string {
   const s = Math.max(0, ms) / 1000;
-  if (s < 60) return `${s.toFixed(2)} s`;
+  // Un compte rond s'ecrit rond : « 5 s », pas « 5.00 s ». C'est le cas d'un
+  // coup clos par l'echeance, qui a dure exactement le temps imparti.
+  if (s < 60) return Number.isInteger(s) ? `${s} s` : `${s.toFixed(2)} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, "0")}`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
   return `${Math.floor(s / 86400)} j ${String(Math.floor((s % 86400) / 3600)).padStart(2, "0")} h`;
@@ -516,8 +522,9 @@ function paintCurrent() {
 }
 
 function paintSide() {
-  $("rb-move").textContent = finie ? "—" : solving ? "…" : String(moveNumber + 1);
+  $("rb-move").textContent = !demarree ? "—" : finie ? "—" : solving ? "…" : String(moveNumber + 1);
   $("fin").hidden = !finie;
+  $("attente").hidden = demarree;
   $("rb-cumul").textContent = cumul.toLocaleString("fr");
   paintCurrent();
 
@@ -576,9 +583,12 @@ function paintSide() {
     if (openPlayer === name) {
       const list = document.createElement("div");
       list.className = "plist";
-      const mine = history
-        .filter((m) => m.player === name || m.demiPoint?.joueur === name)
-        .reverse();
+      // Au duplicate, chacun marque sur TOUS les coups auxquels il a participe,
+      // pas seulement sur ceux qu'il a remportes.
+      const mine = (duplicate
+        ? history.filter((m) => m.scores?.[name] !== undefined)
+        : history.filter((m) => m.player === name || m.demiPoint?.joueur === name)
+      ).reverse();
       if (mine.length === 0) {
         const e = document.createElement("div");
         e.className = "none"; e.textContent = "aucun coup enregistré";
@@ -588,15 +598,30 @@ function paintSide() {
         const r = document.createElement("button");
         r.className = "pmove";
         // Ce que le JOUEUR a tape, qui peut differer du mot retenu par le logiciel.
-        // Un demi-point porte le mot que le joueur a reellement propose, suivi
-        // de « (0.5) » : c'etait sa meilleure solution, pas le top.
-        const demi = m.player === null && m.demiPoint?.joueur === name;
-        const shown = demi ? `${m.demiPoint!.word} (0.5)` : (m.playerWord ?? m.word);
-        r.innerHTML = `<span class="n">${m.n}</span><span class="w">${shown}</span>` +
-                      `<span class="s">${demi ? m.demiPoint!.score : m.score}</span>` +
-                      `<span class="t">${fmtTime(m.ms)}</span>`;
-        r.title = m.playerWord && m.playerWord !== m.word
-          ? `${shown} — le logiciel a retenu ${m.word}` : shown;
+        if (duplicate) {
+          // Son score du coup, et son ecart au top. Zero d'ecart, c'est le top.
+          const sc = m.scores![name]!;
+          const ecart = m.score - sc;
+          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${m.word}</span>` +
+                        `<span class="s">${sc}</span>` +
+                        `<span class="t ${ecart === 0 ? "top" : ""}">${ecart === 0 ? "Top" : `−${ecart}`}</span>`;
+          r.title = `Coup ${m.n} : ${m.word} valait ${m.score} pts, ` +
+            (ecart === 0 ? "trouvé" : `manqué de ${ecart} pts`);
+        } else {
+          // Un demi-point porte le mot que le joueur a reellement propose, suivi
+          // de « (0.5) » : c'etait sa meilleure solution, pas le top.
+          const demi = m.player === null && m.demiPoint?.joueur === name;
+          const shown = demi ? `${m.demiPoint!.word} (0.5)` : (m.playerWord ?? m.word);
+          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${shown}</span>` +
+                        `<span class="s">${demi ? m.demiPoint!.score : m.score}</span>` +
+                        `<span class="t">${fmtTime(m.ms)}</span>`;
+        }
+        if (!duplicate) {
+          const demi2 = m.player === null && m.demiPoint?.joueur === name;
+          const vu = demi2 ? m.demiPoint!.word : (m.playerWord ?? m.word);
+          r.title = m.playerWord && m.playerWord !== m.word
+            ? `${vu} — le logiciel a retenu ${m.word}` : vu;
+        }
         r.addEventListener("click", () => focusMove(m));
         r.appendChild(likeButton(m));
         list.appendChild(r);
@@ -934,6 +959,7 @@ setInterval(() => {
     return;
   }
   $("age").textContent = fmtTime(now - createdAt);
+  if (!demarree) { $("elapsed").textContent = "—"; $("age").textContent = "—"; return; }
   if (endormi) { $("elapsed").textContent = "en pause"; return; }
   if (solving) { $("elapsed").textContent = "…"; return; }
   if (chrono === null) { $("elapsed").textContent = fmtTime(now - servedAt); return; }
@@ -950,6 +976,7 @@ function applyState(s: {
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
+  demarree?: boolean;
   points?: Record<string, number>; negatif?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
@@ -969,6 +996,7 @@ function applyState(s: {
   duplicate = s.mode === "duplicate";
   nonTrouves = s.nonTrouves ?? 0;
   decompteJusqua = s.decompteJusqua ?? 0;
+  demarree = s.demarree !== false;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -1065,6 +1093,11 @@ function connect() {
       // Seul le proprietaire regle son salon. La grille permanente n'en a pas.
       $("reglages-open").hidden = m.proprietaire !== me;
       $("conn").textContent = `${me} · ${m.nomSalon}`;
+      // Une partie qui n'a pas commence s'ouvre sur ses reglages : c'est la
+      // qu'on choisit la variante avant de lancer quoi que ce soit.
+      if (m.state?.demarree === false && m.proprietaire === me) {
+        setTimeout(ouvrirReglages, 60);
+      }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       paintChat(chat);
       paintJournal();
@@ -1517,18 +1550,20 @@ function quitterSalon(): void {
 
 $("quitter").addEventListener("click", quitterSalon);
 
-$("creer-open").addEventListener("click", () => {
-  const ouvert = $("creer").hidden;
-  $("creer").hidden = !ouvert;
-  $("creer-open").textContent = ouvert ? "Annuler" : "Créer un salon";
-});
+$("creer-open").addEventListener("click", () => { void creerSalon(); });
 
 // Le pseudo commande l'affichage des boutons Supprimer : on rafraichit la liste
 // des qu'il change, sinon le createur ne verrait pas ses propres salons.
 $("name").addEventListener("input", () => void peuplerSalons());
 
-$("creer").addEventListener("submit", async (e) => {
-  e.preventDefault();
+/**
+ * Cree un salon et y entre, sans rien demander.
+ *
+ * Le nom vient du serveur, tire au hasard : on ne fait pas remplir un
+ * formulaire pour entrer quelque part. Le salon s'ouvre sur ses reglages, la
+ * partie ne commence qu'une fois qu'on les a valides.
+ */
+async function creerSalon(): Promise<void> {
   const pseudo = ($("name") as HTMLInputElement).value.trim();
   if (pseudo === "") {
     $("c-error").textContent = "Entrez d'abord votre pseudo";
@@ -1540,21 +1575,16 @@ $("creer").addEventListener("submit", async (e) => {
   const r = await fetch("/api/salons", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      nom: ($("c-nom") as HTMLInputElement).value.trim() || "Salon",
-      proprietaire: pseudo,
-      prive: ($("c-prive") as HTMLInputElement).checked,
-    }),
+    body: JSON.stringify({ proprietaire: pseudo }),
   });
   const s = await r.json();
   if (!r.ok) {
     $("c-error").textContent = s.erreur ?? "création impossible";
     $("c-error").hidden = false;
-    $("c-error").scrollIntoView({ block: "nearest" });
     return;
   }
-  rejoindre(s.id);
-});
+  await rejoindre(s.id);
+}
 
 $("joinform").addEventListener("submit", (e) => {
   e.preventDefault();

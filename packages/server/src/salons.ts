@@ -36,6 +36,27 @@ export interface Salon {
 
 const salons = new Map<string, Salon>();
 
+/**
+ * Un nom de salon tire au hasard, le temps qu'on en choisisse un vrai.
+ *
+ * Deux mots accoles, pris a des listes courtes : c'est assez pour distinguer
+ * les salons entre eux et ca se retient mieux qu'un numero.
+ */
+const ADJECTIFS = [
+  "vif", "calme", "clair", "sombre", "leger", "grave", "tiede", "vaste",
+  "menu", "franc", "rude", "doux", "fier", "sage", "vieux", "neuf",
+];
+const NOMS = [
+  "caramel", "pavage", "ancrage", "joker", "tirage", "palier", "reliquat",
+  "sillon", "damier", "chevalet", "collage", "scrabble", "top", "isotop",
+];
+
+export function nomAuHasard(): string {
+  const a = ADJECTIFS[Math.floor(Math.random() * ADJECTIFS.length)]!;
+  const n = NOMS[Math.floor(Math.random() * NOMS.length)]!;
+  return `${n.charAt(0).toUpperCase()}${n.slice(1)} ${a}`;
+}
+
 /** Un identifiant sur, utilisable comme nom de fichier et dans une adresse. */
 export function slug(nom: string): string {
   const base = nom.toLowerCase()
