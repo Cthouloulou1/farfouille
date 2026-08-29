@@ -25,6 +25,8 @@ interface MoveInfo {
   n: number; word: string; dir: Dir; x: number; y: number; score: number;
   player: string | null; ms: number; notation: string; rack: string;
   playerWord?: string; playerDir?: Dir; playerX?: number; playerY?: number;
+  /** Demi-point : personne n'a trouve le top, celui-ci s'en est le plus approche. */
+  demiPoint?: { joueur: string; word: string; score: number };
   /** Nombre de "j'aime" recus, et qui les a donnes. */
   likes?: number; likers?: string[];
 }
@@ -46,6 +48,10 @@ let endormi = false;
 let duplicate = false;
 let points: Record<string, number> = {};
 let negatif: Record<string, number> = {};
+/** Coups que personne n'a trouves. */
+let nonTrouves = 0;
+/** Fin du decompte d'avant-coup, 0 s'il n'y en a pas. */
+let decompteJusqua = 0;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -460,9 +466,16 @@ function paintRack() {
   }
 }
 
+/**
+ * Un temps ENREGISTRE : celui qu'a mis un joueur pour trouver un coup.
+ *
+ * Au centieme sous la minute. Ce n'est pas ce qu'on affiche pendant qu'on
+ * joue -- un chrono qui defile au centieme est une source d'angoisse, pas
+ * d'information -- mais une performance se note precisement.
+ */
 function fmtTime(ms: number): string {
   const s = Math.max(0, ms) / 1000;
-  if (s < 60) return `${s.toFixed(1)} s`;
+  if (s < 60) return `${s.toFixed(2)} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, "0")}`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
   return `${Math.floor(s / 86400)} j ${String(Math.floor((s % 86400) / 3600)).padStart(2, "0")} h`;
@@ -514,7 +527,9 @@ function paintSide() {
   else {
     lw.className = "word";
     lw.innerHTML = `<span>${last.word}</span><span class="pts">${last.score}</span>`;
-    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${last.player ?? "révélé"} · ${fmtTime(last.ms)}`;
+    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ` +
+      `${last.player ?? (last.demiPoint ? `${last.demiPoint.joueur} (0.5)` : "non trouvé")} · ` +
+      `${fmtTime(last.ms)}`;
     ll.appendChild(likeButton(last));
   }
 
@@ -529,6 +544,17 @@ function paintSide() {
     s.className = "none"; s.textContent = "personne encore";
     rank.appendChild(s);
   }
+  // Ce que personne n'a trouve merite sa ligne : sinon les coups perdus par
+  // tout le monde disparaissent du tableau sans laisser de trace.
+  if (!duplicate && nonTrouves > 0) {
+    const perdu = document.createElement("div");
+    perdu.className = "prow perdu";
+    perdu.innerHTML = `<span class="tri"></span>` +
+      `<span class="nom">Non trouvé${nonTrouves > 1 ? "s" : ""}</span>` +
+      `<span class="likes"></span><span class="num">${nonTrouves}</span>`;
+    rank.appendChild(perdu);
+  }
+
   for (const [name, n] of rows) {
     const row = document.createElement("button");
     row.className = "prow" + (name === me ? " me" : "");
@@ -541,7 +567,7 @@ function paintSide() {
       ? `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
         `<span class="num">${points[name] ?? 0}</span>`
       : `<span class="likes">${got > 0 ? `♥ ${got}` : ""}</span>` +
-        `<span class="num">${n}</span>`;
+        `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
                     `<span class="nom">${name}</span>` + droite;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
@@ -550,7 +576,9 @@ function paintSide() {
     if (openPlayer === name) {
       const list = document.createElement("div");
       list.className = "plist";
-      const mine = history.filter((m) => m.player === name).reverse();
+      const mine = history
+        .filter((m) => m.player === name || m.demiPoint?.joueur === name)
+        .reverse();
       if (mine.length === 0) {
         const e = document.createElement("div");
         e.className = "none"; e.textContent = "aucun coup enregistré";
@@ -560,9 +588,13 @@ function paintSide() {
         const r = document.createElement("button");
         r.className = "pmove";
         // Ce que le JOUEUR a tape, qui peut differer du mot retenu par le logiciel.
-        const shown = m.playerWord ?? m.word;
+        // Un demi-point porte le mot que le joueur a reellement propose, suivi
+        // de « (0.5) » : c'etait sa meilleure solution, pas le top.
+        const demi = m.player === null && m.demiPoint?.joueur === name;
+        const shown = demi ? `${m.demiPoint!.word} (0.5)` : (m.playerWord ?? m.word);
         r.innerHTML = `<span class="n">${m.n}</span><span class="w">${shown}</span>` +
-                      `<span class="s">${m.score}</span><span class="t">${fmtTime(m.ms)}</span>`;
+                      `<span class="s">${demi ? m.demiPoint!.score : m.score}</span>` +
+                      `<span class="t">${fmtTime(m.ms)}</span>`;
         r.title = m.playerWord && m.playerWord !== m.word
           ? `${shown} — le logiciel a retenu ${m.word}` : shown;
         r.addEventListener("click", () => focusMove(m));
@@ -636,7 +668,8 @@ function paintRoadmap() {
     r.innerHTML =
       `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
       `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-      `<span class="s">${m.score}</span><span class="who">${m.player ?? "—"}</span>` +
+      `<span class="s">${m.score}</span>` +
+      `<span class="who">${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")}</span>` +
       `<span class="t">${fmtTime(m.ms)}</span>`;
     r.addEventListener("click", () => focusMove(m));
     r.appendChild(likeButton(m));
@@ -664,7 +697,8 @@ function paintJournal(): void {
       `<span class="s">${m.score}</span>` +
       `<span class="t">${fmtTime(m.ms)}</span>`;
     r.title = `${m.word} · ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} · ${m.score} pts · ` +
-      `${m.player ?? "révélé"} · trouvé en ${fmtTime(m.ms)}`;
+      `${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")} · ` +
+      `en ${fmtTime(m.ms)}`;
     r.addEventListener("click", () => focusMove(m));
     box.appendChild(r);
   }
@@ -826,7 +860,7 @@ addEventListener("keydown", (e) => {
   if (e.key === "Backspace") { typed = typed.slice(0, -1); paintRack(); paintCurrent(); draw(); e.preventDefault(); return; }
   if (e.key === "Enter") { submit(); e.preventDefault(); return; }
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
-    if (cursor === null || finie) return;
+    if (cursor === null || finie || decompteJusqua > Date.now() + clockSkew) return;
     if (typed.length >= 15) return;
     const ch = e.key.toUpperCase();
     const left = remaining();
@@ -884,6 +918,14 @@ let finieA = 0;
 
 setInterval(() => {
   const now = Date.now() + clockSkew;
+  // Decompte d'avant-coup : 2, puis 1, puis le jeu commence.
+  const reste2 = decompteJusqua - now;
+  if (reste2 > 0) {
+    $("decompte").hidden = false;
+    $("decompte").textContent = String(Math.ceil(reste2 / 1000));
+  } else {
+    $("decompte").hidden = true;
+  }
   if (finie) {
     // Partie close : l'age s'arrete au dernier coup, et il n'y a plus de coup
     // en cours dont on pourrait chronometrer la recherche.
@@ -897,7 +939,7 @@ setInterval(() => {
   if (chrono === null) { $("elapsed").textContent = fmtTime(now - servedAt); return; }
   // Compte a rebours : c'est le temps qui reste qui interesse le joueur.
   const reste = Math.max(0, servedAt + chrono * 1000 - now);
-  $("elapsed").textContent = `${(reste / 1000).toFixed(1)} s`;
+  $("elapsed").textContent = `${Math.ceil(reste / 1000)} s`;
   $("elapsed").style.color = reste < 6000 ? "var(--warn)" : "";
 }, 200);
 
@@ -907,7 +949,7 @@ function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
-  actif?: boolean; mode?: string;
+  actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
@@ -925,6 +967,8 @@ function applyState(s: {
   chrono = s.chrono ?? null;
   endormi = s.actif === false;
   duplicate = s.mode === "duplicate";
+  nonTrouves = s.nonTrouves ?? 0;
+  decompteJusqua = s.decompteJusqua ?? 0;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -1419,6 +1463,7 @@ function ouvrirReglages(): void {
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
   cMode = cfg.mode === "duplicate" ? "duplicate" : "topping";
+  ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
   peuplerMode();
   peuplerChrono();
   peuplerGrille();
@@ -1443,6 +1488,7 @@ $("r-appliquer").addEventListener("click", () => {
     chrono: cChrono,
     bornes: cBornes,
     mode: cMode,
+    decompte: ($("r-decompte") as HTMLInputElement).checked,
   });
   $("reglages").hidden = true;
 });

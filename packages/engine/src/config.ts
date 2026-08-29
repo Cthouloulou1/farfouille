@@ -59,6 +59,11 @@ export interface ConfigPartie {
    */
   mode: "topping" | "duplicate";
   /**
+   * Decompte de deux secondes avant que le coup commence : 2, 1, partez.
+   * Personne ne perd de temps -- le chrono ne part qu'apres.
+   */
+  decompte: boolean;
+  /**
    * Duree d'un coup en secondes. `null` = pas de chrono : il faut trouver le
    * top pour avancer, comme sur le topping infini (SPEC.md §16).
    */
@@ -91,6 +96,7 @@ export function configParDefaut(): ConfigPartie {
     pioche: "probabilites",
     joker: false,
     mode: "topping",
+    decompte: false,
     chrono: null,
     bornes: null,
     pavage: activeLayout(),
@@ -110,6 +116,7 @@ export interface ConfigSerialisee {
   pioche: "probabilites" | "sac102" | "sac102boucle";
   joker: boolean;
   mode: "topping" | "duplicate";
+  decompte: boolean;
   chrono: number | null;
   bornes: number | null;
   pavageNom: LayoutName | "custom";
@@ -119,7 +126,8 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode, chrono: cfg.chrono,
+    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode,
+    decompte: cfg.decompte, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
@@ -135,6 +143,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
     joker: plat.joker === true,
     mode: plat.mode === "duplicate" ? "duplicate" : "topping",
+    decompte: plat.decompte === true,
     chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),

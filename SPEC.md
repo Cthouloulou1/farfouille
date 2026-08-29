@@ -1307,6 +1307,26 @@ personne ne le trouve avant l'échéance, le top s'affiche quand même, et le
 joueur qui a soumis **la solution la plus rentable, le plus vite**, marque
 **un demi-point**.
 
+Ce coup n'a pas été trouvé : il s'affiche **« non trouvé »**, jamais « révélé ».
+Le classement porte une ligne **« Non trouvé »** — au pluriel dès deux — qui
+compte les coups que personne n'a eus. Dans la liste dépliée du gagnant du
+demi-point, c'est **son mot** qui figure, suivi de **(0.5)** : c'était sa
+meilleure solution, pas le top.
+
+### Le décompte d'avant-coup
+
+Option, décochée par défaut : un **2** puis un **1** en grand sur la grille avant
+que le coup commence. Le chrono ne part **qu'après** — personne ne perd de temps
+sur le décompte, et la saisie est gelée pendant.
+
+### Les temps
+
+Le chrono qui défile s'affiche en **secondes entières** : les dixièmes qui
+tournent sont une source d'angoisse, pas d'information. Le temps **enregistré**
+d'un coup trouvé, lui, se note au **centième** — une performance se mesure.
+
+> Le bouton **rejouer** n'apparaîtra qu'une fois la partie terminée.
+
 ### Les salons
 
 **Le salon est un lieu, la partie est ce qui tourne dedans.** C'est la

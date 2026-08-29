@@ -128,10 +128,12 @@ function publicState(s: Salon) {
     finie: g.finie,
     solving: g.solving,
     actif: g.actif,
+    decompteJusqua: g.decompteJusqua,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
     mode: g.cfg.mode,
     players: g.players,
+    nonTrouves: g.nonTrouves,
     // Au duplicate le classement se lit en points et en negatif, pas en coups
     // remportes : personne ne « remporte » un coup, tout le monde en marque.
     ...(g.cfg.mode === "duplicate" ? g.classementDuplicate() : {}),
@@ -156,6 +158,7 @@ function publicMove(m: PlayedMove) {
     n: m.n, word: m.word, dir: m.dir, x: m.x, y: m.y, score: m.score,
     player: m.player, ms: m.ms, notation: m.notation, rack: m.rack,
     playerWord: m.playerWord, playerDir: m.playerDir, playerX: m.playerX, playerY: m.playerY,
+    demiPoint: m.demiPoint,
     likes: m.likes?.length ?? 0,
     likers: m.likes ?? [],
   };
@@ -491,6 +494,7 @@ wss.on("connection", (ws) => {
       // Une seconde au moins : le chrono ne part qu'APRES le calcul du top, donc
       // rien n'oblige a laisser du temps au serveur.
       const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
+      const decompte = msg.decompte === true;
       let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
       // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
@@ -510,7 +514,7 @@ wss.on("connection", (ws) => {
         tirage, jouables, joker,
         // Le sac sans fin ne vaut que sur une grille infinie.
         pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
-        bornes, pavage, pavageNom, mode,
+        bornes, pavage, pavageNom, mode, decompte,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));

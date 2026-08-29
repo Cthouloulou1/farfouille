@@ -88,6 +88,11 @@ export interface PlayedMove {
    */
   scores?: Record<string, number>;
   trouveurs?: string[];
+  /**
+   * TOPPING chronometre : personne n'a trouve le top a l'echeance. Un demi-point
+   * va au joueur qui avait propose la solution la plus rentable, le plus vite.
+   */
+  demiPoint?: { joueur: string; word: string; score: number };
 }
 
 export interface ChatMessage {
@@ -131,6 +136,9 @@ interface Saved {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
+
+/** Duree du decompte d'avant-coup : 2, 1, partez. */
+const DECOMPTE_MS = 2000;
 
 /** Ce processus existe-t-il encore ? EPERM veut dire oui, mais pas a nous. */
 function alive(pid: number): boolean {
@@ -180,6 +188,19 @@ export class Game {
   servedAt = 0;
   /** Minuterie du coup en cours, quand la partie est chronometree. */
   private echeance: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Fin du decompte d'avant-coup, quand il est active. Tant qu'il court, le
+   * tirage est connu mais le chrono n'a pas demarre : personne ne perd de temps.
+   */
+  decompteJusqua = 0;
+  /**
+   * Le decompte de CE coup a-t-il deja eu lieu ?
+   *
+   * Sans ce drapeau, la fin du decompte relancait un decompte : la condition
+   * « pas de decompte en cours » est vraie avant ET apres, et le vrai chrono
+   * ne s'armait jamais.
+   */
+  private decompteFait = false;
   /**
    * Y a-t-il quelqu'un dans le salon ?
    *
@@ -484,6 +505,9 @@ export class Game {
     // deriver de la liste des coups.
     for (const m of out.moves) {
       if (m.player !== null) out.players[m.player] = (out.players[m.player] ?? 0) + 1;
+      if (m.demiPoint !== undefined) {
+        out.players[m.demiPoint.joueur] = (out.players[m.demiPoint.joueur] ?? 0) + 0.5;
+      }
     }
     return out;
   }
@@ -503,6 +527,11 @@ export class Game {
     this.save();
     this.emit();
     return true;
+  }
+
+  /** Coups que PERSONNE n'a trouves. Ni un joueur, ni un demi-point. */
+  get nonTrouves(): number {
+    return this.moves.filter((m) => m.player === null).length;
   }
 
   /**
@@ -594,6 +623,8 @@ export class Game {
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
     this.servedAt = Date.now();
+    this.decompteJusqua = 0;
+    this.decompteFait = false;
     this.armerLeChrono();
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
@@ -665,6 +696,13 @@ export class Game {
       };
     }
 
+    // On retient la meilleure proposition de chacun, meme en topping : c'est
+    // elle qui decide du demi-point si personne n'atteint le top.
+    const avant = this.propositions.get(player);
+    if (avant === undefined || r.move.score > avant.score) {
+      this.propositions.set(player, { score: r.move.score, word: r.move.word, at: Date.now() });
+    }
+
     if (r.move.score < this.bestScore) {
       return { ok: true, message: "", word: r.move.word, score: r.move.score, top: false };
     }
@@ -672,6 +710,27 @@ export class Game {
     // message ARRIVE AU SERVEUR qui gagne -- ici, l'ordre de traitement.
     await this.commit(player, Date.now() - this.servedAt, r.move);
     return { ok: true, message: "top !", word: r.move.word, score: r.move.score, top: true };
+  }
+
+  /**
+   * TOPPING chronometre : l'echeance tombe sans que personne ait trouve.
+   *
+   * Le top se pose quand meme, et un DEMI-POINT va au joueur qui avait propose
+   * la solution la plus rentable — a egalite de score, le plus rapide a l'avoir
+   * soumise. Personne n'a « trouve le coup », mais chercher a rapporte.
+   */
+  private async cloreParDefaut(): Promise<void> {
+    if (this.canonicalTop === null) return;
+    let meilleur: { joueur: string; word: string; score: number; at: number } | null = null;
+    for (const [joueur, p] of this.propositions) {
+      if (meilleur === null || p.score > meilleur.score
+          || (p.score === meilleur.score && p.at < meilleur.at)) {
+        meilleur = { joueur, word: p.word, score: p.score, at: p.at };
+      }
+    }
+    await this.commit(null, Date.now() - this.servedAt, undefined, undefined,
+      meilleur === null ? undefined
+        : { joueur: meilleur.joueur, word: meilleur.word, score: meilleur.score });
   }
 
   /**
@@ -711,6 +770,7 @@ export class Game {
   private async commit(
     player: string | null, ms: number, played?: Move,
     duplicate?: { scores: Record<string, number>; trouveurs: string[] },
+    demiPoint?: { joueur: string; word: string; score: number },
   ): Promise<void> {
     const top = this.canonicalTop!;
     const move: PlayedMove = {
@@ -734,10 +794,16 @@ export class Game {
       isotops: this.isotops,
       tiers: this.tiers as Tier[],
       ...(duplicate ?? {}),
+      ...(demiPoint ? { demiPoint } : {}),
     };
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.moves.push(move);
     if (player !== null) this.players[player] = (this.players[player] ?? 0) + 1;
+    // Un demi-point vaut la moitie d'un coup trouve : chercher sans atteindre
+    // le top rapporte quand meme quelque chose.
+    if (demiPoint !== undefined) {
+      this.players[demiPoint.joueur] = (this.players[demiPoint.joueur] ?? 0) + 0.5;
+    }
     // Le reliquat se calcule sur le tirage TEL QU'IL A ETE DISTRIBUE, avant
     // toute substitution de joker : c'est bien un joker qui a quitte le tirage.
     this.reliquat = Bag.remainder(this.rack, top.placements);
@@ -765,11 +831,28 @@ export class Game {
    */
   private armerLeChrono(): void {
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
-    if (!this.actif || this.cfg.chrono === null || this.finie) return;
+    if (!this.actif || this.finie) return;
+
+    // Decompte d'avant-coup : le tirage s'affiche, le chrono attend. On ne
+    // prend le temps de personne sur son dos.
+    if (this.cfg.decompte && !this.decompteFait) {
+      this.decompteFait = true;
+      this.decompteJusqua = Date.now() + DECOMPTE_MS;
+      this.emit();
+      setTimeout(() => {
+        this.decompteJusqua = 0;
+        this.servedAt = Date.now();
+        this.armerLeChrono();
+        this.emit();
+      }, DECOMPTE_MS);
+      return;
+    }
+
+    if (this.cfg.chrono === null) return;
     this.servedAt = Date.now();
     this.echeance = setTimeout(() => {
       this.echeance = null;
-      void (this.cfg.mode === "duplicate" ? this.clore() : this.reveal());
+      void (this.cfg.mode === "duplicate" ? this.clore() : this.cloreParDefaut());
     }, this.cfg.chrono * 1000);
   }
 
