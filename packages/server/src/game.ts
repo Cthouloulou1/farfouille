@@ -577,7 +577,10 @@ export class Game {
   private async deal(): Promise<void> {
     // Fin de partie (SPEC.md §16) : le sac ne permet plus de composer un tirage
     // jouable. On ne distribue plus, et l'etat diffuse le dit.
-    if (this.bag.estFinie(this.reliquat)) {
+    // Nombre de coups atteint : la partie s'arrete la, meme si le sac pourrait
+    // continuer. C'est ce qui donne un terme a un duplicate sur grille infinie.
+    const assezJoue = this.cfg.coupsMax !== null && this.moves.length >= this.cfg.coupsMax;
+    if (assezJoue || this.bag.estFinie(this.reliquat)) {
       this.finie = true;
       this.solving = false;
       this.canonicalTop = null;
@@ -589,7 +592,8 @@ export class Game {
       this.bestScore = -1;
       this.isotops = 0;
       this.tiers = [];
-      console.log(`[partie] terminee apres ${this.moves.length} coups`);
+      console.log(`[partie] terminee apres ${this.moves.length} coups` +
+        (assezJoue ? " (nombre de coups atteint)" : ""));
       this.emit();
       return;
     }
@@ -789,11 +793,12 @@ export class Game {
       (this.propositions.get(a)?.at ?? 0) - (this.propositions.get(b)?.at ?? 0));
 
     const n = this.moveNumber + 1;
-    const top = this.bestScore;
     await this.commit(null, this.dureeDuCoup(), undefined, { scores, trouveurs });
+    // Pas de points dans le chat : ils figurent deja au tableau, au journal des
+    // coups et sur la grille. Les repeter ici n'ajoute que du bruit.
     this.say("", trouveurs.length === 0
-      ? `Coup ${n} — personne n'a trouvé le top (${top} pts)`
-      : `Coup ${n} — top trouvé par ${trouveurs.join(", ")} (${top} pts)`);
+      ? `Coup ${n} : non trouvé`
+      : `Coup ${n} : trouvé par ${trouveurs.join(", ")}`);
   }
 
   /** Pose le top canonique et passe au coup suivant. */

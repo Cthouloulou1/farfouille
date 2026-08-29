@@ -290,6 +290,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .choix button { flex: 1; padding: 6px 8px; font-family: inherit; font-size: 12.5px; line-height: 1.35; }
 .choix button em { display: block; font-style: normal; font-size: 10.5px; color: var(--ink-faint); }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
+#r-coups-perso { width: 74px; padding: 4px 6px; font: inherit; font-size: 12px; text-align: right; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
+#r-coups-bloc[hidden] { display: none; }
 #r-perso { width: 74px; padding: 4px 6px; font: inherit; font-size: 12px; text-align: right; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
 #r-perso-ligne span { color: var(--ink-faint); font-size: 11.5px; }
 .join form { background: none; border: 0; padding: 0; width: auto; box-shadow: none; }
@@ -371,7 +373,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
       <div class="block">
         <div class="head">
-          <h2>Dernier top</h2>
+          <h2>Top</h2>
           <span id="last-like"></span>
         </div>
         <button class="word none" id="last-word">—</button>
@@ -459,6 +461,20 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
 
       <label class="case"><input type="checkbox" id="r-decompte"> Décompte « 3, 2, 1 » au début de la partie</label>
+
+      <div id="r-coups-bloc" hidden>
+        <label>Nombre de coups joués</label>
+        <div class="choix" id="r-coups">
+          <button type="button" data-v="10">10</button>
+          <button type="button" data-v="20">20</button>
+          <button type="button" data-v="30">30</button>
+          <button type="button" data-v="sansfin">Sans fin</button>
+        </div>
+        <label class="case">Personnalisé
+          <input type="number" id="r-coups-perso" min="1" max="9999" step="1" placeholder="coups">
+          <span>coups</span>
+        </label>
+      </div>
 
       <label>Temps par coup</label>
       <div class="choix" id="r-chrono">

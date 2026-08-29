@@ -56,6 +56,8 @@ let nonTrouves = 0;
 let decompteJusqua = 0;
 /** La partie du salon a-t-elle commence ? Un salon neuf attend ses reglages. */
 let demarree = true;
+/** Nombre de coups prevus, null si la partie est sans fin. */
+let coupsMax: number | null = null;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -535,7 +537,11 @@ function paintCurrent() {
 }
 
 function paintSide() {
-  $("rb-move").textContent = !demarree ? "—" : finie ? "—" : solving ? "…" : String(moveNumber + 1);
+  // Le numero du coup suivant s'affiche MEME pendant le calcul : le faire
+  // disparaitre le temps d'un solveur lent donne l'impression d'un jeu casse.
+  $("rb-move").textContent = !demarree || finie ? "—"
+    : coupsMax === null ? String(moveNumber + 1)
+    : `${moveNumber + 1} / ${coupsMax}`;
   $("fin").hidden = !finie;
   $("attente").hidden = demarree;
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
@@ -1078,7 +1084,7 @@ function applyState(s: {
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
-  demarree?: boolean;
+  demarree?: boolean; coupsMax?: number | null;
   points?: Record<string, number>; negatif?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
@@ -1099,6 +1105,7 @@ function applyState(s: {
   nonTrouves = s.nonTrouves ?? 0;
   decompteJusqua = s.decompteJusqua ?? 0;
   demarree = s.demarree !== false;
+  coupsMax = s.coupsMax ?? null;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -1403,6 +1410,45 @@ let cChrono: number | null = null;
 let cBornes: number | null = 7;
 /** Mode en cours d'edition. */
 let cMode: "topping" | "duplicate" = "topping";
+/** Nombre de coups a jouer, ou null pour sans fin. */
+let cCoupsMax: number | null = null;
+
+/**
+ * Le nombre de coups ne se propose qu'en duplicate.
+ *
+ * En topping la partie n'a pas besoin de terme -- on joue tant qu'on veut. Le
+ * duplicate, lui, se termine sur un classement : sur une grille infinie, ou
+ * rien ne s'epuise, il faut bien dire quand.
+ */
+function peuplerCoups(): void {
+  $("r-coups-bloc").hidden = cMode !== "duplicate";
+  const perso = $("r-coups-perso") as HTMLInputElement;
+  let reconnu = false;
+  for (const b of $("r-coups").querySelectorAll("button")) {
+    const v = (b as HTMLElement).dataset["v"]!;
+    const choisi = v === "sansfin" ? cCoupsMax === null : Number(v) === cCoupsMax;
+    b.setAttribute("aria-pressed", String(choisi));
+    if (choisi) reconnu = true;
+  }
+  perso.value = !reconnu && cCoupsMax !== null ? String(cCoupsMax) : "";
+}
+
+for (const b of $("r-coups").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    const v = (b as HTMLElement).dataset["v"]!;
+    cCoupsMax = v === "sansfin" ? null : Number(v);
+    peuplerCoups();
+  });
+}
+
+($("r-coups-perso") as HTMLInputElement).addEventListener("input", () => {
+  const brut = ($("r-coups-perso") as HTMLInputElement).value.trim();
+  if (brut === "") return;
+  const v = Math.round(Number(brut));
+  if (!Number.isFinite(v) || v < 1) return;
+  cCoupsMax = Math.min(9999, v);
+  for (const b of $("r-coups").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+});
 
 function peuplerMode(): void {
   for (const b of $("r-mode").querySelectorAll("button")) {
@@ -1414,6 +1460,7 @@ for (const b of $("r-mode").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cMode = (b as HTMLElement).dataset["v"] === "duplicate" ? "duplicate" : "topping";
     peuplerMode();
+    peuplerCoups();
     // Le duplicate a besoin d'une echeance : c'est elle qui clot le coup.
     if (cMode === "duplicate" && cChrono === null) { cChrono = 60; peuplerChrono(); }
   });
@@ -1611,8 +1658,10 @@ function ouvrirReglages(): void {
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
   cMode = cfg.mode === "duplicate" ? "duplicate" : "topping";
+  cCoupsMax = cfg.coupsMax;
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
   peuplerMode();
+  peuplerCoups();
   peuplerChrono();
   peuplerGrille();
   avertirSiExplosif();
@@ -1636,6 +1685,7 @@ $("r-appliquer").addEventListener("click", () => {
     chrono: cChrono,
     bornes: cBornes,
     mode: cMode,
+    coupsMax: cMode === "duplicate" ? cCoupsMax : null,
     decompte: ($("r-decompte") as HTMLInputElement).checked,
   });
   $("reglages").hidden = true;

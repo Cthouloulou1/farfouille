@@ -130,6 +130,7 @@ function publicState(s: Salon) {
     solving: g.solving,
     actif: g.actif,
     demarree: g.demarree,
+    coupsMax: g.cfg.coupsMax,
     decompteJusqua: g.decompteJusqua,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
@@ -531,6 +532,8 @@ wss.on("connection", (ws) => {
       // rien n'oblige a laisser du temps au serveur.
       const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
       const decompte = msg.decompte === true;
+      const coupsMax = msg.coupsMax === null || msg.coupsMax === undefined ? null
+        : Math.max(1, Math.min(9999, Math.round(Number(msg.coupsMax))));
       let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
       // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
@@ -551,6 +554,7 @@ wss.on("connection", (ws) => {
         // Le sac sans fin ne vaut que sur une grille infinie.
         pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
         bornes, pavage, pavageNom, mode, decompte,
+        coupsMax: Number.isFinite(coupsMax as number) ? coupsMax : null,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));

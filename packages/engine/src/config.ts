@@ -59,6 +59,14 @@ export interface ConfigPartie {
    */
   mode: "topping" | "duplicate";
   /**
+   * Nombre de coups a jouer, ou `null` pour sans fin.
+   *
+   * Une grille infinie ne s'epuise jamais : sans cette borne, un duplicate n'y
+   * aurait pas de terme, donc pas de classement final. Sur un plateau borne, le
+   * sac s'epuise avant et cette limite ne sert qu'a raccourcir.
+   */
+  coupsMax: number | null;
+  /**
    * Decompte de deux secondes avant que le coup commence : 2, 1, partez.
    * Personne ne perd de temps -- le chrono ne part qu'apres.
    */
@@ -96,6 +104,7 @@ export function configParDefaut(): ConfigPartie {
     pioche: "probabilites",
     joker: false,
     mode: "topping",
+    coupsMax: null,
     decompte: false,
     chrono: null,
     bornes: null,
@@ -116,6 +125,7 @@ export interface ConfigSerialisee {
   pioche: "probabilites" | "sac102" | "sac102boucle";
   joker: boolean;
   mode: "topping" | "duplicate";
+  coupsMax: number | null;
   decompte: boolean;
   chrono: number | null;
   bornes: number | null;
@@ -126,7 +136,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode,
+    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode, coupsMax: cfg.coupsMax,
     decompte: cfg.decompte, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
@@ -143,6 +153,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
     joker: plat.joker === true,
     mode: plat.mode === "duplicate" ? "duplicate" : "topping",
+    coupsMax: plat.coupsMax ?? null,
     decompte: plat.decompte === true,
     chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,

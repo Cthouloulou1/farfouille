@@ -1296,7 +1296,18 @@ n'entre au classement qu'au coup suivant.
 Savoir que le top est atteint apprendrait aux autres que leur solution ne l'est
 pas. À l'échéance, **la liste de ceux qui ont trouvé le top s'affiche dans le
 chat**, et on enchaîne aussitôt — pas de temps mort entre l'affichage et le coup
-suivant.
+suivant. Le message ne porte **pas les points** : ils figurent déjà au tableau,
+au journal des coups et sur la grille.
+
+```
+Coup 12 : trouvé par alice, bob
+Coup 13 : non trouvé
+```
+
+**Le nombre de coups se règle** quand le mode est duplicate — 10, 20, 30, une
+valeur libre, ou sans fin. Une grille infinie ne s'épuise jamais : sans cette
+borne, un duplicate n'y aurait pas de terme, donc pas de classement final. Le
+compteur affiche alors `7 / 20`.
 
 Le classement se fait sur le **total de points**, avec une colonne **négatif
 total**. Un joueur dont le négatif est nul s'affiche **TOP**.
