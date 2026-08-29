@@ -1216,9 +1216,14 @@ réunis**, le sac est **complété** pour que l'invariant tienne :
 > **sac + reliquat = la distribution de départ.**
 
 Complété, pas remis à neuf : un W gardé en main est un W qui ne revient **pas**
-dans le sac. Le remettre en ferait exister deux, ce que le jeu ne connaît pas.
+dans le sac. Le remettre en ferait exister deux, alors que le jeu n'en a qu'un.
 Vérifié sur 600 tirages en conservant les lettres chères — jamais deux W, et le
 total ne dépasse jamais 102.
+
+> La règle ne vaut que pour les **pioches à sac**. Les probabilités pondérées,
+> elles, n'ont pas de stock : deux W dans un même tirage y sont possibles, et
+> c'est normal. Mesuré : 1 tirage sur 400 000 à sept caramels, 1 sur 67 000 à
+> quinze. Rare, pas interdit.
 
 Elle donne une grille infinie avec la distribution du jeu classique, au lieu des
 probabilités pondérées. Une partie ainsi tirée **ne se termine jamais** : il n'y

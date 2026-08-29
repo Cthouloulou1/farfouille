@@ -88,8 +88,12 @@ export class SacFini implements Pioche {
    * Remet le sac a sa composition d'origine, EN TENANT COMPTE DU RELIQUAT.
    *
    * L'invariant est : `sac + reliquat = la distribution de depart`. Un W garde
-   * en main est un W qui ne doit PAS revenir dans le sac -- sinon la partie en
-   * compterait deux, ce qui n'existe pas dans le jeu.
+   * en main est un W qui ne doit PAS revenir dans le sac -- le jeu n'en a
+   * qu'un, et le rechargement ne doit pas en inventer un second.
+   *
+   * La regle ne vaut que pour les pioches A SAC. Les probabilites ponderees
+   * n'ont pas de stock : deux W y sont possibles dans un meme tirage, et c'est
+   * normal -- environ un tirage sur 400 000 a sept caramels.
    *
    * `deja` liste les caramels qui sont ailleurs que dans le sac et qui doivent
    * donc en etre deduits.
