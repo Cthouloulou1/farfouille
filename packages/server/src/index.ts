@@ -62,8 +62,11 @@ if (process.argv.includes("--nouvelle")) {
 /** Variante de la grille mondiale, demandee en ligne de commande (SPEC.md §16). */
 const CFG_MONDIALE = (() => {
   const enregistree = Game.configEnregistree(GAME_ID);
+  // `--pioche` compte comme les autres : sans cela, la demander sur une partie
+  // deja commencee ne faisait RIEN, en silence -- exactement le genre de
+  // reglage qu'on croit passe et qui ne l'est pas.
   const demande = process.argv.some((a) =>
-    a === "--tirage" || a === "--jouables" || a === "--sac102");
+    a === "--tirage" || a === "--jouables" || a === "--sac102" || a === "--pioche");
   if (enregistree !== null && demande) {
     console.error(
       `\n  La partie "${GAME_ID}" a deja une variante : ` +
