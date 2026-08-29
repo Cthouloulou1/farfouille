@@ -203,6 +203,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 .roadmap { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
 .roadmap[hidden] { display: none; }
+.roadmap > div.large { width: min(1120px, 96vw); max-height: 92vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
 .roadmap header h3 { margin: 0; flex: 1; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 19px; }
@@ -252,9 +253,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sol .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .04em; }
 .sol .p { color: var(--ink-faint); }
 .sol .s { text-align: right; color: var(--accent); }
-.rg-corps { padding: 16px 18px 18px; overflow: auto; }
-.rg-corps label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 14px 0 5px; }
-.rg-corps label:first-child { margin-top: 0; }
+.rg-corps { padding: 16px 20px 20px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 26px; align-content: start; }
+.reglage { min-width: 0; }
+.reglage.large-col { grid-column: 1 / -1; }
+.rg-corps label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 12px 0 5px; }
+.reglage > label:first-child { margin-top: 4px; }
 .rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 12.5px; }
 .rg-corps label.case em { color: var(--ink-faint); font-style: normal; font-size: 11px; }
 .alerte { margin-top: 12px; padding: 9px 11px; background: var(--warn-bg); color: var(--warn); border-radius: 4px; font-size: 12px; line-height: 1.5; }
@@ -264,8 +267,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .primes[hidden] { display: none; }
 .primes .apres { margin: 0 0 10px; }
 .primes-grille { display: flex; flex-wrap: wrap; gap: 6px; }
-.prime { display: flex; align-items: center; gap: 4px; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
-.prime input { width: 46px; padding: 4px 5px; font: inherit; font-size: 11.5px; text-align: right; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
+.primes .apres { color: var(--ink-soft); }
+.prime { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 52px; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
+.prime input { width: 100%; padding: 4px 3px; font: inherit; font-size: 11.5px; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
+.prime input::-webkit-outer-spin-button, .prime input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .prime input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .prime b { color: var(--ink-soft); font-weight: 500; }
 .petit { margin-top: 10px; padding: 5px 9px; font-size: 11.5px; }
@@ -282,7 +287,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .creer label.case input { width: auto; margin: 0; }
 .nombres { display: flex; flex-wrap: nowrap; gap: 4px; }
 .choix.hautes { flex-wrap: wrap; }
-.choix.hautes button, .choix .perso { min-height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.choix.hautes button, .choix .perso { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 .choix .perso { flex: 1; min-width: 96px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); font-size: 12.5px; color: var(--ink-soft); }
 .choix .perso[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .choix .perso input { width: 62px; padding: 2px 5px; font: inherit; font-size: 12px; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
@@ -435,33 +440,53 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 </div>
 
 <div class="roadmap" id="reglages" hidden>
-  <div>
+  <div class="large">
     <header>
       <h3>Réglages</h3>
       <button id="rg-close">Fermer</button>
     </header>
     <div class="rg-corps">
-      <label>Grille</label>
-      <div class="choix" id="r-grille">
-        <button type="button" data-v="15">Normale</button>
-        <button type="button" data-v="infinie">Infinie</button>
+      <div class="reglage">
+        <label>Grille</label>
+        <div class="choix" id="r-grille">
+          <button type="button" data-v="15">Normale</button>
+          <button type="button" data-v="infinie">Infinie</button>
+        </div>
       </div>
 
-      <label>Nombre de lettres</label>
-      <div class="nombres" id="r-tirage"></div>
-
-      <label>Nombre de lettres jouables</label>
-      <div class="nombres" id="r-jouables"></div>
-
-      <label>Mode de jeu</label>
-      <div class="choix" id="r-mode">
-        <button type="button" data-v="topping">Topping</button>
-        <button type="button" data-v="duplicate">Duplicate</button>
+      <div class="reglage">
+        <label>Mode de jeu</label>
+        <div class="choix" id="r-mode">
+          <button type="button" data-v="topping">Topping</button>
+          <button type="button" data-v="duplicate">Duplicate</button>
+        </div>
       </div>
 
-      <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
+      <div class="reglage large-col">
+        <label>Nombre de lettres</label>
+        <div class="nombres" id="r-tirage"></div>
+      </div>
 
-      <div id="r-coups-bloc" hidden>
+      <div class="reglage large-col">
+        <label>Nombre de lettres jouables</label>
+        <div class="nombres" id="r-jouables"></div>
+      </div>
+
+      <div class="reglage large-col">
+        <label>Temps par coup</label>
+        <div class="choix hautes" id="r-chrono">
+          <button type="button" data-v="15">Frades<br><em>15 s</em></button>
+          <button type="button" data-v="30">Super blitz<br><em>30 s</em></button>
+          <button type="button" data-v="60">Blitz<br><em>60 s</em></button>
+          <button type="button" data-v="120">Semi-rapide<br><em>2 min</em></button>
+          <button type="button" data-v="libre">Infini</button>
+          <div class="perso" id="r-perso-case">Personnalisé
+            <input type="text" inputmode="numeric" id="r-perso" maxlength="4">
+          </div>
+        </div>
+      </div>
+
+      <div class="reglage large-col" id="r-coups-bloc" hidden>
         <label>Nombre de coups joués</label>
         <div class="choix hautes" id="r-coups">
           <button type="button" data-v="50">50</button>
@@ -474,37 +499,37 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <label>Temps par coup</label>
-      <div class="choix hautes" id="r-chrono">
-        <button type="button" data-v="30">Super blitz<br><em>30 s</em></button>
-        <button type="button" data-v="60">Blitz<br><em>60 s</em></button>
-        <button type="button" data-v="120">Semi-rapide<br><em>2 min</em></button>
-        <button type="button" data-v="libre">Infini</button>
-        <div class="perso" id="r-perso-case">Personnalisé
-          <input type="text" inputmode="numeric" id="r-perso" maxlength="4">
+      <div class="reglage large-col">
+        <label>Tirage des lettres</label>
+        <div class="choix" id="r-pioche">
+          <button type="button" data-v="probabilites">Probabilités pondérées</button>
+          <button type="button" data-v="sac102">Sac de 102 lettres</button>
+          <button type="button" data-v="sac102boucle">Sac de 102 sans fin</button>
         </div>
       </div>
 
-      <label>Tirage des lettres</label>
-      <div class="choix" id="r-pioche">
-        <button type="button" data-v="probabilites">Probabilités pondérées</button>
-        <button type="button" data-v="sac102">Sac de 102 lettres</button>
-        <button type="button" data-v="sac102boucle">Sac de 102 sans fin</button>
+      <div class="reglage">
+        <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
       </div>
 
-      <label class="case"><input type="checkbox" id="r-joker"> Joker <em id="r-joker-note"></em></label>
-
-      <button class="creer-open" id="r-primes-open" type="button">Primes de farfouille…</button>
-      <div class="primes" id="r-primes" hidden>
-        <p class="apres">Points accordés selon le nombre de caramels posés en un coup. Zéro = pas de prime.</p>
-        <div class="primes-grille" id="r-primes-grille"></div>
-        <button class="petit" id="r-primes-defaut" type="button">Revenir aux primes habituelles</button>
+      <div class="reglage">
+        <label class="case"><input type="checkbox" id="r-joker"> Joker <em id="r-joker-note"></em></label>
       </div>
 
-      <div class="alerte" id="r-alerte" hidden></div>
-      <p class="apres">Appliquer relance une partie neuve dans ce salon. L'ancienne est archivée, jamais effacée.</p>
-      <div class="join-error" id="r-error" hidden></div>
-      <button class="appliquer" id="r-appliquer">Appliquer et lancer la partie</button>
+      <div class="reglage large-col">
+        <button class="creer-open" id="r-primes-open" type="button">Primes de farfouilles…</button>
+        <div class="primes" id="r-primes" hidden>
+          <p class="apres">Prime selon le nombre de lettres posées</p>
+          <div class="primes-grille" id="r-primes-grille"></div>
+          <button class="petit" id="r-primes-defaut" type="button">Primes standards</button>
+        </div>
+      </div>
+
+      <div class="reglage large-col">
+        <div class="alerte" id="r-alerte" hidden></div>
+        <div class="join-error" id="r-error" hidden></div>
+        <button class="appliquer" id="r-appliquer">Go</button>
+      </div>
     </div>
   </div>
 </div>

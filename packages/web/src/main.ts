@@ -865,7 +865,10 @@ function paintChat(msgs: Chat[]) {
     if (m.cell) {
       const b = document.createElement("button");
       b.className = "cellref";
-      b.textContent = `${m.cell.x},${m.cell.y}`;
+      // Sur un plateau borne, la case se nomme comme au jeu de societe.
+      b.textContent = cfg.bornes === null
+        ? `${m.cell.x},${m.cell.y}`
+        : noteCoup("H", m.cell.x, m.cell.y, cfg.bornes);
       b.addEventListener("click", () => {
         marks = [m.cell!];
         flyTo("A", "H", m.cell!.x, m.cell!.y);
@@ -941,8 +944,10 @@ cv.addEventListener("pointerdown", (e) => {
     holdTimer = window.setTimeout(() => {
       if (press === null || press.moved) return;
       press = null;
+      // On ne partage pas une case qui n'existe pas.
+      if (!board.dansLesBornes(gx, gy)) return;
       envoyer({ t: "say", text: "", cell: { x: gx, y: gy } });
-      flash(`case ${gx},${gy} partagée`, "ok");
+      flash(`case ${noteCoup("H", gx, gy, cfg.bornes)} partagée`, "ok");
     }, 550);
   }
 });
@@ -973,6 +978,8 @@ cv.addEventListener("pointerup", (e) => {
 
   // La case retenue est celle de l'APPUI, pas celle du relachement.
   const x = p.cx, y = p.cy;
+  // Hors du plateau, il n'y a rien : on ne pose pas de curseur sur du vide.
+  if (!board.dansLesBornes(x, y)) return;
   marks = [];
   if (cursor !== null && cursor.x === x && cursor.y === y) {
     // Recliquer la meme case fait pivoter le sens -- mais pas au milieu d'un mot.
@@ -1504,11 +1511,9 @@ function avertirSiExplosif(): void {
   const boite = $("r-alerte");
   if (cBornes !== null || cTirage < 10) { boite.hidden = true; return; }
   boite.innerHTML =
-    `<b>Attention : tirage de ${cTirage} caramels sur une grille sans bord.</b><br>` +
-    `Le temps de calcul du top grandit avec la grille et avec le tirage. ` +
-    `Mesuré à 40 coups en 15 sur 15 : 7 s sans joker, 57 s avec un joker, ` +
-    `près de 3 min avec deux. Sur un plateau 15×15 la même variante tient en ` +
-    `moins d'une seconde par coup, parce que la grille cesse de grandir.`;
+    `<b>Attention : tirage de ${cTirage} lettres sur une grille infinie.</b><br>` +
+    `Le temps de calcul du top grandit avec la grille et le tirage. ` +
+    `Ça risque de lagger au bout d'un moment.`;
   boite.hidden = false;
 }
 
@@ -1594,9 +1599,9 @@ function peuplerPrimes(): void {
     const l = document.createElement("label");
     l.className = "prime";
     const champ = document.createElement("input");
-    champ.type = "number";
-    champ.min = "0";
-    champ.max = "9999";
+    champ.type = "text";
+    champ.inputMode = "numeric";
+    champ.maxLength = 4;
     champ.value = String(cPrimes[n] ?? 0);
     champ.addEventListener("input", () => {
       const v = Math.max(0, Math.min(9999, Math.round(Number(champ.value) || 0)));
@@ -1612,7 +1617,7 @@ function peuplerPrimes(): void {
 $("r-primes-open").addEventListener("click", () => {
   const ouvert = $("r-primes").hidden;
   $("r-primes").hidden = !ouvert;
-  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouille…";
+  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouilles…";
   if (ouvert) peuplerPrimes();
 });
 
@@ -1695,7 +1700,7 @@ function ouvrirReglages(): void {
   avertirSiExplosif();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
-  $("r-primes-open").textContent = "Primes de farfouille…";
+  $("r-primes-open").textContent = "Primes de farfouilles…";
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;
