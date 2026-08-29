@@ -124,7 +124,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .like[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .like:disabled { opacity: .35; cursor: default; }
 .like .n { font-variant-numeric: tabular-nums; }
-.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 11.5px; margin-left: 6px; }
+.prow .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
 .banner { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; background: var(--accent-bg); color: var(--accent); border-radius: 4px; font-size: 12.5px; box-shadow: 0 4px 18px var(--shadow); }
 .banner[hidden] { display: none; }
 .banner button { padding: 3px 9px; font-size: 11.5px; background: var(--panel); }
@@ -150,7 +151,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bad[hidden] { display: none; }
 
 .rank { display: flex; flex-direction: column; gap: 1px; }
-.prow { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
 .prow:hover { background: var(--hover); border-color: transparent; color: var(--ink); }
 .prow.me { color: var(--accent); font-weight: 500; }
 .prow .tri { color: var(--ink-faint); font-size: 10px; }

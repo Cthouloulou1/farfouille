@@ -514,8 +514,11 @@ function paintSide() {
     const row = document.createElement("button");
     row.className = "prow" + (name === me ? " me" : "");
     const got = likes[name] ?? 0;
-    row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span><span>${name}</span>` +
-                    (got > 0 ? `<span class="likes">♥ ${got}</span>` : "") +
+    // La case des « j'aime » est TOUJOURS presente, vide quand il n'y en a pas :
+    // une colonne qui apparait et disparait decale tout le reste de la ligne.
+    row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
+                    `<span class="nom">${name}</span>` +
+                    `<span class="likes">${got > 0 ? `♥ ${got}` : ""}</span>` +
                     `<span class="num">${n}</span>`;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
