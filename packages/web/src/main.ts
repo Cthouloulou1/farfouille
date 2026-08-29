@@ -56,6 +56,15 @@ let nonTrouves = 0;
 let decompteJusqua = 0;
 /** La partie du salon a-t-elle commence ? Un salon neuf attend ses reglages. */
 let demarree = true;
+/**
+ * La configuration du salon est-elle arrivee ?
+ *
+ * Tant qu'elle manque, on ne dessine RIEN. Sans ce verrou, la grille etait
+ * peinte une premiere fois avec le cadrage du salon precedent -- une grille
+ * geante ou decalee -- avant de sauter en place a l'arrivee de `hello`. C'est
+ * ce saut qu'on voyait clignoter.
+ */
+let configRecue = false;
 /** Nombre de coups prevus, null si la partie est sans fin. */
 let coupsMax: number | null = null;
 
@@ -178,6 +187,12 @@ function blankPositions(): Set<string> {
 }
 
 function draw() {
+  if (!configRecue) {
+    // Rien a montrer encore : un fond uni vaut mieux qu'une grille fausse.
+    ctx.fillStyle = css("--ground");
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
   const C = {
     field: css("--field"), line: css("--field-line"), face: css("--tile-face"),
     edge: css("--tile-edge"), ink: css("--tile-ink"), accent: css("--accent"),
@@ -543,11 +558,15 @@ function paintSide() {
     : coupsMax === null ? String(moveNumber + 1)
     : `${moveNumber + 1} / ${coupsMax}`;
   $("fin").hidden = !finie;
-  $("attente").hidden = demarree;
+
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
   $("rejeu-wrap").hidden = !finie || history.length === 0;
   $("rb-cumul").textContent = cumul.toLocaleString("fr");
+  // Au duplicate, chacun a son propre total : on le montre a cote du cumul de
+  // la grille, pour qu'il se compare d'un coup d'oeil.
+  $("rb-score-wrap").hidden = !duplicate;
+  if (duplicate) $("rb-score").textContent = String(points[me] ?? 0);
   paintCurrent();
 
   const lw = $("last-word"), lm = $("last-meta"), ll = $("last-like");
@@ -1213,6 +1232,7 @@ function connect() {
       applyState(m.state);
       // Le cadrage depend de la variante, qu'on ne connait qu'ici : un plateau
       // borne se centre, une grille infinie se pose sur son dernier coup.
+      configRecue = true;
       if (cfg.bornes !== null) {
         cadrer();
         draw();
@@ -1421,7 +1441,11 @@ let cCoupsMax: number | null = null;
  * rien ne s'epuise, il faut bien dire quand.
  */
 function peuplerCoups(): void {
-  $("r-coups-bloc").hidden = cMode !== "duplicate";
+  // Il ne se pose que sur une partie qui n'a PAS de fin naturelle : un plateau
+  // borne s'arrete quand le sac se vide, et le sac de 102 aussi. Proposer un
+  // nombre de coups la-dessus poserait deux fins concurrentes.
+  $("r-coups-bloc").hidden =
+    cMode !== "duplicate" || cBornes !== null || cPioche === "sac102";
   const perso = $("r-coups-perso") as HTMLInputElement;
   let reconnu = false;
   for (const b of $("r-coups").querySelectorAll("button")) {
@@ -1431,6 +1455,7 @@ function peuplerCoups(): void {
     if (choisi) reconnu = true;
   }
   perso.value = !reconnu && cCoupsMax !== null ? String(cCoupsMax) : "";
+  $("r-coups-perso-case").setAttribute("aria-pressed", String(!reconnu && cCoupsMax !== null));
 }
 
 for (const b of $("r-coups").querySelectorAll("button")) {
@@ -1498,6 +1523,7 @@ for (const b of $("r-grille").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cBornes = (b as HTMLElement).dataset["v"] === "infinie" ? null : 7;
     peuplerGrille();
+    peuplerCoups();
     // Chaque grille a son tirage naturel : les probabilites ponderees ne
     // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
     // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
@@ -1520,6 +1546,7 @@ function peuplerChrono(): void {
   }
   // Une duree qui ne tombe sur aucun bouton s'affiche dans la case libre.
   perso.value = !reconnu && cChrono !== null ? String(cChrono) : "";
+  $("r-perso-case").setAttribute("aria-pressed", String(!reconnu && cChrono !== null));
 }
 
 for (const b of $("r-chrono").querySelectorAll("button")) {
@@ -1585,7 +1612,7 @@ function peuplerPrimes(): void {
 $("r-primes-open").addEventListener("click", () => {
   const ouvert = $("r-primes").hidden;
   $("r-primes").hidden = !ouvert;
-  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de scrabble…";
+  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouille…";
   if (ouvert) peuplerPrimes();
 });
 
@@ -1624,6 +1651,7 @@ for (const b of $("r-pioche").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cPioche = (b as HTMLElement).dataset["v"] ?? "probabilites";
     peuplerPioche();
+    peuplerCoups();
   });
 }
 
@@ -1667,7 +1695,7 @@ function ouvrirReglages(): void {
   avertirSiExplosif();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
-  $("r-primes-open").textContent = "Primes de scrabble…";
+  $("r-primes-open").textContent = "Primes de farfouille…";
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;
@@ -1802,6 +1830,7 @@ async function rejoindre(id: string): Promise<void> {
   negatif = {};
   nonTrouves = 0;
   cfg = configParDefaut();
+  configRecue = false;
   board = new Board(dict, cfg);
   paintChat(chat);
   paintJournal();
