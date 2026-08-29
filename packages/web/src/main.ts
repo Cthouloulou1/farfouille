@@ -1118,6 +1118,34 @@ $("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 // ---------------------------------------------------------------- feuille de route
 
 /**
+ * Le resume de la partie, en une ligne au-dessus du tableau.
+ *
+ * C'est ce qu'on regarde en premier, et il fallait jusqu'ici le reconstituer
+ * soi-meme en parcourant les lignes. Pas de classement ici : la feuille de
+ * route sert a jeter un coup d'oeil a la partie, le classement a sa place.
+ */
+function enTeteDeLaRoute(): string {
+  const n = history.length;
+  if (n === 0) return "";
+  let points = 0, trouves = 0, temps = 0;
+  for (const m of history) {
+    points += m.score;
+    temps += Math.max(0, m.ms);
+    if (quiLaTrouve(m) !== "non trouvé") trouves++;
+  }
+  const perdus = n - trouves;
+  const bouts = [
+    `<b>${n}</b> coup${n > 1 ? "s" : ""}`,
+    `<b>${points.toLocaleString("fr")}</b> points`,
+    `<b>${trouves}</b> trouvé${trouves > 1 ? "s" : ""}, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`,
+  ];
+  // Le cumul du temps ne vaut qu'en topping : ailleurs, c'est le chrono
+  // multiplie par le nombre de coups, ce que personne n'a besoin de lire.
+  if (!duplicate) bouts.push(`<b>${fmtTime(temps)}</b> en tout`);
+  return bouts.join(" · ");
+}
+
+/**
  * La feuille de route : la partie entiere, un coup par ligne.
  *
  * L'ordre suit la grille. Un plateau borne se lit du premier coup au dernier,
@@ -1128,9 +1156,10 @@ $("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 function paintRoadmap() {
   const body = $("rm-body");
   body.replaceChildren();
-  // En duplicate, le temps ne dit rien : le coup dure toujours le chrono
-  // entier. La colonne disparait plutot que d'afficher la meme valeur partout.
-  body.classList.toggle("sans-temps", duplicate);
+  // Le duplicate n'a pas les memes colonnes : pas de temps -- le coup dure
+  // toujours le chrono entier -- mais l'ecart au top et le nombre de trouveurs.
+  body.classList.toggle("duplicate", duplicate);
+  $("rm-tete").innerHTML = enTeteDeLaRoute();
   if (history.length === 0) {
     const e = document.createElement("div");
     e.className = "none"; e.style.padding = "14px 18px"; e.textContent = "aucun coup joué";
@@ -1138,20 +1167,42 @@ function paintRoadmap() {
     return;
   }
   const ordre = cfg.bornes !== null ? history : [...history].reverse();
+  // Le cumul se compte dans l'ordre de la partie, quel que soit celui de
+  // l'affichage : c'est le temps ecoule depuis le premier coup.
+  const cumulAu = new Map<number, number>();
+  let somme = 0;
+  for (const m of history) { somme += Math.max(0, m.ms); cumulAu.set(m.n, somme); }
+
   for (const m of ordre) {
     const r = document.createElement("div");
     r.className = "rmrow";
     r.tabIndex = 0;
     // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
     // de l'echeance et n'apprendrait rien.
-    const trouve = m.player !== null || m.demiPoint !== undefined;
+    const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
+                             : m.player !== null || m.demiPoint !== undefined;
+    let queue: string;
+    if (duplicate) {
+      const mien = m.scores?.[me];
+      const ecart = mien === undefined ? null : mien - m.score;
+      const trouveurs = m.trouveurs
+        ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n);
+      const presents = Object.keys(m.scores ?? {}).length;
+      queue =
+        `<span class="d${ecart === 0 ? " top" : ""}">` +
+        `${ecart === null ? "—" : ecart === 0 ? "top" : ecart}</span>` +
+        `<span class="sur">${presents === 0 ? "" : `${trouveurs.length}/${presents}`}</span>`;
+    } else {
+      queue =
+        `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>` +
+        `<span class="cum">${fmtTime(cumulAu.get(m.n) ?? 0)}</span>`;
+    }
     r.innerHTML =
       `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
       `<span class="r"></span>` +
       `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
       `<span class="s">${m.score}</span>` +
-      `<span class="who">${quiLaTrouve(m)}</span>` +
-      (duplicate ? "" : `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>`);
+      `<span class="who">${quiLaTrouve(m)}</span>` + queue;
     r.addEventListener("click", () => focusMove(m));
     // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
     // refuse les paliers, et le rejeu n'aurait rien a montrer.
@@ -1177,29 +1228,61 @@ $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
 
 // ---------------------------------------------------------------- chat
 
-/** Les coups joues, du plus recent au plus ancien. */
+/** Hauteur d'une ligne du journal, fixee en dur dans la feuille de style. */
+const H_JROW = 18;
+
+/**
+ * Les coups joues, du plus recent au plus ancien.
+ *
+ * Seules les lignes VISIBLES sont posees -- la boite fait 112 pixels de haut,
+ * soit six lignes. Les poser toutes coutait 197 ms de mise en page sur une
+ * partie de 1 756 coups, a chaque coup : sur une partie chronometree a la
+ * seconde, un cinquieme du temps disponible passait a redessiner des lignes que
+ * personne ne regardait, et la grille en devenait poussive au deplacement.
+ */
 function paintJournal(): void {
-  const box = $("journal");
   // Muet pendant le rejeu : `voirLeCoup` l'a cache expres.
   $("journal-bloc").hidden = history.length === 0 || rejeu !== null;
   $("journal-n").textContent = String(history.length);
-  box.replaceChildren();
-  for (const m of [...history].reverse()) {
-    const r = document.createElement("button");
-    r.className = "jrow";
-    r.type = "button";
-    r.innerHTML =
-      `<span class="n">${m.n}</span><span class="w">${m.word}</span>` +
-      `<span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-      `<span class="s">${m.score}</span>` +
-      `<span class="t">${fmtTime(m.ms)}</span>`;
-    r.title = `${m.word} · ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} · ${m.score} pts · ` +
-      `${quiLaTrouve(m)}` + (duplicate ? "" : ` · en ${fmtTime(m.ms)}`);
-    r.addEventListener("click", () => focusMove(m));
-    box.appendChild(r);
-  }
-  box.scrollTop = 0;
+  $("journal-piste").style.height = `${history.length * H_JROW}px`;
+  $("journal").scrollTop = 0;
+  peindreLeJournalVisible();
 }
+
+/** Pose les lignes du journal qui tombent dans la partie visible. */
+function peindreLeJournalVisible(): void {
+  const box = $("journal");
+  const n = history.length;
+  if (n === 0) { $("journal-piste").replaceChildren(); return; }
+  const haut = Math.max(0, Math.floor(box.scrollTop / H_JROW) - 4);
+  const bas = Math.min(n, Math.ceil((box.scrollTop + box.clientHeight) / H_JROW) + 4);
+
+  let html = "";
+  for (let i = haut; i < bas; i++) {
+    // Le plus recent en haut : la ligne i montre le coup n - i.
+    const m = history[n - 1 - i];
+    if (m === undefined) continue;
+    const place = noteCoup(m.dir, m.x, m.y, cfg.bornes);
+    const titre = `${m.word} · ${place} · ${m.score} pts · ${quiLaTrouve(m)}`
+      + (duplicate ? "" : ` · en ${fmtTime(m.ms)}`);
+    html +=
+      `<button type="button" class="jrow" data-n="${m.n}" style="top:${i * H_JROW}px"` +
+      ` title="${echapper(titre)}">` +
+      `<span class="n">${m.n}</span><span class="w">${echapper(m.word)}</span>` +
+      `<span class="p">${place}</span>` +
+      `<span class="s">${m.score}</span>` +
+      `<span class="t">${fmtTime(m.ms)}</span></button>`;
+  }
+  $("journal-piste").innerHTML = html;
+}
+
+$("journal").addEventListener("scroll", peindreLeJournalVisible);
+$("journal").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest(".jrow") as HTMLElement | null;
+  if (b === null) return;
+  const m = history.find((q) => q.n === Number(b.dataset["n"]));
+  if (m !== undefined) focusMove(m);
+});
 
 function paintChat(msgs: Chat[]) {
   const log = $("chat-log");
@@ -1383,7 +1466,15 @@ addEventListener("keydown", (e) => {
   if (e.key === "Backspace") { typed = typed.slice(0, -1); paintRack(); paintCurrent(); draw(); e.preventDefault(); return; }
   if (e.key === "Enter") { submit(); e.preventDefault(); return; }
   if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
-    if (cursor === null || finie || decompteJusqua > Date.now() + clockSkew) return;
+    if (finie || decompteJusqua > Date.now() + clockSkew) return;
+    // Au tout premier coup, il n'y a qu'un endroit ou poser : on n'oblige pas a
+    // cliquer pour le designer. Le curseur se pose quatre cases a gauche du
+    // centre, a l'horizontale -- H4 sur un plateau 15x15, H 0,-4 sur une grille
+    // infinie, c'est la meme case. Le placement exact est de toute facon
+    // recalcule : un premier coup se glisse a la meilleure position qui couvre
+    // le centre.
+    if (cursor === null && tiles.length === 0) cursor = { dir: "H", x: -4, y: 0 };
+    if (cursor === null) return;
     if (typed.length >= 15) return;
     const ch = e.key.toUpperCase();
     const left = remaining();
@@ -1870,11 +1961,16 @@ for (const b of $("r-borne-onglets").querySelectorAll("button")) {
  * se borne comme une autre. On ne montre que la ligne de l'onglet choisi :
  * voir les deux ne dirait pas laquelle compte.
  */
+/** La variante a-t-elle deja une fin naturelle ? */
+function sansTerme(): boolean {
+  return cBornes !== null || cPioche === "sac102";
+}
+
 function peuplerCoups(): void {
   // Ces bornes ne se posent que sur une partie qui n'a PAS de fin naturelle :
   // un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi.
   // En poser une la-dessus donnerait deux fins concurrentes.
-  $("r-borne-bloc").hidden = cBornes !== null || cPioche === "sac102";
+  $("r-borne-bloc").hidden = sansTerme();
   for (const b of $("r-borne-onglets").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cBorne));
   }
@@ -2000,7 +2096,11 @@ const CHRONO_MIN = 1;
 
 ($("r-perso") as HTMLInputElement).addEventListener("input", () => {
   const champ = $("r-perso") as HTMLInputElement;
-  const brut = champ.value.trim();
+  // Rien que des chiffres : une lettre tapee la n'a aucun sens, et la laisser
+  // s'afficher fait croire qu'elle compte.
+  const propre = champ.value.replace(/[^0-9]/g, "");
+  if (propre !== champ.value) champ.value = propre;
+  const brut = propre.trim();
   // Un champ vide, ou une valeur qu'on est en train de taper, ne doit RIEN
   // changer. Retomber sur « sans chrono » en silence -- ce que faisait un
   // plancher a cinq secondes -- fait passer un reglage refuse pour un reglage
@@ -2148,8 +2248,10 @@ $("r-appliquer").addEventListener("click", () => {
     chrono: cChrono,
     bornes: cBornes,
     mode: cMode,
-    coupsMax: cBorne === "coups" ? cCoupsMax : null,
-    dureeMax: cBorne === "duree" ? cDureeMax : null,
+    // Un plateau borne et un sac de 102 ont leur propre fin : on ne leur en
+    // ajoute pas une seconde. C'est la meme condition qui masque les onglets.
+    coupsMax: sansTerme() || cBorne !== "coups" ? null : cCoupsMax,
+    dureeMax: sansTerme() || cBorne !== "duree" ? null : cDureeMax,
     decompte: ($("r-decompte") as HTMLInputElement).checked,
   });
   $("reglages").hidden = true;

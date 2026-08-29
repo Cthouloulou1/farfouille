@@ -584,6 +584,15 @@ conséquence directe de la règle des isotops.
 Les temps sont exprimés en **années, jours, heures, minutes, secondes,
 centièmes**, comptés depuis le début de la partie.
 
+### Un résumé en tête
+
+Une ligne au-dessus du tableau : nombre de coups, points posés, tops trouvés et
+non trouvés, et — en topping seulement — le temps total. C'est ce qu'on regarde
+en premier, et il fallait le reconstituer soi-même en parcourant les lignes.
+
+Pas de classement ici. La feuille de route sert à **jeter un coup d'œil à la
+partie** ; le classement a sa place ailleurs.
+
 ### L'ordre suit la grille
 
 Un **plateau borné** se lit du **premier coup au dernier**, comme une feuille de
@@ -604,8 +613,19 @@ En topping, le temps est une performance : c'est ce qu'a mis le joueur pour
 trouver. Un coup que **personne n'a trouvé** porte une **croix**, pas une durée —
 celle de l'échéance ne dirait rien de personne.
 
-En duplicate, la colonne **disparaît** : le coup dure toujours le chrono entier,
-la même valeur sur toutes les lignes.
+Elle est suivie d'un **cumul**, le temps écoulé depuis le premier coup. Il se
+compte dans l'ordre de la partie, quel que soit l'ordre d'affichage.
+
+En duplicate, ces deux colonnes **disparaissent** : le coup dure toujours le
+chrono entier, la même valeur sur toutes les lignes. Deux autres les remplacent :
+
+| colonne | contenu |
+|---|---|
+| **négatif** | l'écart au top du lecteur sur ce coup, `top` s'il l'a trouvé, `—` s'il n'était pas là |
+| **n/N** | combien de joueurs ont trouvé, sur combien étaient présents au tirage |
+
+Un coup trouvé par 1 joueur sur 6 n'a pas le même sens qu'un coup trouvé par 6
+sur 6 : c'est ce que dit cette colonne, et rien d'autre ne le disait.
 
 ### Qui a trouvé
 
@@ -1233,12 +1253,21 @@ contenir quatre lettres, et la pioche boucle sans fin.
 La convention retenue : **2 voyelles et 2 consonnes à partir de 7 caramels, une
 seule de chaque en dessous.** Rien ne change pour le tirage classique.
 
-**Sur un sac fini, la règle se relâche à partir du coup 16** : les quinze
+**Sur un sac qui s'épuise, la règle se relâche à partir du coup 16** : les quinze
 premiers tirages exigent 2 et 2, ensuite une seule voyelle et une seule consonne
 suffisent, mais il en faut toujours au moins une de chaque.
-Sans ce relâchement la fin de partie serait injouable — il ne reste plus assez
-de chaque sorte pour composer un tirage acceptable. Le topping infini n'en a pas
-besoin, rien ne s'y épuise.
+
+Le relâchement existe pour **une seule raison** : en fin de sac fini, il ne reste
+plus assez de chaque sorte pour composer un tirage acceptable, et la partie
+serait injouable avant sa fin conventionnelle.
+
+**Il ne vaut donc que là.** Un sac **qui se recharge** se remet à neuf dès qu'il
+devient pauvre d'un côté, et des **probabilités pondérées** ne s'épuisent jamais.
+Sur ces deux pioches, la règle stricte vaut **du premier coup au dernier**.
+
+C'est le défaut qui laissait passer, au coup 37 d'une grille infinie tirée d'un
+sac bouclant, un tirage à **une seule voyelle** : le relâchement s'y appliquait
+alors que rien ne s'y épuisait.
 
 ### Les lettres restantes s'affichent
 
@@ -1416,6 +1445,10 @@ Option, décochée par défaut : **3, 2, 1** en grand sur la grille, **une seule
 fois, avant le premier coup**. C'est un signal de départ, pas une pause avant
 chaque coup. Le chrono ne part qu'après — personne ne perd de temps sur le
 décompte, et la saisie est gelée pendant.
+
+**Le tirage n'est pas envoyé pendant le décompte.** « 3, 2, 1 » est un départ, et
+partir en ayant déjà lu ses lettres n'en est pas un. Le cacher à l'écran ne
+suffirait pas : il serait lisible dans la console.
 
 Le décompte part donc **du premier tirage servi**, pas de l'armement du chrono.
 La nuance n'est pas que d'écriture : demander à chaque coup « faut-il

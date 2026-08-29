@@ -3,7 +3,7 @@
  *
  *     node packages/engine/test/check_sac.ts
  */
-import { SacFini, SAC_FRANCAIS } from "../src/sac.ts";
+import { SacFini, SAC_FRANCAIS, COUP_RELACHEMENT, politiqueSacFini } from "../src/sac.ts";
 import { Bag, DEFAULT_BAG } from "../src/bag.ts";
 import { mulberry32 } from "../src/rng.ts";
 
@@ -90,6 +90,56 @@ console.log("\nSac rechargeable : sac + reliquat ne depasse jamais la distributi
   verifie("aucun coup en faute", fautes === 0, `${sac.rechargements} rechargements`);
 }
 
+
+console.log("\nLe relachement du coup 16 ne vaut que pour un sac qui s'epuise\n");
+{
+  /** Voyelles et consonnes d'un tirage, le Y et le joker etant neutres. */
+  const compte = (rack: string): { v: number; c: number } => {
+    let v = 0, c = 0;
+    for (const ch of rack) {
+      if ("AEIOU".includes(ch)) v++;
+      else if (ch !== "Y" && ch !== "?") c++;
+    }
+    return { v, c };
+  };
+
+  // Sac qui se recharge : la regle stricte du premier coup au dernier. C'est le
+  // cas de la grille infinie ou un tirage a une seule voyelle est passe au 37e.
+  {
+    const sac = new SacFini(SAC_FRANCAIS, mulberry32(7), 7);
+    sac.recharge = true;
+    let pire = 9, coupFautif = 0, reliquat: string[] = [];
+    for (let n = 1; n <= 300; n++) {
+      const d = sac.draw(reliquat);
+      const { v, c } = compte(d.rack);
+      if (Math.min(v, c) < pire) { pire = Math.min(v, c); coupFautif = n; }
+      reliquat = [...d.rack].slice(0, 2);
+    }
+    verifie("sac bouclant : jamais moins de 2 de chaque sur 300 coups",
+      pire >= 2, pire < 2 ? `${pire} au coup ${coupFautif}` : `minimum vu : ${pire}`);
+  }
+
+  // Sac fini : le relachement reste, sinon la fin de partie serait injouable.
+  {
+    const sac = new SacFini(SAC_FRANCAIS, mulberry32(7), 7);
+    let relache = false, reliquat: string[] = [];
+    for (let n = 1; n <= 40 && !sac.estFinie(reliquat); n++) {
+      const d = sac.draw(reliquat);
+      const { v, c } = compte(d.rack);
+      if (n >= COUP_RELACHEMENT && Math.min(v, c) === 1) relache = true;
+      reliquat = [];
+    }
+    // Le relachement AUTORISE un tirage a un seul, il ne l'impose pas : on
+    // verifie donc que la porte est ouverte, pas qu'on la franchit.
+    verifie("sac fini : la politique se relache au coup 16",
+      politiqueSacFini(() => COUP_RELACHEMENT)([..."BCDFGHA"]) === false,
+      relache ? "un tirage a un seul est sorti" : "aucun tirage limite ce coup-ci");
+    verifie("sac fini : avant le coup 16, elle refuse",
+      politiqueSacFini(() => 1)([..."BCDFGHA"]) === true);
+    verifie("sac bouclant : elle refuse meme apres le coup 16",
+      politiqueSacFini(() => 99, () => false)([..."BCDFGHA"]) === true);
+  }
+}
 
 console.log("\nRetrait d'une lettre -- ce dont la partie joker a besoin\n");
 {

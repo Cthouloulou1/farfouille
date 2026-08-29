@@ -86,10 +86,17 @@ const CFG_MONDIALE = (() => {
     console.error(`\n  --jouables doit etre un entier de 2 a ${tirage} (recu ${arg("jouables", "?")})\n`);
     process.exit(1);
   }
-  return avec(base, {
-    tirage, jouables,
-    pioche: process.argv.includes("--sac102") ? "sac102" : base.pioche,
-  });
+  // La pioche de la grille principale. `--sac102` reste accepte : c'est le nom
+  // qu'avait l'option quand il n'y en avait qu'une.
+  const pioches = ["probabilites", "sac102", "sac102boucle"] as const;
+  const demandee = arg("pioche", process.argv.includes("--sac102") ? "sac102" : base.pioche);
+  if (!pioches.includes(demandee as typeof pioches[number])) {
+    console.error(`
+  --pioche doit valoir ${pioches.join(", ")} (recu ${demandee})
+`);
+    process.exit(1);
+  }
+  return avec(base, { tirage, jouables, pioche: demandee as typeof pioches[number] });
 })();
 
 // ---------------------------------------------------------------- transport
@@ -122,8 +129,11 @@ function publicState(s: Salon) {
     nomSalon: s.nom,
     proprietaire: s.proprietaire,
     moveNumber: g.moveNumber,
-    rack: g.rack,
-    notation: g.rackNotation,
+    // Pendant le decompte, le tirage n'est pas encore servi : « 3, 2, 1 » est
+    // un depart, et partir en ayant deja lu les lettres n'en est pas un. Il ne
+    // suffit pas de le cacher a l'ecran -- il serait lisible dans la console.
+    rack: g.decompteJusqua > Date.now() ? "" : g.rack,
+    notation: g.decompteJusqua > Date.now() ? "" : g.rackNotation,
     cumul: g.cumul,
     sac: g.restantDuSac(),
     finie: g.finie,
@@ -568,13 +578,18 @@ wss.on("connection", (ws) => {
         : Math.max(3, Math.min(60, Math.round(Number(msg.bornes))));
       const pavage = bornes === null ? LAYOUTS[s.layout] : LAYOUTS.classique15;
       const pavageNom = bornes === null ? s.layout : "classique15" as const;
+      // Le sac sans fin ne vaut que sur une grille infinie.
+      const pioch = bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche;
+      // Un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi :
+      // leur poser un terme en donnerait DEUX, et la partie s'arreterait au
+      // premier atteint sans qu'on sache lequel. Ces deux-la n'en ont pas.
+      const sansTerme = bornes !== null || pioch === "sac102";
       const archives = await relancer(s, avec(base, {
         tirage, jouables, joker,
-        // Le sac sans fin ne vaut que sur une grille infinie.
-        pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
+        pioche: pioch,
         bornes, pavage, pavageNom, mode, decompte,
-        coupsMax: Number.isFinite(coupsMax as number) ? coupsMax : null,
-        dureeMax: Number.isFinite(dureeMax as number) ? dureeMax : null,
+        coupsMax: !sansTerme && Number.isFinite(coupsMax as number) ? coupsMax : null,
+        dureeMax: !sansTerme && Number.isFinite(dureeMax as number) ? dureeMax : null,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));

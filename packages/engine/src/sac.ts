@@ -13,17 +13,30 @@ import { type DrawResult, type RejectPolicy } from "./bag.ts";
  * Le tirage se relache passe un certain nombre de coups. Voir SPEC.md §16.
  *
  * Au debut il faut 2 voyelles ET 2 consonnes ; a partir du COUP 16 une seule de
- * chaque suffit, mais il en faut toujours au moins une. Sans ce relachement, la
- * fin de partie d'un sac fini serait injouable : il ne reste plus assez de
- * chaque sorte pour composer un tirage acceptable.
+ * chaque suffit, mais il en faut toujours au moins une.
  *
- * Le topping infini n'en a pas besoin -- rien ne s'y epuise.
+ * LE RELACHEMENT NE VAUT QUE POUR UN SAC QUI S'EPUISE. C'est la seule raison
+ * d'etre de la regle : en fin de sac fini, il ne reste plus assez de chaque
+ * sorte pour composer un tirage acceptable, et sans relachement la partie
+ * serait injouable avant sa fin conventionnelle.
+ *
+ * Un sac QUI SE RECHARGE n'a pas ce probleme -- il se remet a neuf des qu'il
+ * devient pauvre d'un cote -- et des probabilites ponderees encore moins :
+ * elles ne s'epuisent jamais. Sur une grille infinie tiree d'un sac bouclant,
+ * le relachement s'appliquait quand meme et laissait passer, au coup 37, un
+ * tirage a une seule voyelle. La regle stricte y vaut du premier coup au
+ * dernier.
  */
 export const COUP_RELACHEMENT = 16;
 
-export function politiqueSacFini(coup: () => number): RejectPolicy {
+export function politiqueSacFini(
+  coup: () => number,
+  /** Le sac s'epuise-t-il ? Seul un sac fini a droit au relachement. */
+  sEpuise: () => boolean = () => true,
+): RejectPolicy {
   return (rack) => {
-    const exige = coup() >= COUP_RELACHEMENT ? 1 : (rack.length >= 7 ? 2 : 1);
+    const relache = sEpuise() && coup() >= COUP_RELACHEMENT;
+    const exige = relache ? 1 : (rack.length >= 7 ? 2 : 1);
     if (rack.length < 2) return false;
     let v = 0, c = 0;
     for (const ch of rack) {
@@ -79,7 +92,9 @@ export class SacFini implements Pioche {
   ) {
     this.random = random;
     this.tirage = tirage;
-    this.reject = reject ?? politiqueSacFini(() => this.coup);
+    // `recharge` est pose APRES la construction : la politique le lit donc a
+    // chaque tirage plutot qu'une fois pour toutes.
+    this.reject = reject ?? politiqueSacFini(() => this.coup, () => !this.recharge);
     this.distribution = distribution;
     this.remplir();
   }
