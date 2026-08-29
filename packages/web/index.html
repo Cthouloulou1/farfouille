@@ -111,7 +111,9 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
    repousser le chat hors de l'ecran. */
 .journal-liste { display: flex; flex-direction: column; gap: 1px; max-height: 112px; overflow-y: auto; }
 .journal-liste[hidden] { display: none; }
-.jrow { display: grid; grid-template-columns: 26px minmax(0, 1fr) 54px 24px 54px; gap: 5px; align-items: center; width: 100%; text-align: left; padding: 1px 3px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+/* La colonne du mot tient quinze lettres -- 99 px en IBM Plex Mono 11 px --
+   barre de defilement comprise : c'est ce qui fixe la largeur du panneau. */
+.jrow { display: grid; grid-template-columns: 26px minmax(0, 1fr) 72px 26px 54px; gap: 5px; align-items: center; width: 100%; text-align: left; padding: 1px 3px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .jrow:hover { background: var(--hover); }
 .jrow .n { color: var(--ink-faint); }
 .jrow .w { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -132,7 +134,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .banner[hidden] { display: none; }
 .banner button { padding: 3px 9px; font-size: 11.5px; background: var(--panel); }
 
-.side { flex: none; width: 300px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.side { flex: none; width: 360px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .panel { flex: none; overflow-y: auto; max-height: 62%; }
 .panel[hidden] { display: none; }
 .block { padding: 11px 15px; border-bottom: 1px solid var(--rule); }
@@ -283,11 +285,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .primes .apres { margin: 0 0 10px; }
 .primes-grille { display: flex; flex-wrap: wrap; gap: 6px; }
 .primes .apres { color: var(--ink-soft); }
-.prime { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 52px; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
+/* Nommee `.rg-corps .prime` et pas `.prime` : `.rg-corps label` compte deux
+   classes contre une et l'emportait, si bien que la case retombait en bloc.
+   Le nombre restait alors une boite en ligne, ou ni la largeur ni le
+   centrage ne s'appliquent -- il se collait a gauche de son champ. */
+.rg-corps .prime { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 52px; margin: 0; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
 .prime input { width: 100%; padding: 4px 3px; font: inherit; font-size: 11.5px; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
 .prime input::-webkit-outer-spin-button, .prime input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .prime input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.prime b { width: 100%; text-align: center; color: var(--ink-soft); font-weight: 500; }
+.rg-corps .prime b { display: block; width: 100%; text-align: center; font-size: 11px; color: var(--ink-soft); font-weight: 500; }
 .petit { margin-top: 10px; padding: 5px 9px; font-size: 11.5px; }
 .rg-pied { display: flex; gap: 8px; margin-top: 14px; }
 .rg-pied .appliquer { flex: 3; margin: 0; }
@@ -324,7 +330,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .choix button { flex: 1 1 0; min-width: 0; padding: 6px 6px; font-family: inherit; font-size: 12.5px; line-height: 1.35; }
 .choix button em { display: block; font-style: normal; font-size: 10.5px; color: var(--ink-faint); }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
-#r-coups-bloc[hidden] { display: none; }
+.choix[hidden] { display: none; }
 .join form { background: none; border: 0; padding: 0; width: auto; box-shadow: none; }
 .join h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 30px; margin: 0 0 6px; }
 .join h1 em { font-style: italic; color: var(--accent); }
@@ -341,7 +347,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="join" id="join">
   <div class="lobby">
     <h1>Topping <em>infini</em></h1>
-    <p>Une grille, un tirage, et le premier qui trouve le top le pose pour tout le monde.</p>
 
     <form id="joinform" autocomplete="off">
       <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off" autofocus>
@@ -513,9 +518,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
 
         <div class="choix hautes" id="r-coups">
-          <button type="button" data-v="50">50</button>
-          <button type="button" data-v="100">100</button>
-          <button type="button" data-v="150">150</button>
+          <button type="button" data-v="50">50 coups</button>
+          <button type="button" data-v="100">100 coups</button>
+          <button type="button" data-v="150">150 coups</button>
           <button type="button" data-v="sansfin">Infini</button>
           <div class="perso" id="r-coups-perso-case">Personnalisé
             <span><input type="text" inputmode="numeric" id="r-coups-perso" maxlength="4"></span>

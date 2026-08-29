@@ -48,7 +48,7 @@ const ADJECTIFS = [
 ];
 const NOMS = [
   "caramel", "pavage", "ancrage", "joker", "tirage", "palier", "reliquat",
-  "sillon", "damier", "chevalet", "collage", "scrabble", "top", "isotop",
+  "sillon", "damier", "chevalet", "collage", "farfouille", "top", "isotop",
 ];
 
 export function nomAuHasard(): string {

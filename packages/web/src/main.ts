@@ -1577,11 +1577,11 @@ for (const b of $("r-borne-onglets").querySelectorAll("button")) {
 }
 
 /**
- * Le nombre de coups ne se propose qu'en duplicate.
+ * Le terme de la partie : un nombre de coups OU une duree, jamais les deux.
  *
- * En topping la partie n'a pas besoin de terme -- on joue tant qu'on veut. Le
- * duplicate, lui, se termine sur un classement : sur une grille infinie, ou
- * rien ne s'epuise, il faut bien dire quand.
+ * Les deux onglets valent pour les deux modes -- une partie de topping infini
+ * se borne comme une autre. On ne montre que la ligne de l'onglet choisi :
+ * voir les deux ne dirait pas laquelle compte.
  */
 function peuplerCoups(): void {
   // Ces bornes ne se posent que sur une partie qui n'a PAS de fin naturelle :
@@ -1672,13 +1672,15 @@ for (const b of $("r-grille").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     cBornes = (b as HTMLElement).dataset["v"] === "infinie" ? null : 7;
     peuplerGrille();
-    peuplerCoups();
     // Chaque grille a son tirage naturel : les probabilites ponderees ne
     // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
     // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
     if (cBornes === null && cPioche === "sac102") cPioche = "probabilites";
     if (cBornes !== null && cPioche !== "sac102") cPioche = "sac102";
     peuplerPioche();
+    // APRES le tirage : l'affichage des bornes depend des deux, et le tirage
+    // vient de changer sous nos pieds.
+    peuplerCoups();
     avertirSiExplosif();
   });
 }

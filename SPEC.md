@@ -1357,10 +1357,16 @@ fois, avant le premier coup**. C'est un signal de départ, pas une pause avant
 chaque coup. Le chrono ne part qu'après — personne ne perd de temps sur le
 décompte, et la saisie est gelée pendant.
 
+Le décompte part donc **du premier tirage servi**, pas de l'armement du chrono.
+La nuance n'est pas que d'écriture : demander à chaque coup « faut-il
+décompter ? » pour répondre non quatre-vingt-dix-neuf fois sur cent revient à
+traiter comme une condition permanente une chose qui n'arrive qu'au début.
+
 ### Créer un salon, y entrer, le régler
 
 **Le bouton crée le salon et y entre**, sans rien demander. Le nom est tiré au
-hasard — deux mots accolés, « Caramel calme », « Tirage franc » — assez pour
+hasard — deux mots accolés, « Caramel calme », « Tirage franc », tirés du
+vocabulaire de la farfouille — assez pour
 distinguer les salons et plus mémorable qu'un numéro. On le renommera plus tard.
 
 **Un salon neuf n'a pas de partie en cours** : ni tirage, ni chrono, ni coup.

@@ -217,16 +217,6 @@ export class Game {
   decompteJusqua = 0;
   /** Instant du premier tirage. Sert a mesurer la duree d'une partie bornee. */
   debutDeLaPartie = 0;
-/**
-   * Le decompte a-t-il deja eu lieu ?
-   *
-   * Il n'a lieu qu'UNE FOIS, avant le premier coup : c'est un « 3, 2, 1, partez »
-   * qui lance la partie, pas une pause avant chaque coup.
-   *
-   * Le drapeau est aussi ce qui empeche la fin du decompte d'en relancer un :
-   * la condition « pas de decompte en cours » est vraie avant ET apres.
-   */
-  private decompteFait = false;
   /**
    * Y a-t-il quelqu'un dans le salon ?
    *
@@ -702,7 +692,7 @@ export class Game {
     this.servedAt = Date.now();
     if (this.debutDeLaPartie === 0) this.debutDeLaPartie = this.servedAt;
     this.decompteJusqua = 0;
-    this.armerLeChrono();
+    if (!this.lancerLeDecompte()) this.armerLeChrono();
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
     // clients, mais quelqu'un qui regarde le terminal de l'hote les lirait.
@@ -938,28 +928,39 @@ export class Game {
   }
 
   /**
+   * Le « 3, 2, 1, partez » d'avant-partie, s'il est demande.
+   *
+   * Il n'arrive qu'UNE fois, au tout premier tirage -- ce n'est pas une pause
+   * avant chaque coup. C'est pourquoi il part d'ici, du premier tirage servi,
+   * et non de l'armement du chrono : demander a chaque coup « faut-il
+   * decompter ? » pour repondre non quatre-vingt-dix-neuf fois sur cent etait
+   * une facon detournee de dire une chose qui ne se produit qu'au debut.
+   *
+   * Pendant qu'il court, le tirage est affiche mais le chrono n'a pas demarre :
+   * ces trois secondes ne sont prises sur le temps de personne.
+   *
+   * Rend vrai s'il a ete lance -- le chrono s'armera alors tout seul a sa fin.
+   */
+  private lancerLeDecompte(): boolean {
+    if (!this.cfg.decompte || this.moves.length > 0 || !this.actif || this.finie) return false;
+    this.decompteJusqua = Date.now() + DECOMPTE_MS;
+    this.emit();
+    setTimeout(() => {
+      this.decompteJusqua = 0;
+      this.servedAt = Date.now();
+      this.armerLeChrono();
+      this.emit();
+    }, DECOMPTE_MS);
+    return true;
+  }
+
+  /**
    * Lance la minuterie du coup courant. Sans personne dans le salon, il n'y a
    * rien a chronometrer : le coup attend.
    */
   private armerLeChrono(): void {
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     if (!this.actif || this.finie) return;
-
-    // Decompte d'avant-coup : le tirage s'affiche, le chrono attend. On ne
-    // prend le temps de personne sur son dos.
-    // Uniquement avant le PREMIER coup de la partie.
-    if (this.cfg.decompte && !this.decompteFait && this.moves.length === 0) {
-      this.decompteFait = true;
-      this.decompteJusqua = Date.now() + DECOMPTE_MS;
-      this.emit();
-      setTimeout(() => {
-        this.decompteJusqua = 0;
-        this.servedAt = Date.now();
-        this.armerLeChrono();
-        this.emit();
-      }, DECOMPTE_MS);
-      return;
-    }
 
     if (this.cfg.chrono === null) return;
     this.servedAt = Date.now();
