@@ -1216,6 +1216,22 @@ a plus rien qui s'épuise.
 > s'arrêter, la partie recharge et continue. Mesuré : un rechargement tous les
 > vingt coups environ.
 
+### Un salon vide dort
+
+Une partie ne pioche et ne chronomètre que **s'il y a quelqu'un**.
+
+- Au démarrage du serveur, les salons rejouent leur historique mais **ne
+  calculent rien** : le top du coup courant n'est cherché qu'à l'arrivée du
+  premier joueur. Sinon chaque salon enregistré coûtait un calcul complet, y
+  compris ceux que personne n'ouvrira.
+- Le dernier joueur parti, **le chrono s'arrête** et le coup en cours gèle. Un
+  salon vide dévorait sinon un coup toutes les N secondes, pour personne — des
+  minutes de calcul chacun sur une grande grille.
+- Celui qui arrive reçoit le **temps plein** : reprendre un décompte entamé
+  pendant que la salle était vide n'aurait aucun sens.
+
+Le coup en cours affiche « en pause » tant que la salle est vide.
+
 ### Le coût du calcul, mesuré
 
 Le temps de recherche du top croît avec le **nombre d'ancrages** — donc sans fin

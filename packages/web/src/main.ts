@@ -40,6 +40,8 @@ let cfg: ConfigPartie = configParDefaut();
 let finie = false;
 /** Duree d'un coup en secondes, quand la partie est chronometree. */
 let chrono: number | null = null;
+/** Le salon est vide : le coup ne s'ecoule pas. */
+let endormi = false;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -878,6 +880,7 @@ setInterval(() => {
     return;
   }
   $("age").textContent = fmtTime(now - createdAt);
+  if (endormi) { $("elapsed").textContent = "en pause"; return; }
   if (solving) { $("elapsed").textContent = "…"; return; }
   if (chrono === null) { $("elapsed").textContent = fmtTime(now - servedAt); return; }
   // Compte a rebours : c'est le temps qui reste qui interesse le joueur.
@@ -892,6 +895,7 @@ function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
+  actif?: boolean;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   rack = s.rack ?? "";
@@ -906,6 +910,7 @@ function applyState(s: {
   $("sac").hidden = sac === "";
   if (sac !== "") $("sac").textContent = sac;
   chrono = s.chrono ?? null;
+  endormi = s.actif === false;
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
   // Sinon les reglages partent dans le vide et on croit a un bug du jeu.
   // Un serveur qui ne dit rien est forcement anterieur a ce controle : c'est

@@ -171,6 +171,14 @@ export class Game {
   servedAt = 0;
   /** Minuterie du coup en cours, quand la partie est chronometree. */
   private echeance: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Y a-t-il quelqu'un dans le salon ?
+   *
+   * Une partie endormie ne pioche pas et ne chronometre pas. Sans cela, un
+   * salon vide continuait a devorer des coups -- et sur une grande grille a
+   * gros tirage, des MINUTES de calcul chacun -- pour personne.
+   */
+  actif = false;
   solving = false;
 
   private nextId = 1;
@@ -406,7 +414,9 @@ export class Game {
     } else {
       console.log(`[partie] nouvelle grille, graine ${this.seed.slice(0, 8)}`);
     }
-    await this.deal();
+    // On ne pioche PAS ici : le premier joueur qui entre declenchera le
+    // calcul. Distribuer au demarrage faisait calculer le top de chaque salon
+    // enregistre, y compris ceux que personne n'ouvrira.
   }
 
   /**
@@ -531,13 +541,7 @@ export class Game {
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
     this.servedAt = Date.now();
-    // Partie chronometree : a l'echeance le top se pose et on enchaine, sans
-    // vainqueur. Le demi-point du mode collaboratif n'est pas encore compte.
-    if (this.echeance !== null) clearTimeout(this.echeance);
-    this.echeance = this.cfg.chrono === null ? null : setTimeout(() => {
-      this.echeance = null;
-      void this.reveal();
-    }, this.cfg.chrono * 1000);
+    this.armerLeChrono();
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
     // clients, mais quelqu'un qui regarde le terminal de l'hote les lirait.
@@ -645,6 +649,45 @@ export class Game {
       (move.isotops > 1 ? ` (${move.isotops} isotops)` : ""),
     );
     await this.deal();
+  }
+
+  /**
+   * Lance la minuterie du coup courant. Sans personne dans le salon, il n'y a
+   * rien a chronometrer : le coup attend.
+   */
+  private armerLeChrono(): void {
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    if (!this.actif || this.cfg.chrono === null || this.finie) return;
+    this.servedAt = Date.now();
+    this.echeance = setTimeout(() => {
+      this.echeance = null;
+      void this.reveal();
+    }, this.cfg.chrono * 1000);
+  }
+
+  /**
+   * Quelqu'un entre. On pioche si ce n'est pas encore fait, et le chrono part.
+   *
+   * Le premier arrivant recoit le temps PLEIN : reprendre un decompte entame
+   * pendant que la salle etait vide n'aurait aucun sens.
+   */
+  async reveiller(): Promise<void> {
+    if (this.actif) return;
+    this.actif = true;
+    if (this.finie) return;
+    if (this.canonicalTop === null && !this.solving) {
+      await this.deal();
+      return;
+    }
+    this.armerLeChrono();
+    this.emit();
+  }
+
+  /** La salle s'est vidée : le coup en cours gele, rien ne se calcule plus. */
+  endormir(): void {
+    this.actif = false;
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    this.emit();
   }
 
   /** Ajoute un message au chat et le persiste. */

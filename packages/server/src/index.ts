@@ -127,6 +127,7 @@ function publicState(s: Salon) {
     sac: g.restantDuSac(),
     finie: g.finie,
     solving: g.solving,
+    actif: g.actif,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
     players: g.players,
@@ -396,6 +397,8 @@ wss.on("connection", (ws) => {
         return;
       }
       clients.set(ws, { nom, salon: cible.id });
+      // Le salon se reveille : il pioche si ce n'est pas fait, et le chrono part.
+      void cible.partie.reveiller();
       send(ws, {
         t: "hello",
         you: nom,
@@ -499,6 +502,9 @@ wss.on("connection", (ws) => {
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));
       surveiller(s);
+      // La partie neuve nait endormie : si le salon est occupe, on la reveille,
+      // sinon elle attendrait un joueur qui est deja la.
+      if (occupants(s.id).length > 0) await s.partie.reveiller();
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
         `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
       for (const [c, v] of clients) {
@@ -525,7 +531,13 @@ wss.on("connection", (ws) => {
     const moi = clients.get(ws);
     clients.delete(ws);
     const s = moi ? salon(moi.salon) : undefined;
-    if (s !== undefined) broadcast(s.id, { t: "state", state: publicState(s) });
+    if (s === undefined) return;
+    // Le dernier parti, la partie s'endort : plus de chrono, plus de calcul.
+    if (occupants(s.id).length === 0) {
+      s.partie.endormir();
+      console.log(`[salon] "${s.nom}" s'endort, plus personne`);
+    }
+    broadcast(s.id, { t: "state", state: publicState(s) });
   });
 });
 
