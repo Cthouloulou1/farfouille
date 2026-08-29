@@ -1186,6 +1186,27 @@ let cChrono: number | null = null;
 /** Grille en cours d'edition : demi-cote, ou null pour l'infini. */
 let cBornes: number | null = 7;
 
+/**
+ * Previent quand la variante choisie va etouffer le solveur.
+ *
+ * Le cout de recherche du top croit avec le nombre d'ancrages -- donc sans fin
+ * sur une grille infinie -- ET avec la taille du tirage, qui multiplie les
+ * combinaisons. Les deux ensemble sont explosifs : mesure a 40 coups en 15 sur
+ * 15, un tirage a deux jokers demande pres de trois minutes de calcul, contre
+ * une demi-seconde sur un plateau borne, ou la grille cesse de grandir.
+ */
+function avertirSiExplosif(): void {
+  const boite = $("r-alerte");
+  if (cBornes !== null || cTirage < 10) { boite.hidden = true; return; }
+  boite.innerHTML =
+    `<b>Attention : tirage de ${cTirage} caramels sur une grille sans bord.</b><br>` +
+    `Le temps de calcul du top grandit avec la grille et avec le tirage. ` +
+    `Mesuré à 40 coups en 15 sur 15 : 7 s sans joker, 57 s avec un joker, ` +
+    `près de 3 min avec deux. Sur un plateau 15×15 la même variante tient en ` +
+    `moins d'une seconde par coup, parce que la grille cesse de grandir.`;
+  boite.hidden = false;
+}
+
 function peuplerGrille(): void {
   for (const b of $("r-grille").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
@@ -1203,6 +1224,7 @@ for (const b of $("r-grille").querySelectorAll("button")) {
     if (cBornes === null && cPioche === "sac102") cPioche = "probabilites";
     if (cBornes !== null && cPioche !== "sac102") cPioche = "sac102";
     peuplerPioche();
+    avertirSiExplosif();
   });
 }
 
@@ -1310,6 +1332,7 @@ function peuplerNombres(): void {
           if (cJouables > n) cJouables = n;
         } else cJouables = n;
         peuplerNombres();
+        avertirSiExplosif();
         if (!$("r-primes").hidden) peuplerPrimes();
       });
       box.appendChild(b);
@@ -1356,6 +1379,7 @@ function ouvrirReglages(): void {
   cBornes = cfg.bornes;
   peuplerChrono();
   peuplerGrille();
+  avertirSiExplosif();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = "Primes de scrabble…";

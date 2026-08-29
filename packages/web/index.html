@@ -237,6 +237,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rg-corps label:first-child { margin-top: 0; }
 .rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 12.5px; }
 .rg-corps label.case em { color: var(--ink-faint); font-style: normal; font-size: 11px; }
+.alerte { margin-top: 12px; padding: 9px 11px; background: var(--warn-bg); color: var(--warn); border-radius: 4px; font-size: 12px; line-height: 1.5; }
+.alerte[hidden] { display: none; }
+.alerte b { font-weight: 600; }
 .primes { margin-top: 10px; padding: 12px 13px; background: var(--ground); border: 1px solid var(--rule); border-radius: 4px; }
 .primes[hidden] { display: none; }
 .primes .apres { margin: 0 0 10px; }
@@ -440,6 +443,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button class="petit" id="r-primes-defaut" type="button">Revenir aux primes habituelles</button>
       </div>
 
+      <div class="alerte" id="r-alerte" hidden></div>
       <p class="apres">Appliquer relance une partie neuve dans ce salon. L'ancienne est archivée, jamais effacée.</p>
       <div class="join-error" id="r-error" hidden></div>
       <button class="appliquer" id="r-appliquer">Appliquer et relancer</button>

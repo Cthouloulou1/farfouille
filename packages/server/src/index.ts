@@ -168,26 +168,44 @@ function surveiller(s: Salon): void {
 
 // ---------------------------------------------------------------- ouverture
 
-const salonMondial = await ouvrirSalon({
-  id: GAME_ID, nom: "Topping infini", proprietaire: null, prive: false,
-  layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
-});
-surveiller(salonMondial);
+/**
+ * Les parties sont-elles pretes ?
+ *
+ * Ouvrir une partie demande de calculer le top de son coup courant, ce qui peut
+ * prendre des MINUTES sur une grande grille a gros tirage. Faire attendre le
+ * site pendant ce temps donnait un serveur injoignable, sans rien qui explique
+ * pourquoi. On sert donc la page d'abord, et on prepare ensuite.
+ */
+let pret = false;
 
-// Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
-for (const e of salonsEnregistres()) {
-  if (e["id"] === GAME_ID) continue;
-  try {
-    const s = await ouvrirSalon({
-      id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? null,
-      prive: e["prive"] === true, layout: (e["layout"] ?? LAYOUT) as LayoutName,
-      cfg: e["config"] ? deserialiser(e["config"]) : configParDefaut(),
-      nouveau: false, creeLe: e["creeLe"],
-    });
-    surveiller(s);
-  } catch (err) {
-    console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
+async function ouvrirLesSalons(): Promise<void> {
+  const t0 = Date.now();
+  const salonMondial = await ouvrirSalon({
+    id: GAME_ID, nom: "Topping infini", proprietaire: null, prive: false,
+    layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
+  });
+  surveiller(salonMondial);
+
+  // Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
+  for (const e of salonsEnregistres()) {
+    if (e["id"] === GAME_ID) continue;
+    try {
+      const s = await ouvrirSalon({
+        id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? null,
+        prive: e["prive"] === true, layout: (e["layout"] ?? LAYOUT) as LayoutName,
+        cfg: e["config"] ? deserialiser(e["config"]) : configParDefaut(),
+        nouveau: false, creeLe: e["creeLe"],
+      });
+      surveiller(s);
+    } catch (err) {
+      console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
+    }
   }
+  pret = true;
+  const n = tousLesSalons().length;
+  console.log(`  ${n} salon${n > 1 ? "s" : ""} pret${n > 1 ? "s" : ""} ` +
+    `en ${((Date.now() - t0) / 1000).toFixed(1)} s
+`);
 }
 
 // ---------------------------------------------------------------- http
@@ -249,6 +267,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
 
   if (url === "/api/salons" && req.method === "GET") {
     json(res, 200, {
+      pret,
       salons: tousLesSalons()
         .filter((s) => !s.prive)
         .map((s) => resume(s, occupants(s.id).length)),
@@ -331,7 +350,14 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     res.end("introuvable");
     return;
   }
-  res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
+  // `no-cache` ne veut pas dire « ne garde rien » mais « redemande avant de
+  // reservir » : sans cela le navigateur gardait un ancien app.js et une
+  // recompilation restait sans effet, ce qui fait passer un correctif pour un
+  // bug persistant.
+  res.writeHead(200, {
+    "content-type": MIME[extname(file)] ?? "application/octet-stream",
+    "cache-control": "no-cache",
+  });
   res.end(readFileSync(file));
 });
 
@@ -353,7 +379,11 @@ wss.on("connection", (ws) => {
       const nom = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
       const cible = salon(String(msg.salon ?? GAME_ID));
       if (cible === undefined) {
-        send(ws, { t: "refus", message: "Ce salon n'existe plus" });
+        send(ws, {
+          t: "refus",
+          message: pret ? "Ce salon n'existe plus"
+            : "Le serveur prépare les parties, réessayez dans un instant",
+        });
         return;
       }
       // Deux joueurs du meme nom rendent le classement faux et les statistiques
@@ -514,11 +544,15 @@ process.on("exit", rendreLesVerrous);
 process.on("uncaughtException", (e) => { rendreLesVerrous(); throw e; });
 
 http.listen(PORT, () => {
-  const n = tousLesSalons().length;
-  console.log(`\n  Grille "${GAME_ID}" sur le pavage "${LAYOUT}"`);
-  console.log(`  ${n} salon${n > 1 ? "s" : ""} ouvert${n > 1 ? "s" : ""}`);
-  console.log(`  http://localhost:${PORT}\n`);
+  console.log(`
+  Grille "${GAME_ID}" sur le pavage "${LAYOUT}"`);
+  console.log(`  http://localhost:${PORT}`);
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');
-  console.log();
+  console.log(`
+  preparation des parties...`);
+  // On sert la page tout de suite ; les parties se preparent ensuite. Calculer
+  // le top d'un gros tirage sur une grande grille prend des minutes, et faire
+  // attendre le site pendant ce temps donnait un serveur injoignable.
+  void ouvrirLesSalons();
 });

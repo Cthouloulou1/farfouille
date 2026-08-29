@@ -1216,6 +1216,33 @@ a plus rien qui s'épuise.
 > s'arrêter, la partie recharge et continue. Mesuré : un rechargement tous les
 > vingt coups environ.
 
+### Le coût du calcul, mesuré
+
+Le temps de recherche du top croît avec le **nombre d'ancrages** — donc sans fin
+sur une grille infinie — **et** avec la **taille du tirage**, qui multiplie les
+combinaisons. Chaque joker multiplie encore par vingt-six.
+
+Les deux ensemble sont explosifs. Mesuré sur une grille infinie en 15 sur 15,
+à **40 coups seulement** (710 ancrages) :
+
+| tirage | temps |
+|---|---|
+| sans joker | 7,4 s |
+| un joker | 57 s |
+| deux jokers | **171 s** |
+
+La mémoire reste à 115 Mo : ce n'est pas un problème de place, c'est du calcul.
+
+La même variante sur un **plateau 15×15 borné** joue la partie **entière en une
+seconde**, pire coup 0,47 s — parce que la grille cesse de grandir et plafonne
+à une centaine d'ancrages.
+
+> ⚠️ Un gros tirage sur une grille sans bord est la combinaison à éviter. Les
+> réglages du salon l'annoncent avec ces chiffres quand on la choisit.
+
+À 7 caramels, la grille infinie reste confortable : 50 à 115 ms par coup jusqu'à
+200 coups, pire cas observé 2,5 s sur un tirage à joker.
+
 ### Le chrono
 
 **Super blitz 30 s · blitz 60 s · semi-rapide 2 min**, plus une option
