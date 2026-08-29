@@ -137,8 +137,8 @@ interface Saved {
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 
-/** Duree du decompte d'avant-coup : 2, 1, partez. */
-const DECOMPTE_MS = 2000;
+/** Duree du decompte d'avant-partie : 3, 2, 1, partez. */
+const DECOMPTE_MS = 3000;
 
 /** Ce processus existe-t-il encore ? EPERM veut dire oui, mais pas a nous. */
 function alive(pid: number): boolean {
@@ -193,12 +193,14 @@ export class Game {
    * tirage est connu mais le chrono n'a pas demarre : personne ne perd de temps.
    */
   decompteJusqua = 0;
-  /**
-   * Le decompte de CE coup a-t-il deja eu lieu ?
+/**
+   * Le decompte a-t-il deja eu lieu ?
    *
-   * Sans ce drapeau, la fin du decompte relancait un decompte : la condition
-   * « pas de decompte en cours » est vraie avant ET apres, et le vrai chrono
-   * ne s'armait jamais.
+   * Il n'a lieu qu'UNE FOIS, avant le premier coup : c'est un « 3, 2, 1, partez »
+   * qui lance la partie, pas une pause avant chaque coup.
+   *
+   * Le drapeau est aussi ce qui empeche la fin du decompte d'en relancer un :
+   * la condition « pas de decompte en cours » est vraie avant ET apres.
    */
   private decompteFait = false;
   /**
@@ -624,7 +626,6 @@ export class Game {
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
     this.servedAt = Date.now();
     this.decompteJusqua = 0;
-    this.decompteFait = false;
     this.armerLeChrono();
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
@@ -835,7 +836,8 @@ export class Game {
 
     // Decompte d'avant-coup : le tirage s'affiche, le chrono attend. On ne
     // prend le temps de personne sur son dos.
-    if (this.cfg.decompte && !this.decompteFait) {
+    // Uniquement avant le PREMIER coup de la partie.
+    if (this.cfg.decompte && !this.decompteFait && this.moves.length === 0) {
       this.decompteFait = true;
       this.decompteJusqua = Date.now() + DECOMPTE_MS;
       this.emit();

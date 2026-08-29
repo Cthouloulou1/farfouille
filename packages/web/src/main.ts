@@ -1069,7 +1069,17 @@ function connect() {
       paintChat(chat);
       paintJournal();
       applyState(m.state);
-      if (tiles.length > 0 && last !== null) flyTo(last.word, last.dir, last.x, last.y);
+      // Le cadrage depend de la variante, qu'on ne connait qu'ici : un plateau
+      // borne se centre, une grille infinie se pose sur son dernier coup.
+      if (cfg.bornes !== null) {
+        cadrer();
+        draw();
+      } else {
+        ox = W / 2 - cell / 2;
+        oy = H / 2 - cell / 2;
+        if (tiles.length > 0 && last !== null) flyTo(last.word, last.dir, last.x, last.y);
+        else draw();
+      }
       return;
     }
     if (m.t === "refus") {
@@ -1089,11 +1099,13 @@ function connect() {
       board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       typed = ""; ghost = null; best = null; finie = false; finieA = 0;
+      cursor = null; marks = [];
       paintChat(chat);
       paintJournal();
       applyState(m.state);
-      ox = W / 2 - cell / 2;
-      oy = H / 2 - cell / 2;
+      // La relance a pu changer de grille : on recadre selon la NOUVELLE.
+      if (cfg.bornes !== null) cadrer();
+      else { ox = W / 2 - cell / 2; oy = H / 2 - cell / 2; }
       flash("nouvelle partie dans ce salon", "ok");
       draw();
       return;
@@ -1584,10 +1596,33 @@ async function rejoindre(id: string): Promise<void> {
     dictCharge = true;
     new ResizeObserver(resize).observe(cv);
   }
-  board = new Board(dict);
+  // Table rase AVANT de se brancher. Sans cela, la grille du salon precedent
+  // restait affichee jusqu'a l'arrivee de `hello` : on voyait ses caramels,
+  // parfois HORS des bornes du nouveau plateau, comme si des mots avaient deja
+  // ete joues. La camera, elle, gardait le cadrage de l'ancienne grille.
+  tiles = [];
+  history = [];
+  chat = [];
+  last = null;
+  cursor = null;
+  ghost = null;
+  best = null;
+  typed = "";
+  rack = "";
+  marks = [];
+  finie = false;
+  endormi = false;
+  decompteJusqua = 0;
+  players = {};
+  likes = {};
+  points = {};
+  negatif = {};
+  nonTrouves = 0;
+  cfg = configParDefaut();
+  board = new Board(dict, cfg);
+  paintChat(chat);
+  paintJournal();
   resize();
-  ox = W / 2 - cell / 2;
-  oy = H / 2 - cell / 2;
   connect();
 }
 

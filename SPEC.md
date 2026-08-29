@@ -1313,11 +1313,23 @@ compte les coups que personne n'a eus. Dans la liste dépliée du gagnant du
 demi-point, c'est **son mot** qui figure, suivi de **(0.5)** : c'était sa
 meilleure solution, pas le top.
 
-### Le décompte d'avant-coup
+### Le décompte de départ
 
-Option, décochée par défaut : un **2** puis un **1** en grand sur la grille avant
-que le coup commence. Le chrono ne part **qu'après** — personne ne perd de temps
-sur le décompte, et la saisie est gelée pendant.
+Option, décochée par défaut : **3, 2, 1** en grand sur la grille, **une seule
+fois, avant le premier coup**. C'est un signal de départ, pas une pause avant
+chaque coup. Le chrono ne part qu'après — personne ne perd de temps sur le
+décompte, et la saisie est gelée pendant.
+
+### Changer de salon efface tout
+
+Entrer dans un salon **vide d'abord l'état du précédent** : caramels, historique,
+chat, curseur, classement. Sans cela la grille de l'ancien salon restait
+affichée jusqu'à l'arrivée de `hello` — on y voyait ses mots, parfois **hors des
+bornes** du nouveau plateau, comme si des coups avaient déjà été joués.
+
+Le **cadrage** se refait quand la configuration arrive, pas avant : c'est elle
+qui dit si la grille est bornée. Le calculer trop tôt le faisait avec la
+variante du salon quitté.
 
 ### Les temps
 
