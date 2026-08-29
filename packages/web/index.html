@@ -203,7 +203,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 .roadmap { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
 .roadmap[hidden] { display: none; }
-.roadmap > div.large { width: min(1120px, 96vw); max-height: 92vh; }
+.roadmap > div.large { width: min(860px, 96vw); max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
 .roadmap header h3 { margin: 0; flex: 1; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 19px; }
@@ -253,9 +253,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sol .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .04em; }
 .sol .p { color: var(--ink-faint); }
 .sol .s { text-align: right; color: var(--accent); }
-.rg-corps { padding: 16px 20px 20px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 26px; align-content: start; }
+.rg-corps { padding: 14px 20px 18px; overflow: auto; }
 .reglage { min-width: 0; }
-.reglage.large-col { grid-column: 1 / -1; }
+.reglage.cote-a-cote { display: flex; gap: 26px; align-items: center; margin-top: 14px; }
+.reglage.cote-a-cote label { margin: 0; }
 .rg-corps label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 12px 0 5px; }
 .reglage > label:first-child { margin-top: 4px; }
 .rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 12.5px; }
@@ -287,16 +288,19 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .creer label.case input { width: auto; margin: 0; }
 .nombres { display: flex; flex-wrap: nowrap; gap: 4px; }
 .choix.hautes { flex-wrap: wrap; }
-.choix.hautes button, .choix .perso { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-.choix .perso { flex: 1; min-width: 96px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); font-size: 12.5px; color: var(--ink-soft); }
+/* La case « Personnalisé » est une option comme les autres : meme boite, meme
+   couleur, meme hauteur. Seule sa garniture change. */
+.choix.hautes button, .choix .perso { flex: 1 1 0; min-width: 0; min-height: 52px; height: 52px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-sizing: border-box; }
+.choix .perso { border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); font-family: inherit; font-size: 12.5px; color: var(--ink); cursor: default; }
+.choix .perso span { display: inline-flex; align-items: baseline; gap: 3px; font-size: 10.5px; color: var(--ink-faint); }
 .choix .perso[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
-.choix .perso input { width: 62px; padding: 2px 5px; font: inherit; font-size: 12px; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
+.choix .perso input { width: 42px; padding: 1px 4px; font: inherit; font-size: 12px; line-height: 1.2; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
 .choix .perso input::-webkit-outer-spin-button, .choix .perso input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .nombres button, .choix button { padding: 0; width: 28px; height: 28px; font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--ground); }
 .nombres button[aria-pressed="true"], .choix button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 500; }
 .nombres button:disabled { opacity: .3; cursor: default; }
 .choix { display: flex; gap: 6px; }
-.choix button { flex: 1; padding: 6px 8px; font-family: inherit; font-size: 12.5px; line-height: 1.35; }
+.choix button { flex: 1 1 0; min-width: 0; padding: 6px 6px; font-family: inherit; font-size: 12.5px; line-height: 1.35; }
 .choix button em { display: block; font-style: normal; font-size: 10.5px; color: var(--ink-faint); }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
 #r-coups-bloc[hidden] { display: none; }
@@ -462,17 +466,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage large-col">
+      <div class="reglage">
         <label>Nombre de lettres</label>
         <div class="nombres" id="r-tirage"></div>
       </div>
 
-      <div class="reglage large-col">
+      <div class="reglage">
         <label>Nombre de lettres jouables</label>
         <div class="nombres" id="r-jouables"></div>
       </div>
 
-      <div class="reglage large-col">
+      <div class="reglage">
         <label>Temps par coup</label>
         <div class="choix hautes" id="r-chrono">
           <button type="button" data-v="15">Frades<br><em>15 s</em></button>
@@ -481,12 +485,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="120">Semi-rapide<br><em>2 min</em></button>
           <button type="button" data-v="libre">Infini</button>
           <div class="perso" id="r-perso-case">Personnalisé
-            <input type="text" inputmode="numeric" id="r-perso" maxlength="4">
+            <span><input type="text" inputmode="numeric" id="r-perso" maxlength="4"> s</span>
           </div>
         </div>
       </div>
 
-      <div class="reglage large-col" id="r-coups-bloc" hidden>
+      <div class="reglage" id="r-coups-bloc" hidden>
         <label>Nombre de coups joués</label>
         <div class="choix hautes" id="r-coups">
           <button type="button" data-v="50">50</button>
@@ -499,7 +503,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage large-col">
+      <div class="reglage">
         <label>Tirage des lettres</label>
         <div class="choix" id="r-pioche">
           <button type="button" data-v="probabilites">Probabilités pondérées</button>
@@ -508,16 +512,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage">
+      <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
+        <label class="case"><input type="checkbox" id="r-joker"> Joker</label>
       </div>
 
       <div class="reglage">
-        <label class="case"><input type="checkbox" id="r-joker"> Joker <em id="r-joker-note"></em></label>
-      </div>
-
-      <div class="reglage large-col">
-        <button class="creer-open" id="r-primes-open" type="button">Primes de farfouilles…</button>
+        <button class="creer-open" id="r-primes-open" type="button">Primes de farfouilles</button>
         <div class="primes" id="r-primes" hidden>
           <p class="apres">Prime selon le nombre de lettres posées</p>
           <div class="primes-grille" id="r-primes-grille"></div>
@@ -525,7 +526,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage large-col">
+      <div class="reglage">
         <div class="alerte" id="r-alerte" hidden></div>
         <div class="join-error" id="r-error" hidden></div>
         <button class="appliquer" id="r-appliquer">Go</button>

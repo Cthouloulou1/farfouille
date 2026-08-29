@@ -1131,13 +1131,18 @@ S'il ne reste **aucun R dans le sac**, le joker lui-même se pose (à zéro, pou
 toujours) et on prend le **second joker**. Les deux jokers posés, la partie
 continue sans.
 
-> La variante suppose un **sac fini** : « il ne reste plus de R » n'a aucun sens
-> avec des probabilités pondérées, où rien ne s'épuise. Le sac se consomme
-> exactement comme dans une vraie partie — la lettre tirée pour remplacer le
-> joker en sort comme les autres.
+**La variante s'accommode des trois pioches**, chacune à sa façon :
 
-Rien n'interdit le mécanisme sur grille infinie : simplement, aucun joker n'y
-serait jamais perdu.
+| pioche | ce qui se passe quand le joker est joué |
+|---|---|
+| sac de 102 | une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **deux** — perd une unité |
+| sac de 102 sans fin | pareil, mais les jokers **ne s'épuisent jamais** : on en reprend un |
+| probabilités pondérées | **rien ne remplace** le joker : il se pose à zéro et on en reprend un aussitôt. Rien ne s'épuisant, « il ne reste plus de R » n'aurait aucun sens |
+
+Mesuré sur 25 coups : aux probabilités, le tirage porte un joker à chaque coup
+et 28 se posent à zéro ; au sac sans fin, 5 seulement — les autres sont
+remplacés par de vraies lettres ; au sac de 102, les deux jokers s'épuisent et
+la partie continue sans.
 
 > ⚠️ **Règle d'isotop propre à cette variante.** Entre deux coups de même score
 > dont l'un emploie le joker et l'autre non, on retient **systématiquement celui
@@ -1354,6 +1359,12 @@ rendre la main. Mesurer l'écart réel donnait donc 5,00 s le plus souvent, mais
 
 On note donc le **temps imparti**, qui est la vérité du coup : cinq secondes
 tout rond. Et un compte rond s'écrit rond — « 5 s », pas « 5.00 s ».
+
+### En réserve : entrer directement dans la partie
+
+**À ne pas construire maintenant.** Un lien qui mène **droit à la grille
+infinie** et demande l'inscription sur place, sans passer par l'accueil : le
+joueur joue d'abord, découvre les salons ensuite.
 
 ### En réserve : les records du site
 

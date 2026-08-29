@@ -1617,7 +1617,7 @@ function peuplerPrimes(): void {
 $("r-primes-open").addEventListener("click", () => {
   const ouvert = $("r-primes").hidden;
   $("r-primes").hidden = !ouvert;
-  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouilles…";
+  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouilles";
   if (ouvert) peuplerPrimes();
 });
 
@@ -1673,13 +1673,6 @@ function peuplerPioche(): void {
     (b as HTMLButtonElement).title = interdit
       ? "réservé aux grilles infinies" : "";
   }
-  // La partie joker demande un sac : sans sac, « il ne reste plus de R » n'a
-  // aucun sens, rien ne s'epuise.
-  const sansSac = cPioche === "probabilites";
-  const cj = $("r-joker") as HTMLInputElement;
-  cj.disabled = sansSac;
-  if (sansSac) cj.checked = false;
-  $("r-joker-note").textContent = sansSac ? "(demande un sac de 102)" : "";
 }
 
 /** Ouvre les reglages sur l'etat courant de la partie. */
@@ -1700,7 +1693,7 @@ function ouvrirReglages(): void {
   avertirSiExplosif();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
-  $("r-primes-open").textContent = "Primes de farfouilles…";
+  $("r-primes-open").textContent = "Primes de farfouilles";
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;

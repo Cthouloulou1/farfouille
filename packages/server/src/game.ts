@@ -429,7 +429,12 @@ export class Game {
     // En partie joker, le tirage contient toujours un joker : le sac ne
     // distribue donc que `tirage - 1` lettres, et les deux jokers sont mis de
     // cote. Ils ne sont pas piochables, ils accompagnent le tirage.
-    this.jokersEnReserve = this.cfg.joker ? 2 : 0;
+    // Combien de jokers ? Deux si le sac est fini -- ce sont ceux du jeu. Sur
+    // une pioche qui ne s'epuise pas, ils ne s'epuisent pas non plus : on en
+    // reprend un chaque fois qu'un est pose.
+    this.jokersEnReserve = this.cfg.joker
+      ? (this.cfg.pioche === "sac102" ? 2 : Infinity)
+      : 0;
     const parTirage = this.cfg.tirage - (this.cfg.joker ? 1 : 0);
     const alea = mulberry32(moveSeed(this.seed, 0));
 
@@ -950,19 +955,25 @@ export class Game {
    */
   private substituerJokers(placements: Placement[]): void {
     const sac = this.bag as SacFini;
-    if (typeof sac.retirer !== "function") return;   // pioche ponderee : rien a faire
+    const avecSac = typeof sac.retirer === "function";
     for (const p of placements) {
       if (!p.blank) continue;
-      if (sac.retirer(p.letter)) {
-        p.blank = false;   // un vrai caramel prend sa place, le joker est garde
+      // Avec un sac, la lettre jouee par le joker en sort pour de vrai : elle
+      // vaudra ses points pour la suite, et le joker revient au tirage.
+      if (avecSac && sac.retirer(p.letter)) {
+        p.blank = false;
         console.log(`[partie] le joker joue ${p.letter} : un vrai ${p.letter} sort du sac`);
-      } else {
-        this.jokersEnReserve--;
-        console.log(
-          `[partie] plus de ${p.letter} dans le sac : le joker reste sur la grille` +
-          ` (${this.jokersEnReserve} joker${this.jokersEnReserve > 1 ? "s" : ""} en reserve)`,
-        );
+        continue;
       }
+      // Sans sac -- ou sans lettre disponible -- le joker se pose lui-meme, a
+      // zero pour toujours. La reserve n'en souffre que si elle est finie.
+      this.jokersEnReserve--;
+      const reste = this.jokersEnReserve === Infinity ? "on en reprend un"
+        : `${this.jokersEnReserve} joker${this.jokersEnReserve > 1 ? "s" : ""} en reserve`;
+      console.log(
+        `[partie] ${avecSac ? `plus de ${p.letter} dans le sac : ` : ""}` +
+        `le joker reste sur la grille (${reste})`,
+      );
     }
   }
 
