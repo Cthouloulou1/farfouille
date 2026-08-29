@@ -67,6 +67,30 @@ console.log("\nFin de partie -- la convention\n");
   }
 }
 
+console.log("\nSac rechargeable : sac + reliquat ne depasse jamais la distribution\n");
+{
+  const total = Object.values(SAC_FRANCAIS).reduce((a, b) => a + b, 0);
+  const sac = new SacFini(SAC_FRANCAIS, mulberry32(5), 7);
+  sac.recharge = true;
+  let rel: string[] = [], pireW = 0, pireTotal = 0, fautes = 0;
+  for (let n = 1; n <= 600; n++) {
+    const d = sac.draw(rel);
+    // On garde les lettres cheres : c'est le cas qui revelait le defaut, un W
+    // conserve en main pendant que le rechargement en remettait un au sac.
+    rel = [...d.rack].filter((c) => "WKXZJQY".includes(c)).slice(0, 5);
+    const restant = sac.restant();
+    const w = (restant["W"] ?? 0) + rel.filter((c) => c === "W").length;
+    const somme = Object.values(restant).reduce((a, b) => a + b, 0) + rel.length;
+    pireW = Math.max(pireW, w);
+    pireTotal = Math.max(pireTotal, somme);
+    if (w > 1 || somme > total) fautes++;
+  }
+  verifie("jamais deux W en jeu", pireW <= 1, `maximum vu : ${pireW}`);
+  verifie("sac + reliquat <= 102", pireTotal <= total, `maximum vu : ${pireTotal}`);
+  verifie("aucun coup en faute", fautes === 0, `${sac.rechargements} rechargements`);
+}
+
+
 console.log("\nRetrait d'une lettre -- ce dont la partie joker a besoin\n");
 {
   const sac = new SacFini({ K: 1, A: 5 }, mulberry32(1), 7);

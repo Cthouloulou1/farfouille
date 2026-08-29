@@ -1211,7 +1211,14 @@ les scores déjà joués.
 
 Troisième pioche. On tire au hasard parmi les 102 caramels, et dès qu'il ne
 reste plus que **2 voyelles ou 2 consonnes dans le sac et les reliquats
-réunis**, le sac **retrouve sa composition d'origine**.
+réunis**, le sac est **complété** pour que l'invariant tienne :
+
+> **sac + reliquat = la distribution de départ.**
+
+Complété, pas remis à neuf : un W gardé en main est un W qui ne revient **pas**
+dans le sac. Le remettre en ferait exister deux, ce que le jeu ne connaît pas.
+Vérifié sur 600 tirages en conservant les lettres chères — jamais deux W, et le
+total ne dépasse jamais 102.
 
 Elle donne une grille infinie avec la distribution du jeu classique, au lieu des
 probabilités pondérées. Une partie ainsi tirée **ne se termine jamais** : il n'y

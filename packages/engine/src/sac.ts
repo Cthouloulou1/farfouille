@@ -84,11 +84,23 @@ export class SacFini implements Pioche {
     this.remplir();
   }
 
-  /** Remet dans le sac la composition d'origine, entiere. */
-  private remplir(): void {
+/**
+   * Remet le sac a sa composition d'origine, EN TENANT COMPTE DU RELIQUAT.
+   *
+   * L'invariant est : `sac + reliquat = la distribution de depart`. Un W garde
+   * en main est un W qui ne doit PAS revenir dans le sac -- sinon la partie en
+   * compterait deux, ce qui n'existe pas dans le jeu.
+   *
+   * `deja` liste les caramels qui sont ailleurs que dans le sac et qui doivent
+   * donc en etre deduits.
+   */
+  private remplir(deja: readonly string[] = []): void {
+    const reste = new Map<string, number>();
+    for (const c of deja) reste.set(c, (reste.get(c) ?? 0) + 1);
     this.caramels = [];
     for (const [lettre, n] of Object.entries(this.distribution)) {
-      for (let i = 0; i < n; i++) this.caramels.push(lettre);
+      const enMain = Math.min(n, reste.get(lettre) ?? 0);
+      for (let i = 0; i < n - enMain; i++) this.caramels.push(lettre);
     }
   }
 
@@ -146,7 +158,7 @@ export class SacFini implements Pioche {
     // trop pauvre d'un cote ou de l'autre.
     if (this.recharge) {
       const { v, c } = this.compte(reliquat);
-      if (v <= 2 || c <= 2) { this.remplir(); this.rechargements++; }
+      if (v <= 2 || c <= 2) { this.remplir(reliquat); this.rechargements++; }
     }
     const avant = [...this.caramels];
     const premier = this.completer(reliquat);
