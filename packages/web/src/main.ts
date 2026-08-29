@@ -313,9 +313,14 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   ctx.fillRect(0, 0, W, TOP);
   ctx.fillRect(0, 0, LEFT, H);
 
-  const mark = ghost !== null
-    ? extentOf(ghost[0], ghost[1], ghost[2], ghost[3])
-    : cursor !== null ? { x0: cursor.x, y0: cursor.y, x1: cursor.x, y1: cursor.y } : null;
+  // Une seule case signalee : celle du DEPART du mot. Souligner toute son
+  // etendue allumait toute une rangee de numeros -- et c'est bien la case de
+  // depart que la notation nomme, « H ligne,colonne ».
+  const depart = ghost !== null
+    ? { x: ghost[2], y: ghost[3] }
+    : cursor !== null ? { x: cursor.x, y: cursor.y } : null;
+  const mark = depart === null ? null
+    : { x0: depart.x, y0: depart.y, x1: depart.x, y1: depart.y };
   if (mark !== null) {
     ctx.fillStyle = C.abg!;
     const sx = ox + mark.x0 * cell, sw = (mark.x1 - mark.x0 + 1) * cell;
@@ -333,7 +338,12 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
 
   // Sur un plateau ferme, chaque ligne porte son repere : quinze suffisent.
   const bornes = cfg.bornes;
-  const stepBy = bornes !== null ? 1 : Math.max(1, Math.ceil(30 / cell));
+  // Sur la grille infinie, les coordonnees s'allongent en s'eloignant de
+  // l'origine : « -1204 » prend le double de place que « 4 ». Espacer d'une
+  // constante faisait donc empieter les nombres au dezoom. On mesure.
+  const chiffres = String(Math.max(Math.abs(gx0), Math.abs(gx1), Math.abs(gy0), Math.abs(gy1))).length;
+  const largeurTexte = chiffres * 6.2 + 12;
+  const stepBy = bornes !== null ? 1 : Math.max(1, Math.ceil(largeurTexte / cell));
   ctx.font = '500 10px "IBM Plex Mono", monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";

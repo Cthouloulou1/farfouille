@@ -1067,6 +1067,12 @@ Hors du plateau, on ne pose rien — mais le bord **reste une fin de mot valide*
 un mot a le droit de s'appuyer contre lui. Ce n'est pas la même chose qu'une
 case occupée, et le générateur distingue les deux.
 
+**Les règles ne signalent que la case de départ du mot**, jamais toute son
+étendue : c'est elle que la notation nomme, et allumer tous les numéros que le
+mot traverse les faisait empiéter les uns sur les autres. Sur la grille infinie,
+l'espacement des numéros se calcule d'ailleurs sur leur **largeur** — « -1204 »
+prend le double de place que « 4 ».
+
 **Le curseur se pose sur la case de l'APPUI, pas sur celle du relâchement.**
 Une souris qui frémit entre les deux ne doit pas décaler le repère d'une case.
 Et sur un plateau fermé, où il n'y a rien à faire glisser, un léger mouvement
