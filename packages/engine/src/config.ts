@@ -67,6 +67,14 @@ export interface ConfigPartie {
    */
   coupsMax: number | null;
   /**
+   * Duree totale de la partie, en secondes, ou `null`.
+   *
+   * L'autre facon de borner une partie sans fin naturelle : au lieu de compter
+   * les coups, on compte le temps. Les deux s'excluent -- une partie a deux
+   * termes concurrents ne sait pas lequel respecter.
+   */
+  dureeMax: number | null;
+  /**
    * Decompte de deux secondes avant que le coup commence : 2, 1, partez.
    * Personne ne perd de temps -- le chrono ne part qu'apres.
    */
@@ -105,6 +113,7 @@ export function configParDefaut(): ConfigPartie {
     joker: false,
     mode: "topping",
     coupsMax: null,
+    dureeMax: null,
     decompte: false,
     chrono: null,
     bornes: null,
@@ -126,6 +135,7 @@ export interface ConfigSerialisee {
   joker: boolean;
   mode: "topping" | "duplicate";
   coupsMax: number | null;
+  dureeMax: number | null;
   decompte: boolean;
   chrono: number | null;
   bornes: number | null;
@@ -136,7 +146,8 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode, coupsMax: cfg.coupsMax,
+    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode,
+    coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
     decompte: cfg.decompte, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
@@ -154,6 +165,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     joker: plat.joker === true,
     mode: plat.mode === "duplicate" ? "duplicate" : "topping",
     coupsMax: plat.coupsMax ?? null,
+    dureeMax: plat.dureeMax ?? null,
     decompte: plat.decompte === true,
     chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,

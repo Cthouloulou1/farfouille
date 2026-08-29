@@ -131,6 +131,8 @@ function publicState(s: Salon) {
     actif: g.actif,
     demarree: g.demarree,
     coupsMax: g.cfg.coupsMax,
+    dureeMax: g.cfg.dureeMax,
+    debutDeLaPartie: g.debutDeLaPartie,
     decompteJusqua: g.decompteJusqua,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
@@ -165,6 +167,7 @@ function publicMove(m: PlayedMove) {
     // DUPLICATE : le score de chacun sur ce coup, pour que le classement
     // puisse se deplier. L'information est publique une fois le coup joue.
     scores: m.scores,
+    propositions: m.propositions,
     likes: m.likes?.length ?? 0,
     likers: m.likes ?? [],
   };
@@ -532,8 +535,12 @@ wss.on("connection", (ws) => {
       // rien n'oblige a laisser du temps au serveur.
       const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
       const decompte = msg.decompte === true;
+      // Les deux bornes s'excluent : une partie a deux termes concurrents ne
+      // saurait pas lequel respecter.
       const coupsMax = msg.coupsMax === null || msg.coupsMax === undefined ? null
         : Math.max(1, Math.min(9999, Math.round(Number(msg.coupsMax))));
+      const dureeMax = msg.dureeMax === null || msg.dureeMax === undefined ? null
+        : Math.max(10, Math.min(86400, Math.round(Number(msg.dureeMax))));
       let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
       // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
@@ -555,6 +562,7 @@ wss.on("connection", (ws) => {
         pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
         bornes, pavage, pavageNom, mode, decompte,
         coupsMax: Number.isFinite(coupsMax as number) ? coupsMax : null,
+        dureeMax: Number.isFinite(dureeMax as number) ? dureeMax : null,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));

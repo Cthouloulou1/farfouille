@@ -89,6 +89,14 @@ export interface PlayedMove {
   scores?: Record<string, number>;
   trouveurs?: string[];
   /**
+   * Ce que CHAQUE joueur a reellement propose sur ce coup : son meilleur mot,
+   * ou il l'a pose et ce qu'il valait.
+   *
+   * C'est ce qui permet, apres la partie, de montrer le coup de chacun plutot
+   * que le top -- et de retrouver un mot qui ne figure dans aucun palier.
+   */
+  propositions?: Record<string, { word: string; dir: Dir; x: number; y: number; score: number }>;
+  /**
    * TOPPING chronometre : personne n'a trouve le top a l'echeance. Un demi-point
    * va au joueur qui avait propose la solution la plus rentable, le plus vite.
    */
@@ -193,6 +201,8 @@ export class Game {
    * tirage est connu mais le chrono n'a pas demarre : personne ne perd de temps.
    */
   decompteJusqua = 0;
+  /** Instant du premier tirage. Sert a mesurer la duree d'une partie bornee. */
+  debutDeLaPartie = 0;
 /**
    * Le decompte a-t-il deja eu lieu ?
    *
@@ -227,7 +237,9 @@ export class Game {
    */
   readonly presents = new Set<string>();
   /** DUPLICATE : la meilleure solution de chacun sur le coup en cours. */
-  private propositions = new Map<string, { score: number; word: string; at: number }>();
+  private propositions = new Map<
+    string, { score: number; word: string; dir: Dir; x: number; y: number; at: number }
+  >();
   /** DUPLICATE : qui etait present quand le tirage est tombe. */
   private participants = new Set<string>();
   solving = false;
@@ -585,7 +597,11 @@ export class Game {
     // Nombre de coups atteint : la partie s'arrete la, meme si le sac pourrait
     // continuer. C'est ce qui donne un terme a un duplicate sur grille infinie.
     const assezJoue = this.cfg.coupsMax !== null && this.moves.length >= this.cfg.coupsMax;
-    if (assezJoue || this.bag.estFinie(this.reliquat)) {
+    // Meme idee, comptee en temps : la partie s'arrete quand sa duree est
+    // ecoulee. Le compte part du premier tirage, pas de la creation du salon.
+    const assezDure = this.cfg.dureeMax !== null && this.debutDeLaPartie !== 0
+      && Date.now() - this.debutDeLaPartie >= this.cfg.dureeMax * 1000;
+    if (assezJoue || assezDure || this.bag.estFinie(this.reliquat)) {
       this.finie = true;
       this.solving = false;
       this.canonicalTop = null;
@@ -598,7 +614,7 @@ export class Game {
       this.isotops = 0;
       this.tiers = [];
       console.log(`[partie] terminee apres ${this.moves.length} coups` +
-        (assezJoue ? " (nombre de coups atteint)" : ""));
+        (assezJoue ? " (nombre de coups atteint)" : assezDure ? " (duree ecoulee)" : ""));
       this.emit();
       return;
     }
@@ -645,6 +661,7 @@ export class Game {
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
     this.servedAt = Date.now();
+    if (this.debutDeLaPartie === 0) this.debutDeLaPartie = this.servedAt;
     this.decompteJusqua = 0;
     this.armerLeChrono();
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
@@ -707,7 +724,8 @@ export class Game {
       const avant = this.propositions.get(player);
       if (avant === undefined || r.move.score > avant.score) {
         this.propositions.set(player, {
-          score: r.move.score, word: r.move.word, at: Date.now(),
+          score: r.move.score, word: r.move.word,
+          dir: r.move.dir, x: r.move.x, y: r.move.y, at: Date.now(),
         });
       }
       const garde = this.propositions.get(player)!;
@@ -721,7 +739,10 @@ export class Game {
     // elle qui decide du demi-point si personne n'atteint le top.
     const avant = this.propositions.get(player);
     if (avant === undefined || r.move.score > avant.score) {
-      this.propositions.set(player, { score: r.move.score, word: r.move.word, at: Date.now() });
+      this.propositions.set(player, {
+        score: r.move.score, word: r.move.word,
+        dir: r.move.dir, x: r.move.x, y: r.move.y, at: Date.now(),
+      });
     }
 
     if (r.move.score < this.bestScore) {
@@ -812,6 +833,17 @@ export class Game {
     duplicate?: { scores: Record<string, number>; trouveurs: string[] },
     demiPoint?: { joueur: string; word: string; score: number },
   ): Promise<void> {
+    const propositions: PlayedMove["propositions"] = {};
+    for (const [nom, p] of this.propositions) {
+      propositions[nom] = { word: p.word, dir: p.dir, x: p.x, y: p.y, score: p.score };
+    }
+    // Celui qui remporte le coup en topping n'est pas toujours passe par une
+    // proposition enregistree : on l'ajoute depuis le mot qu'il a tape.
+    if (player !== null && played !== undefined) {
+      propositions[player] = {
+        word: played.word, dir: played.dir, x: played.x, y: played.y, score: played.score,
+      };
+    }
     const top = this.canonicalTop!;
     const move: PlayedMove = {
       n: this.moveNumber + 1,
@@ -833,6 +865,7 @@ export class Game {
       ms,
       isotops: this.isotops,
       tiers: this.tiers as Tier[],
+      ...(Object.keys(propositions).length > 0 ? { propositions } : {}),
       ...(duplicate ?? {}),
       ...(demiPoint ? { demiPoint } : {}),
     };

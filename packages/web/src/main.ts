@@ -29,6 +29,8 @@ interface MoveInfo {
   demiPoint?: { joueur: string; word: string; score: number };
   /** DUPLICATE : ce que chaque joueur a marque sur ce coup. */
   scores?: Record<string, number>;
+  /** Ce que chaque joueur a reellement propose sur ce coup. */
+  propositions?: Record<string, { word: string; dir: Dir; x: number; y: number; score: number }>;
   /** Nombre de "j'aime" recus, et qui les a donnes. */
   likes?: number; likers?: string[];
 }
@@ -67,6 +69,9 @@ let demarree = true;
 let configRecue = false;
 /** Nombre de coups prevus, null si la partie est sans fin. */
 let coupsMax: number | null = null;
+/** Duree totale prevue en secondes, et instant du premier tirage. */
+let dureeMax: number | null = null;
+let debutDeLaPartie = 0;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -557,6 +562,8 @@ function paintSide() {
   $("rb-move").textContent = !demarree || finie ? "—"
     : coupsMax === null ? String(moveNumber + 1)
     : `${moveNumber + 1} / ${coupsMax}`;
+  // Une partie bornee dans le TEMPS montre ce qu'il lui reste a vivre.
+  $("rb-reste-wrap").hidden = dureeMax === null || !demarree || finie;
   $("fin").hidden = !finie;
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
@@ -643,11 +650,14 @@ function paintSide() {
           // Son score du coup, et son ecart au top. Zero d'ecart, c'est le top.
           const sc = m.scores![name]!;
           const ecart = m.score - sc;
-          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${m.word}</span>` +
+          // Le mot QU'IL a joue -- pas le top, qu'il n'a peut-etre pas trouve.
+          const sien = m.propositions?.[name]?.word ?? (sc === 0 ? "—" : m.word);
+          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${sien}</span>` +
                         `<span class="s">${sc}</span>` +
                         `<span class="t ${ecart === 0 ? "top" : ""}">${ecart === 0 ? "Top" : `−${ecart}`}</span>`;
-          r.title = `Coup ${m.n} : ${m.word} valait ${m.score} pts, ` +
-            (ecart === 0 ? "trouvé" : `manqué de ${ecart} pts`);
+          r.title = `Coup ${m.n} : ${sien} pour ${sc} pts. ` +
+            `Le top ${m.word} valait ${m.score} pts` +
+            (ecart === 0 ? " — trouvé." : `, manqué de ${ecart} pts.`);
         } else {
           // Un demi-point porte le mot que le joueur a reellement propose, suivi
           // de « (0.5) » : c'etait sa meilleure solution, pas le top.
@@ -725,25 +735,64 @@ function voirLeCoup(n: number): void {
   const borne = Math.max(1, Math.min(history.length, n));
   rejeu = { n: borne, paliers: null };
   const m = history.find((q) => q.n === borne);
-  $("rejeu").hidden = false;
+  $("panel-live").hidden = true;
+  $("panel-rejeu").hidden = false;
   $("rj-titre").textContent = `Coup ${borne}`;
-  $("rj-tirage").textContent = m?.notation ?? m?.rack ?? "";
-  ($("rj-avant") as HTMLButtonElement).disabled = borne <= 1;
-  ($("rj-apres") as HTMLButtonElement).disabled = borne >= history.length;
+  for (const [id, off] of [["rj-debut", borne <= 1], ["rj-avant", borne <= 1],
+                           ["rj-apres", borne >= history.length], ["rj-fin", borne >= history.length]] as const) {
+    ($(id) as HTMLButtonElement).disabled = off;
+  }
   $("rj-top").innerHTML = m === undefined ? "" :
     `<b>${m.word}</b> ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} ` +
-    `<span class="pts">${m.score} pts</span> · ` +
-    `${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")}`;
+    `<span class="pts">${m.score} pts</span><br>` +
+    `<span class="g">${m.notation ?? m.rack ?? ""}</span>`;
   const box = $("rj-sols");
   box.replaceChildren();
   const attente = document.createElement("div");
   attente.className = "none";
-  attente.style.padding = "10px 18px";
+  attente.style.padding = "10px 15px";
   attente.textContent = "chargement des solutions…";
   box.appendChild(attente);
+  $("rj-qui").hidden = true;
   ghost = m ? [m.word, m.dir, m.x, m.y] : null;
   envoyer({ t: "tiers", n: borne });
   draw();
+}
+
+/** Qui a joue ce mot, a cet endroit, sur ce coup. */
+function joueursDuMot(m: MoveInfo, word: string, dir: Dir, x: number, y: number): string[] {
+  const out: string[] = [];
+  for (const [nom, p] of Object.entries(m.propositions ?? {})) {
+    if (p.word === word && p.dir === dir && p.x === x && p.y === y) out.push(nom);
+  }
+  return out.sort();
+}
+
+/** Le tableau du bas : ce que chacun a propose sur ce coup. */
+function montrerQui(m: MoveInfo, titre: string, noms: string[]): void {
+  const box = $("rj-qui");
+  box.replaceChildren();
+  if (noms.length === 0) { box.hidden = true; return; }
+  const h = document.createElement("h4");
+  h.textContent = titre;
+  box.appendChild(h);
+  for (const nom of noms) {
+    const p = m.propositions?.[nom];
+    const r = document.createElement("button");
+    r.type = "button";
+    r.className = "qrow";
+    r.innerHTML = `<span class="qui">${nom}</span>` +
+      `<span class="p">${p ? p.word : "—"}</span>` +
+      `<span class="s">${p ? p.score : 0}</span>`;
+    if (p !== undefined) {
+      r.addEventListener("click", () => {
+        ghost = [p.word, p.dir, p.x, p.y];
+        reveal(p.word, p.dir, p.x, p.y);
+      });
+    }
+    box.appendChild(r);
+  }
+  box.hidden = false;
 }
 
 /** Affiche les paliers recus : le top et ses isotops, puis les sous-tops. */
@@ -752,43 +801,64 @@ function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): vo
   rejeu.paliers = paliers;
   const box = $("rj-sols");
   box.replaceChildren();
+  const joue = history.find((q) => q.n === n);
   if (paliers === null || paliers.length === 0) {
     const e = document.createElement("div");
     e.className = "none";
-    e.style.padding = "10px 18px";
+    e.style.padding = "10px 15px";
     e.textContent = refus ?? "solutions non enregistrées pour ce coup";
     box.appendChild(e);
-    return;
   }
-  const meilleur = paliers[0]!.score;
-  const joue = history.find((q) => q.n === n);
-  for (const p of paliers) {
-    for (const [word, dir, x, y] of p.moves) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "sol" + (p.score === meilleur ? " best" : "");
-      b.innerHTML = `<span class="w">${word}</span>` +
-        `<span class="p">${noteCoup(dir, x, y, cfg.bornes)}</span>` +
-        `<span class="s">${p.score}</span>`;
-      if (joue !== undefined && word === joue.word && dir === joue.dir
-          && x === joue.x && y === joue.y) {
-        b.setAttribute("aria-current", "true");
-      }
-      b.addEventListener("click", () => {
-        for (const q of box.querySelectorAll(".sol")) q.setAttribute("aria-current", "false");
-        b.setAttribute("aria-current", "true");
-        ghost = [word, dir, x, y];
-        reveal(word, dir, x, y);
-      });
-      box.appendChild(b);
+  const meilleur = paliers && paliers.length > 0 ? paliers[0]!.score : 0;
+  const vus = new Set<string>();
+
+  const ligne = (word: string, dir: Dir, x: number, y: number, score: number,
+                 best: boolean, hors: boolean): void => {
+    vus.add(`${word}|${dir}|${x}|${y}`);
+    const noms = joue ? joueursDuMot(joue, word, dir, x, y) : [];
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sol" + (best ? " best" : "") + (hors ? " hors" : "");
+    b.innerHTML = `<span class="w">${word}</span>` +
+      `<span class="p">${noteCoup(dir, x, y, cfg.bornes)}</span>` +
+      `<span class="s">${score}</span>` +
+      `<span class="n">${noms.length > 0 ? noms.length : ""}</span>`;
+    if (joue !== undefined && word === joue.word && dir === joue.dir
+        && x === joue.x && y === joue.y) {
+      b.setAttribute("aria-current", "true");
     }
+    b.title = noms.length > 0 ? `joué par ${noms.join(", ")}` : "personne n'a joué ce mot";
+    b.addEventListener("click", () => {
+      for (const q of box.querySelectorAll(".sol")) q.setAttribute("aria-current", "false");
+      b.setAttribute("aria-current", "true");
+      ghost = [word, dir, x, y];
+      reveal(word, dir, x, y);
+      if (joue !== undefined) montrerQui(joue, `${word} — ${noms.length} joueur${noms.length > 1 ? "s" : ""}`, noms);
+    });
+    box.appendChild(b);
+  };
+
+  for (const p of paliers ?? []) {
+    for (const [word, dir, x, y] of p.moves) ligne(word, dir, x, y, p.score, p.score === meilleur, false);
+  }
+
+  // Un mot joue qui ne figure dans AUCUN palier -- au-dela des cent retenues --
+  // doit rester consultable : c'est le coup de quelqu'un.
+  if (joue !== undefined) {
+    for (const [, p] of Object.entries(joue.propositions ?? {})) {
+      if (vus.has(`${p.word}|${p.dir}|${p.x}|${p.y}`)) continue;
+      ligne(p.word, p.dir, p.x, p.y, p.score, false, true);
+    }
+    // Et par defaut, le tableau montre ce que TOUT le monde a joue.
+    montrerQui(joue, "Ce que les joueurs ont joué", Object.keys(joue.propositions ?? {}).sort());
   }
 }
 
 function fermerLeRejeu(): void {
   rejeu = null;
   ghost = null;
-  $("rejeu").hidden = true;
+  $("panel-rejeu").hidden = true;
+  $("panel-live").hidden = false;
   draw();
 }
 
@@ -796,6 +866,8 @@ $("rejeu-open").addEventListener("click", () => voirLeCoup(1));
 $("rj-close").addEventListener("click", fermerLeRejeu);
 $("rj-avant").addEventListener("click", () => { if (rejeu) voirLeCoup(rejeu.n - 1); });
 $("rj-apres").addEventListener("click", () => { if (rejeu) voirLeCoup(rejeu.n + 1); });
+$("rj-debut").addEventListener("click", () => voirLeCoup(1));
+$("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 
 // ---------------------------------------------------------------- feuille de route
 
@@ -994,8 +1066,11 @@ cv.addEventListener("pointercancel", () => { press = null; clearTimeout(holdTime
 
 addEventListener("keydown", (e) => {
   if (!$("join").hidden) return;
-  if (document.activeElement === $("chat-text")) return;
-  if (!$("rejeu").hidden) {
+  // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
+  // avale par le jeu et n'effacait rien dans les champs des reglages.
+  const cible = document.activeElement;
+  if (cible instanceof HTMLInputElement || cible instanceof HTMLTextAreaElement) return;
+  if (!$("panel-rejeu").hidden) {
     if (e.key === "Escape") { fermerLeRejeu(); return; }
     if (e.key === "ArrowLeft" && rejeu) { voirLeCoup(rejeu.n - 1); e.preventDefault(); return; }
     if (e.key === "ArrowRight" && rejeu) { voirLeCoup(rejeu.n + 1); e.preventDefault(); return; }
@@ -1093,6 +1168,11 @@ setInterval(() => {
     return;
   }
   $("age").textContent = fmtTime(now - createdAt);
+  if (dureeMax !== null && debutDeLaPartie !== 0 && demarree && !finie) {
+    const reste = Math.max(0, debutDeLaPartie + dureeMax * 1000 - now);
+    const mn = Math.floor(reste / 60000), sc = Math.floor((reste % 60000) / 1000);
+    $("rb-reste").textContent = `${mn}:${String(sc).padStart(2, "0")}`;
+  }
   if (!demarree) { $("elapsed").textContent = "—"; $("age").textContent = "—"; return; }
   if (endormi) { $("elapsed").textContent = "en pause"; return; }
   if (solving) { $("elapsed").textContent = "…"; return; }
@@ -1111,6 +1191,7 @@ function applyState(s: {
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   demarree?: boolean; coupsMax?: number | null;
+  dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
@@ -1132,6 +1213,8 @@ function applyState(s: {
   decompteJusqua = s.decompteJusqua ?? 0;
   demarree = s.demarree !== false;
   coupsMax = s.coupsMax ?? null;
+  dureeMax = s.dureeMax ?? null;
+  debutDeLaPartie = s.debutDeLaPartie ?? 0;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -1315,11 +1398,12 @@ function connect() {
       draw();
       // Au duplicate, la liste des trouveurs arrive par le chat a l'echeance :
       // rien ne doit filtrer avant, pas meme un « untel a trouve ».
+      const place = noteCoup(mv.dir, mv.x, mv.y, cfg.bornes);
       flash(
-        duplicate ? `Coup ${mv.n} — top : ${mv.word}, ${mv.score} pts`
-        : mv.player === me ? `Top ! ${mv.word} — ${mv.score} pts`
-        : `${mv.player ?? "Révélé"} : ${mv.word} — ${mv.score} pts`,
-        duplicate ? "ok" : mv.player === me ? "top" : "ok",
+        !duplicate && mv.player === me ? `Top ! ${mv.word} — ${mv.score} pts`
+        : !duplicate && mv.player !== null ? `${mv.player} : ${mv.word} — ${mv.score} pts`
+        : `Coup ${mv.n} : ${mv.word}, ${place}, ${mv.score} pts`,
+        !duplicate && mv.player === me ? "top" : "ok",
       );
       return;
     }
@@ -1439,6 +1523,58 @@ let cBornes: number | null = 7;
 let cMode: "topping" | "duplicate" = "topping";
 /** Nombre de coups a jouer, ou null pour sans fin. */
 let cCoupsMax: number | null = null;
+/** Duree totale en secondes, ou null. */
+let cDureeMax: number | null = null;
+/** Lequel des deux termes on regle : par les coups ou par le temps. */
+let cBorne: "coups" | "duree" = "coups";
+
+/** Minutes vers secondes et retour, pour un champ qui accepte « 3,5 ». */
+const enSecondes = (min: number): number => Math.round(min * 60);
+const enMinutes = (s: number): string => {
+  const m = s / 60;
+  return Number.isInteger(m) ? String(m) : String(Math.round(m * 100) / 100).replace(".", ",");
+};
+
+function peuplerDuree(): void {
+  const perso = $("r-duree-perso") as HTMLInputElement;
+  let reconnu = false;
+  for (const b of $("r-duree").querySelectorAll("button")) {
+    const v = (b as HTMLElement).dataset["v"]!;
+    const choisi = v === "sansfin" ? cDureeMax === null : Number(v) === cDureeMax;
+    b.setAttribute("aria-pressed", String(choisi));
+    if (choisi) reconnu = true;
+  }
+  perso.value = !reconnu && cDureeMax !== null ? enMinutes(cDureeMax) : "";
+  $("r-duree-perso-case").setAttribute("aria-pressed", String(!reconnu && cDureeMax !== null));
+}
+
+for (const b of $("r-duree").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    const v = (b as HTMLElement).dataset["v"]!;
+    cDureeMax = v === "sansfin" ? null : Number(v);
+    peuplerDuree();
+  });
+}
+
+($("r-duree-perso") as HTMLInputElement).addEventListener("input", () => {
+  const champ = $("r-duree-perso") as HTMLInputElement;
+  // Des minutes, decimales acceptees : « 3,5 » comme « 3.5 ».
+  const propre = champ.value.replace(/[^0-9.,]/g, "");
+  if (propre !== champ.value) champ.value = propre;
+  const v = Number(propre.replace(",", "."));
+  if (!Number.isFinite(v) || v <= 0) return;
+  cDureeMax = enSecondes(v);
+  for (const b of $("r-duree").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+});
+
+for (const b of $("r-borne-onglets").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    cBorne = (b as HTMLElement).dataset["v"] === "duree" ? "duree" : "coups";
+    // Les deux termes s'excluent : choisir l'un efface l'autre.
+    if (cBorne === "coups") cDureeMax = null; else cCoupsMax = null;
+    peuplerCoups();
+  });
+}
 
 /**
  * Le nombre de coups ne se propose qu'en duplicate.
@@ -1448,11 +1584,16 @@ let cCoupsMax: number | null = null;
  * rien ne s'epuise, il faut bien dire quand.
  */
 function peuplerCoups(): void {
-  // Il ne se pose que sur une partie qui n'a PAS de fin naturelle : un plateau
-  // borne s'arrete quand le sac se vide, et le sac de 102 aussi. Proposer un
-  // nombre de coups la-dessus poserait deux fins concurrentes.
-  $("r-coups-bloc").hidden =
-    cMode !== "duplicate" || cBornes !== null || cPioche === "sac102";
+  // Ces bornes ne se posent que sur une partie qui n'a PAS de fin naturelle :
+  // un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi.
+  // En poser une la-dessus donnerait deux fins concurrentes.
+  $("r-borne-bloc").hidden = cBornes !== null || cPioche === "sac102";
+  for (const b of $("r-borne-onglets").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cBorne));
+  }
+  $("r-coups").hidden = cBorne !== "coups";
+  $("r-duree").hidden = cBorne !== "duree";
+  peuplerDuree();
   const perso = $("r-coups-perso") as HTMLInputElement;
   let reconnu = false;
   for (const b of $("r-coups").querySelectorAll("button")) {
@@ -1474,7 +1615,10 @@ for (const b of $("r-coups").querySelectorAll("button")) {
 }
 
 ($("r-coups-perso") as HTMLInputElement).addEventListener("input", () => {
-  const brut = ($("r-coups-perso") as HTMLInputElement).value.trim();
+  const champ = $("r-coups-perso") as HTMLInputElement;
+  const propre = champ.value.replace(/[^0-9]/g, "");
+  if (propre !== champ.value) champ.value = propre;
+  const brut = propre.trim();
   if (brut === "") return;
   const v = Math.round(Number(brut));
   if (!Number.isFinite(v) || v < 1) return;
@@ -1604,8 +1748,10 @@ function peuplerPrimes(): void {
     champ.maxLength = 4;
     champ.value = String(cPrimes[n] ?? 0);
     champ.addEventListener("input", () => {
-      const v = Math.max(0, Math.min(9999, Math.round(Number(champ.value) || 0)));
-      cPrimes[n] = v;
+      // Rien que des chiffres : une lettre tapee la n'a aucun sens.
+      const propre = champ.value.replace(/[^0-9]/g, "");
+      if (propre !== champ.value) champ.value = propre;
+      cPrimes[n] = Math.max(0, Math.min(9999, Number(propre) || 0));
     });
     const b = document.createElement("b");
     b.textContent = String(n);
@@ -1685,6 +1831,8 @@ function ouvrirReglages(): void {
   cBornes = cfg.bornes;
   cMode = cfg.mode === "duplicate" ? "duplicate" : "topping";
   cCoupsMax = cfg.coupsMax;
+  cDureeMax = cfg.dureeMax;
+  cBorne = cfg.dureeMax !== null ? "duree" : "coups";
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
   peuplerMode();
   peuplerCoups();
@@ -1711,7 +1859,8 @@ $("r-appliquer").addEventListener("click", () => {
     chrono: cChrono,
     bornes: cBornes,
     mode: cMode,
-    coupsMax: cMode === "duplicate" ? cCoupsMax : null,
+    coupsMax: cBorne === "coups" ? cCoupsMax : null,
+    dureeMax: cBorne === "duree" ? cDureeMax : null,
     decompte: ($("r-decompte") as HTMLInputElement).checked,
   });
   $("reglages").hidden = true;
