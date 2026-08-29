@@ -89,6 +89,15 @@ let marks: { x: number; y: number }[] = [];
 /** Le coup mis en evidence sur la grille, quand on en clique un. */
 let ghost: [string, Dir, number, number] | null = null;
 
+interface Palier { score: number; moves: [string, Dir, number, number][] }
+/**
+ * Le rejeu : on remonte la partie coup par coup, une fois qu'elle est finie.
+ *
+ * `n` est le coup qu'on examine. La grille n'affiche que les caramels poses
+ * AVANT lui : on voit ce que voyaient les joueurs au moment de chercher.
+ */
+let rejeu: { n: number; paliers: Palier[] | null } | null = null;
+
 let cell = 30, ox = 0, oy = 0, W = 0, H = 0;
 
 // ---------------------------------------------------------------- rendu
@@ -260,11 +269,15 @@ function draw() {
     }
   };
 
+  // Pendant le rejeu, on ne montre que ce qui etait pose AVANT le coup examine.
+  const jusqua = rejeu === null ? Infinity : rejeu.n - 1;
   // Le dernier coup joue reste souligne sur la grille.
   const hl = new Set(
-    last === null ? [] : tiles.filter((t) => t.n === last!.n).map((t) => `${t.x},${t.y}`),
+    rejeu !== null || last === null
+      ? [] : tiles.filter((t) => t.n === last!.n).map((t) => `${t.x},${t.y}`),
   );
   for (const t of tiles) {
+    if (t.n > jusqua) continue;
     if (t.x < gx0 || t.x > gx1 || t.y < gy0 || t.y > gy1) continue;
     caramel(t.x, t.y, t.l, t.b === 1,
       t.b === 1 ? C.jface : C.face,
@@ -525,6 +538,9 @@ function paintSide() {
   $("rb-move").textContent = !demarree ? "—" : finie ? "—" : solving ? "…" : String(moveNumber + 1);
   $("fin").hidden = !finie;
   $("attente").hidden = demarree;
+  // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
+  // les reponses d'une partie en cours.
+  $("rejeu-wrap").hidden = !finie || history.length === 0;
   $("rb-cumul").textContent = cumul.toLocaleString("fr");
   paintCurrent();
 
@@ -675,6 +691,86 @@ function likeButton(m: MoveInfo): HTMLButtonElement {
 $("last-word").addEventListener("click", () => {
   if (last !== null) focusMove(last);
 });
+
+// ---------------------------------------------------------------- rejeu
+
+/** Ouvre le rejeu sur un coup donne et demande ses paliers au serveur. */
+function voirLeCoup(n: number): void {
+  if (history.length === 0) return;
+  const borne = Math.max(1, Math.min(history.length, n));
+  rejeu = { n: borne, paliers: null };
+  const m = history.find((q) => q.n === borne);
+  $("rejeu").hidden = false;
+  $("rj-titre").textContent = `Coup ${borne}`;
+  $("rj-tirage").textContent = m?.notation ?? m?.rack ?? "";
+  ($("rj-avant") as HTMLButtonElement).disabled = borne <= 1;
+  ($("rj-apres") as HTMLButtonElement).disabled = borne >= history.length;
+  $("rj-top").innerHTML = m === undefined ? "" :
+    `<b>${m.word}</b> ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} ` +
+    `<span class="pts">${m.score} pts</span> · ` +
+    `${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")}`;
+  const box = $("rj-sols");
+  box.replaceChildren();
+  const attente = document.createElement("div");
+  attente.className = "none";
+  attente.style.padding = "10px 18px";
+  attente.textContent = "chargement des solutions…";
+  box.appendChild(attente);
+  ghost = m ? [m.word, m.dir, m.x, m.y] : null;
+  envoyer({ t: "tiers", n: borne });
+  draw();
+}
+
+/** Affiche les paliers recus : le top et ses isotops, puis les sous-tops. */
+function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): void {
+  if (rejeu === null || rejeu.n !== n) return;
+  rejeu.paliers = paliers;
+  const box = $("rj-sols");
+  box.replaceChildren();
+  if (paliers === null || paliers.length === 0) {
+    const e = document.createElement("div");
+    e.className = "none";
+    e.style.padding = "10px 18px";
+    e.textContent = refus ?? "solutions non enregistrées pour ce coup";
+    box.appendChild(e);
+    return;
+  }
+  const meilleur = paliers[0]!.score;
+  const joue = history.find((q) => q.n === n);
+  for (const p of paliers) {
+    for (const [word, dir, x, y] of p.moves) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sol" + (p.score === meilleur ? " best" : "");
+      b.innerHTML = `<span class="w">${word}</span>` +
+        `<span class="p">${noteCoup(dir, x, y, cfg.bornes)}</span>` +
+        `<span class="s">${p.score}</span>`;
+      if (joue !== undefined && word === joue.word && dir === joue.dir
+          && x === joue.x && y === joue.y) {
+        b.setAttribute("aria-current", "true");
+      }
+      b.addEventListener("click", () => {
+        for (const q of box.querySelectorAll(".sol")) q.setAttribute("aria-current", "false");
+        b.setAttribute("aria-current", "true");
+        ghost = [word, dir, x, y];
+        reveal(word, dir, x, y);
+      });
+      box.appendChild(b);
+    }
+  }
+}
+
+function fermerLeRejeu(): void {
+  rejeu = null;
+  ghost = null;
+  $("rejeu").hidden = true;
+  draw();
+}
+
+$("rejeu-open").addEventListener("click", () => voirLeCoup(1));
+$("rj-close").addEventListener("click", fermerLeRejeu);
+$("rj-avant").addEventListener("click", () => { if (rejeu) voirLeCoup(rejeu.n - 1); });
+$("rj-apres").addEventListener("click", () => { if (rejeu) voirLeCoup(rejeu.n + 1); });
 
 // ---------------------------------------------------------------- feuille de route
 
@@ -867,6 +963,12 @@ cv.addEventListener("pointercancel", () => { press = null; clearTimeout(holdTime
 addEventListener("keydown", (e) => {
   if (!$("join").hidden) return;
   if (document.activeElement === $("chat-text")) return;
+  if (!$("rejeu").hidden) {
+    if (e.key === "Escape") { fermerLeRejeu(); return; }
+    if (e.key === "ArrowLeft" && rejeu) { voirLeCoup(rejeu.n - 1); e.preventDefault(); return; }
+    if (e.key === "ArrowRight" && rejeu) { voirLeCoup(rejeu.n + 1); e.preventDefault(); return; }
+    return;
+  }
   if (!$("roadmap").hidden && e.key === "Escape") { $("roadmap").hidden = true; return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
@@ -1145,6 +1247,7 @@ function connect() {
     }
     if (m.t === "state") { applyState(m.state); return; }
     // Un "j'aime" est arrive : on met a jour le coup concerne, partout.
+    if (m.t === "tiers") { montrerPaliers(m.n, m.tiers, m.refus); return; }
     if (m.t === "likes") {
       const upd = (q: MoveInfo | null) => {
         if (q === null || q.n !== m.n) return;

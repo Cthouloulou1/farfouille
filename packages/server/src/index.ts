@@ -442,6 +442,33 @@ wss.on("connection", (ws) => {
 
     if (s === undefined) return;
 
+    /**
+     * Les paliers d'un coup : le top, ses isotops, puis les sous-tops.
+     *
+     * UNIQUEMENT SUR UNE PARTIE TERMINEE. Pendant qu'elle se joue, cette liste
+     * est le jeu lui-meme -- la donner reviendrait a donner la reponse. Une
+     * fois la partie close, elle devient ce qui permet de la comprendre.
+     */
+    if (msg.t === "tiers") {
+      if (!s.partie.finie) {
+        send(ws, { t: "tiers", n: Number(msg.n), tiers: null, refus: "partie en cours" });
+        return;
+      }
+      const m = s.partie.moves.find((q) => q.n === Number(msg.n));
+      // On s'arrete a cent solutions : au-dela, personne ne lit.
+      let reste = 100;
+      const paliers = (m?.tiers ?? []).map((g) => {
+        const pris = g.moves.slice(0, Math.max(0, reste));
+        reste -= pris.length;
+        return { score: g.score, moves: pris };
+      }).filter((g) => g.moves.length > 0);
+      send(ws, {
+        t: "tiers", n: Number(msg.n), tiers: paliers,
+        rack: m?.notation ?? m?.rack ?? "", mot: m?.word, score: m?.score,
+      });
+      return;
+    }
+
     // "j'aime" sur un coup : le like va au joueur qui a trouve le top. On ne
     // peut ni s'aimer soi-meme, ni aimer un coup revele sans vainqueur.
     if (msg.t === "like") {

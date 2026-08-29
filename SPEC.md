@@ -1372,7 +1372,21 @@ Le chrono qui défile s'affiche en **secondes entières** : les dixièmes qui
 tournent sont une source d'angoisse, pas d'information. Le temps **enregistré**
 d'un coup trouvé, lui, se note au **centième** — une performance se mesure.
 
-> Le bouton **rejouer** n'apparaîtra qu'une fois la partie terminée.
+### Rejouer une partie terminée
+
+Le bouton **Rejouer** n'apparaît **qu'une fois la partie close** — avant, ce
+serait donner les réponses d'une partie en cours. Le serveur refuse d'ailleurs
+les paliers d'une partie qui se joue, quoi que demande le client.
+
+Le rejeu remonte la partie coup par coup. Pour chaque coup il montre le tirage,
+le mot posé et qui l'a trouvé, puis **les paliers** : le top et ses isotops
+d'abord, les sous-tops ensuite, **cent solutions au plus** — au-delà, personne
+ne lit. Le coup réellement joué y est surligné.
+
+La grille se **rembobine** : on ne voit que les caramels posés *avant* le coup
+examiné, c'est-à-dire ce que voyaient les joueurs au moment de chercher. Un clic
+sur une solution la montre sur la grille. Les flèches, ou les touches ← et →,
+passent d'un coup à l'autre.
 
 ### Les salons
 
