@@ -1281,7 +1281,18 @@ même si quelqu'un l'a trouvé plus tôt. Chaque joueur marque **le score de sa
 meilleure solution**, et son écart au top est son **négatif**. Le score de chaque
 joueur est noté **à chaque coup**.
 
+**Construit.** Le mode se choisit dans les réglages du salon. Un duplicate exige
+un chrono — c'est l'échéance qui clôt le coup, pas la découverte du top ; sans
+chrono, on en impose un de 60 s.
+
 Rien ne filtre pendant le coup : aucune annonce, aucun décompte de trouveurs.
+La réponse faite à celui qui vient de soumettre ne dit **jamais** s'il a trouvé
+le top — le lui dire le lui apprendrait, et l'apprendrait aux autres par
+ricochet. Il reçoit son score, et la meilleure de ses propres solutions.
+
+Seuls sont notés les joueurs **présents au moment du tirage**. Qui arrive en
+cours de coup joue et figure dans la liste des trouveurs s'il trouve, mais
+n'entre au classement qu'au coup suivant.
 Savoir que le top est atteint apprendrait aux autres que leur solution ne l'est
 pas. À l'échéance, **la liste de ceux qui ont trouvé le top s'affiche dans le
 chat**, et on enchaîne aussitôt — pas de temps mort entre l'affichage et le coup

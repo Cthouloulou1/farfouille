@@ -130,7 +130,11 @@ function publicState(s: Salon) {
     actif: g.actif,
     servedAt: g.servedAt,
     chrono: g.cfg.chrono,
+    mode: g.cfg.mode,
     players: g.players,
+    // Au duplicate le classement se lit en points et en negatif, pas en coups
+    // remportes : personne ne « remporte » un coup, tout le monde en marque.
+    ...(g.cfg.mode === "duplicate" ? g.classementDuplicate() : {}),
     likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),
@@ -165,6 +169,8 @@ function surveiller(s: Salon): void {
   s.partie.onMove((m) => broadcast(s.id, {
     t: "placed", move: publicMove(m), placements: m.placements, state: publicState(s),
   }));
+  // Le moteur parle aussi : la liste des trouveurs du duplicate vient de lui.
+  s.partie.onChat((m) => broadcast(s.id, { t: "said", msg: m }));
 }
 
 // ---------------------------------------------------------------- ouverture
@@ -397,7 +403,9 @@ wss.on("connection", (ws) => {
         return;
       }
       clients.set(ws, { nom, salon: cible.id });
-      // Le salon se reveille : il pioche si ce n'est pas fait, et le chrono part.
+      // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
+      // la. Le duplicate en a besoin pour savoir qui compter sur un coup.
+      cible.partie.presents.add(nom);
       void cible.partie.reveiller();
       send(ws, {
         t: "hello",
@@ -440,7 +448,8 @@ wss.on("connection", (ws) => {
         ? { x: Math.round(msg.cell.x), y: Math.round(msg.cell.y) }
         : undefined;
       if (text.length === 0 && cell === undefined) return;
-      broadcast(s.id, { t: "said", msg: s.partie.say(moi.nom, text, cell) });
+      // La diffusion passe par onChat : inutile de la refaire ici.
+      s.partie.say(moi.nom, text, cell);
       return;
     }
 
@@ -481,8 +490,12 @@ wss.on("connection", (ws) => {
       }
       // Une seconde au moins : le chrono ne part qu'APRES le calcul du top, donc
       // rien n'oblige a laisser du temps au serveur.
-      const chrono = msg.chrono === null || msg.chrono === undefined ? null
+      const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
+      let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
+      // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
+      // l'echeance qui le clot, pas la decouverte du top.
+      if (mode === "duplicate" && chrono === null) chrono = 60;
       // Changer de grille change aussi le pavage : le plateau du commerce n'a
       // de sens que borne, le pavage infini que sans bord.
       // `null` VEUT DIRE quelque chose ici -- la grille infinie -- et ne peut
@@ -497,13 +510,14 @@ wss.on("connection", (ws) => {
         tirage, jouables, joker,
         // Le sac sans fin ne vaut que sur une grille infinie.
         pioche: bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche,
-        bornes, pavage, pavageNom,
+        bornes, pavage, pavageNom, mode,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       }));
       surveiller(s);
-      // La partie neuve nait endormie : si le salon est occupe, on la reveille,
-      // sinon elle attendrait un joueur qui est deja la.
+      // La partie neuve nait endormie ET ignorante de qui est la : on lui rend
+      // les deux, sinon le duplicate ne compterait personne sur son premier coup.
+      for (const nom of occupants(s.id)) s.partie.presents.add(nom);
       if (occupants(s.id).length > 0) await s.partie.reveiller();
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
         `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
@@ -532,6 +546,9 @@ wss.on("connection", (ws) => {
     clients.delete(ws);
     const s = moi ? salon(moi.salon) : undefined;
     if (s === undefined) return;
+    if (moi !== undefined && !occupants(s.id).includes(moi.nom)) {
+      s.partie.presents.delete(moi.nom);
+    }
     // Le dernier parti, la partie s'endort : plus de chrono, plus de calcul.
     if (occupants(s.id).length === 0) {
       s.partie.endormir();

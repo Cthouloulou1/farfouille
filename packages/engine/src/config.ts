@@ -50,6 +50,15 @@ export interface ConfigPartie {
    */
   joker: boolean;
   /**
+   * Comment un coup se termine. Voir SPEC.md §16.
+   *
+   * `topping`    — le premier qui trouve le top le pose et remporte le coup.
+   * `duplicate`  — le coup dure TOUJOURS le temps plein ; chacun marque le
+   *                score de sa meilleure solution, et son ecart au top est son
+   *                negatif. Rien ne filtre avant l'echeance.
+   */
+  mode: "topping" | "duplicate";
+  /**
    * Duree d'un coup en secondes. `null` = pas de chrono : il faut trouver le
    * top pour avancer, comme sur le topping infini (SPEC.md §16).
    */
@@ -81,6 +90,7 @@ export function configParDefaut(): ConfigPartie {
     valeurs: VALUES,
     pioche: "probabilites",
     joker: false,
+    mode: "topping",
     chrono: null,
     bornes: null,
     pavage: activeLayout(),
@@ -99,6 +109,7 @@ export interface ConfigSerialisee {
   valeurs: Record<string, number>;
   pioche: "probabilites" | "sac102" | "sac102boucle";
   joker: boolean;
+  mode: "topping" | "duplicate";
   chrono: number | null;
   bornes: number | null;
   pavageNom: LayoutName | "custom";
@@ -108,7 +119,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
-    pioche: cfg.pioche, joker: cfg.joker, chrono: cfg.chrono,
+    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
@@ -123,6 +134,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     tirage: plat.tirage, jouables: plat.jouables,
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
     joker: plat.joker === true,
+    mode: plat.mode === "duplicate" ? "duplicate" : "topping",
     chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),

@@ -42,6 +42,10 @@ let finie = false;
 let chrono: number | null = null;
 /** Le salon est vide : le coup ne s'ecoule pas. */
 let endormi = false;
+/** Au duplicate, chacun marque : le classement se lit en points et negatif. */
+let duplicate = false;
+let points: Record<string, number> = {};
+let negatif: Record<string, number> = {};
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -516,7 +520,10 @@ function paintSide() {
 
   const rank = $("rank");
   rank.replaceChildren();
-  const rows = Object.entries(players).sort((a, b) => b[1] - a[1]);
+  const rows = duplicate
+    ? Object.keys({ ...players, ...points }).map((k) => [k, points[k] ?? 0] as [string, number])
+        .sort((a, b) => b[1] - a[1])
+    : Object.entries(players).sort((a, b) => b[1] - a[1]);
   if (rows.length === 0) {
     const s = document.createElement("div");
     s.className = "none"; s.textContent = "personne encore";
@@ -528,10 +535,15 @@ function paintSide() {
     const got = likes[name] ?? 0;
     // La case des « j'aime » est TOUJOURS presente, vide quand il n'y en a pas :
     // une colonne qui apparait et disparait decale tout le reste de la ligne.
+    // Au duplicate on lit des points et un negatif ; un negatif nul, c'est TOP.
+    const neg = negatif[name] ?? 0;
+    const droite = duplicate
+      ? `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
+        `<span class="num">${points[name] ?? 0}</span>`
+      : `<span class="likes">${got > 0 ? `♥ ${got}` : ""}</span>` +
+        `<span class="num">${n}</span>`;
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom">${name}</span>` +
-                    `<span class="likes">${got > 0 ? `♥ ${got}` : ""}</span>` +
-                    `<span class="num">${n}</span>`;
+                    `<span class="nom">${name}</span>` + droite;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
 
@@ -895,7 +907,8 @@ function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
-  actif?: boolean;
+  actif?: boolean; mode?: string;
+  points?: Record<string, number>; negatif?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   rack = s.rack ?? "";
@@ -911,6 +924,9 @@ function applyState(s: {
   if (sac !== "") $("sac").textContent = sac;
   chrono = s.chrono ?? null;
   endormi = s.actif === false;
+  duplicate = s.mode === "duplicate";
+  points = s.points ?? {};
+  negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
   // Sinon les reglages partent dans le vide et on croit a un bug du jeu.
   // Un serveur qui ne dit rien est forcement anterieur a ce controle : c'est
@@ -1071,10 +1087,13 @@ function connect() {
       // pleine recherche, donne le mal de mer : c'est au joueur de cliquer le
       // coup s'il veut aller le voir.
       draw();
+      // Au duplicate, la liste des trouveurs arrive par le chat a l'echeance :
+      // rien ne doit filtrer avant, pas meme un « untel a trouve ».
       flash(
-        mv.player === me ? `Top ! ${mv.word} — ${mv.score} pts`
+        duplicate ? `Coup ${mv.n} — top : ${mv.word}, ${mv.score} pts`
+        : mv.player === me ? `Top ! ${mv.word} — ${mv.score} pts`
         : `${mv.player ?? "Révélé"} : ${mv.word} — ${mv.score} pts`,
-        mv.player === me ? "top" : "ok",
+        duplicate ? "ok" : mv.player === me ? "top" : "ok",
       );
       return;
     }
@@ -1190,6 +1209,23 @@ let cPrimes: Record<number, number> = {};
 let cChrono: number | null = null;
 /** Grille en cours d'edition : demi-cote, ou null pour l'infini. */
 let cBornes: number | null = 7;
+/** Mode en cours d'edition. */
+let cMode: "topping" | "duplicate" = "topping";
+
+function peuplerMode(): void {
+  for (const b of $("r-mode").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cMode));
+  }
+}
+
+for (const b of $("r-mode").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    cMode = (b as HTMLElement).dataset["v"] === "duplicate" ? "duplicate" : "topping";
+    peuplerMode();
+    // Le duplicate a besoin d'une echeance : c'est elle qui clot le coup.
+    if (cMode === "duplicate" && cChrono === null) { cChrono = 60; peuplerChrono(); }
+  });
+}
 
 /**
  * Previent quand la variante choisie va etouffer le solveur.
@@ -1382,6 +1418,8 @@ function ouvrirReglages(): void {
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
+  cMode = cfg.mode === "duplicate" ? "duplicate" : "topping";
+  peuplerMode();
   peuplerChrono();
   peuplerGrille();
   avertirSiExplosif();
@@ -1404,6 +1442,7 @@ $("r-appliquer").addEventListener("click", () => {
     primes: cPrimes,
     chrono: cChrono,
     bornes: cBornes,
+    mode: cMode,
   });
   $("reglages").hidden = true;
 });

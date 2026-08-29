@@ -81,6 +81,13 @@ export interface PlayedMove {
   tiers?: Tier[];
   /** Qui a aime ce coup. Un nom au plus une fois. */
   likes?: string[];
+  /**
+   * DUPLICATE seulement : le score de chaque joueur sur ce coup, et ceux qui
+   * ont trouve le top. Chacun marque sa meilleure solution ; l'ecart au top est
+   * son negatif (SPEC.md §16).
+   */
+  scores?: Record<string, number>;
+  trouveurs?: string[];
 }
 
 export interface ChatMessage {
@@ -98,6 +105,8 @@ export interface TryResult {
   score?: number;
   /** Vrai si ce coup atteint le score du top : le coup est remporte. */
   top?: boolean;
+  /** DUPLICATE : la meilleure solution retenue pour ce joueur sur ce coup. */
+  retenu?: number;
 }
 
 interface Saved {
@@ -179,12 +188,24 @@ export class Game {
    * gros tirage, des MINUTES de calcul chacun -- pour personne.
    */
   actif = false;
+  /**
+   * Qui est dans le salon. Tenu a jour par le transport : le moteur n'a pas de
+   * WebSocket, mais le duplicate a besoin de savoir QUI etait la au moment du
+   * tirage -- c'est ce qui distingue un joueur compte d'un visiteur arrive en
+   * cours de coup.
+   */
+  readonly presents = new Set<string>();
+  /** DUPLICATE : la meilleure solution de chacun sur le coup en cours. */
+  private propositions = new Map<string, { score: number; word: string; at: number }>();
+  /** DUPLICATE : qui etait present quand le tirage est tombe. */
+  private participants = new Set<string>();
   solving = false;
 
   private nextId = 1;
   private pending = new Map<number, (r: any) => void>();
   private listeners: (() => void)[] = [];
   private surCoup: ((m: PlayedMove) => void)[] = [];
+  private surChat: ((m: ChatMessage) => void)[] = [];
 
   constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
     this.gameId = gameId;
@@ -248,6 +269,7 @@ export class Game {
     this.pending.clear();
     this.listeners = [];
     this.surCoup = [];
+    this.surChat = [];
     if (this.worker !== undefined) await this.worker.terminate();
   }
 
@@ -324,6 +346,15 @@ export class Game {
    * avancait sans que personne ne recoive les caramels.
    */
   onMove(fn: (m: PlayedMove) => void): void { this.surCoup.push(fn); }
+
+  /**
+   * Prevenu a chaque message du chat, y compris ceux que le MOTEUR emet.
+   *
+   * La liste des trouveurs du duplicate vient de la, pas d'un joueur : diffuser
+   * depuis le point d'entree du message « say » la laissait invisible, comme
+   * l'etaient les coups poses par le chrono.
+   */
+  onChat(fn: (m: ChatMessage) => void): void { this.surChat.push(fn); }
   private emit(): void { for (const f of this.listeners) f(); }
 
   /** Rejoue le journal, puis prepare le coup courant. */
@@ -474,6 +505,25 @@ export class Game {
     return true;
   }
 
+  /**
+   * DUPLICATE : points et negatif de chacun, sur toute la partie.
+   *
+   * Le negatif est l'ecart cumule au top. Un joueur qui a trouve tous les tops
+   * a un negatif nul -- c'est le « TOP » du tableau.
+   */
+  classementDuplicate(): { points: Record<string, number>; negatif: Record<string, number> } {
+    const points: Record<string, number> = {};
+    const negatif: Record<string, number> = {};
+    for (const m of this.moves) {
+      if (m.scores === undefined) continue;
+      for (const [nom, sc] of Object.entries(m.scores)) {
+        points[nom] = (points[nom] ?? 0) + sc;
+        negatif[nom] = (negatif[nom] ?? 0) + (m.score - sc);
+      }
+    }
+    return { points, negatif };
+  }
+
   /** Nombre de "j'aime" recus par un joueur sur l'ensemble de la partie. */
   likesOf(player: string): number {
     let n = 0;
@@ -507,6 +557,9 @@ export class Game {
     const reliquatSansJoker = gardeJoker
       ? this.reliquat.filter((c) => c !== BLANK)
       : this.reliquat;
+    // Nouveau coup : les propositions repartent a zero, et on fige QUI est la.
+    this.propositions.clear();
+    this.participants = new Set(this.presents);
     const draw = this.bag.draw(reliquatSansJoker);
     this.rack = gardeJoker ? [...draw.rack, BLANK].sort().join("") : draw.rack;
     this.rackNotation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
@@ -594,6 +647,24 @@ export class Game {
         : PLAY_MESSAGE[r.error as PlayError];
       return { ok: false, message, word: r.word };
     }
+    // EN DUPLICATE, rien ne filtre. On enregistre la meilleure solution du
+    // joueur et on lui rend son score, sans jamais dire s'il a trouve le top :
+    // le savoir lui apprendrait que sa solution est la bonne, et l'apprendrait
+    // aux autres par ricochet. Le coup dure le temps plein (SPEC.md §16).
+    if (this.cfg.mode === "duplicate") {
+      const avant = this.propositions.get(player);
+      if (avant === undefined || r.move.score > avant.score) {
+        this.propositions.set(player, {
+          score: r.move.score, word: r.move.word, at: Date.now(),
+        });
+      }
+      const garde = this.propositions.get(player)!;
+      return {
+        ok: true, message: "", word: r.move.word, score: r.move.score,
+        top: false, retenu: garde.score,
+      };
+    }
+
     if (r.move.score < this.bestScore) {
       return { ok: true, message: "", word: r.move.word, score: r.move.score, top: false };
     }
@@ -603,8 +674,44 @@ export class Game {
     return { ok: true, message: "top !", word: r.move.word, score: r.move.score, top: true };
   }
 
+  /**
+   * DUPLICATE : l'echeance tombe, on clot le coup.
+   *
+   * Le top se pose, chacun marque sa meilleure solution, et ceux qui l'ont
+   * trouve sont annonces dans le chat. Personne ne « remporte » le coup : au
+   * duplicate on compte des points, pas des coups.
+   *
+   * Seuls sont notes les joueurs presents AU MOMENT DU TIRAGE. Qui arrive en
+   * cours de coup joue, figure dans la liste des trouveurs s'il trouve, mais
+   * n'entre au classement qu'au coup suivant.
+   */
+  private async clore(): Promise<void> {
+    if (this.canonicalTop === null) return;
+    const scores: Record<string, number> = {};
+    const trouveurs: string[] = [];
+    for (const [nom, p] of this.propositions) {
+      if (p.score >= this.bestScore) trouveurs.push(nom);
+      if (this.participants.has(nom)) scores[nom] = p.score;
+    }
+    // Present au tirage mais rien propose : zero, et le negatif du top entier.
+    for (const nom of this.participants) if (scores[nom] === undefined) scores[nom] = 0;
+    // Les plus rapides d'abord, c'est ainsi qu'on lit la liste.
+    trouveurs.sort((a, b) =>
+      (this.propositions.get(a)?.at ?? 0) - (this.propositions.get(b)?.at ?? 0));
+
+    const n = this.moveNumber + 1;
+    const top = this.bestScore;
+    await this.commit(null, Date.now() - this.servedAt, undefined, { scores, trouveurs });
+    this.say("", trouveurs.length === 0
+      ? `Coup ${n} — personne n'a trouvé le top (${top} pts)`
+      : `Coup ${n} — top trouvé par ${trouveurs.join(", ")} (${top} pts)`);
+  }
+
   /** Pose le top canonique et passe au coup suivant. */
-  private async commit(player: string | null, ms: number, played?: Move): Promise<void> {
+  private async commit(
+    player: string | null, ms: number, played?: Move,
+    duplicate?: { scores: Record<string, number>; trouveurs: string[] },
+  ): Promise<void> {
     const top = this.canonicalTop!;
     const move: PlayedMove = {
       n: this.moveNumber + 1,
@@ -626,6 +733,7 @@ export class Game {
       ms,
       isotops: this.isotops,
       tiers: this.tiers as Tier[],
+      ...(duplicate ?? {}),
     };
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.moves.push(move);
@@ -661,7 +769,7 @@ export class Game {
     this.servedAt = Date.now();
     this.echeance = setTimeout(() => {
       this.echeance = null;
-      void this.reveal();
+      void (this.cfg.mode === "duplicate" ? this.clore() : this.reveal());
     }, this.cfg.chrono * 1000);
   }
 
@@ -696,6 +804,7 @@ export class Game {
     this.chat.push(msg);
     this.append({ t: "chat", msg });
     this.save();
+    for (const f of this.surChat) f(msg);
     return msg;
   }
 
