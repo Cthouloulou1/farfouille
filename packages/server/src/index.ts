@@ -199,10 +199,20 @@ let pret = false;
 
 async function ouvrirLesSalons(): Promise<void> {
   const t0 = Date.now();
-  const salonMondial = await ouvrirSalon({
-    id: GAME_ID, nom: "Topping infini", proprietaire: null, prive: false,
-    layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
-  });
+  let salonMondial;
+  try {
+    salonMondial = await ouvrirSalon({
+      id: GAME_ID, nom: "Topping infini", proprietaire: null, prive: false,
+      layout: LAYOUT, cfg: CFG_MONDIALE, nouveau: false,
+    });
+  } catch (e) {
+    // Un echec sur la grille principale doit se lire, pas se deverser en trace
+    // d'appels. C'est presque toujours un verrou, et le message dit quoi faire.
+    console.error(`
+  ${(e as Error).message}
+`);
+    process.exit(1);
+  }
   surveiller(salonMondial);
   // La grille permanente n'a pas de proprietaire pour la regler : elle demarre
   // d'office, elle est le jeu par defaut du site.

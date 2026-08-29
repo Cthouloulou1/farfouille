@@ -154,6 +154,19 @@ function alive(pid: number): boolean {
   catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
 }
 
+/**
+ * Le verrou bat toutes les dix secondes ; on le tient pour mort au-dela de
+ * quarante.
+ *
+ * Le numero de processus ne suffit pas a savoir si un serveur vit encore : le
+ * systeme les RECYCLE. Un verrou laisse par un serveur tue a ainsi bloque le
+ * demarrage parce que son numero avait ete repris par un processus Windows sans
+ * aucun rapport -- « ce processus existe-t-il ? » repondait oui. Le battement
+ * tranche : un verrou qui ne bat plus n'est tenu par personne.
+ */
+const BATTEMENT_MS = 10_000;
+const VERROU_MORT_MS = 40_000;
+
 export class Game {
   readonly gameId: string;
   readonly layout: LayoutName;
@@ -176,6 +189,7 @@ export class Game {
   private readonly journal: string;
   private readonly lockFile: string;
   private holdsLock = false;
+  private battement: ReturnType<typeof setInterval> | null = null;
   /** Descripteur du journal, ouvert en ajout pour toute la duree de la partie. */
   private jfd: number | null = null;
   seed = "";
@@ -273,10 +287,14 @@ export class Game {
   private acquireLock(): void {
     mkdirSync(DATA_DIR, { recursive: true });
     if (existsSync(this.lockFile)) {
-      let held: { pid?: number; since?: number } = {};
+      let held: { pid?: number; since?: number; vu?: number } = {};
       try { held = JSON.parse(readFileSync(this.lockFile, "utf8")); } catch { /* verrou illisible */ }
       const pid = held.pid;
-      if (pid !== undefined && pid !== process.pid && alive(pid)) {
+      // Un verrou d'avant le battement n'a pas de `vu` : on se rabat sur son
+      // horodatage de prise, faute de mieux.
+      const dernierSigne = held.vu ?? held.since ?? 0;
+      const bat = Date.now() - dernierSigne < VERROU_MORT_MS;
+      if (pid !== undefined && pid !== process.pid && alive(pid) && bat) {
         throw new Error(
           `la partie "${this.gameId}" est deja ouverte par le processus ${pid}` +
           (held.since ? ` depuis ${new Date(held.since).toLocaleString("fr")}` : "") +
@@ -289,13 +307,33 @@ export class Game {
         );
       }
       if (pid !== undefined && pid !== process.pid) {
-        console.log(`[partie] verrou perime du processus ${pid} (arret brutal), on le reprend`);
+        console.log(
+          `[partie] verrou perime du processus ${pid}` +
+          (alive(pid) ? " (numero recycle par un autre programme)" : " (arret brutal)") +
+          `, on le reprend`,
+        );
       }
     }
-    const fd = openSync(this.lockFile, "w");
-    writeSync(fd, JSON.stringify({ pid: process.pid, since: Date.now() }));
-    closeSync(fd);
+    this.ecrireLeVerrou(Date.now());
     this.holdsLock = true;
+    // Le battement dit « je suis toujours la ». Sans lui, rien ne distingue un
+    // serveur vivant d'un numero de processus recycle.
+    this.battement = setInterval(() => {
+      if (this.holdsLock) this.ecrireLeVerrou(this.depuis);
+    }, BATTEMENT_MS);
+    this.battement.unref?.();
+  }
+
+  /** Instant de prise du verrou, conserve pour l'affichage. */
+  private depuis = 0;
+
+  private ecrireLeVerrou(depuis: number): void {
+    this.depuis = depuis === 0 ? Date.now() : depuis;
+    try {
+      const fd = openSync(this.lockFile, "w");
+      writeSync(fd, JSON.stringify({ pid: process.pid, since: this.depuis, vu: Date.now() }));
+      closeSync(fd);
+    } catch { /* un verrou qu'on n'arrive pas a ecrire ne doit pas tuer la partie */ }
   }
 
 /**
@@ -318,6 +356,7 @@ export class Game {
 
   /** Rend le verrou. Sans effet s'il ne nous appartient pas. */
   releaseLock(): void {
+    if (this.battement !== null) { clearInterval(this.battement); this.battement = null; }
     if (!this.holdsLock) return;
     this.holdsLock = false;
     try {

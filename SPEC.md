@@ -738,9 +738,18 @@ serveur sur la même partie **refuse de démarrer**, même sur un autre port : d
 processus écrivant dans le même journal en feraient une bouillie, les coups
 s'entrelaçant sans numérotation cohérente.
 
-Le verrou nomme son processus, donc un verrou dont le processus est mort est
-reconnu comme périmé et repris automatiquement. C'est le cas courant sous
-Windows, où fermer la fenêtre tue le serveur sans lui laisser le rendre.
+**Le verrou bat** toutes les dix secondes, et on le tient pour mort au-delà de
+quarante. Le numéro de processus seul ne suffit pas : le système les **recycle**.
+Un verrou laissé par un serveur tué a ainsi bloqué un démarrage parce que son
+numéro avait été repris par un processus Windows sans aucun rapport — « ce
+processus existe-t-il ? » répondait oui. Le battement tranche : celui qui ne bat
+plus n'est tenu par personne.
+
+C'est le cas courant sous Windows, où fermer la fenêtre tue le serveur sans lui
+laisser rendre son verrou.
+
+Un échec sur la grille principale s'affiche **en clair**, pas en trace d'appels :
+c'est presque toujours un verrou, et le message dit quoi faire.
 
 ### Retrouver une partie
 
