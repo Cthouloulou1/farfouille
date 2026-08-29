@@ -584,6 +584,36 @@ conséquence directe de la règle des isotops.
 Les temps sont exprimés en **années, jours, heures, minutes, secondes,
 centièmes**, comptés depuis le début de la partie.
 
+### L'ordre suit la grille
+
+Un **plateau borné** se lit du **premier coup au dernier**, comme une feuille de
+match : la partie a une fin, on la parcourt. Une **grille infinie** se lit à
+**l'envers**, du plus récent au plus ancien : elle n'a pas de fin, et ce qu'on
+vient de jouer est ce qui intéresse.
+
+### Les colonnes sont alignées
+
+Chaque ligne est sa propre grille CSS. Une largeur `auto` ou `fr` s'y recalcule
+donc **ligne par ligne**, et le tirage d'une ligne ne tombe pas sous le tirage de
+la précédente. Les colonnes de la feuille de route sont **fixes**, à la seule
+exception du nom du joueur, qui prend ce qui reste.
+
+### La colonne du temps n'existe qu'en topping
+
+En topping, le temps est une performance : c'est ce qu'a mis le joueur pour
+trouver. Un coup que **personne n'a trouvé** porte une **croix**, pas une durée —
+celle de l'échéance ne dirait rien de personne.
+
+En duplicate, la colonne **disparaît** : le coup dure toujours le chrono entier,
+la même valeur sur toutes les lignes.
+
+### Qui a trouvé
+
+En topping, c'est celui qui a posé le top. En duplicate, **personne ne le pose**
+— le coup se clôt à l'échéance — et les trouveurs sont une **liste**, qui peut
+être vide. Lire le poseur en duplicate écrivait « non trouvé » sur toutes les
+lignes d'une partie où le top avait pourtant été trouvé.
+
 ### Affichage et interaction
 
 La feuille de route **n'est pas affichée par défaut** : elle s'ouvre à la
@@ -595,7 +625,10 @@ confondre :
 1. **Cliquer un mot le met simplement en valeur** — sur la grille et dans la
    liste. Rien d'autre ne bouge : pas de rembobinage, pas de changement de vue.
    C'est une consultation, pas une navigation.
-2. **Un bouton « revoir le coup »** ouvre l'inspection proprement dite.
+2. **Un bouton `R`, à droite du top**, ouvre le rejeu sur ce coup-là. Il
+   n'apparaît que sur une **partie close** : avant, le serveur refuse les
+   paliers et le rejeu n'aurait rien à montrer. Une fois dedans, on navigue
+   normalement d'un coup à l'autre.
 
 ### Les paliers restent en réserve
 
@@ -634,6 +667,16 @@ vient d'un rapport de trente entre les deux.
 
 **Un clic sur un coup passé amène la caméra dessus** et le met en évidence,
 avec dézoom puis zoom s'il est hors champ. Rien de plus.
+
+### Rien n'annonce le top en bas de l'écran
+
+Le coup joué s'affiche au tableau « Top », au journal des coups et sur la
+grille. Un bandeau flottant qui répétait la même chose une seconde n'apprenait
+rien à personne.
+
+Au **duplicate**, ce tableau porte en plus **l'écart au top du lecteur sur ce
+coup**, s'il y en a un. Il reste affiché tant que le coup suivant ne l'a pas
+remplacé — c'est le temps qu'on a de le lire.
 
 ### La caméra n'est jamais déplacée d'office
 
@@ -1462,9 +1505,23 @@ Seules les lignes **visibles** sont posées dans la page. Les poser toutes coût
 2,4 secondes de mise en page pour un coup à 18 655 solutions — l'essentiel pour
 des lignes que personne ne regarde.
 
+Le **bandeau du haut reprend le tirage du coup examiné**, en caramels, comme
+pendant la partie : on revoit un coup avec ce qu'on avait en main pour le
+chercher.
+
+Le mot montré sur la grille a ses **propres couleurs** — un vert clair, encre
+foncée. Il empruntait celles de l'accent : terne en clair, et en sombre un fond
+`#11301F` sous une encre `#1C221F`, deux noirs l'un sur l'autre.
+
 La grille se **rembobine** : on ne voit que les caramels posés *avant* le coup
 examiné, c'est-à-dire ce que voyaient les joueurs au moment de chercher. Un clic
 sur une solution la montre sur la grille.
+
+À l'ouverture d'un coup, le tableau du bas montre **tous ceux qui comptaient sur
+ce coup** — y compris ceux qui n'ont rien rendu, qui y valent zéro. Les réduire
+aux trouveurs du top faisait disparaître ceux qui ne l'avaient pas trouvé,
+c'est-à-dire justement ceux qu'on vient regarder. Cliquer une solution montre
+alors qui a joué *ce mot-là*.
 
 Au clavier : **↑ et ↓** parcourent les solutions, **← et →** passent d'un coup à
 l'autre. Les deux premières marchent aussi depuis le champ de recherche ; ← et →

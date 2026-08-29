@@ -33,6 +33,9 @@
   --warn-bg:    #FBE7D8;
   --cursor:     #121916;
   --mark:       #B5762A;
+  --ghost-face: #BCE6CE;
+  --ghost-edge: #3E9E6B;
+  --ghost-ink:  #10291C;
   --shadow:     rgba(18,25,22,.13);
 }
 @media (prefers-color-scheme: dark) {
@@ -44,6 +47,9 @@
     --mct: #99392F; --mcd: #B2665A; --lct: #2E5D7C; --lcd: #4C84A2;
     --accent: #44B27A; --accent-bg: #11301F; --warn: #DE8A4E; --warn-bg: #331E10;
     --cursor: #E6EDE9; --mark: #D8A24A; --shadow: rgba(0,0,0,.45);
+    /* Le vert reste CLAIR en mode sombre : c'est un caramel pose sur la
+       grille, il doit se lire comme les autres, encre foncee comprise. */
+    --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
   }
 }
 * { box-sizing: border-box; }
@@ -217,13 +223,19 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
 .roadmap header h3 { margin: 0; flex: 1; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 19px; }
 #rm-body { overflow-y: auto; padding: 4px 0 10px; }
-.rmrow { display: grid; grid-template-columns: 44px minmax(92px, auto) minmax(0, 1.4fr) 84px 46px minmax(0, 1fr) 62px auto; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 4px 18px; background: transparent; border: 0; border-radius: 0; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.rmrow { display: grid; grid-template-columns: 40px 122px 24px 118px 78px 44px minmax(0, 1fr) 58px auto; gap: 9px; align-items: center; width: 100%; text-align: left; padding: 4px 18px; background: transparent; border: 0; border-radius: 0; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+/* En duplicate le temps ne dit rien : le coup dure toujours le chrono entier. */
+#rm-body.sans-temps .rmrow { grid-template-columns: 40px 122px 24px 118px 78px 44px minmax(0, 1fr) auto; }
+.rm-rejouer { padding: 0; width: 20px; height: 18px; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; line-height: 1; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 3px; }
+.rm-rejouer:hover { color: var(--accent); border-color: var(--accent); }
+.rmrow .vide { color: var(--ink-faint); }
 .rmrow:hover { background: var(--hover); border-color: transparent; color: var(--ink-soft); }
 .rmrow .n, .rmrow .q { color: var(--ink-faint); }
 .rmrow .q, .rmrow .w, .rmrow .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rmrow .w { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
 .rmrow .s { text-align: right; color: var(--accent); font-weight: 500; }
 .rmrow .t { text-align: right; color: var(--ink-faint); white-space: nowrap; }
+.rmrow .t.non { color: var(--warn); }
 .rmrow .like { padding: 1px 5px; font-size: 10.5px; }
 
 .join { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ground); z-index: 30; }

@@ -165,8 +165,12 @@ function publicMove(m: PlayedMove) {
     playerWord: m.playerWord, playerDir: m.playerDir, playerX: m.playerX, playerY: m.playerY,
     demiPoint: m.demiPoint,
     // DUPLICATE : le score de chacun sur ce coup, pour que le classement
-    // puisse se deplier. L'information est publique une fois le coup joue.
+    // puisse se deplier, et QUI a trouve le top -- l'equivalent du `player` du
+    // topping, ou le top est pose par celui qui le trouve. Sans cette liste,
+    // la feuille de route ne pouvait qu'ecrire « non trouve » a chaque ligne.
+    // L'information est publique une fois le coup joue : elle part deja au chat.
     scores: m.scores,
+    trouveurs: m.trouveurs,
     propositions: m.propositions,
     likes: m.likes?.length ?? 0,
     likers: m.likes ?? [],

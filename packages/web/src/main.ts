@@ -29,6 +29,8 @@ interface MoveInfo {
   demiPoint?: { joueur: string; word: string; score: number };
   /** DUPLICATE : ce que chaque joueur a marque sur ce coup. */
   scores?: Record<string, number>;
+  /** DUPLICATE : qui a trouve le top, les plus rapides d'abord. */
+  trouveurs?: string[];
   /** Ce que chaque joueur a reellement propose sur ce coup. */
   propositions?: Record<string, { word: string; dir: Dir; x: number; y: number; score: number }>;
   /** Nombre de "j'aime" recus, et qui les a donnes. */
@@ -203,6 +205,7 @@ function draw() {
     edge: css("--tile-edge"), ink: css("--tile-ink"), accent: css("--accent"),
     cursor: css("--cursor"), mark: css("--mark"), faint: css("--ink-faint"),
     panel: css("--panel"), rule: css("--rule"), abg: css("--accent-bg"), dark: css("--ink"),
+    gface: css("--ghost-face"), gedge: css("--ghost-edge"), gink: css("--ghost-ink"),
     ground: css("--ground"), bord: css("--ink-soft"),
     jface: css("--joker-face"), jedge: css("--joker-edge"),
     T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
@@ -270,20 +273,21 @@ function draw() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const caramel = (x: number, y: number, letter: string, blank: boolean, face: string, edge: string) => {
+  const caramel = (x: number, y: number, letter: string, blank: boolean, face: string,
+                   edge: string, encre?: string) => {
     const px = eX(x) + gap, py = eY(y) + gap;
     const w = eX(x + 1) - eX(x) - gap * 2, h = eY(y + 1) - eY(y) - gap * 2;
     roundRect(px, py, w, h, rad);
     ctx.fillStyle = face; ctx.fill();
     roundRect(px + .5, py + .5, w - 1, h - 1, rad);
     ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.stroke();
-    ctx.fillStyle = blank ? C.jedge : C.ink;
+    ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink);
     ctx.font = `700 ${Math.round(h * .62)}px Archivo, system-ui, sans-serif`;
     ctx.fillText(letter, px + w / 2, py + h * .53);
     // Un joker vaut zero, et il l'affiche : le 0 dit ce qu'il rapporte.
     const v = blank ? 0 : valueOf(letter);
     if (h >= 18) {
-      ctx.fillStyle = blank ? C.jedge : C.ink; ctx.globalAlpha = blank ? .8 : .6;
+      ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink); ctx.globalAlpha = blank ? .8 : .6;
       ctx.font = `500 ${Math.round(h * .27)}px "IBM Plex Mono", monospace`;
       ctx.textAlign = "right";
       ctx.fillText(String(v), px + w - w * .1, py + h * .84);
@@ -318,7 +322,7 @@ function draw() {
       const x = dir === "H" ? gx + i : gx;
       const y = dir === "V" ? gy + i : gy;
       if (x < gx0 || x > gx1 || y < gy0 || y > gy1) continue;
-      caramel(x, y, word[i]!, false, C.abg, C.mark);
+      caramel(x, y, word[i]!, false, C.gface, C.gedge, C.gink);
     }
   }
 
@@ -494,10 +498,26 @@ function remaining(): string[] {
   return left;
 }
 
+/**
+ * Les caramels du bandeau.
+ *
+ * Pendant le rejeu, c'est le tirage du coup EXAMINE qui s'affiche, pas celui de
+ * la partie en cours : on revoit ce coup, on doit voir avec quoi on cherchait.
+ */
 function paintRack() {
+  const ici = rejeu;
+  if (ici !== null) {
+    const m = history.find((q) => q.n === ici.n);
+    peindreCaramels(m === undefined ? [] : [...m.rack]);
+    return;
+  }
+  peindreCaramels(remaining());
+}
+
+function peindreCaramels(lettres: readonly string[]): void {
   const box = $("rb-tiles");
   box.replaceChildren();
-  for (const ch of remaining()) {
+  for (const ch of lettres) {
     const el = document.createElement("div");
     const joker = ch === BLANK;
     el.className = "caramel" + (joker ? " joker" : "");
@@ -564,11 +584,13 @@ function paintCurrent() {
 function paintSide() {
   // Le numero du coup suivant s'affiche MEME pendant le calcul : le faire
   // disparaitre le temps d'un solveur lent donne l'impression d'un jeu casse.
-  $("rb-move").textContent = !demarree || finie ? "—"
+  $("rb-move").textContent = rejeu !== null ? String(rejeu.n)
+    : !demarree || finie ? "—"
     : coupsMax === null ? String(moveNumber + 1)
     : `${moveNumber + 1} / ${coupsMax}`;
+  if (rejeu !== null) paintRack();
   // Une partie bornee dans le TEMPS montre ce qu'il lui reste a vivre.
-  $("rb-reste-wrap").hidden = dureeMax === null || !demarree || finie;
+  $("rb-reste-wrap").hidden = rejeu !== null || dureeMax === null || !demarree || finie;
   $("fin").hidden = !finie;
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
@@ -587,9 +609,12 @@ function paintSide() {
   else {
     lw.className = "word";
     lw.innerHTML = `<span>${last.word}</span><span class="pts">${last.score}</span>`;
-    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ` +
-      `${last.player ?? (last.demiPoint ? `${last.demiPoint.joueur} (0.5)` : "non trouvé")} · ` +
-      `${fmtTime(last.ms)}`;
+    // Au duplicate, mon ecart au top sur CE coup. Il reste affiche tant que le
+     // coup suivant ne l'a pas remplace : c'est le temps qu'on a de le lire.
+    const mien = duplicate ? last.scores?.[me] : undefined;
+    const ecart = mien === undefined ? 0 : mien - last.score;
+    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${quiLaTrouve(last)}` +
+      (duplicate ? (ecart < 0 ? ` · ${ecart}` : "") : ` · ${fmtTime(last.ms)}`);
     ll.appendChild(likeButton(last));
   }
 
@@ -769,8 +794,44 @@ function voirLeCoup(n: number): void {
   $("rj-sols").scrollTop = 0;
   $("rj-qui").hidden = true;
   ghost = m ? [m.word, m.dir, m.x, m.y] : null;
+  // Le bandeau reprend le tirage de CE coup : on revoit le coup avec ce qu'on
+  // avait en main pour le chercher.
+  paintSide();
   envoyer({ t: "tiers", n: borne });
   draw();
+}
+
+/**
+ * Tous ceux qui comptaient sur ce coup, propositions ou non.
+ *
+ * En duplicate, `scores` porte une entree par PARTICIPANT, y compris ceux qui
+ * n'ont rien rendu -- ils y valent zero. Se contenter des propositions faisait
+ * disparaitre du tableau ceux qui n'avaient pas trouve, c'est-a-dire justement
+ * ceux qu'on cherche quand on revoit un coup.
+ */
+function participantsDuCoup(m: MoveInfo): string[] {
+  const noms = new Set(Object.keys(m.propositions ?? {}));
+  for (const nom of Object.keys(m.scores ?? {})) noms.add(nom);
+  return [...noms].sort();
+}
+
+/**
+ * Qui a trouve le top de ce coup.
+ *
+ * En topping, c'est celui qui l'a pose. En duplicate, personne ne le pose -- le
+ * coup se clot a l'echeance -- et les trouveurs sont une liste, qui peut etre
+ * vide. Lire `player` en duplicate donnait « non trouve » a toutes les lignes.
+ */
+function quiLaTrouve(m: MoveInfo): string {
+  if (duplicate) {
+    // A defaut de la liste -- une partie servie par un serveur qui ne l'envoyait
+    // pas encore -- on la retrouve dans les scores : trouver le top, c'est
+    // marquer exactement le score du top.
+    const t = m.trouveurs
+      ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n).sort();
+    return t.length > 0 ? t.join(", ") : "non trouvé";
+  }
+  return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé");
 }
 
 /** Qui a joue ce mot, a cet endroit, sur ce coup. */
@@ -787,9 +848,11 @@ function montrerQui(m: MoveInfo, titre: string, noms: string[]): void {
   const box = $("rj-qui");
   box.replaceChildren();
   if (noms.length === 0) { box.hidden = true; return; }
-  const h = document.createElement("h4");
-  h.textContent = titre;
-  box.appendChild(h);
+  if (titre !== "") {
+    const h = document.createElement("h4");
+    h.textContent = titre;
+    box.appendChild(h);
+  }
   for (const nom of noms) {
     const p = m.propositions?.[nom];
     const r = document.createElement("button");
@@ -888,7 +951,7 @@ function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): vo
       });
     }
     // Et par defaut, le tableau montre ce que TOUT le monde a joue.
-    montrerQui(joue, "Ce que les joueurs ont joué", Object.keys(joue.propositions ?? {}).sort());
+    montrerQui(joue, "", participantsDuCoup(joue));
   }
 
   peindreSolutions();
@@ -897,7 +960,7 @@ function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): vo
   if (joue !== undefined) {
     const i = solutionsVues.findIndex((s) => s.word === joue.word && s.dir === joue.dir
                                           && s.x === joue.x && s.y === joue.y);
-    if (i >= 0) { choisie = i; marquerLaChoisie(true); }
+    if (i >= 0) { choisie = i; marquerLaChoisie(true, false); }
   }
 }
 
@@ -972,8 +1035,15 @@ $("rj-sols").addEventListener("scroll", () => {
   if (solutionsVues.length > 0) peindreLaFenetre();
 });
 
-/** Souligne la ligne choisie, la pose sur la grille, et la fait defiler. */
-function marquerLaChoisie(deroule = false): void {
+/**
+ * Souligne la ligne choisie, la pose sur la grille, et la fait defiler.
+ *
+ * `choisiParLeJoueur` distingue le clic ou la fleche du soulignement fait a
+ * l'ouverture. A l'ouverture, le tableau du bas doit montrer TOUS ceux qui
+ * comptaient sur ce coup ; le reduire aux trouveurs du top faisait disparaitre
+ * ceux qui ne l'avaient pas trouve -- justement ceux qu'on vient regarder.
+ */
+function marquerLaChoisie(deroule = false, choisiParLeJoueur = true): void {
   const s = solutionsVues[choisie];
   if (s === undefined) return;
   const box = $("rj-sols");
@@ -990,8 +1060,14 @@ function marquerLaChoisie(deroule = false): void {
   reveal(s.word, s.dir, s.x, s.y);
   const ici = rejeu;
   const joue = ici === null ? undefined : history.find((h) => h.n === ici.n);
-  if (joue !== undefined && s.noms.length > 0) {
+  if (joue === undefined || !choisiParLeJoueur) return;
+  // Une ligne choisie a la main montre QUI a joue ce mot-la. Une ligne que
+  // personne n'a jouee rend la main a la liste complete, plutot que de laisser
+  // en place le tableau du mot precedent.
+  if (s.noms.length > 0) {
     montrerQui(joue, `${s.word} — ${s.noms.length} joueur${s.noms.length > 1 ? "s" : ""}`, s.noms);
+  } else {
+    montrerQui(joue, "", participantsDuCoup(joue));
   }
 }
 
@@ -1028,6 +1104,7 @@ function fermerLeRejeu(): void {
   // Le journal et le chat pleine hauteur reviennent : ils sont du direct.
   document.querySelector(".side")!.classList.remove("rejeu");
   paintJournal();
+  paintSide();
   draw();
 }
 
@@ -1040,25 +1117,57 @@ $("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 
 // ---------------------------------------------------------------- feuille de route
 
+/**
+ * La feuille de route : la partie entiere, un coup par ligne.
+ *
+ * L'ordre suit la grille. Un plateau borne se lit du premier coup au dernier,
+ * comme une feuille de match : la partie a une fin, on la parcourt. Une grille
+ * infinie se lit a l'envers, du plus recent au plus ancien : elle n'a pas de
+ * fin, et ce qu'on vient de jouer est ce qui interesse.
+ */
 function paintRoadmap() {
   const body = $("rm-body");
   body.replaceChildren();
+  // En duplicate, le temps ne dit rien : le coup dure toujours le chrono
+  // entier. La colonne disparait plutot que d'afficher la meme valeur partout.
+  body.classList.toggle("sans-temps", duplicate);
   if (history.length === 0) {
     const e = document.createElement("div");
     e.className = "none"; e.style.padding = "14px 18px"; e.textContent = "aucun coup joué";
     body.appendChild(e);
     return;
   }
-  for (const m of [...history].reverse()) {
-    const r = document.createElement("button");
+  const ordre = cfg.bornes !== null ? history : [...history].reverse();
+  for (const m of ordre) {
+    const r = document.createElement("div");
     r.className = "rmrow";
+    r.tabIndex = 0;
+    // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
+    // de l'echeance et n'apprendrait rien.
+    const trouve = m.player !== null || m.demiPoint !== undefined;
     r.innerHTML =
       `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
+      `<span class="r"></span>` +
       `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
       `<span class="s">${m.score}</span>` +
-      `<span class="who">${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")}</span>` +
-      `<span class="t">${fmtTime(m.ms)}</span>`;
+      `<span class="who">${quiLaTrouve(m)}</span>` +
+      (duplicate ? "" : `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>`);
     r.addEventListener("click", () => focusMove(m));
+    // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
+    // refuse les paliers, et le rejeu n'aurait rien a montrer.
+    if (finie) {
+      const rb = document.createElement("button");
+      rb.type = "button";
+      rb.className = "rm-rejouer";
+      rb.textContent = "R";
+      rb.title = `revoir le coup ${m.n}`;
+      rb.addEventListener("click", (e) => {
+        e.stopPropagation();
+        $("roadmap").hidden = true;
+        voirLeCoup(m.n);
+      });
+      r.querySelector(".r")!.replaceWith(rb);
+    }
     r.appendChild(likeButton(m));
     body.appendChild(r);
   }
@@ -1085,8 +1194,7 @@ function paintJournal(): void {
       `<span class="s">${m.score}</span>` +
       `<span class="t">${fmtTime(m.ms)}</span>`;
     r.title = `${m.word} · ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} · ${m.score} pts · ` +
-      `${m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé")} · ` +
-      `en ${fmtTime(m.ms)}`;
+      `${quiLaTrouve(m)}` + (duplicate ? "" : ` · en ${fmtTime(m.ms)}`);
     r.addEventListener("click", () => focusMove(m));
     box.appendChild(r);
   }
@@ -1581,15 +1689,9 @@ function connect() {
       // pleine recherche, donne le mal de mer : c'est au joueur de cliquer le
       // coup s'il veut aller le voir.
       draw();
-      // Au duplicate, la liste des trouveurs arrive par le chat a l'echeance :
-      // rien ne doit filtrer avant, pas meme un « untel a trouve ».
-      const place = noteCoup(mv.dir, mv.x, mv.y, cfg.bornes);
-      flash(
-        !duplicate && mv.player === me ? `Top ! ${mv.word} — ${mv.score} pts`
-        : !duplicate && mv.player !== null ? `${mv.player} : ${mv.word} — ${mv.score} pts`
-        : `Coup ${mv.n} : ${mv.word}, ${place}, ${mv.score} pts`,
-        !duplicate && mv.player === me ? "top" : "ok",
-      );
+      // Pas de bandeau flottant pour annoncer le top : il est deja au tableau
+      // « Top », au journal des coups et sur la grille. Le repeter une seconde
+      // en bas de l'ecran n'apprenait rien a personne.
       return;
     }
 
