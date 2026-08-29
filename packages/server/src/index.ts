@@ -446,8 +446,10 @@ wss.on("connection", (ws) => {
           if (pts > 0) primes[n] = pts;
         }
       }
+      // Une seconde au moins : le chrono ne part qu'APRES le calcul du top, donc
+      // rien n'oblige a laisser du temps au serveur.
       const chrono = msg.chrono === null || msg.chrono === undefined ? null
-        : Math.max(5, Math.min(3600, Math.round(Number(msg.chrono))));
+        : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
       // Changer de grille change aussi le pavage : le plateau du commerce n'a
       // de sens que borne, le pavage infini que sans bord.
       // `null` VEUT DIRE quelque chose ici -- la grille infinie -- et ne peut

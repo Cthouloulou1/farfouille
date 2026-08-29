@@ -1218,9 +1218,20 @@ for (const b of $("r-chrono").querySelectorAll("button")) {
   });
 }
 
+/** Duree la plus courte acceptee, en secondes. */
+const CHRONO_MIN = 1;
+
 ($("r-perso") as HTMLInputElement).addEventListener("input", () => {
-  const v = Number(($("r-perso") as HTMLInputElement).value);
-  cChrono = Number.isFinite(v) && v >= 5 ? Math.round(v) : null;
+  const champ = $("r-perso") as HTMLInputElement;
+  const brut = champ.value.trim();
+  // Un champ vide, ou une valeur qu'on est en train de taper, ne doit RIEN
+  // changer. Retomber sur « sans chrono » en silence -- ce que faisait un
+  // plancher a cinq secondes -- fait passer un reglage refuse pour un reglage
+  // accepte, et c'est le pire des deux mondes.
+  if (brut === "") return;
+  const v = Math.round(Number(brut));
+  if (!Number.isFinite(v) || v < CHRONO_MIN) return;
+  cChrono = Math.min(3600, v);
   for (const b of $("r-chrono").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", "false");
   }
