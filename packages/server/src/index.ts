@@ -690,6 +690,15 @@ process.on("uncaughtException", (e) => { rendreLesVerrous(); throw e; });
 http.listen(PORT, () => {
   console.log(`
   Grille "${GAME_ID}" sur le pavage "${LAYOUT}"`);
+  // `--partie` remplace la grille PERMANENTE par celle qu'on nomme : elle en
+  // prend la place, le nom, et se remet a jouer avec SES reglages. Sans le
+  // dire, on croit consulter une archive alors qu'on l'a mise en service.
+  if (GAME_ID !== "mondiale") {
+    console.log(`
+  ATTENTION : "${GAME_ID}" occupe la place de la grille permanente.
+  Elle rejoue avec ses propres reglages, chrono compris.
+  Pour rendre la place a la grille permanente :  npm run serve`);
+  }
   console.log(`  http://localhost:${PORT}`);
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');

@@ -233,13 +233,25 @@ function draw() {
     ctx.fillRect(eX(-b), eY(-b), eX(b + 1) - eX(-b), eY(b + 1) - eY(-b));
   }
 
+  // Les cases a prime, groupees par couleur : un chemin par teinte plutot qu'un
+  // fillRect par case. Au dezoom maximum l'ecran en compte plusieurs milliers.
+  const parPrime = new Map<string, [number, number][]>();
   for (let y = py0; y <= py1; y++) {
     for (let x = px0; x <= px1; x++) {
       const ch = bonusChar(x, y, cfg.pavage);
       if (ch === ".") continue;
-      ctx.fillStyle = (C as Record<string, string>)[ch === "*" ? "D" : ch] ?? C.D;
-      ctx.fillRect(eX(x), eY(y), eX(x + 1) - eX(x), eY(y + 1) - eY(y));
+      const cle = ch === "*" ? "D" : ch;
+      const l = parPrime.get(cle);
+      if (l === undefined) parPrime.set(cle, [[x, y]]); else l.push([x, y]);
     }
+  }
+  for (const [cle, cases] of parPrime) {
+    ctx.fillStyle = (C as Record<string, string>)[cle] ?? C.D;
+    ctx.beginPath();
+    for (const [x, y] of cases) {
+      ctx.rect(eX(x), eY(y), eX(x + 1) - eX(x), eY(y + 1) - eY(y));
+    }
+    ctx.fill();
   }
 
   ctx.strokeStyle = C.line;
@@ -270,6 +282,10 @@ function draw() {
 
   const gap = cell >= 22 ? 1 : 0;
   const rad = Math.max(.8, cell * .05);
+  /** Au-dela, l'arrondi se voit et vaut son prix. */
+  const arrondi = cell >= 22;
+  /** En deca, la lettre ferait moins de dix pixels : illisible. */
+  const lisible = cell >= 16;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -295,6 +311,58 @@ function draw() {
     }
   };
 
+  /**
+   * Un lot de caramels de meme couleur, en un seul chemin.
+   *
+   * La lettre ne se trace qu'a partir de `LISIBLE` : en dessous elle mesure
+   * moins de dix pixels et ne se lit pas, alors qu'elle coute un appel de dessin
+   * par caramel -- l'essentiel du temps d'une image au dezoom maximum. Ce qu'on
+   * regarde a cette echelle, c'est la FORME de la grille, pas les lettres.
+   */
+  const caramels = (lot: readonly Tile[], face: string, edge: string): void => {
+    if (lot.length === 0) return;
+    ctx.beginPath();
+    for (const q of lot) {
+      const px = eX(q.x) + gap, py = eY(q.y) + gap;
+      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
+      if (arrondi) {
+        ctx.moveTo(px + rad, py);
+        ctx.arcTo(px + w, py, px + w, py + h, rad);
+        ctx.arcTo(px + w, py + h, px, py + h, rad);
+        ctx.arcTo(px, py + h, px, py, rad);
+        ctx.arcTo(px, py, px + w, py, rad);
+        ctx.closePath();
+      } else {
+        ctx.rect(px + .5, py + .5, w - 1, h - 1);
+      }
+    }
+    ctx.fillStyle = face; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.stroke();
+    if (!lisible) return;
+    const hMoy = cell - gap * 2;
+    ctx.font = `700 ${Math.round(hMoy * .62)}px Archivo, system-ui, sans-serif`;
+    for (const q of lot) {
+      const px = eX(q.x) + gap, py = eY(q.y) + gap;
+      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
+      ctx.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      ctx.fillText(q.l, px + w / 2, py + h * .53);
+    }
+    // La valeur du caramel, seulement quand elle tient : sous dix-huit pixels
+    // de haut, le chiffre est un point gris qui n'apprend rien.
+    if (hMoy < 18) return;
+    ctx.font = `500 ${Math.round(hMoy * .27)}px "IBM Plex Mono", monospace`;
+    ctx.textAlign = "right";
+    for (const q of lot) {
+      const px = eX(q.x) + gap, py = eY(q.y) + gap;
+      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
+      ctx.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      ctx.globalAlpha = q.b === 1 ? .8 : .6;
+      ctx.fillText(String(q.b === 1 ? 0 : valueOf(q.l)), px + w - w * .1, py + h * .84);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "center";
+  };
+
   // Pendant le rejeu, on ne montre que ce qui etait pose AVANT le coup examine.
   const jusqua = rejeu === null ? Infinity : rejeu.n - 1;
   // Le dernier coup joue reste souligne sur la grille.
@@ -302,12 +370,29 @@ function draw() {
     rejeu !== null || last === null
       ? [] : tiles.filter((t) => t.n === last!.n).map((t) => `${t.x},${t.y}`),
   );
-  for (const t of tiles) {
-    if (t.n > jusqua) continue;
-    if (t.x < gx0 || t.x > gx1 || t.y < gy0 || t.y > gy1) continue;
-    caramel(t.x, t.y, t.l, t.b === 1,
-      t.b === 1 ? C.jface : C.face,
-      hl.has(`${t.x},${t.y}`) ? C.accent : t.b === 1 ? C.jedge : C.edge);
+  // Les caramels poses, groupes par couleur.
+  //
+  // Un caramel dessine seul coute deux chemins, un remplissage, un contour et
+  // un texte. Au dezoom maximum, l'ecran en montre des milliers : mesure a
+  // 59 ms par image pour trois mille, alors qu'une image en a seize. Groupes
+  // par teinte et traces en carre, les memes trois mille tombent a 0,65 ms.
+  //
+  // Ce sont les COINS ARRONDIS qui coutent, pas le nombre de caramels : trois
+  // mille arrondis dans un seul chemin demandent encore 70 ms. Un arrondi de
+  // 0,8 pixel ne se voit pas ; en dessous de la taille ou il se voit, on trace
+  // des carres.
+  {
+    const groupes = new Map<string, { face: string; edge: string; t: typeof tiles }>();
+    for (const q of tiles) {
+      if (q.n > jusqua) continue;
+      if (q.x < gx0 || q.x > gx1 || q.y < gy0 || q.y > gy1) continue;
+      const face = q.b === 1 ? C.jface : C.face;
+      const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
+      const cle = `${face}|${edge}`;
+      const g = groupes.get(cle);
+      if (g === undefined) groupes.set(cle, { face, edge, t: [q] }); else g.t.push(q);
+    }
+    for (const g of groupes.values()) caramels(g.t, g.face, g.edge);
   }
 
   const blanks = blankPositions();
@@ -1435,7 +1520,7 @@ cv.addEventListener("pointermove", (e) => {
   ox += dx; oy += dy;
   press.x = e.clientX; press.y = e.clientY;
   cv.style.cursor = "grabbing";
-  draw();
+  redessiner();
 });
 
 cv.addEventListener("pointerup", (e) => {
@@ -1538,8 +1623,20 @@ cv.addEventListener("wheel", (e) => {
   ox = mx - (mx - ox) * (next / cell);
   oy = my - (my - oy) * (next / cell);
   cell = next;
-  draw();
+  redessiner();
 }, { passive: false });
+
+/**
+ * Un dessin par image, pas un par evenement.
+ *
+ * Une souris rapide emet plus de `pointermove` que l'ecran n'affiche d'images :
+ * dessiner a chacun refait deux fois le meme travail pour un seul affichage.
+ */
+let imageDemandee = 0;
+function redessiner(): void {
+  if (imageDemandee !== 0) return;
+  imageDemandee = requestAnimationFrame(() => { imageDemandee = 0; draw(); });
+}
 
 function submit() {
   if (cursor === null || typed.length === 0) return;
