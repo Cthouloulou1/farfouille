@@ -737,6 +737,38 @@ Au **duplicate**, ce tableau porte en plus **l'écart au top du lecteur sur ce
 coup**, s'il y en a un. Il reste affiché tant que le coup suivant ne l'a pas
 remplacé — c'est le temps qu'on a de le lire.
 
+### Ce qui ne bouge pas n'est peint qu'une fois
+
+Se déplacer ne change ni la grille ni l'échelle : seule la caméra bouge. Primes,
+quadrillage et caramels sont donc peints **une fois** dans une image de côté un
+peu plus grande que l'écran, et le déplacement n'est plus qu'une recopie. Quand
+la caméra sort de la marge, l'image **glisse** — on la décale et on ne repeint
+que la bande découverte.
+
+Le glissement se compte en **pixels d'écran**. Sur un écran à 125 %, un pixel de
+mise en page en vaut 1,25 : glisser d'un nombre entier de pixels de mise en page
+tombait entre deux pixels réels, le navigateur rééchantillonnait, et comme
+l'image se recopie dans elle-même, le flou **s'ajoutait** à chaque glissement.
+
+**La marge suit l'échelle.** Elle se compte en pixels, mais ce qu'elle coûte se
+compte en cases : à douze pixels par case, 320 pixels font vingt-six cases de
+rab ; à deux pixels, cent soixante — et l'image couvre alors trois fois la
+surface de l'écran, donc trois fois les caramels à peindre.
+
+**Changer d'échelle n'invalide pas l'image : on sait l'étirer.** Pendant un
+geste de molette, chaque cran ne coûte qu'une recopie ; l'image se repeint une
+seule fois, quand la molette s'arrête. La vue est un peu molle le temps du
+geste, nette dès qu'il cesse.
+
+Mesuré sur une partie de 5 500 coups, au dézoom maximum :
+
+| | |
+|---|---|
+| avant, par cran de molette | 995 ms |
+| après, pour un geste de dix crans | **1 ms** |
+| remise au net, une fois | 130 ms |
+| déplacement | 0,3 ms médian |
+
 ### La caméra n'est jamais déplacée d'office
 
 Quand un joueur trouve le top, **l'écran des autres ne bouge pas**. Se faire
