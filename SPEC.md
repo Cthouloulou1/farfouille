@@ -895,6 +895,18 @@ doter d'un journal rétroactivement, au premier démarrage.
 Les lignes tronquées par une coupure sont ignorées à la relecture, avec un
 avertissement : une ligne perdue ne condamne pas les précédentes.
 
+### Recommencer ne veut pas dire changer de jeu
+
+`--nouvelle` **garde la variante** de la partie qu'il remplace : tirage, lettres
+jouables, pioche. La ligne de commande peut en demander une autre, mais rien ne
+se perd par défaut, et le démarrage annonce ce qui a été repris.
+
+Elle se lit **avant** l'archivage, faute de quoi elle disparaîtrait avec les
+fichiers. C'est arrivé : une grille permanente réglée sur le sac de 102 bouclant
+est repartie en probabilités pondérées sans que rien ne le dise — et sans
+reliquat à l'écran, puisque des probabilités n'ont pas de stock. Le symptôme
+était à trois écrans de la cause.
+
 ### Commencer une nouvelle grille
 
 Deux façons, aucune ne détruit quoi que ce soit :

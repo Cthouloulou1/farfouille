@@ -62,6 +62,19 @@ setLayout(LAYOUT);
 /** Instant du demarrage : sert a reperer un serveur plus vieux que la page. */
 const DEMARRE_A = Date.now();
 
+/**
+ * La variante de la partie qu'on s'apprete a archiver.
+ *
+ * Lue AVANT de mettre les fichiers de cote, faute de quoi elle disparaitrait
+ * avec eux : `--nouvelle` repartait alors sur la variante par defaut. Une
+ * grille permanente reglee sur le sac de 102 bouclant s'est ainsi retrouvee en
+ * probabilites ponderees, sans que rien ne le dise -- et sans reliquat a
+ * l'ecran, puisque des probabilites n'ont pas de stock.
+ *
+ * « Recommencer la partie » ne veut pas dire « changer de jeu ».
+ */
+const VARIANTE_PRECEDENTE = Game.configEnregistree(GAME_ID);
+
 // --nouvelle : la grille mondiale repart a zero. Rien n'est efface, les trois
 // fichiers sont mis de cote sous un meme horodatage.
 if (process.argv.includes("--nouvelle")) {
@@ -97,7 +110,10 @@ const CFG_MONDIALE = (() => {
   }
   if (enregistree !== null) return deserialiser(enregistree);
 
-  const base = configParDefaut();
+  // La partie neuve reprend la variante de celle qu'elle remplace, sauf si la
+  // ligne de commande en demande une autre.
+  const base = VARIANTE_PRECEDENTE !== null
+    ? deserialiser(VARIANTE_PRECEDENTE) : configParDefaut();
   const tirage = Number(arg("tirage", String(base.tirage)));
   const jouables = Number(arg("jouables", String(tirage)));
   if (!Number.isInteger(tirage) || tirage < 2 || tirage > 15) {
@@ -112,6 +128,10 @@ const CFG_MONDIALE = (() => {
   // qu'avait l'option quand il n'y en avait qu'une.
   const pioches = ["probabilites", "sac102", "sac102boucle"] as const;
   const demandee = arg("pioche", process.argv.includes("--sac102") ? "sac102" : base.pioche);
+  if (VARIANTE_PRECEDENTE !== null) {
+    console.log(`  variante reprise de la partie precedente : ` +
+      `${base.jouables} sur ${base.tirage}, pioche ${demandee}`);
+  }
   if (!pioches.includes(demandee as typeof pioches[number])) {
     console.error(`
   --pioche doit valoir ${pioches.join(", ")} (recu ${demandee})
