@@ -291,6 +291,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sol.hors { color: var(--ink-faint); font-style: italic; }
 .rj-top { flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 15px; border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-soft); }
 .rj-top > div:first-child { flex: 1; min-width: 0; }
+/* L'oeil retire le mot de la grille : de quoi faire chercher le coup a
+   quelqu'un sans lui donner la reponse sous les yeux. */
+.rj-oeil { flex: none; padding: 3px 5px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 3px; }
+.rj-oeil:hover { color: var(--accent); border-color: var(--accent); }
+.rj-oeil .barre { opacity: 0; }
+.rj-oeil[aria-pressed="true"] { color: var(--warn); border-color: var(--warn); }
+.rj-oeil[aria-pressed="true"] .barre { opacity: 1; }
 .rj-chercher { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .rj-chercher input { width: 118px; padding: 4px 7px; font-family: inherit; font-size: 11.5px; border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); color: var(--ink); }
 .rj-chercher input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -494,6 +501,16 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
       <div class="rj-top">
         <div id="rj-top"></div>
+        <button class="rj-oeil" id="rj-oeil" type="button" aria-pressed="false"
+                title="masquer le mot sur la grille">
+          <svg viewBox="0 0 20 14" width="17" height="13" aria-hidden="true">
+            <path d="M1 7s3.2-5.5 9-5.5S19 7 19 7s-3.2 5.5-9 5.5S1 7 1 7z"
+                  fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="10" cy="7" r="2.4" fill="currentColor"/>
+            <path class="barre" d="M3 12.5 17 1.5" stroke="currentColor" stroke-width="1.4"
+                  stroke-linecap="round"/>
+          </svg>
+        </button>
         <div class="rj-chercher">
           <input id="rj-q" type="search" placeholder="chercher un mot…" autocomplete="off" spellcheck="false">
           <span id="rj-compte"></span>

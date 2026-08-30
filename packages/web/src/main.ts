@@ -106,6 +106,14 @@ let marks: { x: number; y: number }[] = [];
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
 /** Le coup mis en evidence sur la grille, quand on en clique un. */
 let ghost: [string, Dir, number, number] | null = null;
+/**
+ * Le mot du rejeu est-il cache sur la grille ?
+ *
+ * De quoi faire chercher un coup a quelqu'un : le tirage et la grille sont la,
+ * la reponse ne l'est pas. Le reglage TIENT d'un coup a l'autre -- on fait
+ * rarement deviner un seul coup -- et se retire en fermant le rejeu.
+ */
+let ghostCache = false;
 
 interface Palier { score: number; moves: [string, Dir, number, number][] }
 /**
@@ -193,6 +201,29 @@ function blankPositions(): Set<string> {
   return out;
 }
 
+/**
+ * La couche des caramels, gardee en image.
+ *
+ * Se deplacer ne change ni la grille ni l'echelle : seule la camera bouge. Il
+ * n'y a donc aucune raison de redessiner des milliers de caramels a chaque
+ * image -- on les dessine UNE fois dans une image de cote, un peu plus grande
+ * que l'ecran, et le deplacement n'est plus qu'une recopie.
+ *
+ * L'image de cote deborde de `MARGE` pixels de chaque cote : tant que la camera
+ * reste dans cette marge, la recopie suffit. Au-dela, on la refait. Un
+ * deplacement rapide la refait donc quelques fois par seconde au lieu de
+ * soixante.
+ *
+ * C'est ce qui permet de garder les LETTRES a toutes les echelles. Elles
+ * coutent un appel de dessin chacune -- l'essentiel du temps d'une image au
+ * dezoom -- mais ce cout n'est plus paye qu'a la reconstruction.
+ */
+const MARGE_CACHE = 320;
+let cache: HTMLCanvasElement | null = null;
+let cacheCtx: CanvasRenderingContext2D | null = null;
+let cacheCle = "";
+let cacheOx = 0, cacheOy = 0;
+
 function draw() {
   if (!configRecue) {
     // Rien a montrer encore : un fond uni vaut mieux qu'une grille fausse.
@@ -233,39 +264,56 @@ function draw() {
     ctx.fillRect(eX(-b), eY(-b), eX(b + 1) - eX(-b), eY(b + 1) - eY(-b));
   }
 
-  // Les cases a prime, groupees par couleur : un chemin par teinte plutot qu'un
-  // fillRect par case. Au dezoom maximum l'ecran en compte plusieurs milliers.
-  const parPrime = new Map<string, [number, number][]>();
-  for (let y = py0; y <= py1; y++) {
-    for (let x = px0; x <= px1; x++) {
-      const ch = bonusChar(x, y, cfg.pavage);
-      if (ch === ".") continue;
-      const cle = ch === "*" ? "D" : ch;
-      const l = parPrime.get(cle);
-      if (l === undefined) parPrime.set(cle, [[x, y]]); else l.push([x, y]);
+  /**
+   * Les primes et le quadrillage, dans l'image de cote.
+   *
+   * Ils ne changent pas plus que les caramels quand la camera bouge, et au
+   * dezoom maximum ils coutent bien davantage : la boucle des primes parcourt
+   * CHAQUE case visible, soit cent quatre-vingt-dix mille cases a deux pixels
+   * de cote. Les laisser dehors, c'etait payer 24 ms par image pour un fond
+   * fixe.
+   */
+  const peindreLeFond = (
+    g: CanvasRenderingContext2D, orgX: number, orgY: number,
+    rx: number, ry: number, rw: number, rh: number,
+  ): void => {
+    const X = (x: number) => Math.round(orgX + x * cell);
+    const Y = (y: number) => Math.round(orgY + y * cell);
+    let a0 = Math.floor((rx - orgX) / cell) - 1, a1 = Math.ceil((rx + rw - orgX) / cell);
+    let b0 = Math.floor((ry - orgY) / cell) - 1, b1 = Math.ceil((ry + rh - orgY) / cell);
+    if (b !== null) {
+      a0 = Math.max(a0, -b); a1 = Math.min(a1, b);
+      b0 = Math.max(b0, -b); b1 = Math.min(b1, b);
     }
-  }
-  for (const [cle, cases] of parPrime) {
-    ctx.fillStyle = (C as Record<string, string>)[cle] ?? C.D;
-    ctx.beginPath();
-    for (const [x, y] of cases) {
-      ctx.rect(eX(x), eY(y), eX(x + 1) - eX(x), eY(y + 1) - eY(y));
+    const parPrime = new Map<string, [number, number][]>();
+    for (let y = b0; y <= b1; y++) {
+      for (let x = a0; x <= a1; x++) {
+        const ch = bonusChar(x, y, cfg.pavage);
+        if (ch === ".") continue;
+        const cle = ch === "*" ? "D" : ch;
+        const l = parPrime.get(cle);
+        if (l === undefined) parPrime.set(cle, [[x, y]]); else l.push([x, y]);
+      }
     }
-    ctx.fill();
-  }
-
-  ctx.strokeStyle = C.line;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const ly0 = b === null ? 0 : eY(-b), ly1 = b === null ? H : eY(b + 1);
-  const lx0 = b === null ? 0 : eX(-b), lx1 = b === null ? W : eX(b + 1);
-  for (let x = px0; x <= px1 + (b === null ? 0 : 1); x++) {
-    const p = eX(x) + .5; ctx.moveTo(p, ly0); ctx.lineTo(p, ly1);
-  }
-  for (let y = py0; y <= py1 + (b === null ? 0 : 1); y++) {
-    const p = eY(y) + .5; ctx.moveTo(lx0, p); ctx.lineTo(lx1, p);
-  }
-  ctx.stroke();
+    for (const [cle, cases] of parPrime) {
+      g.fillStyle = (C as Record<string, string>)[cle] ?? C.D;
+      g.beginPath();
+      for (const [x, y] of cases) g.rect(X(x), Y(y), X(x + 1) - X(x), Y(y + 1) - Y(y));
+      g.fill();
+    }
+    g.strokeStyle = C.line;
+    g.lineWidth = 1;
+    g.beginPath();
+    const ly0 = b === null ? ry : Y(-b), ly1 = b === null ? ry + rh : Y(b + 1);
+    const lx0 = b === null ? rx : X(-b), lx1 = b === null ? rx + rw : X(b + 1);
+    for (let x = a0; x <= a1 + (b === null ? 0 : 1); x++) {
+      const q = X(x) + .5; g.moveTo(q, ly0); g.lineTo(q, ly1);
+    }
+    for (let y = b0; y <= b1 + (b === null ? 0 : 1); y++) {
+      const q = Y(y) + .5; g.moveTo(lx0, q); g.lineTo(lx1, q);
+    }
+    g.stroke();
+  };
 
   // Le bord du plateau, trace franc pour qu'on voie ou la grille s'arrete.
   if (b !== null) {
@@ -284,8 +332,6 @@ function draw() {
   const rad = Math.max(.8, cell * .05);
   /** Au-dela, l'arrondi se voit et vaut son prix. */
   const arrondi = cell >= 22;
-  /** En deca, la lettre ferait moins de dix pixels : illisible. */
-  const lisible = cell >= 16;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -319,48 +365,58 @@ function draw() {
    * par caramel -- l'essentiel du temps d'une image au dezoom maximum. Ce qu'on
    * regarde a cette echelle, c'est la FORME de la grille, pas les lettres.
    */
-  const caramels = (lot: readonly Tile[], face: string, edge: string): void => {
+  const caramels = (
+    g: CanvasRenderingContext2D, lot: readonly Tile[], face: string, edge: string,
+    orgX: number, orgY: number,
+  ): void => {
     if (lot.length === 0) return;
-    ctx.beginPath();
+    const X = (x: number) => Math.round(orgX + x * cell);
+    const Y = (y: number) => Math.round(orgY + y * cell);
+    g.beginPath();
     for (const q of lot) {
-      const px = eX(q.x) + gap, py = eY(q.y) + gap;
-      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
+      const px = X(q.x) + gap, py = Y(q.y) + gap;
+      const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
       if (arrondi) {
-        ctx.moveTo(px + rad, py);
-        ctx.arcTo(px + w, py, px + w, py + h, rad);
-        ctx.arcTo(px + w, py + h, px, py + h, rad);
-        ctx.arcTo(px, py + h, px, py, rad);
-        ctx.arcTo(px, py, px + w, py, rad);
-        ctx.closePath();
+        g.moveTo(px + rad, py);
+        g.arcTo(px + w, py, px + w, py + h, rad);
+        g.arcTo(px + w, py + h, px, py + h, rad);
+        g.arcTo(px, py + h, px, py, rad);
+        g.arcTo(px, py, px + w, py, rad);
+        g.closePath();
       } else {
-        ctx.rect(px + .5, py + .5, w - 1, h - 1);
+        g.rect(px + .5, py + .5, w - 1, h - 1);
       }
     }
-    ctx.fillStyle = face; ctx.fill();
-    ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.stroke();
-    if (!lisible) return;
+    g.fillStyle = face; g.fill();
+    g.lineWidth = 1; g.strokeStyle = edge; g.stroke();
+
+    // La lettre est dessinee A TOUTE ECHELLE. Meme reduite a une tache, elle
+    // fait la difference entre une grille de jeu et un damier de couleurs :
+    // c'est ce qu'on regarde quand on prend du recul sur une partie. Son cout
+    // est paye a la construction de l'image de cote, pas a chaque deplacement.
     const hMoy = cell - gap * 2;
-    ctx.font = `700 ${Math.round(hMoy * .62)}px Archivo, system-ui, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = `700 ${Math.max(3, Math.round(hMoy * .62))}px Archivo, system-ui, sans-serif`;
     for (const q of lot) {
-      const px = eX(q.x) + gap, py = eY(q.y) + gap;
-      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
-      ctx.fillStyle = q.b === 1 ? C.jedge : C.ink;
-      ctx.fillText(q.l, px + w / 2, py + h * .53);
+      const px = X(q.x) + gap, py = Y(q.y) + gap;
+      const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
+      g.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      g.fillText(q.l, px + w / 2, py + h * .53);
     }
     // La valeur du caramel, seulement quand elle tient : sous dix-huit pixels
     // de haut, le chiffre est un point gris qui n'apprend rien.
     if (hMoy < 18) return;
-    ctx.font = `500 ${Math.round(hMoy * .27)}px "IBM Plex Mono", monospace`;
-    ctx.textAlign = "right";
+    g.font = `500 ${Math.round(hMoy * .27)}px "IBM Plex Mono", monospace`;
+    g.textAlign = "right";
     for (const q of lot) {
-      const px = eX(q.x) + gap, py = eY(q.y) + gap;
-      const w = eX(q.x + 1) - eX(q.x) - gap * 2, h = eY(q.y + 1) - eY(q.y) - gap * 2;
-      ctx.fillStyle = q.b === 1 ? C.jedge : C.ink;
-      ctx.globalAlpha = q.b === 1 ? .8 : .6;
-      ctx.fillText(String(q.b === 1 ? 0 : valueOf(q.l)), px + w - w * .1, py + h * .84);
+      const px = X(q.x) + gap, py = Y(q.y) + gap;
+      const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
+      g.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      g.globalAlpha = q.b === 1 ? .8 : .6;
+      g.fillText(String(q.b === 1 ? 0 : valueOf(q.l)), px + w - w * .1, py + h * .84);
     }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = "center";
+    g.globalAlpha = 1;
+    g.textAlign = "center";
   };
 
   // Pendant le rejeu, on ne montre que ce qui etait pose AVANT le coup examine.
@@ -382,17 +438,94 @@ function draw() {
   // 0,8 pixel ne se voit pas ; en dessous de la taille ou il se voit, on trace
   // des carres.
   {
-    const groupes = new Map<string, { face: string; edge: string; t: typeof tiles }>();
-    for (const q of tiles) {
-      if (q.n > jusqua) continue;
-      if (q.x < gx0 || q.x > gx1 || q.y < gy0 || q.y > gy1) continue;
-      const face = q.b === 1 ? C.jface : C.face;
-      const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
-      const cle = `${face}|${edge}`;
-      const g = groupes.get(cle);
-      if (g === undefined) groupes.set(cle, { face, edge, t: [q] }); else g.t.push(q);
+    const cw = W + MARGE_CACHE * 2, ch = H + MARGE_CACHE * 2;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+
+    /**
+     * Peint les caramels d'un rectangle de l'image de cote.
+     *
+     * `orgX`/`orgY` sont les coordonnees d'ecran, DANS L'IMAGE DE COTE, de la
+     * case (0,0). On ne peint que ce qui tombe dans le rectangle demande : c'est
+     * ce qui permet, apres un glissement, de ne repeindre que la bande decouverte.
+     */
+    const peindreLot = (
+      g: CanvasRenderingContext2D, orgX: number, orgY: number,
+      rx: number, ry: number, rw: number, rh: number,
+    ): void => {
+      if (rw <= 0 || rh <= 0) return;
+      const x0 = Math.floor((rx - orgX) / cell) - 1, x1 = Math.ceil((rx + rw - orgX) / cell);
+      // Le fond se peint meme sans un seul caramel dans la bande.
+
+      const y0 = Math.floor((ry - orgY) / cell) - 1, y1 = Math.ceil((ry + rh - orgY) / cell);
+      const groupes = new Map<string, { face: string; edge: string; t: Tile[] }>();
+      for (const q of tiles) {
+        if (q.n > jusqua) continue;
+        if (q.x < x0 || q.x > x1 || q.y < y0 || q.y > y1) continue;
+        const face = q.b === 1 ? C.jface : C.face;
+        const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
+        const k = `${face}|${edge}`;
+        const l = groupes.get(k);
+        if (l === undefined) groupes.set(k, { face, edge, t: [q] }); else l.t.push(q);
+      }
+      g.save();
+      g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
+      g.clearRect(rx, ry, rw, rh);
+      peindreLeFond(g, orgX, orgY, rx, ry, rw, rh);
+      for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, orgX, orgY);
+      g.restore();
+    };
+
+    // La cle dit tout ce qui change le dessin des caramels, la position mise a
+    // part : l'echelle, ce qui est pose, ce qui est souligne, le theme.
+    const cle = `${cell}|${tiles.length}|${jusqua}|${last?.n ?? -1}|${C.face}|${W}x${H}`;
+    if (cache === null) { cache = document.createElement("canvas"); cacheCtx = cache.getContext("2d"); }
+    if (cache.width !== Math.round(cw * dpr) || cache.height !== Math.round(ch * dpr)) {
+      cache.width = Math.round(cw * dpr);
+      cache.height = Math.round(ch * dpr);
+      cacheCle = "";
     }
-    for (const g of groupes.values()) caramels(g.t, g.face, g.edge);
+    const g = cacheCtx!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (cacheCle !== cle) {
+      // Tout a change : on repeint l'image entiere.
+      g.clearRect(0, 0, cw, ch);
+      peindreLot(g, ox + MARGE_CACHE, oy + MARGE_CACHE, 0, 0, cw, ch);
+      cacheCle = cle; cacheOx = ox; cacheOy = oy;
+    } else {
+      // Seule la camera a bouge : on FAIT GLISSER l'image plutot que de la
+      // refaire, et on ne repeint que les bandes que le glissement decouvre.
+      // Refaire l'image entiere coutait 342 ms sur une partie de trois mille
+      // coups -- une saccade nette tous les trois cents pixels de deplacement.
+      // On ne fait glisser que lorsque la camera s'eloigne assez : recopier
+      // l'image entiere coute 26 ms, la dessiner a l'ecran 6. Tant qu'on reste
+      // dans la marge, la simple recopie a l'ecran suffit, et le glissement
+      // n'arrive qu'une fois tous les SEUIL pixels parcourus.
+      const dx = Math.round(ox - cacheOx), dy = Math.round(oy - cacheOy);
+      const SEUIL = 140;
+      if (Math.abs(dx) > SEUIL || Math.abs(dy) > SEUIL) {
+        if (Math.abs(dx) >= cw || Math.abs(dy) >= ch) {
+          g.clearRect(0, 0, cw, ch);
+          peindreLot(g, ox + MARGE_CACHE, oy + MARGE_CACHE, 0, 0, cw, ch);
+          cacheOx = ox; cacheOy = oy;
+        } else {
+          g.globalCompositeOperation = "copy";
+          g.drawImage(cache, 0, 0, cache.width, cache.height, dx, dy, cw, ch);
+          g.globalCompositeOperation = "source-over";
+          cacheOx += dx; cacheOy += dy;
+          const orgX = cacheOx + MARGE_CACHE, orgY = cacheOy + MARGE_CACHE;
+          // La bande verticale decouverte, puis l'horizontale.
+          if (dx > 0) peindreLot(g, orgX, orgY, 0, 0, dx, ch);
+          else if (dx < 0) peindreLot(g, orgX, orgY, cw + dx, 0, -dx, ch);
+          if (dy > 0) peindreLot(g, orgX, orgY, 0, 0, cw, dy);
+          else if (dy < 0) peindreLot(g, orgX, orgY, 0, ch + dy, cw, -dy);
+        }
+      }
+    }
+    ctx.drawImage(
+      cache, 0, 0, cache.width, cache.height,
+      -MARGE_CACHE + (ox - cacheOx), -MARGE_CACHE + (oy - cacheOy), cw, ch,
+    );
   }
 
   const blanks = blankPositions();
@@ -401,7 +534,7 @@ function draw() {
     caramel(c.x, c.y, c.letter, isBlank, isBlank ? C.jface : C.face, isBlank ? C.jedge : C.cursor);
   }
 
-  if (ghost !== null && cell >= 6) {
+  if (ghost !== null && !ghostCache && cell >= 6) {
     const [word, dir, gx, gy] = ghost;
     for (let i = 0; i < word.length; i++) {
       const x = dir === "H" ? gx + i : gx;
@@ -516,6 +649,37 @@ function extentOf(word: string, dir: Dir, x: number, y: number) {
 // ------------------------------------------------------------- camera
 
 function readableCell() { return Math.max(14, Math.min(36, Math.min(W, H) / 16)); }
+
+/** L'emprise des caramels poses, recalculee quand leur nombre change. */
+let emprise = { n: -1, x0: 0, x1: 0, y0: 0, y1: 0, vide: true };
+function empriseDesCaramels() {
+  if (emprise.n === tiles.length) return emprise;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const q of tiles) {
+    if (q.x < x0) x0 = q.x;
+    if (q.x > x1) x1 = q.x;
+    if (q.y < y0) y0 = q.y;
+    if (q.y > y1) y1 = q.y;
+  }
+  emprise = { n: tiles.length, x0, x1, y0, y1, vide: tiles.length === 0 };
+  return emprise;
+}
+
+/**
+ * Jusqu'ou on peut s'eloigner.
+ *
+ * La limite n'est pas fixe : elle suit la partie. Une grille infinie grandit
+ * sans fin, et un plancher en dur finissait par empecher d'embrasser du regard
+ * ce qu'on avait construit -- or c'est precisement la vue qui donne son
+ * caractere a une longue partie. On s'arrete quand toute l'emprise des
+ * caramels tient a l'ecran, jamais plus tot.
+ */
+function cellMinimal(): number {
+  const e = empriseDesCaramels();
+  if (e.vide) return 12;
+  const largeur = e.x1 - e.x0 + 3, hauteur = e.y1 - e.y0 + 3;
+  return Math.max(2, Math.min(12, Math.min(W / largeur, H / hauteur)));
+}
 
 function alreadyVisible(word: string, dir: Dir, x: number, y: number) {
   if (cell < 11) return false;
@@ -864,6 +1028,7 @@ function voirLeCoup(n: number): void {
   }
   ($("rj-q") as HTMLInputElement).value = "";
   $("rj-compte").textContent = "";
+  peindreLOeil();
   $("rj-top").innerHTML = m === undefined ? "" :
     `<b>${m.word}</b> ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} ` +
     `<span class="pts">${m.score} pts</span><br>` +
@@ -1177,9 +1342,23 @@ $("rj-sols").addEventListener("click", (e) => {
   peindreSolutions();
 });
 
+/** L'oeil : ouvert, le mot se voit ; barre, il est retire de la grille. */
+function peindreLOeil(): void {
+  const b = $("rj-oeil");
+  b.setAttribute("aria-pressed", String(ghostCache));
+  b.title = ghostCache ? "montrer le mot sur la grille" : "masquer le mot sur la grille";
+}
+
+$("rj-oeil").addEventListener("click", () => {
+  ghostCache = !ghostCache;
+  peindreLOeil();
+  draw();
+});
+
 function fermerLeRejeu(): void {
   rejeu = null;
   ghost = null;
+  ghostCache = false;
   solutions = [];
   solutionsVues = [];
   choisie = -1;
@@ -1619,7 +1798,7 @@ cv.addEventListener("wheel", (e) => {
   if (anim) { cancelAnimationFrame(anim); anim = 0; }
   const r = cv.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
-  const next = Math.max(12, Math.min(56, cell * Math.exp(-e.deltaY * .0016)));
+  const next = Math.max(cellMinimal(), Math.min(56, cell * Math.exp(-e.deltaY * .0016)));
   ox = mx - (mx - ox) * (next / cell);
   oy = my - (my - oy) * (next / cell);
   cell = next;
