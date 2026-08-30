@@ -1073,6 +1073,26 @@ function fmtTime(ms: number): string {
   return `${Math.floor(s / 86400)} j ${String(Math.floor((s % 86400) / 3600)).padStart(2, "0")} h`;
 }
 
+/**
+ * La place du coup DU JOUEUR, quand elle differe de celle du top retenu.
+ *
+ * Le logiciel choisit un isotop canonique parmi les coups a score egal : celui
+ * qu'un joueur a trouve n'est pas toujours celui qui est pose. Cliquer sur son
+ * propre coup emmenait donc la camera ailleurs, sans rien qui l'explique. Un
+ * demi-point est dans le meme cas : sa solution n'est pas sur la grille du tout.
+ *
+ * La cellule existe TOUJOURS, vide quand les deux places coincident : une
+ * colonne qui apparait et disparait decalerait tout le reste de la ligne.
+ */
+function placeDuJoueur(
+  ailleurs: boolean,
+  sien: { word: string; dir: Dir; x: number; y: number } | undefined,
+): string {
+  if (!ailleurs || sien === undefined) return `<span class="place"></span>`;
+  const ou = noteCoup(sien.dir, sien.x, sien.y, cfg.bornes);
+  return `<button type="button" class="place" title="voir ${echapper(sien.word)} en ${ou}">${ou}</button>`;
+}
+
 /** Le mot en cours de frappe et son score, mis a jour a chaque lettre. */
 function paintCurrent() {
   const w = $("cur-word"), meta = $("cur-meta"), bad = $("cur-bad");
@@ -1182,13 +1202,16 @@ function paintSide() {
     // une colonne qui apparait et disparait decale tout le reste de la ligne.
     // Au duplicate on lit des points et un negatif ; un negatif nul, c'est TOP.
     const neg = negatif[name] ?? 0;
+    // Les coeurs contre le pseudo : a l'autre bout de la ligne, ils se lisaient
+    // comme un second nombre de points.
+    const coeurs = got > 0 ? `<b class="coeurs">♥ ${got}</b>` : "";
     const droite = duplicate
       ? `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
         `<span class="num">${points[name] ?? 0}</span>`
-      : `<span class="likes">${got > 0 ? `♥ ${got}` : ""}</span>` +
+      : `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom">${name}</span>` + droite;
+                    `<span class="nom">${name}${coeurs}</span>` + droite;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
 
@@ -1207,19 +1230,31 @@ function paintSide() {
         list.appendChild(e);
       }
       for (const m of mine) {
-        const r = document.createElement("button");
+        const r = document.createElement("div");
         r.className = "pmove";
+        r.tabIndex = 0;
+        // Ou le joueur a pose SON mot. Le logiciel retient un isotop canonique
+        // qui n'est pas toujours celui qu'on a joue : sans cette place-la, on
+        // clique sur son propre coup et la camera part ailleurs.
+        const sien = m.propositions?.[name]
+          ?? (m.playerWord !== undefined && m.playerDir !== undefined
+              && m.playerX !== undefined && m.playerY !== undefined
+              ? { word: m.playerWord, dir: m.playerDir, x: m.playerX, y: m.playerY, score: 0 }
+              : undefined);
+        const ailleurs = sien !== undefined
+          && (sien.dir !== m.dir || sien.x !== m.x || sien.y !== m.y);
         // Ce que le JOUEUR a tape, qui peut differer du mot retenu par le logiciel.
         if (duplicate) {
           // Son score du coup, et son ecart au top. Zero d'ecart, c'est le top.
           const sc = m.scores![name]!;
           const ecart = m.score - sc;
           // Le mot QU'IL a joue -- pas le top, qu'il n'a peut-etre pas trouve.
-          const sien = m.propositions?.[name]?.word ?? (sc === 0 ? "—" : m.word);
-          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${sien}</span>` +
+          const mot = m.propositions?.[name]?.word ?? (sc === 0 ? "—" : m.word);
+          r.innerHTML = `<span class="n">${m.n}</span><span class="w">${mot}</span>` +
+                        placeDuJoueur(ailleurs, sien) +
                         `<span class="s">${sc}</span>` +
                         `<span class="t ${ecart === 0 ? "top" : ""}">${ecart === 0 ? "Top" : `−${ecart}`}</span>`;
-          r.title = `Coup ${m.n} : ${sien} pour ${sc} pts. ` +
+          r.title = `Coup ${m.n} : ${mot} pour ${sc} pts. ` +
             `Le top ${m.word} valait ${m.score} pts` +
             (ecart === 0 ? " — trouvé." : `, manqué de ${ecart} pts.`);
         } else {
@@ -1228,6 +1263,7 @@ function paintSide() {
           const demi = m.player === null && m.demiPoint?.joueur === name;
           const shown = demi ? `${m.demiPoint!.word} (0.5)` : (m.playerWord ?? m.word);
           r.innerHTML = `<span class="n">${m.n}</span><span class="w">${shown}</span>` +
+                        placeDuJoueur(ailleurs, sien) +
                         `<span class="s">${demi ? m.demiPoint!.score : m.score}</span>` +
                         `<span class="t">${fmtTime(m.ms)}</span>`;
         }
@@ -1238,6 +1274,15 @@ function paintSide() {
             ? `${vu} — le logiciel a retenu ${m.word}` : vu;
         }
         r.addEventListener("click", () => focusMove(m));
+        // La place du joueur mene a SON coup, pas a celui du logiciel.
+        if (ailleurs && sien !== undefined) {
+          const b = r.querySelector(".place") as HTMLElement | null;
+          b?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            ghost = [sien.word, sien.dir, sien.x, sien.y];
+            reveal(sien.word, sien.dir, sien.x, sien.y);
+          });
+        }
         r.appendChild(likeButton(m));
         list.appendChild(r);
       }

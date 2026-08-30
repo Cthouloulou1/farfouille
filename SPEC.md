@@ -791,6 +791,22 @@ Mesuré sur une partie de 5 500 coups, au dézoom maximum :
 | remise au net, une fois | 130 ms |
 | déplacement | 0,3 ms médian |
 
+### Le coup du joueur a sa propre place
+
+Le logiciel retient **un** isotop parmi les coups à score égal, et ce n'est pas
+toujours celui qu'on a trouvé. Dans la liste dépliée d'un joueur, cliquer sur
+son propre coup emmenait donc la caméra ailleurs, sans rien qui l'explique.
+
+Chaque ligne porte maintenant **la place du coup du joueur**, à droite du mot,
+cliquable — elle mène à *sa* solution. La ligne, elle, continue de mener au top
+retenu : les deux sont utiles, ils ne se confondent plus.
+
+C'est encore plus vrai d'un **demi-point** : sa solution n'est nulle part sur la
+grille, et cette place était le seul moyen de savoir où il l'avait vue.
+
+La cellule existe toujours, **vide quand les deux places coïncident** — une
+colonne qui apparaît et disparaît décalerait tout le reste de la ligne.
+
 ### La caméra n'est jamais déplacée d'office
 
 Quand un joueur trouve le top, **l'écran des autres ne bouge pas**. Se faire
