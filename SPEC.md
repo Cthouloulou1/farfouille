@@ -618,6 +618,20 @@ photo, cinq mille fois. Mesuré après : **5 ms**.
 Les clics sont recueillis par **un seul écouteur** posé sur le tableau, qui lit
 l'attribut de la ligne ou du bouton touché.
 
+Le tableau est **découvert avant d'être peint** : le nombre de lignes à poser se
+déduit de sa hauteur, et un tableau caché n'en a pas — on n'en posait que cinq,
+et les autres n'arrivaient qu'au premier défilement.
+
+**Un champ de recherche** remplace le Ctrl+F du navigateur, qui ne trouvait plus
+rien puisque les lignes ne sont plus toutes là. Il cherche mieux : dans tous les
+coups de la partie et non dans les vingt affichés, et sur le mot comme sur le
+tirage, la place, le trouveur ou le numéro du coup.
+
+**La liste ne glisse pas sous les yeux.** Sur une grille infinie, un coup neuf
+s'insère en tête et pousse tout le reste d'une ligne : qui lisait le milieu
+voyait le texte se décaler et un clic tomber à côté. Le décalage est rattrapé —
+sauf en haut de liste, où l'on veut justement voir arriver le coup.
+
 ### Les colonnes sont alignées
 
 Chaque ligne est sa propre grille CSS. Une largeur `auto` ou `fr` s'y recalcule

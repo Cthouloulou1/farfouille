@@ -1663,9 +1663,40 @@ function paintRoadmap() {
   for (const m of history) { somme += Math.max(0, m.ms); cumulRoute.set(m.n, somme); }
 
   body.innerHTML = `<div class="rm-piste" id="rm-piste"></div>`;
-  $("rm-piste").style.height = `${history.length * H_RMROW}px`;
+  filtrerLaRoute();
   body.scrollTop = 0;
   peindreLaRouteVisible();
+}
+
+/** Les coups montres, dans l'ordre d'affichage et passes au filtre. */
+let routeVues: MoveInfo[] = [];
+
+/**
+ * Le filtre de la feuille de route.
+ *
+ * Il remplace le Ctrl+F du navigateur, qui ne trouvait plus rien depuis que la
+ * feuille ne pose que ses lignes visibles -- mais il cherche mieux : dans les
+ * 5 400 coups de la partie, pas seulement dans les vingt affiches, et sur le
+ * mot comme sur le tirage, la place ou le numero du coup.
+ */
+function filtrerLaRoute(): void {
+  const champ = document.getElementById("rm-q") as HTMLInputElement | null;
+  const q = (champ?.value ?? "").trim().toUpperCase();
+  // Un plateau borne se lit du premier coup au dernier, une grille infinie a
+  // l'envers.
+  const base = cfg.bornes !== null ? history : [...history].reverse();
+  routeVues = q === "" ? base : base.filter((m) =>
+    m.word.includes(q)
+    || m.notation.toUpperCase().includes(q)
+    || noteCoup(m.dir, m.x, m.y, cfg.bornes).toUpperCase().includes(q)
+    || quiLaTrouve(m).toUpperCase().includes(q)
+    || String(m.n) === q);
+  const piste = document.getElementById("rm-piste");
+  if (piste !== null) piste.style.height = `${routeVues.length * H_RMROW}px`;
+  const compte = document.getElementById("rm-compte");
+  if (compte !== null) {
+    compte.textContent = q === "" ? "" : `${routeVues.length} sur ${history.length}`;
+  }
 }
 
 /**
@@ -1676,17 +1707,15 @@ function paintRoadmap() {
  */
 function peindreLaRouteVisible(): void {
   const body = $("rm-body");
-  const n = history.length;
+  const n = routeVues.length;
   const piste = document.getElementById("rm-piste");
-  if (piste === null || n === 0) return;
+  if (piste === null) return;
+  if (n === 0) { piste.innerHTML = ""; return; }
   const haut = Math.max(0, Math.floor(body.scrollTop / H_RMROW) - 5);
   const bas = Math.min(n, Math.ceil((body.scrollTop + body.clientHeight) / H_RMROW) + 5);
-  // Un plateau borne se lit du premier coup au dernier, une grille infinie a
-  // l'envers : c'est l'indice qui change de sens, pas la liste.
-  const croissant = cfg.bornes !== null;
   let html = "";
   for (let i = haut; i < bas; i++) {
-    const m = history[croissant ? i : n - 1 - i];
+    const m = routeVues[i];
     if (m !== undefined) html += ligneDeRoute(m, i * H_RMROW);
   }
   piste.innerHTML = html;
@@ -1729,7 +1758,17 @@ function ajouterALaRoute(m: MoveInfo): void {
   cumulRoute.set(m.n, (cumulRoute.get(m.n - 1) ?? 0) + Math.max(0, m.ms));
   const piste = document.getElementById("rm-piste");
   if (piste === null) { paintRoadmap(); return; }
-  piste.style.height = `${history.length * H_RMROW}px`;
+  const body = $("rm-body");
+  const avant = routeVues.length;
+  filtrerLaRoute();
+  // Sur une grille infinie, le nouveau coup s'insere EN TETE : tout ce qui est
+  // dessous descend d'une ligne. Qui lisait le milieu de la liste voyait donc
+  // le texte glisser sous ses yeux, et un clic tomber a cote. On rattrape le
+  // decalage -- sauf en haut de liste, ou l'on veut justement voir arriver le
+  // coup.
+  if (cfg.bornes === null && body.scrollTop > 0) {
+    body.scrollTop += (routeVues.length - avant) * H_RMROW;
+  }
   peindreLaRouteVisible();
 }
 
@@ -1802,7 +1841,19 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     `<span class="s">${m.score}</span>` +
     `<span class="who">${echapper(quiLaTrouve(m))}</span>` + queue + like + `</div>`;
 }
-$("rm-open").addEventListener("click", () => { paintRoadmap(); $("roadmap").hidden = false; });
+$("rm-open").addEventListener("click", () => {
+  // On decouvre AVANT de peindre : le nombre de lignes a poser se deduit de la
+  // hauteur du tableau, et un tableau cache n'en a pas. On n'en posait que cinq,
+  // et les autres n'arrivaient qu'au premier defilement.
+  $("roadmap").hidden = false;
+  paintRoadmap();
+});
+
+($("rm-q") as HTMLInputElement).addEventListener("input", () => {
+  filtrerLaRoute();
+  $("rm-body").scrollTop = 0;
+  peindreLaRouteVisible();
+});
 $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
 
 // ---------------------------------------------------------------- chat
