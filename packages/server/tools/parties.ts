@@ -78,6 +78,9 @@ for (const f of readdirSync(DATA_DIR)) {
   else if (f.endsWith(".secours.json")) noms.add(f.slice(0, -".secours.json".length));
   else if (f.endsWith(".json")) noms.add(f.slice(0, -".json".length));
 }
+// `salons` n'est pas une partie mais le registre des salons : le lister ici le
+// ferait passer pour une partie vide qu'on pourrait ouvrir.
+noms.delete("salons");
 
 const lignes = [...noms].map(lire).filter((l): l is Ligne => l !== null)
   .sort((a, b) => b.dernier - a.dernier);

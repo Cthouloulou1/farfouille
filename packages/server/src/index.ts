@@ -52,8 +52,12 @@ const DEMARRE_A = Date.now();
 if (process.argv.includes("--nouvelle")) {
   const faits = archiver(GAME_ID);
   if (faits.length > 0) {
+    // Le nom de la partie est ce qui precede le suffixe, HORODATAGE COMPRIS.
+    // Decoupe sur les points, `[1]` ne rendait que l'horodatage nu : le nom
+    // annonce n'existait pas, et l'ouvrir aurait cree une partie vide.
+    const nom = faits[0]!.replace(/\.(secours\.json|journal\.jsonl|json)$/, "");
     console.log(`  partie precedente archivee : ${faits.join(", ")}`);
-    console.log(`  (rien n'est efface -- pour la rouvrir : --partie ${faits[0]!.split(".")[1]})`);
+    console.log(`  (rien n'est efface -- pour la rouvrir : --partie ${nom})`);
   } else {
     console.log(`  aucune partie "${GAME_ID}" a archiver, on part de zero`);
   }
