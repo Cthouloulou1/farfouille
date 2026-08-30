@@ -396,7 +396,7 @@ function draw() {
     // est paye a la construction de l'image de cote, pas a chaque deplacement.
     const hMoy = cell - gap * 2;
     g.textAlign = "center"; g.textBaseline = "middle";
-    g.font = `700 ${Math.max(3, Math.round(hMoy * .62))}px Archivo, system-ui, sans-serif`;
+    g.font = `700 ${Math.max(2, Math.round(hMoy * .62))}px Archivo, system-ui, sans-serif`;
     for (const q of lot) {
       const px = X(q.x) + gap, py = Y(q.y) + gap;
       const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
@@ -522,9 +522,12 @@ function draw() {
         }
       }
     }
+    // Au pixel entier : pose a une fraction de pixel pres, l'image se
+    // reechantillonnait a chaque deplacement et tout paraissait legerement
+    // flou. Le demi-pixel perdu ne se voit pas, le flou si.
     ctx.drawImage(
       cache, 0, 0, cache.width, cache.height,
-      -MARGE_CACHE + (ox - cacheOx), -MARGE_CACHE + (oy - cacheOy), cw, ch,
+      Math.round(-MARGE_CACHE + (ox - cacheOx)), Math.round(-MARGE_CACHE + (oy - cacheOy)), cw, ch,
     );
   }
 
@@ -677,8 +680,13 @@ function empriseDesCaramels() {
 function cellMinimal(): number {
   const e = empriseDesCaramels();
   if (e.vide) return 12;
-  const largeur = e.x1 - e.x0 + 3, hauteur = e.y1 - e.y0 + 3;
-  return Math.max(2, Math.min(12, Math.min(W / largeur, H / hauteur)));
+  // Deux cases de marge de chaque cote, et la place des regles : sans elles, la
+  // derniere rangee tombait sous les numeros de colonnes. Le plancher descend
+  // jusqu'a un pixel et demi -- au-dela un caramel n'occupe plus de surface,
+  // mais jusque-la il en occupe une, et c'est ce qui fait l'image d'ensemble.
+  const REGLES = 28;
+  const largeur = e.x1 - e.x0 + 5, hauteur = e.y1 - e.y0 + 5;
+  return Math.max(1.5, Math.min(12, Math.min((W - REGLES) / largeur, (H - REGLES) / hauteur)));
 }
 
 function alreadyVisible(word: string, dir: Dir, x: number, y: number) {
