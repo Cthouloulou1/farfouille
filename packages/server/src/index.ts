@@ -415,7 +415,36 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
 
 // ---------------------------------------------------------------- websocket
 
+/**
+ * Le port est deja pris.
+ *
+ * C'est presque toujours un serveur oublie dans une autre fenetre : une
+ * situation ordinaire, pas de quoi deverser vingt lignes de trace ou l'on
+ * cherche « EADDRINUSE » au milieu. Le message dit quoi faire, comme celui du
+ * verrou.
+ *
+ * Pose AVANT `ws`, et sur les deux emetteurs. `ws` reporte l'erreur du serveur
+ * HTTP sur le sien : un gestionnaire pose apres le sien s'executait trop tard,
+ * la trace etait deja jetee.
+ */
+const surErreurReseau = (e: NodeJS.ErrnoException): void => {
+  if (e.code !== "EADDRINUSE") throw e;
+  console.error(
+    `
+  Le port ${PORT} est deja pris : un serveur tourne dans une autre fenetre.` +
+    `
+
+  Fermez-la, ou prenez un autre port :  npm run serve -- --port ${PORT + 1}` +
+    `
+  Pour voir qui le tient :  netstat -ano | findstr :${PORT}
+`,
+  );
+  process.exit(1);
+};
+http.on("error", surErreurReseau);
+
 const wss = new WebSocketServer({ server: http });
+wss.on("error", surErreurReseau);
 
 wss.on("connection", (ws) => {
   clients.set(ws, { nom: "", salon: "" });
