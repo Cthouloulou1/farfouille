@@ -2579,13 +2579,18 @@ async function peuplerSalons(): Promise<void> {
     b.addEventListener("keydown", (e) => {
       if ((e as KeyboardEvent).key === "Enter") rejoindre(s.id);
     });
-    // Le createur peut retirer son salon. Ses fichiers restent sur le disque.
+    // Le createur peut retirer son salon.
     if (!s.mondiale && s.proprietaire === moi && moi !== "") {
       const jeter = document.createElement("button");
       jeter.type = "button";
       jeter.className = "jeter";
       jeter.textContent = "Supprimer";
-      jeter.title = "Retire le salon de la liste. La partie jouée reste sur le disque.";
+      // Le bouton dit ce qu'il fait VRAIMENT. Il promettait que la partie
+      // restait sur le disque, ce qui n'est plus vrai depuis qu'une partie
+      // suit son salon : seule une 15x15 terminee lui survit.
+      jeter.title = s.config.bornes !== null && s.finie
+        ? "Retire le salon. La partie terminée est conservée."
+        : "Retire le salon ET efface la partie. Sans retour.";
       jeter.addEventListener("click", async (e) => {
         e.stopPropagation();
         const r = await fetch(`/api/salon/${encodeURIComponent(s.id)}`, {

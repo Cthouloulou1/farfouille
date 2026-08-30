@@ -432,13 +432,13 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       json(res, 403, { erreur: "seul le créateur du salon peut le supprimer" });
       return;
     }
-    // Le salon disparait de la liste ; ses FICHIERS RESTENT. On ne detruit
-    // jamais une partie jouee, meme close.
     for (const [ws, v] of clients) {
       if (v.salon === id) send(ws, { t: "refus", message: "Ce salon a été supprimé" });
     }
+    // `fermerSalon` dit lui-meme ce qu'il advient de la partie : conservee si
+    // c'est une 15x15 terminee, effacee sinon.
+    console.log(`[salon] "${s.nom}" (${id}) supprime par ${par}`);
     await fermerSalon(id);
-    console.log(`[salon] "${s.nom}" (${id}) supprime par ${par} -- fichiers conserves`);
     json(res, 200, { ok: true });
     return;
   }
