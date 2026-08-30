@@ -44,19 +44,26 @@ export function perpendicular(dir: Dir): Dir {
  * LIGNE PUIS COLONNE, quel que soit le sens.
  *
  *   "H 0,-4"    mot horizontal, ligne 0, depuis la colonne -4
- *   "V -3,12"   mot vertical, depuis la ligne -3, colonne 12
+ *   "V 3,12"    mot vertical, depuis la ligne 3, colonne 12
  *
  * L'ordre ne depend plus du sens : une paire qui change de signification selon
  * la lettre qui la precede se lit mal.
+ *
+ * LA LIGNE MONTE quand son numero grandit, comme en geometrie. A l'interieur,
+ * `y` descend -- c'est la convention des ecrans, et tous les journaux deja
+ * ecrits la suivent -- mais ce serait un mauvais service a rendre au joueur
+ * que de la lui imposer : les colonnes se lisent deja comme des abscisses, les
+ * lignes se liront comme des ordonnees. Le signe se retourne ici, a la
+ * frontiere de l'affichage, et nulle part ailleurs.
  */
 export function formatMove(dir: Dir, x: number, y: number): string {
-  return `${dir} ${y},${x}`;
+  return `${dir} ${-y},${x}`;
 }
 
 export function parseMove(s: string): { dir: Dir; x: number; y: number } | null {
   const m = /^([HV])\s+(-?\d+),(-?\d+)$/.exec(s.trim());
   if (!m) return null;
-  return { dir: m[1] as Dir, x: Number(m[3]), y: Number(m[2]) };
+  return { dir: m[1] as Dir, x: Number(m[3]), y: -Number(m[2]) };
 }
 
 /**

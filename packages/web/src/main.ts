@@ -676,7 +676,8 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     if (bornes !== null && (y < -bornes || y > bornes)) continue;
     ctx.fillStyle = on ? C.dark! : C.faint!;
     ctx.fillText(
-      bornes === null ? String(y) : String.fromCharCode(65 + y + bornes), LEFT / 2, py,
+      // La ligne monte quand son numero grandit : voir `formatMove`.
+      bornes === null ? String(-y) : String.fromCharCode(65 + y + bornes), LEFT / 2, py,
     );
   }
 }
@@ -1655,15 +1656,61 @@ function paintRoadmap() {
     body.appendChild(e);
     return;
   }
-  const ordre = cfg.bornes !== null ? history : [...history].reverse();
   // Le cumul se compte dans l'ordre de la partie, quel que soit celui de
   // l'affichage : c'est le temps ecoule depuis le premier coup.
   cumulRoute.clear();
   let somme = 0;
   for (const m of history) { somme += Math.max(0, m.ms); cumulRoute.set(m.n, somme); }
 
-  for (const m of ordre) body.appendChild(ligneDeRoute(m));
+  body.innerHTML = `<div class="rm-piste" id="rm-piste"></div>`;
+  $("rm-piste").style.height = `${history.length * H_RMROW}px`;
+  body.scrollTop = 0;
+  peindreLaRouteVisible();
 }
+
+/**
+ * Pose les lignes de la feuille de route qui tombent dans la partie visible.
+ *
+ * Comme le journal et la liste des solutions : une partie de 4 500 coups en a
+ * 4 500, et le tableau en montre vingt.
+ */
+function peindreLaRouteVisible(): void {
+  const body = $("rm-body");
+  const n = history.length;
+  const piste = document.getElementById("rm-piste");
+  if (piste === null || n === 0) return;
+  const haut = Math.max(0, Math.floor(body.scrollTop / H_RMROW) - 5);
+  const bas = Math.min(n, Math.ceil((body.scrollTop + body.clientHeight) / H_RMROW) + 5);
+  // Un plateau borne se lit du premier coup au dernier, une grille infinie a
+  // l'envers : c'est l'indice qui change de sens, pas la liste.
+  const croissant = cfg.bornes !== null;
+  let html = "";
+  for (let i = haut; i < bas; i++) {
+    const m = history[croissant ? i : n - 1 - i];
+    if (m !== undefined) html += ligneDeRoute(m, i * H_RMROW);
+  }
+  piste.innerHTML = html;
+}
+
+$("rm-body").addEventListener("scroll", peindreLaRouteVisible);
+
+$("rm-body").addEventListener("click", (e) => {
+  const cible = e.target as HTMLElement;
+  const image = cible.closest("[data-image]") as HTMLElement | null;
+  if (image !== null) { void exporterImage(Number(image.dataset["image"])); return; }
+  const revoir = cible.closest("[data-revoir]") as HTMLElement | null;
+  if (revoir !== null) {
+    $("roadmap").hidden = true;
+    voirLeCoup(Number(revoir.dataset["revoir"]));
+    return;
+  }
+  const aime = cible.closest("[data-aime]") as HTMLElement | null;
+  if (aime !== null) { envoyer({ t: "like", n: Number(aime.dataset["aime"]) }); return; }
+  const ligne = cible.closest("[data-coup]") as HTMLElement | null;
+  if (ligne === null) return;
+  const m = history.find((q) => q.n === Number(ligne.dataset["coup"]));
+  if (m !== undefined) focusMove(m);
+});
 
 /** Temps ecoule au terme de chaque coup, pour la colonne de cumul. */
 const cumulRoute = new Map<number, number>();
@@ -1677,23 +1724,34 @@ const cumulRoute = new Map<number, number>();
  * reste est fige -- il n'y a donc qu'une ligne a poser, du cote ou elle va.
  */
 function ajouterALaRoute(m: MoveInfo): void {
-  const body = $("rm-body");
   $("rm-tete").innerHTML = enTeteDeLaRoute();
   if (history.length === 1) { paintRoadmap(); return; }
-  const precedent = cumulRoute.get(m.n - 1) ?? 0;
-  cumulRoute.set(m.n, precedent + Math.max(0, m.ms));
-  const ligne = ligneDeRoute(m);
-  // Plateau borne : la liste monte, le nouveau coup va en bas. Grille infinie :
-  // elle descend, il va en haut.
-  if (cfg.bornes !== null) body.appendChild(ligne);
-  else body.insertBefore(ligne, body.firstChild);
+  cumulRoute.set(m.n, (cumulRoute.get(m.n - 1) ?? 0) + Math.max(0, m.ms));
+  const piste = document.getElementById("rm-piste");
+  if (piste === null) { paintRoadmap(); return; }
+  piste.style.height = `${history.length * H_RMROW}px`;
+  peindreLaRouteVisible();
 }
 
 /** Une ligne de la feuille de route. */
-function ligneDeRoute(m: MoveInfo): HTMLElement {
-  const r = document.createElement("div");
-  r.className = "rmrow";
-  r.tabIndex = 0;
+/** Hauteur d'une ligne de feuille de route, fixee dans la feuille de style. */
+const H_RMROW = 26;
+
+const ICONE_IMAGE =
+  '<svg viewBox="0 0 18 16" width="13" height="11" aria-hidden="true">'
+  + '<rect x="1" y="3" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+  + '<path d="M6 3 7.2 1h3.6L12 3" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+  + '<circle cx="9" cy="9" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+
+/**
+ * Une ligne de feuille de route, en TEXTE.
+ *
+ * Construite comme une chaine et non comme des elements : une partie de
+ * 4 500 coups en demandait 1,7 seconde a l'ouverture, dont un tiers rien qu'a
+ * analyser l'icone d'appareil photo, quatre mille cinq cents fois. Les clics
+ * sont recueillis par un seul ecouteur pose sur le tableau.
+ */
+function ligneDeRoute(m: MoveInfo, haut: number): string {
   // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
   // de l'echeance et n'apprendrait rien.
   const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
@@ -1714,48 +1772,35 @@ function ligneDeRoute(m: MoveInfo): HTMLElement {
       `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>` +
       `<span class="cum">${fmtTime(cumulRoute.get(m.n) ?? 0)}</span>`;
   }
-  r.innerHTML =
-    `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
-    `<span class="ph"></span><span class="r"></span>` +
-    `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-    `<span class="s">${m.score}</span>` +
-    `<span class="who">${quiLaTrouve(m)}</span>` + queue;
-  r.addEventListener("click", () => focusMove(m));
+
+  const aime = (m.likers ?? []).includes(me);
+  const muet = m.player === null || m.player === me;
+  const like =
+    `<button type="button" class="like" data-aime="${m.n}"${muet ? " disabled" : ""}` +
+    ` aria-pressed="${aime}" title="${m.player === null ? "coup révélé, personne à féliciter"
+      : m.player === me ? "votre coup" : `bravo à ${echapper(m.player)}`}">` +
+    `<span aria-hidden="true">${aime ? "♥" : "♡"}</span>` +
+    `<span class="n">${m.likes ?? 0}</span></button>`;
 
   // L'image de la position AVANT ce coup, tirage en tete. Disponible en cours
-  // de partie et sur une grille infinie, la ou le rejeu ne l'est pas : c'est
-  // ce qui permet de proposer un coup a chercher a tout moment.
-  const ph = document.createElement("button");
-  ph.type = "button";
-  ph.className = "rm-image";
-  ph.title = `image de la grille au coup ${m.n}, avec son tirage`;
-  ph.innerHTML = '<svg viewBox="0 0 18 16" width="13" height="11" aria-hidden="true">'
-    + '<rect x="1" y="3" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-    + '<path d="M6 3 7.2 1h3.6L12 3" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-    + '<circle cx="9" cy="9" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
-  ph.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    void exporterImage(m.n);
-  });
-  r.querySelector(".ph")!.replaceWith(ph);
+  // de partie et sur une grille infinie, la ou le rejeu ne l'est pas : c'est ce
+  // qui permet de proposer un coup a chercher a tout moment.
+  const image =
+    `<button type="button" class="rm-image" data-image="${m.n}"` +
+    ` title="image de la grille au coup ${m.n}, avec son tirage">${ICONE_IMAGE}</button>`;
+  // Rejouer CE coup. Seulement sur une partie close : avant, le serveur refuse
+  // les paliers, et le rejeu n'aurait rien a montrer.
+  const rejouer = finie
+    ? `<button type="button" class="rm-rejouer" data-revoir="${m.n}" title="revoir le coup ${m.n}">R</button>`
+    : `<span class="r"></span>`;
 
-  // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
-  // refuse les paliers, et le rejeu n'aurait rien a montrer.
-  if (finie) {
-    const rb = document.createElement("button");
-    rb.type = "button";
-    rb.className = "rm-rejouer";
-    rb.textContent = "R";
-    rb.title = `revoir le coup ${m.n}`;
-    rb.addEventListener("click", (e) => {
-      e.stopPropagation();
-      $("roadmap").hidden = true;
-      voirLeCoup(m.n);
-    });
-    r.querySelector(".r")!.replaceWith(rb);
-  }
-  r.appendChild(likeButton(m));
-  return r;
+  return `<div class="rmrow" tabindex="0" data-coup="${m.n}" style="top:${haut}px">` +
+    `<span class="n">${m.n}</span><span class="q">${echapper(m.notation)}</span>` +
+    image + rejouer +
+    `<span class="w">${echapper(m.word)}</span>` +
+    `<span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
+    `<span class="s">${m.score}</span>` +
+    `<span class="who">${echapper(quiLaTrouve(m))}</span>` + queue + like + `</div>`;
 }
 $("rm-open").addEventListener("click", () => { paintRoadmap(); $("roadmap").hidden = false; });
 $("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
@@ -1845,8 +1890,10 @@ function ligneDeChat(m: Chat): HTMLElement {
     const b = document.createElement("button");
     b.className = "cellref";
     // Sur un plateau borne, la case se nomme comme au jeu de societe.
+    // Ligne puis colonne, comme une notation de coup : la meme case ne peut
+    // pas se lire « 12,-34 » dans le chat et « H -34,12 » au journal.
     b.textContent = cfg.bornes === null
-      ? `${m.cell.x},${m.cell.y}`
+      ? `${-m.cell.y},${m.cell.x}`
       : noteCoup("H", m.cell.x, m.cell.y, cfg.bornes);
     b.addEventListener("click", () => {
       marks = [m.cell!];

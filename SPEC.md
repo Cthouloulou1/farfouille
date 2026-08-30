@@ -98,8 +98,16 @@ précède se lit mal.
 
 ```
 H 0,-4      horizontal, ligne 0, à partir de la colonne -4
-V -3,12     vertical, à partir de la ligne -3, colonne 12
+V 3,12      vertical, à partir de la ligne 3, colonne 12
 ```
+
+**La ligne monte quand son numéro grandit**, comme une ordonnée en géométrie —
+les colonnes se lisaient déjà comme des abscisses.
+
+À l'intérieur, `y` descend : c'est la convention des écrans, et tous les
+journaux déjà écrits la suivent. Le signe se retourne **à la frontière de
+l'affichage**, dans `formatMove`, et nulle part ailleurs. Rien de ce qui est
+enregistré ne change, et une partie ancienne se relit sans rien perdre.
 
 **Grille bornée** — la notation du jeu de société. Les lignes portent des
 lettres à partir de A, les colonnes des numéros à partir de 1 ; sur un plateau
@@ -599,6 +607,16 @@ Un **plateau borné** se lit du **premier coup au dernier**, comme une feuille d
 match : la partie a une fin, on la parcourt. Une **grille infinie** se lit à
 **l'envers**, du plus récent au plus ancien : elle n'a pas de fin, et ce qu'on
 vient de jouer est ce qui intéresse.
+
+### Seules les lignes visibles sont posées
+
+Comme le journal des coups et la liste des solutions. Une partie de 5 302 coups
+en a 5 302, et le tableau en montre vingt : les poser toutes demandait **1,7
+seconde à l'ouverture** — dont un tiers rien qu'à analyser l'icône d'appareil
+photo, cinq mille fois. Mesuré après : **5 ms**.
+
+Les clics sont recueillis par **un seul écouteur** posé sur le tableau, qui lit
+l'attribut de la ligne ou du bouton touché.
 
 ### Les colonnes sont alignées
 
