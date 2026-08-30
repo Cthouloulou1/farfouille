@@ -1167,7 +1167,7 @@ function paintSide() {
      // coup suivant ne l'a pas remplace : c'est le temps qu'on a de le lire.
     const mien = duplicate ? last.scores?.[me] : undefined;
     const ecart = mien === undefined ? 0 : mien - last.score;
-    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${quiLaTrouve(last)}` +
+    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${quiLaTrouve(last, true)}` +
       (duplicate ? (ecart < 0 ? ` · ${ecart}` : "") : ` · ${fmtTime(last.ms)}`);
     ll.appendChild(likeButton(last));
   }
@@ -1402,14 +1402,28 @@ function participantsDuCoup(m: MoveInfo): string[] {
  * coup se clot a l'echeance -- et les trouveurs sont une liste, qui peut etre
  * vide. Lire `player` en duplicate donnait « non trouve » a toutes les lignes.
  */
-function quiLaTrouve(m: MoveInfo): string {
+function trouveursDuCoup(m: MoveInfo): string[] {
+  // A defaut de la liste -- une partie servie par un serveur qui ne l'envoyait
+  // pas encore -- on la retrouve dans les scores : trouver le top, c'est
+  // marquer exactement le score du top.
+  return m.trouveurs
+    ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n).sort();
+}
+
+/**
+ * Qui a trouve le top de ce coup, en une ligne qui tient dans sa colonne.
+ *
+ * Au-dela de deux noms, on compte au lieu d'enumerer : six pseudos bout a bout
+ * debordaient sur la colonne suivante, et une ligne qui se chevauche ne se lit
+ * plus du tout -- alors que le nombre, lui, se lit d'un coup d'oeil. La liste
+ * complete reste dans l'infobulle.
+ */
+function quiLaTrouve(m: MoveInfo, complet = false): string {
   if (duplicate) {
-    // A defaut de la liste -- une partie servie par un serveur qui ne l'envoyait
-    // pas encore -- on la retrouve dans les scores : trouver le top, c'est
-    // marquer exactement le score du top.
-    const t = m.trouveurs
-      ?? Object.entries(m.scores ?? {}).filter(([, s]) => s === m.score).map(([n]) => n).sort();
-    return t.length > 0 ? t.join(", ") : "non trouvé";
+    const t = trouveursDuCoup(m);
+    if (t.length === 0) return "non trouvé";
+    if (complet || t.length <= 2) return t.join(", ");
+    return `${t.length} joueurs`;
   }
   return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé");
 }
@@ -1793,7 +1807,7 @@ function filtrerLaRoute(): void {
     m.word.includes(q)
     || m.notation.toUpperCase().includes(q)
     || noteCoup(m.dir, m.x, m.y, cfg.bornes).toUpperCase().includes(q)
-    || quiLaTrouve(m).toUpperCase().includes(q)
+    || quiLaTrouve(m, true).toUpperCase().includes(q)
     || String(m.n) === q);
   const piste = document.getElementById("rm-piste");
   if (piste !== null) piste.style.height = `${routeVues.length * H_RMROW}px`;
@@ -1937,7 +1951,10 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     ? `<button type="button" class="rm-rejouer" data-revoir="${m.n}" title="revoir le coup ${m.n}">R</button>`
     : `<span class="r"></span>`;
 
-  return `<div class="rmrow" tabindex="0" data-coup="${m.n}" style="top:${haut}px">` +
+  const tousLesTrouveurs = duplicate ? trouveursDuCoup(m) : [];
+  const infobulle = tousLesTrouveurs.length > 2
+    ? ` title="trouvé par ${echapper(tousLesTrouveurs.join(", "))}"` : "";
+  return `<div class="rmrow" tabindex="0" data-coup="${m.n}"${infobulle} style="top:${haut}px">` +
     `<span class="n">${m.n}</span><span class="q">${echapper(m.notation)}</span>` +
     image + rejouer +
     `<span class="w">${echapper(m.word)}</span>` +
@@ -1997,7 +2014,7 @@ function peindreLeJournalVisible(): void {
     const m = history[n - 1 - i];
     if (m === undefined) continue;
     const place = noteCoup(m.dir, m.x, m.y, cfg.bornes);
-    const titre = `${m.word} · ${place} · ${m.score} pts · ${quiLaTrouve(m)}`
+    const titre = `${m.word} · ${place} · ${m.score} pts · ${quiLaTrouve(m, true)}`
       + (duplicate ? "" : ` · en ${fmtTime(m.ms)}`);
     html +=
       `<button type="button" class="jrow" data-n="${m.n}" style="top:${i * H_JROW}px"` +

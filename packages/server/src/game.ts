@@ -152,16 +152,16 @@ const DECOMPTE_MS = 3000;
  * Combien de tirages sans le moindre coup jouable avant de clore la partie.
  *
  * Un tirage dont rien ne se pose est deja rarissime -- il faut une grille tres
- * fermee et beaucoup de malchance. Que ce soit vrai HUIT fois de suite, avec un
- * tirage refait a chaque fois, ne s'explique plus par la malchance : le sac ne
- * contient plus de quoi jouer, et la partie est finie.
+ * fermee et beaucoup de malchance. Que ce soit vrai autant de fois de suite,
+ * avec un tirage refait a chaque fois, ne s'explique plus par la malchance : le
+ * sac ne contient plus de quoi jouer, et la partie est finie.
  *
- * Huit, parce que chaque essai coute un calcul de top complet -- quelques
- * millisecondes sur un plateau borne, jusqu'a une seconde sur une grille de
- * trois mille coups. Assez pour ecarter le hasard, assez peu pour ne pas figer
- * le serveur sur un evenement qui ne devrait jamais arriver.
+ * Le nombre suit le PRIX D'UN ESSAI, qui n'est pas le meme des deux cotes :
+ * quelques millisecondes sur un plateau borne, jusqu'a une seconde sur une
+ * grille de trois mille coups. On peut donc se montrer large la ou c'est
+ * gratuit, et rester sobre la ou chaque essai se paie.
  */
-const TIRAGES_INJOUABLES = 8;
+const tiragesInjouables = (bornes: number | null): number => bornes !== null ? 40 : 8;
 
 /** Ce processus existe-t-il encore ? EPERM veut dire oui, mais pas a nous. */
 function alive(pid: number): boolean {
@@ -725,9 +725,10 @@ export class Game {
       // pas une panne, c'est une fin de partie, et elle se dit comme telle.
       this.bag.rendre([...this.rack].filter((l) => l !== BLANK || !this.cfg.joker));
       this.reliquat = [];
-      if (injouables + 1 >= TIRAGES_INJOUABLES) {
+      const plafond = tiragesInjouables(this.cfg.bornes);
+      if (injouables + 1 >= plafond) {
         console.log(`[partie] terminee apres ${this.moves.length} coups ` +
-          `(${TIRAGES_INJOUABLES} tirages de suite sans un seul coup jouable)`);
+          `(${plafond} tirages de suite sans un seul coup jouable)`);
         this.finie = true;
         this.rack = "";
         this.rackNotation = "";
@@ -738,7 +739,7 @@ export class Game {
         return;
       }
       console.warn(`[partie] aucun coup possible avec ${this.rack}, on repioche ` +
-        `(${injouables + 1}/${TIRAGES_INJOUABLES})`);
+        `(${injouables + 1}/${plafond})`);
       await this.deal(injouables + 1);
       return;
     }

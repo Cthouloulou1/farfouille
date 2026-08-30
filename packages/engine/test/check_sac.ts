@@ -56,7 +56,10 @@ console.log("\nFin de partie -- la convention\n");
     // tenait lieu de voyelle plus bas. La partie continue, et la pioche
     // l'exigera dans le tirage pour qu'il soit joue.
     ["que des voyelles et le Y", { A: 3, Y: 1 }, [], false],
-    ["le Y seul", { Y: 1 }, [], true],
+    // Les 101 autres lettres sont sur la grille et il ne reste que le Y : il ne
+    // fait pas un mot a lui seul, la partie s'arrete la.
+    ["le Y seul, dans le sac", { Y: 1 }, [], true],
+    ["le Y seul, en main", {}, ["Y"], true],
     ["consonnes seules avec le Y", { B: 2, T: 1, Y: 1 }, [], false],
     ["consonnes seules sans le Y", { B: 2, T: 1 }, [], true],
     ["un joker traine", { A: 3, "?": 1 }, [], false],

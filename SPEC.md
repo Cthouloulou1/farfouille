@@ -685,7 +685,13 @@ sur 6 : c'est ce que dit cette colonne, et rien d'autre ne le disait.
 
 En topping, c'est celui qui a posé le top. En duplicate, **personne ne le pose**
 — le coup se clôt à l'échéance — et les trouveurs sont une **liste**, qui peut
-être vide. Lire le poseur en duplicate écrivait « non trouvé » sur toutes les
+être vide.
+
+**Au-delà de deux noms, on compte au lieu d'énumérer** : « 6 joueurs ». Six
+pseudos bout à bout débordaient de leur colonne, et une ligne qui se chevauche ne
+se lit plus du tout — alors que le nombre se lit d'un coup d'œil. La liste
+complète reste dans l'infobulle de la ligne, et la recherche continue de porter
+sur les noms. Lire le poseur en duplicate écrivait « non trouvé » sur toutes les
 lignes d'une partie où le top avait pourtant été trouvé.
 
 ### Affichage et interaction
@@ -1415,14 +1421,26 @@ fermée, malchance rare. Le tirage est alors **rendu au sac**, reliquat compris,
 et refait. Rendre est le point important : les lettres abandonnées restaient
 dehors, et un sac de 102 n'en comptait plus que 99.
 
-Au bout de **huit tirages de suite sans un seul coup jouable**, la partie est
-**terminée**. Ce n'est plus de la malchance : le sac ne contient plus de quoi
-jouer. Le compte est borné parce que la reprise était récursive et sans fin — un
-serveur tournait jusqu'à épuiser sa pile.
+Au bout d'un certain nombre de tirages de suite **sans un seul coup jouable**, la
+partie est **terminée**. Ce n'est plus de la malchance : le sac ne contient plus
+de quoi jouer. Le compte est borné parce que la reprise était récursive et sans
+fin — un serveur tournait jusqu'à épuiser sa pile.
 
-Huit, parce que chaque essai coûte un calcul de top complet : quelques
-millisecondes sur un plateau borné, jusqu'à une seconde sur une grille de trois
-mille coups.
+Le nombre suit **le prix d'un essai**, qui n'est pas le même des deux côtés :
+
+| grille | essais | prix d'un essai |
+|---|---|---|
+| **15×15** | 40 | quelques millisecondes |
+| **infinie** | 8 | jusqu'à une seconde sur une grille de trois mille coups |
+
+On peut se montrer large là où c'est gratuit, et rester sobre là où chaque essai
+se paie.
+
+### Le Y tout seul
+
+Cent une lettres sur la grille, le Y en main ou dans le sac : **la partie
+s'arrête**. Il ne fait pas un mot à lui seul, et il n'a plus rien à quoi
+s'accrocher. C'est le seul cas où le Y ne prolonge pas la partie.
 
 ### Les lettres restantes s'affichent
 
