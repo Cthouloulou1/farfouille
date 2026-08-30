@@ -148,6 +148,21 @@ const DATA_DIR = join(here, "..", "data");
 /** Duree du decompte d'avant-partie : 3, 2, 1, partez. */
 const DECOMPTE_MS = 3000;
 
+/**
+ * Combien de tirages sans le moindre coup jouable avant de clore la partie.
+ *
+ * Un tirage dont rien ne se pose est deja rarissime -- il faut une grille tres
+ * fermee et beaucoup de malchance. Que ce soit vrai HUIT fois de suite, avec un
+ * tirage refait a chaque fois, ne s'explique plus par la malchance : le sac ne
+ * contient plus de quoi jouer, et la partie est finie.
+ *
+ * Huit, parce que chaque essai coute un calcul de top complet -- quelques
+ * millisecondes sur un plateau borne, jusqu'a une seconde sur une grille de
+ * trois mille coups. Assez pour ecarter le hasard, assez peu pour ne pas figer
+ * le serveur sur un evenement qui ne devrait jamais arriver.
+ */
+const TIRAGES_INJOUABLES = 8;
+
 /** Ce processus existe-t-il encore ? EPERM veut dire oui, mais pas a nous. */
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
@@ -637,7 +652,7 @@ export class Game {
   }
 
   /** Tire le prochain tirage et lance le calcul du top. */
-  private async deal(): Promise<void> {
+  private async deal(injouables = 0): Promise<void> {
     // Fin de partie (SPEC.md §16) : le sac ne permet plus de composer un tirage
     // jouable. On ne distribue plus, et l'etat diffuse le dit.
     // Nombre de coups atteint : la partie s'arrete la, meme si le sac pourrait
@@ -697,9 +712,34 @@ export class Game {
 
     this.solving = false;
     if (reply.result === null) {
-      console.warn(`[partie] aucun coup possible avec ${this.rack}, on repioche`);
+      // AUCUN COUP POSSIBLE avec ce tirage. On le rend au sac et on retire.
+      //
+      // Rendre est le point important : les lettres abandonnees restaient
+      // dehors, et un sac de 102 n'en comptait plus que 99. Le reliquat aussi
+      // repart, puisque le tirage entier est refait.
+      //
+      // Le compte est BORNE. La retraite etait recursive et sans fin : un sac
+      // dont plus rien n'est jouable -- le cas du Y seul en 2 sur 3 -- faisait
+      // tourner le serveur jusqu'a l'epuisement de la pile. Au-dela de
+      // TIRAGES_INJOUABLES essais, on tient la partie pour terminee : ce n'est
+      // pas une panne, c'est une fin de partie, et elle se dit comme telle.
+      this.bag.rendre([...this.rack].filter((l) => l !== BLANK || !this.cfg.joker));
       this.reliquat = [];
-      await this.deal();
+      if (injouables + 1 >= TIRAGES_INJOUABLES) {
+        console.log(`[partie] terminee apres ${this.moves.length} coups ` +
+          `(${TIRAGES_INJOUABLES} tirages de suite sans un seul coup jouable)`);
+        this.finie = true;
+        this.rack = "";
+        this.rackNotation = "";
+        this.bestScore = -1;
+        this.isotops = 0;
+        this.tiers = [];
+        this.emit();
+        return;
+      }
+      console.warn(`[partie] aucun coup possible avec ${this.rack}, on repioche ` +
+        `(${injouables + 1}/${TIRAGES_INJOUABLES})`);
+      await this.deal(injouables + 1);
       return;
     }
     this.canonicalTop = reply.result.top;

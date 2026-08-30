@@ -189,6 +189,12 @@ export class Bag {
     return {};
   }
 
+  /**
+   * Sans effet : des probabilites ponderees n'ont pas de stock a reapprovisionner.
+   * La methode existe pour que les deux pioches se remplacent l'une l'autre.
+   */
+  rendre(_lettres: readonly string[]): void { /* rien a rendre */ }
+
   /** Le reliquat apres un coup : le tirage moins les caramels effectivement poses. */
   static remainder(rack: string, used: readonly { letter: string; blank: boolean }[]): string[] {
     const left = [...rack];

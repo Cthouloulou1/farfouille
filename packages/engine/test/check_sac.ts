@@ -52,7 +52,10 @@ console.log("\nFin de partie -- la convention\n");
   const cas: [string, Record<string, number>, string[], boolean][] = [
     ["sac vide, reliquat vide", {}, [], true],
     ["que des voyelles", { A: 3, E: 2 }, [], true],
-    ["que des voyelles et le Y", { A: 3, Y: 1 }, [], true],
+    // Le Y bascule des DEUX cotes : il tient lieu de consonne ici comme il
+    // tenait lieu de voyelle plus bas. La partie continue, et la pioche
+    // l'exigera dans le tirage pour qu'il soit joue.
+    ["que des voyelles et le Y", { A: 3, Y: 1 }, [], false],
     ["le Y seul", { Y: 1 }, [], true],
     ["consonnes seules avec le Y", { B: 2, T: 1, Y: 1 }, [], false],
     ["consonnes seules sans le Y", { B: 2, T: 1 }, [], true],
@@ -141,31 +144,57 @@ console.log("\nLe relachement du coup 16 ne vaut que pour un sac qui s'epuise\n"
   }
 }
 
-console.log("\nUn sac qui ne peut pas satisfaire la regle ne fait pas tomber le serveur\n");
+console.log("\nLe Y devient obligatoire quand il tient seul un role\n");
 {
-  // Le cas qui a coute une partie : il ne reste qu'un Y et des consonnes. La
-  // convention d'arret tient ce reste pour jouable -- le Y y remplace la
-  // voyelle -- alors que la regle de rejet le refuse, le Y n'y comptant
-  // d'aucun cote. La pioche tournait mille fois puis levait une erreur, et le
-  // serveur tombait avec la partie.
-  const sac = new SacFini({ Y: 1, N: 1, T: 1 }, mulberry32(3), 7);
-  verifie("un Y et des consonnes : la partie n'est pas finie", !sac.estFinie([]));
+  // Plus de voyelle en dehors du Y : exiger une voyelle serait exiger
+  // l'impossible, et c'est ce qui faisait tourner la pioche mille fois avant de
+  // lever une erreur. Le Y en tient lieu, donc on le TIRE -- il sera joue, et
+  // la partie s'achevera pour de bon.
+  const sansVoyelle = new SacFini({ Y: 1, N: 2, T: 2, R: 2, S: 2 }, mulberry32(3), 3);
+  verifie("un Y et des consonnes : la partie n'est pas finie", !sansVoyelle.estFinie([]));
   let leve: string | null = null;
-  let tire = "";
-  try { tire = sac.draw([]).rack; } catch (e) { leve = (e as Error).message; }
-  verifie("la pioche rend un tirage au lieu de lever une erreur",
-    leve === null, leve ?? `tirage : ${tire}`);
+  const tires: string[] = [];
+  try {
+    for (let i = 0; i < 6; i++) tires.push(sansVoyelle.draw([]).rack);
+  } catch (e) { leve = (e as Error).message; }
+  verifie("aucune erreur levee", leve === null, leve ?? "");
+  verifie("le Y sort au premier tirage", tires[0]?.includes("Y") === true, tires[0] ?? "");
 
-  // Le cas ordinaire n'est pas abime pour autant : quand un tirage acceptable
-  // existe, c'est lui qui sort.
-  const bon = new SacFini(SAC_FRANCAIS, mulberry32(11), 7);
-  const d = bon.draw([]);
+  // Symetriquement, quand le Y est la derniere consonne.
+  const sansConsonne = new SacFini({ Y: 1, A: 2, E: 3, O: 2 }, mulberry32(5), 3);
+  verifie("un Y et des voyelles : la partie n'est pas finie", !sansConsonne.estFinie([]));
+  verifie("le Y sort la aussi", sansConsonne.draw([]).rack.includes("Y"));
+
+  // Et le cas ordinaire n'est pas abime : quand un tirage acceptable existe,
+  // c'est lui qui sort, Y ou pas.
+  const plein = new SacFini(SAC_FRANCAIS, mulberry32(11), 7);
+  const d = plein.draw([]);
   let v = 0, c = 0;
   for (const ch of d.rack) {
     if ("AEIOU".includes(ch)) v++;
     else if (ch !== "Y" && ch !== "?") c++;
   }
   verifie("sac plein : le tirage respecte la regle", v >= 2 && c >= 2, d.rack);
+}
+
+console.log("\nUn tirage abandonne rend ses lettres\n");
+{
+  // Un tirage dont aucun coup n'est jouable est refait. Ses lettres restaient
+  // dehors : le sac de 102 n'en comptait plus que 99, et l'invariant
+  // « tirage + sac = la distribution de depart » tombait en silence.
+  const sac = new SacFini(SAC_FRANCAIS, mulberry32(2), 7);
+  const total = () => Object.values(sac.restant()).reduce((a, b) => a + b, 0);
+  const avant = total();
+  const d = sac.draw([]);
+  verifie("sept caramels sortis", avant - total() === 7, `${avant} -> ${total()}`);
+  sac.rendre([...d.rack]);
+  verifie("rendus, le compte est bon", total() === avant, `${total()} sur ${avant}`);
+
+  // Les lettres rendues sont bien les memes : on recompte par lettre.
+  const r = sac.restant();
+  const attendu = SAC_FRANCAIS;
+  const identique = Object.keys(attendu).every((l) => (r[l] ?? 0) === attendu[l]);
+  verifie("et ce sont les memes lettres", identique);
 }
 
 console.log("\nRetrait d'une lettre -- ce dont la partie joker a besoin\n");

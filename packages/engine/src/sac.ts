@@ -70,6 +70,14 @@ export interface Pioche {
   estFinie(reliquat: readonly string[]): boolean;
   /** Ce qui reste, par lettre. Vide pour une pioche infinie. */
   restant(): Readonly<Record<string, number>>;
+  /**
+   * Remet des caramels dans le sac.
+   *
+   * Un tirage abandonne -- parce qu'il ne permet aucun coup -- doit rendre ses
+   * lettres, sinon elles disparaissent du jeu et le sac de 102 n'en compte plus
+   * que 99. Sans effet sur une pioche a probabilites, qui n'a pas de stock.
+   */
+  rendre(lettres: readonly string[]): void;
 }
 
 export class SacFini implements Pioche {
@@ -189,8 +197,24 @@ export class SacFini implements Pioche {
       if (v <= 2 || c <= 2) { this.remplir(reliquat); this.rechargements++; }
     }
     const avant = [...this.caramels];
+    // LE Y DEVIENT OBLIGATOIRE quand il tient seul un role.
+    //
+    // S'il ne reste plus de voyelle en dehors du Y, aucun tirage ne peut en
+    // contenir une : exiger une voyelle serait exiger l'impossible. Mais le Y
+    // en tient lieu, et la partie n'est pas finie tant qu'il est la -- alors on
+    // le TIRE, pour qu'il soit joue et que la partie s'acheve pour de bon.
+    // Symetriquement quand il est la derniere consonne.
+    //
+    // C'est ce qui reconcilie les deux regles du sac : la convention d'arret
+    // dit que le Y remplace la lettre manquante, la regle de tirage l'exige.
+    const { v, c } = this.compte(reliquat);
+    const yEnReserve = [...this.caramels, ...reliquat].filter((l) => l === "Y").length;
+    const yObligatoire = yEnReserve > 0 && (v === 0 || c === 0);
+    const convient = (rack: readonly string[]): boolean =>
+      yObligatoire ? rack.includes("Y") : !this.reject(rack);
+
     const premier = this.completer(reliquat);
-    if (!this.reject(premier) || this.caramels.length === 0) {
+    if (convient(premier) || this.caramels.length === 0) {
       const pioches = premier.slice(reliquat.length).sort().join("");
       const garde = [...reliquat].sort().join("");
       return {
@@ -217,12 +241,16 @@ export class SacFini implements Pioche {
       // avant de LEVER UNE ERREUR : le serveur tombait, partie comprise.
       //
       // Une preference qu'on ne peut pas satisfaire n'est plus une preference.
-      if (!this.reject(frais) || this.caramels.length === 0 || rejets >= MAX_REJETS) {
+      if (convient(frais) || this.caramels.length === 0 || rejets >= MAX_REJETS) {
         const trie = [...frais].sort().join("");
         return { rack: trie, notation: `-${trie}`, rejected: true, rejections: rejets };
       }
       rejets++;
     }
+  }
+
+  rendre(lettres: readonly string[]): void {
+    for (const l of lettres) this.caramels.push(l);
   }
 
   restant(): Record<string, number> {
@@ -238,8 +266,11 @@ export class SacFini implements Pioche {
    * ou que des consonnes, meme si des coups restent techniquement jouables. Les
    * fins de partie ou l'on colle des voyelles isolees n'interessent personne.
    *
-   * Le Y est la lettre qui bascule, parce qu'il peut tenir le role de la
-   * voyelle : avec des consonnes et lui, on joue encore.
+   * LE Y BASCULE DES DEUX COTES. Il peut tenir le role de la voyelle qui manque
+   * comme celui de la consonne : tant qu'il est la, la partie continue, et la
+   * pioche l'exige dans le tirage pour qu'il soit joue (voir `draw`). Il ne
+   * tenait ce role que d'un cote, si bien qu'un reste de voyelles et d'un Y
+   * finissait la partie quand le meme reste en consonnes la poursuivait.
    */
   estFinie(reliquat: readonly string[]): boolean {
     // Un sac qui se recharge ne s'epuise jamais : la partie ne finit pas.
@@ -255,8 +286,10 @@ export class SacFini implements Pioche {
       else if (isVowel(c)) voyelles++;
       else if (isConsonant(c)) consonnes++;
     }
-    if (consonnes === 0) return true;      // que des voyelles, avec ou sans Y
-    if (voyelles === 0) return y === 0;    // consonnes seules : on continue tant qu'il y a le Y
+    // Rien que des Y : ils ne font pas un mot a eux seuls.
+    if (consonnes === 0 && voyelles === 0) return true;
+    // D'un cote comme de l'autre, on continue tant que le Y est la.
+    if (consonnes === 0 || voyelles === 0) return y === 0;
     return false;
   }
 }

@@ -1390,14 +1390,39 @@ C'est le défaut qui laissait passer, au coup 37 d'une grille infinie tirée d'u
 sac bouclant, un tirage à **une seule voyelle** : le relâchement s'y appliquait
 alors que rien ne s'y épuisait.
 
-**La règle est une préférence, pas une loi physique.** En fin de partie le sac
-ne peut parfois plus la satisfaire : un reste fait d'un **Y et de consonnes** est
-tenu pour jouable par la convention d'arrêt — le Y y remplace la voyelle — alors
-que la règle de rejet le refuse, le Y n'y comptant d'aucun côté. Les deux règles
-se contredisent.
+### Le Y devient obligatoire quand il tient seul un rôle
 
-La pioche prend alors **ce qu'il y a**, après cinq cents tentatives. Elle levait
-une erreur, et le serveur tombait avec la partie en cours.
+S'il ne reste **plus de voyelle en dehors du Y**, aucun tirage ne peut en
+contenir une : exiger une voyelle serait exiger l'impossible. Mais le Y en tient
+lieu, et la partie n'est pas finie tant qu'il est là — alors **on le tire**, pour
+qu'il soit joué et que la partie s'achève pour de bon. Symétriquement quand il
+est la dernière consonne.
+
+**Le Y bascule des deux côtés**, dans la règle de tirage comme dans la
+convention d'arrêt. Il ne tenait ce rôle que d'un seul : un reste de voyelles et
+d'un Y finissait la partie, quand le même reste en consonnes la poursuivait — et
+la pioche cherchait alors sans fin un tirage qui n'existait pas, avant de lever
+une erreur qui emportait le serveur.
+
+C'est ce qui réconcilie les deux règles. À défaut, après cinq cents tentatives,
+la pioche prend ce qu'il y a : une préférence qu'on ne peut pas satisfaire n'est
+plus une préférence.
+
+### Un tirage dont rien ne se joue est refait
+
+Il arrive qu'aucun coup ne soit possible avec le tirage servi — grille très
+fermée, malchance rare. Le tirage est alors **rendu au sac**, reliquat compris,
+et refait. Rendre est le point important : les lettres abandonnées restaient
+dehors, et un sac de 102 n'en comptait plus que 99.
+
+Au bout de **huit tirages de suite sans un seul coup jouable**, la partie est
+**terminée**. Ce n'est plus de la malchance : le sac ne contient plus de quoi
+jouer. Le compte est borné parce que la reprise était récursive et sans fin — un
+serveur tournait jusqu'à épuiser sa pile.
+
+Huit, parce que chaque essai coûte un calcul de top complet : quelques
+millisecondes sur un plateau borné, jusqu'à une seconde sur une grille de trois
+mille coups.
 
 ### Les lettres restantes s'affichent
 
