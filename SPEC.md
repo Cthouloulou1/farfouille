@@ -1637,6 +1637,16 @@ L'échelle s'ajuste : jusqu'à 48 pixels par case pour une petite grille, au
 minimum 6 pour une grande, sous un plafond de 36 mégapixels. Mesuré sur une
 partie de 4 452 coups : **5 916 × 5 903 pixels, 3,6 Mo, en 2,4 secondes**.
 
+**Chaque ligne de la feuille de route porte le même bouton**, à droite de son
+tirage. Il donne la grille **telle qu'elle était avant ce coup-là**, avec **le
+tirage du coup en tête de l'image**, en caramels, dans l'ordre alphabétique et
+les jokers à la fin — de quoi rejouer le coup comme si on y était.
+
+C'est là que ça compte : le rejeu n'existe que sur une partie close, alors que
+la feuille de route est ouverte à tout moment, y compris sur une grille infinie
+qui ne se termine jamais. Sans ce bouton, proposer un coup à chercher y était
+impossible.
+
 PNG plutôt que JPEG : des lettres nettes sur un fond uni, c'est le cas où le PNG
 gagne sur tous les tableaux, poids compris.
 

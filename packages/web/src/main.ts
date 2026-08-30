@@ -28,6 +28,8 @@ const cv = $<HTMLCanvasElement>("cv");
 let ctx = cv.getContext("2d")!;
 /** Vrai le temps d'une exportation : le cache d'ecran ne sert alors a rien. */
 let exportEnCours = false;
+/** Numero du dernier coup a montrer sur une image d'archive, `null` sinon. */
+let exportJusqua: number | null = null;
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 interface Tile { x: number; y: number; l: string; b: 0 | 1; n: number }
@@ -430,7 +432,10 @@ function draw() {
   };
 
   // Pendant le rejeu, on ne montre que ce qui etait pose AVANT le coup examine.
-  const jusqua = rejeu === null ? Infinity : rejeu.n - 1;
+  // Une image tiree de la feuille de route fixe la meme borne, sans passer par
+  // le rejeu : elle est disponible en cours de partie, y compris sur une grille
+  // infinie ou le rejeu, lui, ne l'est pas.
+  const jusqua = exportJusqua ?? (rejeu === null ? Infinity : rejeu.n - 1);
   // Le dernier coup joue reste souligne sur la grille.
   const hl = new Set(
     rejeu !== null || last === null
@@ -688,8 +693,14 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
  * PNG plutot que JPEG : des lettres nettes sur un fond uni, c'est le cas ou le
  * PNG gagne sur tous les tableaux, poids compris.
  */
-async function exporterImage(): Promise<void> {
+async function exporterImage(coup?: number): Promise<void> {
   const bouton = $("rb-image") as HTMLButtonElement;
+  const m = coup === undefined ? undefined : history.find((q) => q.n === coup);
+  // Le tirage du coup, dans l'ordre alphabetique et les jokers a la fin : c'est
+  // ainsi qu'on le lit sur son chevalet. Il figure en tete de l'image, ce qui
+  // suffit a rejouer le coup comme si on y etait.
+  const tirage = m === undefined ? [] : [...m.rack].sort((a, b) =>
+    a === BLANK ? 1 : b === BLANK ? -1 : a < b ? -1 : a > b ? 1 : 0);
   const e = empriseDesCaramels();
   const b = cfg.bornes;
   // Sur un plateau borne, c'est le plateau ; sur une grille infinie, l'emprise
@@ -708,8 +719,12 @@ async function exporterImage(): Promise<void> {
   while (cases.l * taille * cases.h * taille > PIXELS_MAX && taille > 6) taille--;
 
   const REGLE = { x: 30, y: 17 };
+  // Le bandeau du tirage, quand il y en a un. Ses caramels sont plus grands que
+  // ceux de la grille : c'est ce qu'on lit en premier.
+  const tailleTirage = Math.max(28, Math.min(64, Math.round(cases.l * taille / 26)));
+  const BANDEAU = tirage.length > 0 ? Math.round(tailleTirage * 1.9) : 0;
   const largeur = Math.round(cases.l * taille) + REGLE.x;
-  const hauteur = Math.round(cases.h * taille) + REGLE.y;
+  const hauteur = Math.round(cases.h * taille) + REGLE.y + BANDEAU;
 
   const hors = document.createElement("canvas");
   hors.width = largeur; hors.height = hauteur;
@@ -721,13 +736,16 @@ async function exporterImage(): Promise<void> {
   bouton.disabled = true;
   try {
     ctx = g; W = largeur; H = hauteur; cell = taille;
-    ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille;
+    ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille + BANDEAU;
     exportEnCours = true;
+    exportJusqua = coup === undefined ? null : coup - 1;
     ctx.fillStyle = css("--field");
     ctx.fillRect(0, 0, W, H);
     draw();
+    if (tirage.length > 0) dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, coup!);
   } finally {
     exportEnCours = false;
+    exportJusqua = null;
     ctx = memoire.ctx; W = memoire.W; H = memoire.H;
     ox = memoire.ox; oy = memoire.oy; cell = memoire.cell;
     cacheCle = "";   // l'image de cote a servi a autre chose entre-temps
@@ -738,14 +756,77 @@ async function exporterImage(): Promise<void> {
   const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
   if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
   const quand = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "h");
-  const coup = rejeu !== null ? `coup ${rejeu.n}` : `${history.length} coups`;
+  const quoi = coup !== undefined ? `coup ${coup}`
+    : rejeu !== null ? `coup ${rejeu.n}` : `${history.length} coups`;
   const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${salonNom} — ${coup} — ${quand}.png`;
+  a.download = `${salonNom} — ${quoi} — ${quand}.png`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   flash(`image enregistrée · ${largeur} × ${hauteur} px`, "ok");
+}
+
+/**
+ * Le tirage en tete de l'image, en caramels, comme sur un chevalet.
+ *
+ * Le bandeau du jeu vit dans la page, pas sur le canevas : on le redessine ici,
+ * sans quoi une image d'archive montrerait une grille sans les lettres avec
+ * lesquelles il fallait chercher -- et ne servirait a rien.
+ */
+function dessinerLeTirage(
+  g: CanvasRenderingContext2D, lettres: readonly string[],
+  largeur: number, hauteur: number, taille: number, coup: number,
+): void {
+  g.save();
+  g.fillStyle = css("--panel");
+  g.fillRect(0, 0, largeur, hauteur);
+  g.strokeStyle = css("--rule"); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, hauteur - .5); g.lineTo(largeur, hauteur - .5); g.stroke();
+
+  const gap = Math.max(2, Math.round(taille * .09));
+  const total = lettres.length * taille + (lettres.length - 1) * gap;
+  let px = Math.round((largeur - total) / 2);
+  const py = Math.round((hauteur - taille) / 2);
+  const rad = Math.max(1.5, taille * .07);
+
+  g.textAlign = "center"; g.textBaseline = "middle";
+  for (const ch of lettres) {
+    const joker = ch === BLANK;
+    roundRectSur(g, px, py, taille, taille, rad);
+    g.fillStyle = joker ? css("--joker-face") : css("--tile-face"); g.fill();
+    g.lineWidth = Math.max(1, taille * .04);
+    g.strokeStyle = joker ? css("--joker-edge") : css("--tile-edge"); g.stroke();
+    g.fillStyle = joker ? css("--joker-edge") : css("--tile-ink");
+    g.font = `700 ${Math.round(taille * .58)}px Archivo, system-ui, sans-serif`;
+    g.fillText(joker ? "?" : ch, px + taille / 2, py + taille * .5);
+    g.globalAlpha = .6;
+    g.font = `500 ${Math.round(taille * .26)}px "IBM Plex Mono", monospace`;
+    g.textAlign = "right";
+    g.fillText(String(joker ? 0 : valueOf(ch)), px + taille * .9, py + taille * .84);
+    g.textAlign = "center"; g.globalAlpha = 1;
+    px += taille + gap;
+  }
+
+  // Le numero du coup, discret, a gauche : de quoi retrouver la position.
+  g.fillStyle = css("--ink-faint");
+  g.font = `500 ${Math.round(taille * .32)}px "IBM Plex Mono", monospace`;
+  g.textAlign = "left"; g.textBaseline = "middle";
+  g.fillText(`COUP ${coup}`, 14, hauteur / 2);
+  g.restore();
+}
+
+/** Un rectangle arrondi sur un contexte quelconque. */
+function roundRectSur(
+  g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number,
+): void {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
 }
 
 $("rb-image").addEventListener("click", () => { void exporterImage(); });
@@ -1604,11 +1685,29 @@ function ligneDeRoute(m: MoveInfo): HTMLElement {
   }
   r.innerHTML =
     `<span class="n">${m.n}</span><span class="q">${m.notation}</span>` +
-    `<span class="r"></span>` +
+    `<span class="ph"></span><span class="r"></span>` +
     `<span class="w">${m.word}</span><span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
     `<span class="s">${m.score}</span>` +
     `<span class="who">${quiLaTrouve(m)}</span>` + queue;
   r.addEventListener("click", () => focusMove(m));
+
+  // L'image de la position AVANT ce coup, tirage en tete. Disponible en cours
+  // de partie et sur une grille infinie, la ou le rejeu ne l'est pas : c'est
+  // ce qui permet de proposer un coup a chercher a tout moment.
+  const ph = document.createElement("button");
+  ph.type = "button";
+  ph.className = "rm-image";
+  ph.title = `image de la grille au coup ${m.n}, avec son tirage`;
+  ph.innerHTML = '<svg viewBox="0 0 18 16" width="13" height="11" aria-hidden="true">'
+    + '<rect x="1" y="3" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+    + '<path d="M6 3 7.2 1h3.6L12 3" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+    + '<circle cx="9" cy="9" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+  ph.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    void exporterImage(m.n);
+  });
+  r.querySelector(".ph")!.replaceWith(ph);
+
   // Rejouer CE coup. Seulement sur une partie close : avant, le serveur
   // refuse les paliers, et le rejeu n'aurait rien a montrer.
   if (finie) {
