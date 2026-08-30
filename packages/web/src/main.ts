@@ -231,10 +231,30 @@ function blankPositions(): Set<string> {
  * dezoom -- mais ce cout n'est plus paye qu'a la reconstruction.
  */
 const MARGE_CACHE = 320;
+
+/**
+ * De combien l'image de cote deborde de l'ecran, selon l'echelle.
+ *
+ * La marge se compte en pixels, mais ce qu'elle coute se compte en CASES. A
+ * douze pixels par case, 320 pixels font vingt-six cases de rab ; a deux
+ * pixels, ils en font cent soixante, et l'image de cote couvre alors trois fois
+ * la surface de l'ecran -- donc trois fois les caramels a peindre, pour une
+ * marge dont on n'a pas plus besoin.
+ *
+ * Elle suit donc l'echelle. En dessous, le glissement se declenche un peu plus
+ * souvent, mais chaque glissement coute d'autant moins.
+ */
+const margeVoulue = (): number => Math.max(48, Math.min(MARGE_CACHE, Math.round(cell * 26)));
 let cache: HTMLCanvasElement | null = null;
 let cacheCtx: CanvasRenderingContext2D | null = null;
 let cacheCle = "";
 let cacheOx = 0, cacheOy = 0;
+/** Taille de case a laquelle l'image de cote a ete peinte. */
+let cacheCell = 0;
+/** Marge a laquelle l'image de cote a ete taillee. */
+let cacheMarge = MARGE_CACHE;
+/** Attend l'arret du zoom pour repeindre net. */
+let zoomRepos = 0;
 
 function draw() {
   if (!configRecue) {
@@ -493,13 +513,19 @@ function draw() {
     // megaoctets pour un dessin qui n'aura lieu qu'une fois.
     peindreLot(ctx, ox, oy, 0, 0, W, H, false);
   } else {
-    const cw = W + MARGE_CACHE * 2, ch = H + MARGE_CACHE * 2;
+    // Une marge qui change demande une image de cote d'une autre taille : on la
+    // refait alors entierement, ce qui n'arrive qu'apres un changement d'echelle.
+    const refaire = cacheCell === 0 || margeVoulue() !== cacheMarge;
+    if (refaire) cacheMarge = margeVoulue();
+    const cw = W + cacheMarge * 2, ch = H + cacheMarge * 2;
     const dpr = Math.min(devicePixelRatio || 1, 2);
 
 
     // La cle dit tout ce qui change le dessin des caramels, la position mise a
     // part : l'echelle, ce qui est pose, ce qui est souligne, le theme.
-    const cle = `${cell}|${tiles.length}|${jusqua}|${last?.n ?? -1}|${C.face}|${W}x${H}`;
+    // L'echelle ne fait PAS partie de la cle : la changer n'invalide pas ce
+    // qu'on a peint, on sait l'etirer. Le reste, si.
+    const cle = `${tiles.length}|${jusqua}|${last?.n ?? -1}|${C.face}|${W}x${H}`;
     if (cache === null) { cache = document.createElement("canvas"); cacheCtx = cache.getContext("2d"); }
     if (cache.width !== Math.round(cw * dpr) || cache.height !== Math.round(ch * dpr)) {
       cache.width = Math.round(cw * dpr);
@@ -509,11 +535,24 @@ function draw() {
     const g = cacheCtx!;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    if (cacheCle !== cle) {
+    if (cacheCle !== cle || refaire) {
       // Tout a change : on repeint l'image entiere.
       g.clearRect(0, 0, cw, ch);
-      peindreLot(g, ox + MARGE_CACHE, oy + MARGE_CACHE, 0, 0, cw, ch);
-      cacheCle = cle; cacheOx = ox; cacheOy = oy;
+      peindreLot(g, ox + cacheMarge, oy + cacheMarge, 0, 0, cw, ch);
+      cacheCle = cle; cacheOx = ox; cacheOy = oy; cacheCell = cell;
+    } else if (cell !== cacheCell) {
+      // ZOOM EN COURS. On ne repeint pas : on ETIRE ce qu'on a deja, et on
+      // repeindra net des que la molette s'arrete.
+      //
+      // Repeindre a chaque cran coutait pres d'une seconde sur une partie de
+      // cinq mille coups : une image de cote entiere, vingt-six mille caramels
+      // et leurs lettres, pour un cran de molette aussitot suivi du suivant. La
+      // vue est un peu molle le temps du geste, nette des qu'il cesse.
+      clearTimeout(zoomRepos);
+      zoomRepos = window.setTimeout(() => {
+        cacheCell = 0;   // force la remise au net
+        redessiner();
+      }, 130);
     } else {
       // Seule la camera a bouge : on FAIT GLISSER l'image plutot que de la
       // refaire, et on ne repeint que les bandes que le glissement decouvre.
@@ -534,11 +573,13 @@ function draw() {
       // reechantillonne rien.
       const ddx = Math.round((ox - cacheOx) * dpr), ddy = Math.round((oy - cacheOy) * dpr);
       const dx = ddx / dpr, dy = ddy / dpr;
-      const SEUIL = 140;
+      // On glisse a mi-marge : au-dela, une bande decouverte depasserait ce que
+      // l'image de cote contient.
+      const SEUIL = cacheMarge * 0.45;
       if (Math.abs(dx) > SEUIL || Math.abs(dy) > SEUIL) {
         if (Math.abs(dx) >= cw || Math.abs(dy) >= ch) {
           g.clearRect(0, 0, cw, ch);
-          peindreLot(g, ox + MARGE_CACHE, oy + MARGE_CACHE, 0, 0, cw, ch);
+          peindreLot(g, ox + cacheMarge, oy + cacheMarge, 0, 0, cw, ch);
           cacheOx = ox; cacheOy = oy;
         } else {
           // Recopie a l'identite : un pixel d'ecran pour un pixel d'ecran.
@@ -549,7 +590,7 @@ function draw() {
           g.globalCompositeOperation = "source-over";
           g.setTransform(dpr, 0, 0, dpr, 0, 0);
           cacheOx += dx; cacheOy += dy;
-          const orgX = cacheOx + MARGE_CACHE, orgY = cacheOy + MARGE_CACHE;
+          const orgX = cacheOx + cacheMarge, orgY = cacheOy + cacheMarge;
           // La bande verticale decouverte, puis l'horizontale.
           if (dx > 0) peindreLot(g, orgX, orgY, 0, 0, dx, ch);
           else if (dx < 0) peindreLot(g, orgX, orgY, cw + dx, 0, -dx, ch);
@@ -561,10 +602,20 @@ function draw() {
     // Pose sur un pixel D'ECRAN entier, la encore : arrondir au pixel de mise
     // en page ne suffit pas quand l'ecran n'est pas a 100 %.
     const auPixel = (v: number) => Math.round(v * dpr) / dpr;
-    ctx.drawImage(
-      cache, 0, 0, cache.width, cache.height,
-      auPixel(-MARGE_CACHE + (ox - cacheOx)), auPixel(-MARGE_CACHE + (oy - cacheOy)), cw, ch,
-    );
+    if (cell === cacheCell) {
+      ctx.drawImage(
+        cache, 0, 0, cache.width, cache.height,
+        auPixel(-cacheMarge + (ox - cacheOx)), auPixel(-cacheMarge + (oy - cacheOy)), cw, ch,
+      );
+    } else {
+      // L'image a ete peinte a une autre echelle : on l'etire de sorte que la
+      // case (0,0) retombe la ou la camera la place maintenant.
+      const k = cell / cacheCell;
+      ctx.drawImage(
+        cache, 0, 0, cache.width, cache.height,
+        ox - k * (cacheOx + cacheMarge), oy - k * (cacheOy + cacheMarge), cw * k, ch * k,
+      );
+    }
   }
 
   const blanks = blankPositions();
