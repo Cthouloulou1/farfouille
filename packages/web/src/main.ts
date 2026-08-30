@@ -695,20 +695,41 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
  */
 async function exporterImage(coup?: number): Promise<void> {
   const bouton = $("rb-image") as HTMLButtonElement;
-  const m = coup === undefined ? undefined : history.find((q) => q.n === coup);
-  // Le tirage du coup, dans l'ordre alphabetique et les jokers a la fin : c'est
-  // ainsi qu'on le lit sur son chevalet. Il figure en tete de l'image, ce qui
-  // suffit a rejouer le coup comme si on y etait.
-  const tirage = m === undefined ? [] : [...m.rack].sort((a, b) =>
+  // Quel coup, et avec quelles lettres. Sans numero, c'est la position DU
+  // MOMENT : celle du coup en cours, ou celle qu'examine le rejeu.
+  const numero = coup ?? (rejeu !== null ? rejeu.n : moveNumber + 1);
+  const m = history.find((q) => q.n === numero);
+  const lettres = m !== undefined && coup !== undefined ? m.rack
+    : rejeu !== null ? (m?.rack ?? "") : rack;
+  // Ordre alphabetique, jokers a la fin : c'est ainsi qu'on lit son chevalet.
+  // Le tirage en tete de l'image est ce qui permet de rejouer le coup.
+  const tirage = [...lettres].sort((a, b) =>
     a === BLANK ? 1 : b === BLANK ? -1 : a < b ? -1 : a > b ? 1 : 0);
-  const e = empriseDesCaramels();
   const b = cfg.bornes;
-  // Sur un plateau borne, c'est le plateau ; sur une grille infinie, l'emprise
-  // des caramels avec deux cases d'air autour.
-  const x0 = b !== null ? -b - 1 : (e.vide ? -8 : e.x0 - 2);
-  const x1 = b !== null ? b + 1 : (e.vide ? 8 : e.x1 + 2);
-  const y0 = b !== null ? -b - 1 : (e.vide ? -8 : e.y0 - 2);
-  const y1 = b !== null ? b + 1 : (e.vide ? 8 : e.y1 + 2);
+  // L'emprise des caramels POSES A CE MOMENT-LA. Prendre celle de la partie
+  // entiere montrerait une zone vide du cote ou elle a grandi ensuite.
+  const jusque = coup === undefined ? Infinity : coup - 1;
+  let ex0 = Infinity, ex1 = -Infinity, ey0 = Infinity, ey1 = -Infinity;
+  for (const q of tiles) {
+    if (q.n > jusque) continue;
+    if (q.x < ex0) ex0 = q.x;
+    if (q.x > ex1) ex1 = q.x;
+    if (q.y < ey0) ey0 = q.y;
+    if (q.y > ey1) ey1 = q.y;
+  }
+  const vide = ex0 === Infinity;
+
+  // La marge fait la LONGUEUR D'UN MOT ENTIER, plus une case d'air.
+  //
+  // C'est ce qui rend l'image jouable : un coup peut partir de sept cases au-
+  // dessus du dernier caramel pose et redescendre le toucher. Une marge de deux
+  // cases coupait ces coups-la de l'image, et le top devenait introuvable pour
+  // qui cherche dessus.
+  const marge = cfg.jouables + 1;
+  const x0 = b !== null ? -b - 1 : (vide ? -8 : ex0 - marge);
+  const x1 = b !== null ? b + 1 : (vide ? 8 : ex1 + marge);
+  const y0 = b !== null ? -b - 1 : (vide ? -8 : ey0 - marge);
+  const y1 = b !== null ? b + 1 : (vide ? 8 : ey1 + marge);
   const cases = { l: x1 - x0 + 1, h: y1 - y0 + 1 };
 
   // Assez grand pour se lire, assez petit pour tenir en memoire. Un canevas de
@@ -731,18 +752,26 @@ async function exporterImage(coup?: number): Promise<void> {
   const g = hors.getContext("2d");
   if (g === null) return;
 
+  // La grille se dessine sur SON canevas, que l'on pose ensuite sous le
+  // bandeau. `draw()` place les numeros de colonnes tout en haut de ce qu'il
+  // dessine : peindre le bandeau par-dessus les aurait recouverts, et c'est
+  // justement ce qui permet de nommer la case ou l'on joue.
+  const grille = document.createElement("canvas");
+  grille.width = largeur; grille.height = hauteur - BANDEAU;
+  const gg = grille.getContext("2d");
+  if (gg === null) return;
+
   // On prete a `draw()` un autre canevas et un autre cadrage, puis on rend tout.
   const memoire = { ctx, W, H, ox, oy, cell, cle: cacheCle };
   bouton.disabled = true;
   try {
-    ctx = g; W = largeur; H = hauteur; cell = taille;
-    ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille + BANDEAU;
+    ctx = gg; W = largeur; H = hauteur - BANDEAU; cell = taille;
+    ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille;
     exportEnCours = true;
     exportJusqua = coup === undefined ? null : coup - 1;
     ctx.fillStyle = css("--field");
     ctx.fillRect(0, 0, W, H);
     draw();
-    if (tirage.length > 0) dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, coup!);
   } finally {
     exportEnCours = false;
     exportJusqua = null;
@@ -753,11 +782,13 @@ async function exporterImage(coup?: number): Promise<void> {
     draw();
   }
 
+  if (tirage.length > 0) dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, numero);
+  g.drawImage(grille, 0, BANDEAU);
+
   const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
   if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
   const quand = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "h");
-  const quoi = coup !== undefined ? `coup ${coup}`
-    : rejeu !== null ? `coup ${rejeu.n}` : `${history.length} coups`;
+  const quoi = `coup ${numero}`;
   const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

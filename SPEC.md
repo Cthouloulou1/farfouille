@@ -1637,10 +1637,21 @@ L'échelle s'ajuste : jusqu'à 48 pixels par case pour une petite grille, au
 minimum 6 pour une grande, sous un plafond de 36 mégapixels. Mesuré sur une
 partie de 4 452 coups : **5 916 × 5 903 pixels, 3,6 Mo, en 2,4 secondes**.
 
+L'image porte **le tirage en tête**, en caramels, dans l'ordre alphabétique et
+les jokers à la fin, avec le numéro du coup — de quoi rejouer le coup comme si
+on y était. Les **numéros de colonnes** restent visibles sous ce bandeau : la
+grille est dessinée sur son propre canevas et posée dessous, sinon le bandeau
+les aurait recouverts, et on ne pourrait plus nommer la case où l'on joue.
+
+**La marge fait la longueur d'un mot entier**, plus une case d'air. C'est ce qui
+rend l'image jouable : un coup peut partir de sept cases au-dessus du dernier
+caramel posé et redescendre le toucher. Une marge de deux cases coupait ces
+coups-là de l'image, et le top y devenait introuvable.
+
 **Chaque ligne de la feuille de route porte le même bouton**, à droite de son
-tirage. Il donne la grille **telle qu'elle était avant ce coup-là**, avec **le
-tirage du coup en tête de l'image**, en caramels, dans l'ordre alphabétique et
-les jokers à la fin — de quoi rejouer le coup comme si on y était.
+tirage. Il donne la grille **telle qu'elle était avant ce coup-là**, avec le
+tirage de ce coup. L'emprise dessinée est celle du moment : prendre celle de la
+partie entière montrerait une zone vide du côté où elle a grandi ensuite.
 
 C'est là que ça compte : le rejeu n'existe que sur une partie close, alors que
 la feuille de route est ouverte à tout moment, y compris sur une grille infinie
