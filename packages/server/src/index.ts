@@ -562,8 +562,12 @@ wss.on("connection", (ws) => {
       // un plateau borne, plafonne sur une grille infinie. En recouper un
       // second ici cassait des paliers par le milieu -- on affichait trois
       // coups a 34 points sur les neuf qui existaient, sans le dire.
+      //
+      // Sur un plateau borne, les paliers ne sont pas au journal : on les refait
+      // ici, ce qui prend quelques millisecondes.
+      const paliers = await s.partie.paliersDuCoup(Number(msg.n));
       send(ws, {
-        t: "tiers", n: Number(msg.n), tiers: m?.tiers ?? [],
+        t: "tiers", n: Number(msg.n), tiers: paliers,
         rack: m?.notation ?? m?.rack ?? "", mot: m?.word, score: m?.score,
       });
       return;

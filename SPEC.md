@@ -672,13 +672,20 @@ forme du coup, donc sur le coup.
 sur les neuf qui existent, sans le dire, donne une liste qui a l'air complète et
 ne l'est pas. Le plafond, quand il y en a un, tombe donc entre deux paliers.
 
-**Sur un plateau borné, il n'y a pas de plafond du tout** : toutes les solutions
-du coup sont gardées. Mesuré sur trois parties de 15×15, une position en compte
-**537 en moyenne, 18 655 au pire**, pour 4,7 ms de calcul au lieu de 4,1 et
-**0,5 Mo par partie entière**.
+**Sur un plateau borné, les paliers ne sont pas enregistrés du tout.** Ils
+faisaient **86 % du poids d'un journal** — 3 028 octets par coup contre 415 sans
+eux — et une position de 15×15 se résout en quelques millisecondes. Le rejeu les
+**refait à la demande**, complets, en remontant la grille au coup demandé.
 
-**Sur une grille infinie il en faut un** : la grille grandit sans fin, donc le
-nombre d'ancrages aussi. Même mesure : **15 333 solutions par position en
+Mesuré : un journal de 15×15 passe de ~11 500 à **378 octets par coup**, et le
+recalcul coûte **19 ms par coup**, jusqu'à 6 000 solutions.
+
+C'est l'équilibre habituel des logiciels de ce genre : on garde le paramétrage,
+les tirages et le coup joué, et on recalcule le reste.
+
+**Sur une grille infinie, on les garde** : au trois-millième coup, refaire une
+position demanderait près d'une seconde — la question ne se pose pas. Et il en
+faut un plafond : la grille grandit sans fin, donc le nombre d'ancrages aussi. Même mesure : **15 333 solutions par position en
 moyenne, 166 659 au pire, 35 Mo pour cent vingt coups**. On s'y arrête à quarante
 paliers ou cent vingt solutions, le premier atteint.
 

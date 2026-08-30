@@ -511,7 +511,7 @@ export class Game {
       workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
     });
     this.worker.on("message", (m: any) => {
-      if (m.t !== "solved") return;
+      if (m.t !== "solved" && m.t !== "paliers") return;
       const done = this.pending.get(m.id);
       this.pending.delete(m.id);
       done?.(m);
@@ -686,13 +686,12 @@ export class Game {
     const id = this.nextId++;
     const reply: any = await new Promise((res) => {
       this.pending.set(id, res);
-      // Sur un plateau borne, on garde TOUT : le rejeu peut alors montrer
-      // chaque solution du coup, et pas seulement le haut du classement. La
-      // grille ne grandit pas, donc le nombre de solutions reste modeste.
-      // Sur une grille infinie il faut plafonner -- voir worker.ts.
+      // Autant de paliers ENTIERS que tiennent dans 120 solutions. C'est ce
+      // qu'on enregistre sur une grille infinie ; sur un plateau borne on ne
+      // les enregistre plus du tout et le rejeu les refait, complets, a la
+      // demande. Pas la peine d'en calculer davantage ici.
       this.worker.postMessage({
-        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1,
-        tiers: 40, tousLesPaliers: this.cfg.bornes !== null,
+        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1, tiers: 40,
       });
     });
 
@@ -913,7 +912,13 @@ export class Game {
       playerY: played?.y,
       ms,
       isotops: this.isotops,
-      tiers: this.tiers as Tier[],
+      // Les paliers ne sont enregistres QUE sur une grille infinie.
+      //
+      // Ils representaient 86 % du poids d'un journal -- 3 028 octets par coup
+      // contre 415 sans eux. Sur un plateau borne on les refait a la demande en
+      // cinq millisecondes ; sur une grille infinie au trois millieme coup il
+      // faudrait presque une seconde, et la question ne se pose pas.
+      ...(this.cfg.bornes === null ? { tiers: this.tiers as Tier[] } : {}),
       ...(Object.keys(propositions).length > 0 ? { propositions } : {}),
       ...(duplicate ?? {}),
       ...(demiPoint ? { demiPoint } : {}),
@@ -1071,6 +1076,30 @@ export class Game {
   }
 
   /** Revele le top sans vainqueur. Commodite de test en solo. */
+  /**
+   * Les paliers d'un coup deja joue, recalcules si le journal ne les a pas.
+   *
+   * C'est le cas des plateaux bornes, ou on ne les enregistre plus. La grille
+   * se reconstruit a partir des coups qui precedent, ce qui est immediat sur un
+   * plateau de quinze cases de cote.
+   */
+  async paliersDuCoup(n: number): Promise<Tier[]> {
+    const m = this.moves.find((q) => q.n === n);
+    if (m === undefined) return [];
+    if (m.tiers !== undefined && m.tiers.length > 0) return m.tiers;
+    const avant: Placement[] = [];
+    for (const q of this.moves) {
+      if (q.n >= n) break;
+      avant.push(...q.placements);
+    }
+    const id = this.nextId++;
+    const reply: any = await new Promise((res) => {
+      this.pending.set(id, res);
+      this.worker.postMessage({ t: "paliers", id, rack: m.rack, avant });
+    });
+    return (reply.tiers ?? []) as Tier[];
+  }
+
   async reveal(): Promise<void> {
     if (this.solving || this.canonicalTop === null) return;
     await this.commit(null, Date.now() - this.servedAt);

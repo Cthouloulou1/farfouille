@@ -37,33 +37,57 @@ export interface SolveRequest {
   moveNumber: number;
   /** Paliers de sous-tops a renvoyer, pour l'inspection. */
   tiers: number;
-  /**
-   * Garder TOUTES les solutions du coup, sans plafond.
-   *
-   * Reserve aux grilles bornees. Mesure sur trois parties de 15x15 : 537 coups
-   * distincts par position en moyenne, 6 755 au pire, pour 4,7 ms de calcul au
-   * lieu de 4,1 et 0,44 Mo par partie entiere -- autant dire rien.
-   *
-   * Sur une grille infinie ce serait 15 333 coups par position, 166 659 au
-   * pire, et 35 Mo pour cent vingt coups : la grille grandit sans fin, donc le
-   * nombre d'ancrages aussi, et avec lui le nombre de solutions.
-   */
-  tousLesPaliers?: boolean;
 }
 export interface PlaceRequest {
   t: "place";
   placements: Placement[];
 }
 
-parentPort!.on("message", (msg: SolveRequest | PlaceRequest) => {
+/**
+ * Refaire les paliers d'un coup PASSE, pour le rejeu.
+ *
+ * Sur un plateau borne, les paliers ne sont plus ecrits dans le journal : ils
+ * en representaient 86 % du poids, et une position s'y resout en cinq
+ * millisecondes. On les recalcule donc a la demande, sur une grille reconstruite
+ * a partir des coups qui precedent -- au plus une cinquantaine.
+ *
+ * La grille du solveur n'est pas touchee : elle suit la partie en cours, et la
+ * remonter dans le temps lui ferait perdre son cache de croisements.
+ */
+export interface PaliersRequest {
+  t: "paliers";
+  id: number;
+  rack: string;
+  /** Les caramels poses avant ce coup-la. */
+  avant: Placement[];
+}
+
+parentPort!.on("message", (msg: SolveRequest | PlaceRequest | PaliersRequest) => {
   if (msg.t === "place") {
     board.place(msg.placements);
     return;
   }
+  if (msg.t === "paliers") {
+    const t0 = performance.now();
+    const passe = new Board(dawg, deserialiser(config));
+    passe.place(msg.avant);
+    const gen = generateMoves(passe, gaddag, msg.rack, { prune: false });
+    // La graine ne sert qu'a departager les isotops ; les paliers, eux, ne
+    // dependent que de la position et du tirage.
+    const top = pickTop(gen.moves, mulberry32(1), passe.cfg.joker);
+    parentPort!.postMessage({
+      t: "paliers",
+      id: msg.id,
+      ms: performance.now() - t0,
+      tiers: top === null ? [] : top.tiers.map((g) => ({
+        score: g[0]!.score,
+        moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
+      })),
+    });
+    return;
+  }
   const t0 = performance.now();
-  const gen = msg.tousLesPaliers === true
-    ? generateMoves(board, gaddag, msg.rack, { prune: false })
-    : generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
+  const gen = generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
   const top = pickTop(
     gen.moves, mulberry32(moveSeed(seed, msg.moveNumber)), board.cfg.joker,
   );

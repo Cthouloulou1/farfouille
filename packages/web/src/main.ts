@@ -501,7 +501,17 @@ function draw() {
       // l'image entiere coute 26 ms, la dessiner a l'ecran 6. Tant qu'on reste
       // dans la marge, la simple recopie a l'ecran suffit, et le glissement
       // n'arrive qu'une fois tous les SEUIL pixels parcourus.
-      const dx = Math.round(ox - cacheOx), dy = Math.round(oy - cacheOy);
+      // Le decalage se compte en pixels D'ECRAN, pas en pixels de mise en page.
+      //
+      // C'est la cause du flou qui s'installait et ne partait plus. Sur un
+      // ecran a 125 %, un pixel de mise en page en vaut 1,25 a l'ecran : glisser
+      // d'un nombre ENTIER de pixels de mise en page tombait entre deux pixels
+      // reels, le navigateur reechantillonnait, et comme l'image se recopie
+      // dans elle-meme, le flou s'ajoutait a chaque glissement -- il ne partait
+      // qu'a la reconstruction complete. Un nombre entier de pixels d'ecran ne
+      // reechantillonne rien.
+      const ddx = Math.round((ox - cacheOx) * dpr), ddy = Math.round((oy - cacheOy) * dpr);
+      const dx = ddx / dpr, dy = ddy / dpr;
       const SEUIL = 140;
       if (Math.abs(dx) > SEUIL || Math.abs(dy) > SEUIL) {
         if (Math.abs(dx) >= cw || Math.abs(dy) >= ch) {
@@ -509,9 +519,13 @@ function draw() {
           peindreLot(g, ox + MARGE_CACHE, oy + MARGE_CACHE, 0, 0, cw, ch);
           cacheOx = ox; cacheOy = oy;
         } else {
+          // Recopie a l'identite : un pixel d'ecran pour un pixel d'ecran.
+          g.setTransform(1, 0, 0, 1, 0, 0);
           g.globalCompositeOperation = "copy";
-          g.drawImage(cache, 0, 0, cache.width, cache.height, dx, dy, cw, ch);
+          g.drawImage(cache, 0, 0, cache.width, cache.height,
+            ddx, ddy, cache.width, cache.height);
           g.globalCompositeOperation = "source-over";
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
           cacheOx += dx; cacheOy += dy;
           const orgX = cacheOx + MARGE_CACHE, orgY = cacheOy + MARGE_CACHE;
           // La bande verticale decouverte, puis l'horizontale.
@@ -522,12 +536,12 @@ function draw() {
         }
       }
     }
-    // Au pixel entier : pose a une fraction de pixel pres, l'image se
-    // reechantillonnait a chaque deplacement et tout paraissait legerement
-    // flou. Le demi-pixel perdu ne se voit pas, le flou si.
+    // Pose sur un pixel D'ECRAN entier, la encore : arrondir au pixel de mise
+    // en page ne suffit pas quand l'ecran n'est pas a 100 %.
+    const auPixel = (v: number) => Math.round(v * dpr) / dpr;
     ctx.drawImage(
       cache, 0, 0, cache.width, cache.height,
-      Math.round(-MARGE_CACHE + (ox - cacheOx)), Math.round(-MARGE_CACHE + (oy - cacheOy)), cw, ch,
+      auPixel(-MARGE_CACHE + (ox - cacheOx)), auPixel(-MARGE_CACHE + (oy - cacheOy)), cw, ch,
     );
   }
 
