@@ -1084,6 +1084,14 @@ function paintCurrent() {
       w.className = "word";
       w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
       meta.textContent = noteCoup(r.move.dir, r.move.x, r.move.y, cfg.bornes);
+      // Le score d'abord, toujours. Ce qui clocherait se dit a voix basse, en
+      // dessous : « mot non valide » a la place du score, pendant qu'on tape,
+      // cache la seule chose qu'on regardait.
+      if (r.bad !== undefined && r.bad.length > 0) {
+        bad.hidden = false;
+        bad.textContent = r.bad.length > 1
+          ? `collages faux : ${r.bad.join(", ")}` : `collage faux : ${r.bad[0]}`;
+      }
       return;
     }
     w.className = "word";

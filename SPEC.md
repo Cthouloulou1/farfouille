@@ -476,6 +476,28 @@ Les 7 caramels sont affichés **au-dessus de la grille**.
 
 Un caramel joué par un joker a un **rendu distinct** du caramel normal.
 
+### Pendant la frappe on compte, à la validation on juge
+
+**Le score s'affiche à chaque lettre, quoi qu'on ait tapé.** Un mot en cours de
+frappe n'est presque jamais un mot : `ARBOUSE` posé sur un A passe par `AR`, et
+le détour est plus long encore quand on enjambe des caramels déjà posés —
+`BIOSOURCE` sur un O posé donne `BIOSO` avant de redevenir un mot.
+
+Répondre « mot non valide » à chacune de ces étapes, **à la place du score**,
+revient à taire la seule chose qu'on regardait pour en donner une dont on n'a
+que faire : on sait qu'on n'a pas fini de taper.
+
+Sont donc **différés jusqu'à `Entrée`** : le mot inconnu, le collage inconnu, et
+le contact avec la grille — un mot flotte dans le vide avant d'atteindre un
+caramel. Le score, lui, est calculable pour n'importe quelle suite de lettres,
+et c'est **le vrai score**, pas un chiffre de complaisance.
+
+Ce qui reste refusé sur-le-champ est ce qui empêche de *poser* les caramels :
+une lettre absente du tirage, un mot hors de la grille, plus de caramels que la
+variante n'en autorise. Là, il n'y a pas de score à montrer.
+
+Les collages fautifs restent signalés **en dessous du score**, à voix basse.
+
 ### Saisie
 
 | Geste | Effet |

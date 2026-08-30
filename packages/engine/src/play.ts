@@ -44,7 +44,20 @@ export const PLAY_MESSAGE: Readonly<Record<PlayError, string>> = {
 };
 
 export type PlayOutcome =
-  | { ok: true; move: Move }
+  | {
+      ok: true;
+      move: Move;
+      /**
+       * APERCU seulement : ce qui empecherait ce coup d'etre accepte.
+       *
+       * Le score est calculable pour n'importe quelle suite de lettres ; sa
+       * validite est une autre question. Pendant la frappe on repond a la
+       * premiere, on garde la seconde de cote, et la validation la tranche.
+       */
+      faute?: PlayError;
+      /** Les mots perpendiculaires fautifs, s'il y en a. */
+      bad?: string[];
+    }
   | {
       ok: false;
       error: PlayError;
@@ -75,12 +88,22 @@ export function resolveTypedWord(
   /** Garde-fou de la bascule d'orientation ci-dessous. Ne pas passer. */
   flipped = false,
   /**
-   * Apercu pendant la frappe : le mot n'a pas encore a toucher la grille.
+   * Apercu pendant la frappe.
    *
-   * Un mot commence presque toujours par flotter dans le vide avant d'atteindre
-   * un caramel deja pose. Refuser « le mot ne touche rien » a la deuxieme lettre
-   * n'apprend rien et empeche d'afficher le score en cours. Le contact n'est
-   * exige qu'a la validation.
+   * ON COMPTE LES POINTS DE CE QUI EST TAPE, SANS RIEN EXIGER D'AUTRE.
+   *
+   * Un mot en cours de frappe n'est presque jamais un mot : « ARBOUSE » passe
+   * par « AR », et le detour est plus long encore quand on enjambe des caramels
+   * deja poses -- « BIOSOURCE » sur un O pose donne « BIOSO » avant de
+   * redevenir un mot. Repondre « mot non valide » a chacune de ces etapes, au
+   * lieu du score, revient a taire l'information demandee pour en donner une
+   * dont on n'a que faire : on SAIT que ce n'est pas encore un mot.
+   *
+   * De meme, un mot flotte dans le vide avant d'atteindre un caramel : le
+   * contact n'a pas a etre exige a la deuxieme lettre.
+   *
+   * Ce qui cloche n'est pas perdu pour autant : c'est rendu dans `faute`, et
+   * la validation, elle, refuse.
    */
   apercu = false,
   /**
@@ -169,7 +192,7 @@ export function resolveTypedWord(
     // le fait passer par l'origine, en choisissant l'emplacement qui rapporte
     // le plus. Exiger de viser la case centrale au premier coup, sur une grille
     // vide ou rien ne sert de repere, n'aurait aucun interet.
-    if (!origineFixee) return premierCoup(board, dawg, word, rack);
+    if (!origineFixee) return premierCoup(board, dawg, word, rack, apercu);
     if (dir !== "H") return { ok: false, error: "PREMIER_COUP_HORIZONTAL", word };
     if (!cells.some((c) => c.x === 0 && c.y === 0)) {
       return { ok: false, error: "DOIT_COUVRIR_ORIGINE", word };
@@ -183,7 +206,8 @@ export function resolveTypedWord(
     if (!touches && !apercu) return { ok: false, error: "PAS_DE_CONTACT", word };
   }
 
-  if (!dawg.contains(word)) return { ok: false, error: "MOT_INCONNU", word };
+  const inconnu = !dawg.contains(word);
+  if (inconnu && !apercu) return { ok: false, error: "MOT_INCONNU", word };
 
   // 4. Les mots perpendiculaires formes doivent exister eux aussi.
   const bad: string[] = [];
@@ -193,7 +217,7 @@ export function resolveTypedWord(
       bad.push(crossWordAt(board, dir, c.x, c.y, c.letter));
     }
   }
-  if (bad.length > 0) return { ok: false, error: "COLLAGE_INCONNU", word, bad };
+  if (bad.length > 0 && !apercu) return { ok: false, error: "COLLAGE_INCONNU", word, bad };
 
   // 5. Affectation des jokers. Une lettre absente du tirage en consomme un ;
   //    quand la lettre reelle ET un joker sont disponibles, le joker va sur la
@@ -242,7 +266,11 @@ export function resolveTypedWord(
     cells.map((c) => c.blank),
   );
 
-  return { ok: true, move: { dir, x: start.x, y: start.y, word, placements, score } };
+  const move = { dir, x: start.x, y: start.y, word, placements, score };
+  // En apercu, le score part quand meme, avec la faute en remarque.
+  if (inconnu) return { ok: true, move, faute: "MOT_INCONNU" };
+  if (bad.length > 0) return { ok: true, move, faute: "COLLAGE_INCONNU", bad };
+  return { ok: true, move };
 }
 
 /**
@@ -253,12 +281,14 @@ export function resolveTypedWord(
  * qui commence dessus. On les evalue tous et on garde le plus rentable. A score
  * egal, le plus a gauche, pour que le choix soit reproductible.
  */
-function premierCoup(board: Board, dawg: Dict, word: string, rack: string): PlayOutcome {
-  if (!dawg.contains(word)) return { ok: false, error: "MOT_INCONNU", word };
+function premierCoup(
+  board: Board, dawg: Dict, word: string, rack: string, apercu = false,
+): PlayOutcome {
+  if (!dawg.contains(word) && !apercu) return { ok: false, error: "MOT_INCONNU", word };
   let best: PlayOutcome | null = null;
   let bestScore = -1;
   for (let x = -(word.length - 1); x <= 0; x++) {
-    const essai = resolveTypedWord(board, dawg, "H", x, 0, word, rack, true, false, true);
+    const essai = resolveTypedWord(board, dawg, "H", x, 0, word, rack, true, apercu, true);
     if (!essai.ok) { best ??= essai; continue; }
     if (essai.move.score > bestScore) { bestScore = essai.move.score; best = essai; }
   }
