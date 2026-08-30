@@ -141,6 +141,33 @@ console.log("\nLe relachement du coup 16 ne vaut que pour un sac qui s'epuise\n"
   }
 }
 
+console.log("\nUn sac qui ne peut pas satisfaire la regle ne fait pas tomber le serveur\n");
+{
+  // Le cas qui a coute une partie : il ne reste qu'un Y et des consonnes. La
+  // convention d'arret tient ce reste pour jouable -- le Y y remplace la
+  // voyelle -- alors que la regle de rejet le refuse, le Y n'y comptant
+  // d'aucun cote. La pioche tournait mille fois puis levait une erreur, et le
+  // serveur tombait avec la partie.
+  const sac = new SacFini({ Y: 1, N: 1, T: 1 }, mulberry32(3), 7);
+  verifie("un Y et des consonnes : la partie n'est pas finie", !sac.estFinie([]));
+  let leve: string | null = null;
+  let tire = "";
+  try { tire = sac.draw([]).rack; } catch (e) { leve = (e as Error).message; }
+  verifie("la pioche rend un tirage au lieu de lever une erreur",
+    leve === null, leve ?? `tirage : ${tire}`);
+
+  // Le cas ordinaire n'est pas abime pour autant : quand un tirage acceptable
+  // existe, c'est lui qui sort.
+  const bon = new SacFini(SAC_FRANCAIS, mulberry32(11), 7);
+  const d = bon.draw([]);
+  let v = 0, c = 0;
+  for (const ch of d.rack) {
+    if ("AEIOU".includes(ch)) v++;
+    else if (ch !== "Y" && ch !== "?") c++;
+  }
+  verifie("sac plein : le tirage respecte la regle", v >= 2 && c >= 2, d.rack);
+}
+
 console.log("\nRetrait d'une lettre -- ce dont la partie joker a besoin\n");
 {
   const sac = new SacFini({ K: 1, A: 5 }, mulberry32(1), 7);

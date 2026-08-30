@@ -1390,6 +1390,15 @@ C'est le défaut qui laissait passer, au coup 37 d'une grille infinie tirée d'u
 sac bouclant, un tirage à **une seule voyelle** : le relâchement s'y appliquait
 alors que rien ne s'y épuisait.
 
+**La règle est une préférence, pas une loi physique.** En fin de partie le sac
+ne peut parfois plus la satisfaire : un reste fait d'un **Y et de consonnes** est
+tenu pour jouable par la convention d'arrêt — le Y y remplace la voyelle — alors
+que la règle de rejet le refuse, le Y n'y comptant d'aucun côté. Les deux règles
+se contredisent.
+
+La pioche prend alors **ce qu'il y a**, après cinq cents tentatives. Elle levait
+une erreur, et le serveur tombait avec la partie en cours.
+
 ### Les lettres restantes s'affichent
 
 Sur une pioche à sac fini, ce qui reste est **public** — au duplicate on suit

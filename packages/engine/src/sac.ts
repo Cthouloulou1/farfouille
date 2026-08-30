@@ -29,6 +29,15 @@ import { type DrawResult, type RejectPolicy } from "./bag.ts";
  */
 export const COUP_RELACHEMENT = 16;
 
+/**
+ * Combien de tirages on refuse avant de prendre ce qu'il y a.
+ *
+ * Assez pour que le hasard ait toutes ses chances -- un tirage acceptable qui
+ * existe sort bien avant -- et fini, pour qu'un sac qui n'en contient aucun ne
+ * fasse pas tourner la pioche sans fin.
+ */
+const MAX_REJETS = 500;
+
 export function politiqueSacFini(
   coup: () => number,
   /** Le sac s'epuise-t-il ? Seul un sac fini a droit au relachement. */
@@ -197,12 +206,22 @@ export class SacFini implements Pioche {
       // Tout revient dans le sac, reliquat inclus, et on repart a neuf.
       this.caramels = [...avant, ...reliquat];
       const frais = this.completer([]);
-      if (!this.reject(frais) || this.caramels.length === 0) {
+      // ON PREND CE QU'IL Y A quand le sac ne peut plus faire mieux.
+      //
+      // La regle de rejet est une PREFERENCE, pas une loi physique : elle
+      // suppose qu'un tirage acceptable existe. En fin de partie il n'en existe
+      // parfois aucun -- ainsi d'un reste fait d'un Y et de consonnes, que la
+      // convention d'arret tient pour jouable (le Y y remplace la voyelle)
+      // alors que la regle de rejet le refuse (le Y n'y compte d'aucun cote).
+      // Les deux regles se contredisent, et la pioche tournait alors mille fois
+      // avant de LEVER UNE ERREUR : le serveur tombait, partie comprise.
+      //
+      // Une preference qu'on ne peut pas satisfaire n'est plus une preference.
+      if (!this.reject(frais) || this.caramels.length === 0 || rejets >= MAX_REJETS) {
         const trie = [...frais].sort().join("");
         return { rack: trie, notation: `-${trie}`, rejected: true, rejections: rejets };
       }
       rejets++;
-      if (rejets > 1000) throw new Error("politique de rejet insatisfiable");
     }
   }
 
