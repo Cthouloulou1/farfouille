@@ -165,8 +165,13 @@ function cadrer(): void {
   const RULE = 34;   // place laissee aux regles, en haut et a gauche
   cell = Math.max(12, Math.floor(Math.min(W - RULE - 12, H - RULE - 12) / cotes));
   const taille = cell * cotes;
-  ox = RULE + Math.max(0, (W - RULE - taille) / 2) + b * cell;
-  oy = RULE + Math.max(0, (H - RULE - taille) / 2) + b * cell;
+  // Cale sur des pixels d'ecran : la moitie d'un ecart impair de largeur donne
+  // un demi-pixel, et le plateau se decalait d'un cheveu a la moindre variation
+  // de la mise en page -- ce qui se voit comme une secousse.
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const cale = (v: number) => Math.round(v * dpr) / dpr;
+  ox = cale(RULE + Math.max(0, (W - RULE - taille) / 2) + b * cell);
+  oy = cale(RULE + Math.max(0, (H - RULE - taille) / 2) + b * cell);
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -2460,9 +2465,17 @@ function applyState(s: {
   likes = s.likes ?? {};
   // Les lettres qui restent dans le sac. Rien a montrer sur une pioche
   // ponderee : elle ne s'epuise pas, il n'y a pas de reste.
+  // LA BANDE DU RELIQUAT NE DOIT PAS CHANGER LA HAUTEUR DU PLATEAU.
+  //
+  // Elle vit AU-DESSUS de la grille, dans le flux : la faire apparaitre ou
+  // disparaitre, ou la laisser passer a deux lignes, redimensionne le canevas.
+  // Sur un plateau borne, `cadrer()` recalcule alors la taille des cases et
+  // recentre tout : la grille sursaute. Sa presence ne depend donc plus de son
+  // CONTENU -- qui change a chaque coup et finit vide -- mais de la variante,
+  // qui ne change pas de la partie.
   const sac = s.sac ?? "";
-  $("sac").hidden = sac === "";
-  if (sac !== "") $("sac").textContent = sac;
+  $("sac").hidden = cfg.pioche === "probabilites";
+  $("sac").textContent = sac;
   chrono = s.chrono ?? null;
   endormi = s.actif === false;
   duplicate = s.mode === "duplicate";

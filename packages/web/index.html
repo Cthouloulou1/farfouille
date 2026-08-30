@@ -133,7 +133,11 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .jrow .p, .jrow .t { color: var(--ink-faint); white-space: nowrap; }
 .jrow .t { text-align: right; }
 .jrow .s { text-align: right; color: var(--accent); }
-.sac { flex: none; padding: 3px 10px 4px; background: var(--panel); border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; line-height: 1.35; letter-spacing: .07em; color: var(--ink-soft); word-break: break-all; }
+/* Une seule ligne, toujours : `word-break` la faisait passer a deux quand la
+   fenetre etait etroite, et le plateau se recadrait sous les yeux. Elle defile
+   plutot que de grandir. */
+.sac { flex: none; height: 22px; padding: 3px 10px; background: var(--panel); border-bottom: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; line-height: 16px; letter-spacing: .07em; color: var(--ink-soft); white-space: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.sac::-webkit-scrollbar { display: none; }
 .sac[hidden] { display: none; }
 .sac b { color: var(--ink-faint); font-weight: 500; letter-spacing: 0; }
 .like { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; font-size: 11.5px; line-height: 1; background: none; border: 1px solid var(--rule); border-radius: 3px; color: var(--ink-faint); cursor: pointer; }

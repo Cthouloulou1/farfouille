@@ -858,6 +858,21 @@ grille, et cette place était le seul moyen de savoir où il l'avait vue.
 La cellule existe toujours, **vide quand les deux places coïncident** — une
 colonne qui apparaît et disparaît décalerait tout le reste de la ligne.
 
+### Rien de ce qui entoure la grille n'en change la taille
+
+Un plateau borné se recadre à chaque changement de taille du canevas : la taille
+des cases et le centrage se recalculent, et **tout le plateau se déplace**. Ce
+qui l'entoure ne doit donc jamais grandir ni rétrécir sous lui.
+
+La **bande du reliquat** vit juste au-dessus, dans le flux. Sa présence ne dépend
+plus de son contenu — qui change à chaque coup et finit vide — mais de la
+variante, qui ne change pas de la partie. Elle tient sur **une ligne fixe** et
+défile plutôt que de passer à deux.
+
+Le cadrage lui-même se cale sur des **pixels d'écran** : la moitié d'un écart
+impair de largeur donnait un demi-pixel, et le plateau se décalait d'un cheveu à
+la moindre variation de mise en page.
+
 ### Un plateau borné ne bouge pas
 
 Il tient tout entier à l'écran et son cadrage est calculé une fois pour toutes.
