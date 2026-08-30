@@ -209,7 +209,22 @@ function blankPositions(): Set<string> {
   if (cursor === null || typed.length === 0) return out;
   const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack, false, true);
   if (!r.ok) return out;
-  for (const p of r.move.placements) if (p.blank) out.add(`${p.x},${p.y}`);
+  // ON APPARIE DANS L'ORDRE, PAS PAR COORDONNEES.
+  //
+  // Au premier coup, le moteur DEPLACE le mot pour lui faire couvrir l'origine
+  // au meilleur endroit : les coordonnees qu'il rend ne sont plus celles ou
+  // l'on ecrit. Les comparer aux cases affichees ne rapprochait donc rien, et
+  // le compte du tirage partait en morceaux -- une lettre posee revenait en
+  // main, un joker disparaissait, et la lettre suivante etait refusee sans
+  // qu'on comprenne pourquoi. C'etait le cas du premier coup a deux jokers.
+  //
+  // L'ordre, lui, ne change pas : le i-eme caramel pose est la i-eme lettre
+  // tapee, ou que le mot ait ete recale.
+  const cases = typedCells();
+  r.move.placements.forEach((p, i) => {
+    const c = cases[i];
+    if (p.blank && c !== undefined) out.add(`${c.x},${c.y}`);
+  });
   return out;
 }
 
@@ -668,15 +683,17 @@ function draw() {
     }
   }
 
-  // Cases partagees dans le chat.
-  for (const m of marks) {
+  // Le curseur et les cases partagees appartiennent a CELUI QUI REGARDE, pas a
+  // la position : une image qui les emporte montre le carre noir et la fleche
+  // de son auteur a tous ceux a qui il l'envoie.
+  for (const m of exportEnCours ? [] : marks) {
     if (m.x < gx0 || m.x > gx1 || m.y < gy0 || m.y > gy1) continue;
     ctx.strokeStyle = C.mark; ctx.lineWidth = 2;
     ctx.strokeRect(eX(m.x) + 1, eY(m.y) + 1, eX(m.x + 1) - eX(m.x) - 2, eY(m.y + 1) - eY(m.y) - 2);
   }
 
   const nf = nextFree();
-  if (cursor !== null && nf !== null) {
+  if (cursor !== null && nf !== null && !exportEnCours) {
     const px = eX(nf.x), py = eY(nf.y);
     const w = eX(nf.x + 1) - px, h = eY(nf.y + 1) - py;
     ctx.strokeStyle = C.cursor; ctx.lineWidth = 1;
@@ -1001,11 +1018,38 @@ function alreadyVisible(word: string, dir: Dir, x: number, y: number) {
 }
 
 let anim = 0;
+/** Ou le vol en cours doit arriver. Sert a l'interrompre proprement. */
+let volCible: { cell: number; ox: number; oy: number } | null = null;
+
+/**
+ * Termine sur-le-champ le vol en cours, s'il y en a un.
+ *
+ * On l'appelle avant de lire la case sous le pointeur : pendant un vol, la
+ * camera bouge d'une image a l'autre, si bien que la case visee au moment du
+ * clic n'etait plus celle qu'on avait sous les yeux quand il s'affichait. En
+ * rejeu, ou l'on clique une solution puis la grille, cela se traduisait par une
+ * case selectionnee a cote.
+ */
+function finirLeVol(): void {
+  if (anim === 0 || volCible === null) return;
+  cancelAnimationFrame(anim);
+  anim = 0;
+  cell = volCible.cell; ox = volCible.ox; oy = volCible.oy;
+  volCible = null;
+  draw();
+}
+
 function flyTo(word: string, dir: Dir, x: number, y: number) {
+  // RIEN NE VOLE SUR UN PLATEAU BORNE. Il est deja entier a l'ecran, et le
+  // cadrage y est calcule une fois pour toutes. Partager une case du chat
+  // appelait pourtant `flyTo` : la grille se dezoomait, et le zoom etant
+  // desactive sur ce format, elle y restait.
+  if (cfg.bornes !== null) { draw(); return; }
   const t = readableCell();
   const e = extentOf(word, dir, x, y);
   const to = { cell: t, ox: W / 2 - ((e.x0 + e.x1 + 1) / 2) * t, oy: H / 2 - ((e.y0 + e.y1 + 1) / 2) * t };
   if (anim) cancelAnimationFrame(anim);
+  volCible = to;
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
     cell = to.cell; ox = to.ox; oy = to.oy; draw(); return;
   }
@@ -1026,6 +1070,7 @@ function flyTo(word: string, dir: Dir, x: number, y: number) {
     ox = W / 2 - gx * cell; oy = H / 2 - gy * cell;
     draw();
     anim = p < 1 ? requestAnimationFrame(stepFn) : 0;
+    if (anim === 0) volCible = null;
   };
   anim = requestAnimationFrame(stepFn);
 }
@@ -1208,10 +1253,15 @@ function paintSide() {
 
   const rank = $("rank");
   rank.replaceChildren();
+  // CEUX QUI SONT LA Y FIGURENT, meme a zero. Disparaitre du tableau parce
+  // qu'on n'a rien marque, c'est ne pas savoir si l'on joue.
+  const presents = Object.fromEntries(online.map((nom) => [nom, 0]));
   const rows = duplicate
-    ? Object.keys({ ...players, ...points }).map((k) => [k, points[k] ?? 0] as [string, number])
-        .sort((a, b) => b[1] - a[1])
-    : Object.entries(players).sort((a, b) => b[1] - a[1]);
+    ? Object.keys({ ...presents, ...players, ...points })
+        .map((k) => [k, points[k] ?? 0] as [string, number])
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    : Object.entries({ ...presents, ...players })
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   if (rows.length === 0) {
     const s = document.createElement("div");
     s.className = "none"; s.textContent = "personne encore";
@@ -1769,17 +1819,24 @@ $("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 function enTeteDeLaRoute(): string {
   const n = history.length;
   if (n === 0) return "";
-  let points = 0, trouves = 0, temps = 0;
+  // UN DEMI-POINT N'EST PAS UN TOP. Il revient a qui s'en est le plus approche
+  // quand personne ne l'a trouve : le compter parmi les tops disait « 5 trouves »
+  // la ou il y en avait un seul et quatre sous-tops.
+  let points = 0, trouves = 0, demis = 0, temps = 0;
   for (const m of history) {
     points += m.score;
     temps += Math.max(0, m.ms);
-    if (quiLaTrouve(m) !== "non trouvé") trouves++;
+    if (duplicate) { if (trouveursDuCoup(m).length > 0) trouves++; }
+    else if (m.player !== null) trouves++;
+    else if (m.demiPoint !== undefined) demis++;
   }
-  const perdus = n - trouves;
+  const perdus = n - trouves - demis;
   const bouts = [
     `<b>${n}</b> coup${n > 1 ? "s" : ""}`,
     `<b>${points.toLocaleString("fr")}</b> points`,
-    `<b>${trouves}</b> trouvé${trouves > 1 ? "s" : ""}, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`,
+    `<b>${trouves}</b> trouvé${trouves > 1 ? "s" : ""}`
+      + (demis > 0 ? `, <b>${demis}</b> demi-point${demis > 1 ? "s" : ""}` : "")
+      + `, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`,
   ];
   // Le cumul du temps ne vaut qu'en topping : ailleurs, c'est le chrono
   // multiplie par le nombre de coups, ce que personne n'a besoin de lire.
@@ -2159,6 +2216,8 @@ let press: {
 let holdTimer = 0;
 
 cv.addEventListener("pointerdown", (e) => {
+  // La camera se pose AVANT qu'on lise la case : on clique ce qu'on voit.
+  finirLeVol();
   const r0 = cv.getBoundingClientRect();
   press = {
     x: e.clientX, y: e.clientY, button: e.button, moved: false, at: Date.now(),
@@ -2273,6 +2332,12 @@ addEventListener("keydown", (e) => {
     if (cursor === null && tiles.length === 0) cursor = { dir: "H", x: -4, y: 0 };
     if (cursor === null) return;
     if (typed.length >= 15) return;
+    // La lettre irait-elle hors du plateau ? Alors elle ne part pas. Mieux vaut
+    // qu'une touche ne fasse rien que d'ecrire dans le vide et de l'annoncer
+    // apres coup : « le mot sort de la grille » ne se lit qu'une fois le mal
+    // fait, et le joueur voit ses lettres flotter dehors en attendant.
+    const libre = nextFree();
+    if (libre !== null && !board.dansLesBornes(libre.x, libre.y)) return;
     const ch = e.key.toUpperCase();
     const left = remaining();
     // Lettre absente du tirage : il ne se passe simplement rien.
@@ -2281,6 +2346,9 @@ addEventListener("keydown", (e) => {
     paintRack(); paintCurrent(); draw();
     return;
   }
+  // Un plateau borne tient tout entier a l'ecran : il n'y a nulle part ou
+  // aller, et le deplacer ne fait que decadrer ce que `cadrer()` a pose.
+  if (cfg.bornes !== null) return;
   const d = 60;
   if (e.key === "ArrowLeft") { ox += d; draw(); }
   if (e.key === "ArrowRight") { ox -= d; draw(); }

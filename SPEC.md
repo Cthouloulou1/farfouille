@@ -576,6 +576,11 @@ Un mot invalide affiche **« mot non valide »**.
 
 Le tirage est **toujours en ordre alphabétique**, dans tous les cas.
 
+### Le classement montre ceux qui sont là
+
+Y compris **à zéro**. Disparaître du tableau parce qu'on n'a rien marqué, c'est
+ne pas savoir si l'on joue.
+
 ### Affichages permanents
 
 - **À droite** : la meilleure solution que *le joueur* a tapée sur ce coup.
@@ -613,6 +618,13 @@ conséquence directe de la règle des isotops.
 
 Les temps sont exprimés en **années, jours, heures, minutes, secondes,
 centièmes**, comptés depuis le début de la partie.
+
+### Un résumé en tête, et ce qu'il compte
+
+Un demi-point **n'est pas un top**. Il revient à qui s'en est le plus approché
+quand personne ne l'a trouvé : le compter parmi les tops annonçait « 5 trouvés »
+là où il y en avait un seul et quatre sous-tops. Les deux se comptent
+séparément.
 
 ### Un résumé en tête
 
@@ -755,6 +767,11 @@ vient d'un rapport de trente entre les deux.
 **Un clic sur un coup passé amène la caméra dessus** et le met en évidence,
 avec dézoom puis zoom s'il est hors champ. Rien de plus.
 
+**Un clic pendant un vol pose d'abord la caméra.** Sinon la case lue est celle
+qu'on visait à cet instant, pas celle qu'on avait sous les yeux quand le résultat
+s'affichait : en rejeu, où l'on clique une solution puis la grille, une autre
+case se trouvait sélectionnée.
+
 ### Rien n'annonce le top en bas de l'écran
 
 Le coup joué s'affiche au tableau « Top », au journal des coups et sur la
@@ -814,6 +831,17 @@ Mesuré sur une partie de 5 500 coups, au dézoom maximum :
 | remise au net, une fois | 130 ms |
 | déplacement | 0,3 ms médian |
 
+### Les caramels posés suivent l'ordre de la frappe
+
+L'écran compte le tirage restant en appariant les caramels posés aux lettres
+tapées. Il ne peut pas le faire **par coordonnées** : au premier coup, le moteur
+*déplace* le mot pour lui faire couvrir l'origine au meilleur endroit. Il le fait
+donc **dans l'ordre**, qui lui ne change pas.
+
+Sans cela, un premier coup à deux jokers partait en morceaux : une lettre posée
+revenait en main, un joker disparaissait, et la lettre suivante était refusée
+sans qu'on comprenne pourquoi.
+
 ### Le coup du joueur a sa propre place
 
 Le logiciel retient **un** isotop parmi les coups à score égal, et ce n'est pas
@@ -829,6 +857,18 @@ grille, et cette place était le seul moyen de savoir où il l'avait vue.
 
 La cellule existe toujours, **vide quand les deux places coïncident** — une
 colonne qui apparaît et disparaît décalerait tout le reste de la ligne.
+
+### Un plateau borné ne bouge pas
+
+Il tient tout entier à l'écran et son cadrage est calculé une fois pour toutes.
+Rien ne doit l'en déloger : ni les flèches du clavier, ni un vol de caméra, ni le
+partage d'une case dans le chat — qui appelait pourtant un vol, dézoomait la
+grille et l'y laissait, le zoom étant désactivé sur ce format.
+
+**On n'y écrit pas non plus hors des bornes.** La lettre qui tomberait dehors ne
+part pas : mieux vaut qu'une touche ne fasse rien que d'écrire dans le vide et de
+l'annoncer après coup. « Le mot sort de la grille » ne se lisait qu'une fois le
+mal fait, et les lettres flottaient dehors en attendant.
 
 ### La caméra n'est jamais déplacée d'office
 
