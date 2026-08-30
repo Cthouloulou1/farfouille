@@ -309,8 +309,8 @@ function draw() {
     g: CanvasRenderingContext2D, orgX: number, orgY: number,
     rx: number, ry: number, rw: number, rh: number,
   ): void => {
-    const X = (x: number) => Math.round(orgX + x * cell);
-    const Y = (y: number) => Math.round(orgY + y * cell);
+    const X = (x: number) => auPixelEcran(orgX + x * cell);
+    const Y = (y: number) => auPixelEcran(orgY + y * cell);
     let a0 = Math.floor((rx - orgX) / cell) - 1, a1 = Math.ceil((rx + rw - orgX) / cell);
     let b0 = Math.floor((ry - orgY) / cell) - 1, b1 = Math.ceil((ry + rh - orgY) / cell);
     if (b !== null) {
@@ -360,6 +360,26 @@ function draw() {
     ctx.strokeRect(eX(0) + 1, eY(0) + 1, eX(1) - eX(0) - 2, eY(1) - eY(0) - 2);
   }
 
+  /**
+   * Arrondi des coordonnees : au pixel D'ECRAN, pas au pixel de mise en page.
+   *
+   * C'EST L'ORIGINE DES LIGNES CLAIRES qui traversaient la grille.
+   *
+   * L'image de cote glisse d'un nombre entier de pixels d'ecran -- il le faut,
+   * sinon elle se reechantillonne et devient floue. Sur un ecran a 125 %, cela
+   * fait un nombre FRACTIONNAIRE de pixels de mise en page : 141 pixels d'ecran
+   * valent 112,8 pixels de mise en page. Or les cases se calaient sur des
+   * pixels de mise en page ENTIERS. La bande fraichement repeinte se trouvait
+   * donc decalee de jusqu'a un demi-pixel par rapport a tout ce qui l'entourait
+   * et qui, lui, avait simplement glisse. A la jonction : une couture claire,
+   * droite, qui ne partait qu'a la reconstruction complete -- donc au premier
+   * changement de zoom.
+   *
+   * En pixels d'ecran, le glissement et le trace parlent la meme langue.
+   */
+  const dprGrille = Math.min(devicePixelRatio || 1, 2);
+  const auPixelEcran = (v: number) => Math.round(v * dprGrille) / dprGrille;
+
   const gap = cell >= 22 ? 1 : 0;
   const rad = Math.max(.8, cell * .05);
   /** Au-dela, l'arrondi se voit et vaut son prix. */
@@ -402,8 +422,8 @@ function draw() {
     orgX: number, orgY: number,
   ): void => {
     if (lot.length === 0) return;
-    const X = (x: number) => Math.round(orgX + x * cell);
-    const Y = (y: number) => Math.round(orgY + y * cell);
+    const X = (x: number) => auPixelEcran(orgX + x * cell);
+    const Y = (y: number) => auPixelEcran(orgY + y * cell);
     g.beginPath();
     for (const q of lot) {
       const px = X(q.x) + gap, py = Y(q.y) + gap;
@@ -481,10 +501,18 @@ function draw() {
    */
   const peindreLot = (
     g: CanvasRenderingContext2D, orgX: number, orgY: number,
-    rx: number, ry: number, rw: number, rh: number,
+    rxBrut: number, ryBrut: number, rwBrut: number, rhBrut: number,
     effacer = true,
   ): void => {
-    if (rw <= 0 || rh <= 0) return;
+    if (rwBrut <= 0 || rhBrut <= 0) return;
+    // La bande deborde d'un pixel d'ecran de chaque cote. Ce n'est pas ce qui
+    // causait les coutures -- voir `auPixelEcran` -- mais repeindre un pixel
+    // deja juste ne coute rien, et cela met la jonction a l'abri des arrondis.
+    const unPixel = 1 / dprGrille;
+    const rx = auPixelEcran(rxBrut) - unPixel;
+    const ry = auPixelEcran(ryBrut) - unPixel;
+    const rw = auPixelEcran(rwBrut) + unPixel * 2;
+    const rh = auPixelEcran(rhBrut) + unPixel * 2;
     const x0 = Math.floor((rx - orgX) / cell) - 1, x1 = Math.ceil((rx + rw - orgX) / cell);
     // Le fond se peint meme sans un seul caramel dans la bande.
 
@@ -517,8 +545,14 @@ function draw() {
     // refait alors entierement, ce qui n'arrive qu'apres un changement d'echelle.
     const refaire = cacheCell === 0 || margeVoulue() !== cacheMarge;
     if (refaire) cacheMarge = margeVoulue();
-    const cw = W + cacheMarge * 2, ch = H + cacheMarge * 2;
     const dpr = Math.min(devicePixelRatio || 1, 2);
+    // La taille de l'image de cote se decide en pixels D'ECRAN, et sa taille en
+    // pixels de mise en page s'en deduit. L'inverse -- arrondir une largeur de
+    // mise en page en pixels d'ecran -- laissait un rapport qui n'etait pas
+    // tout a fait un : l'image se reechantillonnait a chaque pose.
+    const largeurCache = Math.round((W + cacheMarge * 2) * dpr);
+    const hauteurCache = Math.round((H + cacheMarge * 2) * dpr);
+    const cw = largeurCache / dpr, ch = hauteurCache / dpr;
 
 
     // La cle dit tout ce qui change le dessin des caramels, la position mise a
@@ -527,9 +561,9 @@ function draw() {
     // qu'on a peint, on sait l'etirer. Le reste, si.
     const cle = `${tiles.length}|${jusqua}|${last?.n ?? -1}|${C.face}|${W}x${H}`;
     if (cache === null) { cache = document.createElement("canvas"); cacheCtx = cache.getContext("2d"); }
-    if (cache.width !== Math.round(cw * dpr) || cache.height !== Math.round(ch * dpr)) {
-      cache.width = Math.round(cw * dpr);
-      cache.height = Math.round(ch * dpr);
+    if (cache.width !== largeurCache || cache.height !== hauteurCache) {
+      cache.width = largeurCache;
+      cache.height = hauteurCache;
       cacheCle = "";
     }
     const g = cacheCtx!;

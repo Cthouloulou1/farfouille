@@ -778,6 +778,23 @@ mise en page en vaut 1,25 : glisser d'un nombre entier de pixels de mise en page
 tombait entre deux pixels réels, le navigateur rééchantillonnait, et comme
 l'image se recopie dans elle-même, le flou **s'ajoutait** à chaque glissement.
 
+**Le tracé se cale sur les mêmes pixels d'écran.** C'est la contrepartie
+obligée : un glissement en pixels d'écran entiers fait un nombre *fractionnaire*
+de pixels de mise en page — 141 pixels d'écran valent 112,8 pixels de mise en
+page à 125 %. Tant que les cases se calaient sur des pixels de mise en page
+entiers, celles de la bande fraîchement repeinte tombaient à côté de celles qui
+avaient simplement glissé, et la jonction laissait une **couture claire** :
+
+| écran | décalage d'une case entre bande repeinte et contenu glissé |
+|---|---|
+| 100 % | aucun |
+| 125 % | un demi-pixel |
+| 150 % | un pixel entier |
+
+D'où un défaut invisible sur un écran à 100 % et bien réel ailleurs. La couture
+ne partait qu'à la reconstruction complète, c'est-à-dire au premier changement
+de zoom.
+
 **La marge suit l'échelle.** Elle se compte en pixels, mais ce qu'elle coûte se
 compte en cases : à douze pixels par case, 320 pixels font vingt-six cases de
 rab ; à deux pixels, cent soixante — et l'image couvre alors trois fois la
