@@ -712,10 +712,37 @@ wss.on("connection", (ws) => {
     if (occupants(s.id).length === 0) {
       s.partie.endormir();
       console.log(`[salon] "${s.nom}" s'endort, plus personne`);
+      if (s.partie.cfg.bornes !== null && s.proprietaire !== null) rangerPlusTard(s.id);
     }
     broadcast(s.id, { t: "state", state: publicState(s) });
   });
 });
+
+/**
+ * Un salon 15x15 vide se referme tout seul.
+ *
+ * Une partie bornee tient dans une seance : personne n'y revient le lendemain.
+ * La laisser au registre encombre la liste et garde un fil de calcul pour rien.
+ *
+ * Pas tout de suite, cependant : recharger sa page, c'est se deconnecter une
+ * demi-seconde. Fermer sur-le-champ detruirait le salon sous les pieds de celui
+ * qui vient d'appuyer sur F5. On attend donc, et on verifie a nouveau.
+ */
+const DELAI_DE_RANGEMENT = 90_000;
+const rangements = new Map<string, ReturnType<typeof setTimeout>>();
+
+function rangerPlusTard(id: string): void {
+  const dejaPrevu = rangements.get(id);
+  if (dejaPrevu !== undefined) clearTimeout(dejaPrevu);
+  rangements.set(id, setTimeout(() => {
+    rangements.delete(id);
+    const s = salon(id);
+    if (s === undefined || s.proprietaire === null) return;
+    if (occupants(id).length > 0) return;   // quelqu'un est revenu
+    if (s.partie.cfg.bornes === null) return;
+    void fermerSalon(id);
+  }, DELAI_DE_RANGEMENT));
+}
 
 // ---------------------------------------------------------------- arret
 

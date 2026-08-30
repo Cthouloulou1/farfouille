@@ -9,7 +9,7 @@
  * La grille mondiale est un salon comme un autre -- permanent, sans
  * proprietaire, a configuration verrouillee.
  */
-import { mkdirSync, openSync, writeSync, fsyncSync, readFileSync, existsSync, renameSync } from "node:fs";
+import { mkdirSync, openSync, writeSync, fsyncSync, readFileSync, existsSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Game } from "./game.ts";
@@ -189,14 +189,50 @@ export async function relancer(s: Salon, cfg?: ConfigPartie): Promise<string[]> 
   return archives;
 }
 
-/** Ferme un salon : sa partie s'arrete, ses fichiers restent. */
+/**
+ * Une partie merite-t-elle de survivre a son salon ?
+ *
+ * OUI pour une partie 15x15 TERMINEE : c'est une partie complete, elle pese
+ * quelques dizaines de kilo-octets depuis qu'on n'y ecrit plus les paliers, et
+ * elle se rejoue entierement.
+ *
+ * NON pour tout le reste. Une 15x15 abandonnee en cours de route ne se rejoue
+ * pas et n'interesse personne. Une grille infinie n'a pas de fin : la garder,
+ * c'est accumuler des megaoctets qu'on ne rouvrira jamais -- l'une d'elles
+ * pesait a elle seule 9,4 Mo.
+ */
+export function meriteDEtreGardee(s: Salon): boolean {
+  return s.partie.cfg.bornes !== null && s.partie.finie;
+}
+
+/**
+ * Ferme un salon.
+ *
+ * Ses fichiers partent avec lui, sauf s'il s'agit d'une 15x15 terminee. C'est
+ * la seule chose qu'on efface volontairement dans ce programme, et elle est
+ * annoncee au journal du serveur, nom et nombre de coups compris.
+ */
 export async function fermerSalon(id: string): Promise<void> {
   const s = salons.get(id);
   if (s === undefined) return;
+  const garder = meriteDEtreGardee(s);
+  const coups = s.partie.moves.length;
   s.partie.releaseLock();
   await s.partie.stop();
   salons.delete(id);
   inscrire({ t: "ferme", id });
+  if (garder) {
+    console.log(`[salon] "${s.nom}" ferme -- partie 15x15 terminee, ${coups} coups conserves`);
+    return;
+  }
+  const partis: string[] = [];
+  for (const suffixe of [".json", ".journal.jsonl", ".secours.json", ".verrou"]) {
+    const f = join(DATA_DIR, `${id}${suffixe}`);
+    if (!existsSync(f)) continue;
+    rmSync(f);
+    partis.push(suffixe);
+  }
+  console.log(`[salon] "${s.nom}" ferme -- ${coups} coups effaces (${partis.join(", ") || "rien a effacer"})`);
 }
 
 export type { ConfigSerialisee };

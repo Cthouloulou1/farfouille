@@ -17,7 +17,17 @@ import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cv = $<HTMLCanvasElement>("cv");
-const ctx = cv.getContext("2d")!;
+/**
+ * Ou l'on dessine.
+ *
+ * Presque toujours le canevas de la page. Le temps d'une exportation, c'est un
+ * canevas hors ecran, plus grand : `draw()` ne fait pas la difference, ce qui
+ * garantit que l'image enregistree est bien ce qu'on voit -- memes caramels,
+ * memes primes, meme mot cache si on l'a cache.
+ */
+let ctx = cv.getContext("2d")!;
+/** Vrai le temps d'une exportation : le cache d'ecran ne sert alors a rien. */
+let exportEnCours = false;
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 interface Tile { x: number; y: number; l: string; b: 0 | 1; n: number }
@@ -437,43 +447,50 @@ function draw() {
   // mille arrondis dans un seul chemin demandent encore 70 ms. Un arrondi de
   // 0,8 pixel ne se voit pas ; en dessous de la taille ou il se voit, on trace
   // des carres.
-  {
+  /**
+   * Peint les caramels d'un rectangle de l'image de cote.
+   *
+   * `orgX`/`orgY` sont les coordonnees d'ecran, DANS L'IMAGE DE COTE, de la
+   * case (0,0). On ne peint que ce qui tombe dans le rectangle demande : c'est
+   * ce qui permet, apres un glissement, de ne repeindre que la bande decouverte.
+   */
+  const peindreLot = (
+    g: CanvasRenderingContext2D, orgX: number, orgY: number,
+    rx: number, ry: number, rw: number, rh: number,
+    effacer = true,
+  ): void => {
+    if (rw <= 0 || rh <= 0) return;
+    const x0 = Math.floor((rx - orgX) / cell) - 1, x1 = Math.ceil((rx + rw - orgX) / cell);
+    // Le fond se peint meme sans un seul caramel dans la bande.
+
+    const y0 = Math.floor((ry - orgY) / cell) - 1, y1 = Math.ceil((ry + rh - orgY) / cell);
+    const groupes = new Map<string, { face: string; edge: string; t: Tile[] }>();
+    for (const q of tiles) {
+      if (q.n > jusqua) continue;
+      if (q.x < x0 || q.x > x1 || q.y < y0 || q.y > y1) continue;
+      const face = q.b === 1 ? C.jface : C.face;
+      const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
+      const k = `${face}|${edge}`;
+      const l = groupes.get(k);
+      if (l === undefined) groupes.set(k, { face, edge, t: [q] }); else l.t.push(q);
+    }
+    g.save();
+    g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
+    if (effacer) g.clearRect(rx, ry, rw, rh);
+    peindreLeFond(g, orgX, orgY, rx, ry, rw, rh);
+    for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, orgX, orgY);
+    g.restore();
+  };
+
+  if (exportEnCours) {
+    // Une image d'exportation fait plusieurs milliers de pixels de cote : lui
+    // reserver une image de cote plus grande encore couterait des centaines de
+    // megaoctets pour un dessin qui n'aura lieu qu'une fois.
+    peindreLot(ctx, ox, oy, 0, 0, W, H, false);
+  } else {
     const cw = W + MARGE_CACHE * 2, ch = H + MARGE_CACHE * 2;
     const dpr = Math.min(devicePixelRatio || 1, 2);
 
-    /**
-     * Peint les caramels d'un rectangle de l'image de cote.
-     *
-     * `orgX`/`orgY` sont les coordonnees d'ecran, DANS L'IMAGE DE COTE, de la
-     * case (0,0). On ne peint que ce qui tombe dans le rectangle demande : c'est
-     * ce qui permet, apres un glissement, de ne repeindre que la bande decouverte.
-     */
-    const peindreLot = (
-      g: CanvasRenderingContext2D, orgX: number, orgY: number,
-      rx: number, ry: number, rw: number, rh: number,
-    ): void => {
-      if (rw <= 0 || rh <= 0) return;
-      const x0 = Math.floor((rx - orgX) / cell) - 1, x1 = Math.ceil((rx + rw - orgX) / cell);
-      // Le fond se peint meme sans un seul caramel dans la bande.
-
-      const y0 = Math.floor((ry - orgY) / cell) - 1, y1 = Math.ceil((ry + rh - orgY) / cell);
-      const groupes = new Map<string, { face: string; edge: string; t: Tile[] }>();
-      for (const q of tiles) {
-        if (q.n > jusqua) continue;
-        if (q.x < x0 || q.x > x1 || q.y < y0 || q.y > y1) continue;
-        const face = q.b === 1 ? C.jface : C.face;
-        const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
-        const k = `${face}|${edge}`;
-        const l = groupes.get(k);
-        if (l === undefined) groupes.set(k, { face, edge, t: [q] }); else l.t.push(q);
-      }
-      g.save();
-      g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
-      g.clearRect(rx, ry, rw, rh);
-      peindreLeFond(g, orgX, orgY, rx, ry, rw, rh);
-      for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, orgX, orgY);
-      g.restore();
-    };
 
     // La cle dit tout ce qui change le dessin des caramels, la position mise a
     // part : l'echelle, ce qui est pose, ce qui est souligne, le theme.
@@ -658,6 +675,80 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     );
   }
 }
+
+/**
+ * Enregistre la grille entiere en image.
+ *
+ * On ne photographie pas l'ecran : on redessine la partie a une autre echelle,
+ * dans un canevas hors ecran assez grand pour contenir TOUTE l'emprise des
+ * caramels. C'est le meme `draw()` qui s'en charge, donc l'image montre
+ * exactement ce que montre le jeu -- y compris le mot du rejeu masque par
+ * l'oeil, ce qui donne une position a chercher.
+ *
+ * PNG plutot que JPEG : des lettres nettes sur un fond uni, c'est le cas ou le
+ * PNG gagne sur tous les tableaux, poids compris.
+ */
+async function exporterImage(): Promise<void> {
+  const bouton = $("rb-image") as HTMLButtonElement;
+  const e = empriseDesCaramels();
+  const b = cfg.bornes;
+  // Sur un plateau borne, c'est le plateau ; sur une grille infinie, l'emprise
+  // des caramels avec deux cases d'air autour.
+  const x0 = b !== null ? -b - 1 : (e.vide ? -8 : e.x0 - 2);
+  const x1 = b !== null ? b + 1 : (e.vide ? 8 : e.x1 + 2);
+  const y0 = b !== null ? -b - 1 : (e.vide ? -8 : e.y0 - 2);
+  const y1 = b !== null ? b + 1 : (e.vide ? 8 : e.y1 + 2);
+  const cases = { l: x1 - x0 + 1, h: y1 - y0 + 1 };
+
+  // Assez grand pour se lire, assez petit pour tenir en memoire. Un canevas de
+  // six mille pixels de cote pese deja 144 Mo une fois developpe.
+  const COTE_MAX = 6000, PIXELS_MAX = 36e6;
+  let taille = Math.min(48, Math.floor(COTE_MAX / Math.max(cases.l, cases.h)));
+  taille = Math.max(6, taille);
+  while (cases.l * taille * cases.h * taille > PIXELS_MAX && taille > 6) taille--;
+
+  const REGLE = { x: 30, y: 17 };
+  const largeur = Math.round(cases.l * taille) + REGLE.x;
+  const hauteur = Math.round(cases.h * taille) + REGLE.y;
+
+  const hors = document.createElement("canvas");
+  hors.width = largeur; hors.height = hauteur;
+  const g = hors.getContext("2d");
+  if (g === null) return;
+
+  // On prete a `draw()` un autre canevas et un autre cadrage, puis on rend tout.
+  const memoire = { ctx, W, H, ox, oy, cell, cle: cacheCle };
+  bouton.disabled = true;
+  try {
+    ctx = g; W = largeur; H = hauteur; cell = taille;
+    ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille;
+    exportEnCours = true;
+    ctx.fillStyle = css("--field");
+    ctx.fillRect(0, 0, W, H);
+    draw();
+  } finally {
+    exportEnCours = false;
+    ctx = memoire.ctx; W = memoire.W; H = memoire.H;
+    ox = memoire.ox; oy = memoire.oy; cell = memoire.cell;
+    cacheCle = "";   // l'image de cote a servi a autre chose entre-temps
+    bouton.disabled = false;
+    draw();
+  }
+
+  const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
+  if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
+  const quand = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "h");
+  const coup = rejeu !== null ? `coup ${rejeu.n}` : `${history.length} coups`;
+  const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${salonNom} — ${coup} — ${quand}.png`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  flash(`image enregistrée · ${largeur} × ${hauteur} px`, "ok");
+}
+
+$("rb-image").addEventListener("click", () => { void exporterImage(); });
 
 function extentOf(word: string, dir: Dir, x: number, y: number) {
   return { x0: x, y0: y, x1: dir === "H" ? x + word.length - 1 : x, y1: dir === "V" ? y + word.length - 1 : y };

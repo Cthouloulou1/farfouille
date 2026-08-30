@@ -1600,6 +1600,46 @@ Elle figure **toujours en tête** de la liste des salons. C'est le jeu par défa
 du site ; la laisser prendre son rang parmi les salons du moment lui donnait une
 place qui changeait avec eux.
 
+### Ce qu'on garde, et ce qu'on jette
+
+C'est le seul endroit du programme qui **efface volontairement** une partie.
+La règle tient en une phrase : **une 15×15 terminée survit à son salon, rien
+d'autre.**
+
+| partie | à la fermeture du salon |
+|---|---|
+| **15×15 terminée** | **conservée** — quelques dizaines de Ko, elle se rejoue entièrement |
+| 15×15 abandonnée | effacée — elle ne se rejoue pas et n'intéresse personne |
+| grille infinie | effacée — elle n'a pas de fin, et l'une d'elles pesait 9,4 Mo à elle seule |
+
+Chaque effacement est **annoncé au journal du serveur**, avec le nom du salon et
+le nombre de coups perdus.
+
+**Un salon 15×15 vide se referme tout seul.** Une partie bornée tient dans une
+séance ; personne n'y revient le lendemain, et la laisser au registre encombre
+la liste et garde un fil de calcul pour rien. Pas sur-le-champ, cependant :
+recharger sa page, c'est se déconnecter une demi-seconde. On attend **quatre-
+vingt-dix secondes**, puis on vérifie à nouveau que la salle est vide.
+
+La grille permanente ne se referme jamais, et les salons sur grille infinie
+restent tant qu'on ne les supprime pas à la main.
+
+### Prendre la grille en image
+
+Un bouton dans le bandeau enregistre la grille en **PNG**. On ne photographie
+pas l'écran : la partie est **redessinée à une autre échelle** dans un canevas
+hors écran, assez grand pour contenir toute l'emprise des caramels. C'est le
+même code de dessin, donc l'image montre exactement ce que montre le jeu — y
+compris **le mot du rejeu masqué par l'œil**, ce qui donne une position à
+chercher.
+
+L'échelle s'ajuste : jusqu'à 48 pixels par case pour une petite grille, au
+minimum 6 pour une grande, sous un plafond de 36 mégapixels. Mesuré sur une
+partie de 4 452 coups : **5 916 × 5 903 pixels, 3,6 Mo, en 2,4 secondes**.
+
+PNG plutôt que JPEG : des lettres nettes sur un fond uni, c'est le cas où le PNG
+gagne sur tous les tableaux, poids compris.
+
 ### Rouvrir une partie ancienne
 
 Deux options, à ne pas confondre :
