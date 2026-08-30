@@ -842,6 +842,24 @@ Sans cela, un premier coup à deux jokers partait en morceaux : une lettre posé
 revenait en main, un joker disparaissait, et la lettre suivante était refusée
 sans qu'on comprenne pourquoi.
 
+### Un joker mis en évidence vaut toujours zéro
+
+Le mot qu'on clique se repose sur la grille en vert. Il n'est qu'une **suite de
+lettres** : rien n'y dit qu'un joker en tient une. Le O de T(O)M s'affichait donc
+à 1 point alors qu'il n'en rapporte aucun, et le compte ne tombait plus juste
+sous les yeux de celui qui relisait le coup.
+
+La vérité est **sur la grille** : chaque caramel posé garde sa marque de joker.
+Encore faut-il ne lire que les caramels **de ce coup ou d'avant** — un caramel
+posé plus tard occupe la case sans rien dire du mot qu'on regarde.
+
+Reste le mot qui n'est nulle part sur la grille : l'isotop d'un joueur que le
+logiciel n'a pas retenu, une solution qu'on parcourt dans le rejeu. Celui-là
+vient de la main, et **les lettres que le tirage ne contient pas sont des
+jokers**. Un tirage qui a à la fois la lettre et le joker laisse un doute ; on
+prend la lettre, qui rapporte davantage et que le solveur préfère pour la même
+raison.
+
 ### Le coup du joueur a sa propre place
 
 Le logiciel retient **un** isotop parmi les coups à score égal, et ce n'est pas

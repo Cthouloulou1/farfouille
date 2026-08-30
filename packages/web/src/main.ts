@@ -116,8 +116,14 @@ let openPlayer: string | null = null;
 let marks: { x: number; y: number }[] = [];
 
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
-/** Le coup mis en evidence sur la grille, quand on en clique un. */
-let ghost: [string, Dir, number, number] | null = null;
+/**
+ * Le coup mis en evidence sur la grille, quand on en clique un.
+ *
+ * `jokers` dit, lettre par lettre, laquelle est posee par un joker. Rien
+ * d'autre ne le porte : le mot n'est qu'une suite de lettres, et un joker s'y
+ * lit comme la lettre qu'il joue.
+ */
+let ghost: { word: string; dir: Dir; x: number; y: number; jokers: boolean[] } | null = null;
 /**
  * Le mot du rejeu est-il cache sur la grille ?
  *
@@ -230,6 +236,48 @@ function blankPositions(): Set<string> {
     const c = cases[i];
     if (p.blank && c !== undefined) out.add(`${c.x},${c.y}`);
   });
+  return out;
+}
+
+/**
+ * Quelles lettres du mot mis en evidence sont posees par un joker.
+ *
+ * UN JOKER NE RAPPORTE RIEN, ET DOIT LE DIRE. Le mot en surbrillance affichait
+ * la valeur ordinaire de chacune de ses lettres : le O de T(O)M y comptait
+ * 1 point alors qu'il n'en vaut aucun, et le compte du mot ne tombait plus
+ * juste sous les yeux de celui qui le relisait.
+ *
+ * La verite est sur la grille -- chaque caramel pose garde sa marque de joker,
+ * et `tiles` les retient tous, y compris ceux que le rejeu masque. Encore
+ * faut-il ne lire que les caramels DE CE COUP OU D'AVANT : un caramel pose plus
+ * tard occupe la case sans rien dire du mot qu'on regarde.
+ *
+ * Reste le mot qui n'est nulle part sur la grille -- l'isotop d'un joueur que
+ * le logiciel n'a pas retenu, une solution qu'on parcourt dans le rejeu. Celui
+ * la vient de la main : les lettres que le tirage ne contient pas sont des
+ * jokers. Un tirage qui a A LA FOIS la lettre et le joker laisse un doute ; on
+ * prend la lettre, qui rapporte davantage et que le solveur prefere pour la
+ * meme raison.
+ */
+function jokersDuMot(m: MoveInfo | undefined, word: string, dir: Dir,
+                     gx: number, gy: number): boolean[] {
+  // Jusqu'ou la grille fait foi. Le mot JOUE est sur la grille au coup `m.n` ;
+  // tout autre mot du meme coup n'y est pas, et s'arrete au coup d'avant.
+  const joue = m !== undefined && word === m.word && dir === m.dir && gx === m.x && gy === m.y;
+  const borne = m === undefined ? Infinity : joue ? m.n : m.n - 1;
+  const main = [...(m?.rack ?? "")];
+  const out: boolean[] = [];
+  for (let i = 0; i < word.length; i++) {
+    const x = dir === "H" ? gx + i : gx;
+    const y = dir === "V" ? gy + i : gy;
+    const q = tiles.find((c) => c.x === x && c.y === y && c.n <= borne && c.l === word[i]);
+    if (q !== undefined) { out.push(q.b === 1); continue; }
+    const j = main.indexOf(word[i]!);
+    if (j !== -1) { main.splice(j, 1); out.push(false); continue; }
+    const k = main.indexOf(BLANK);
+    if (k !== -1) main.splice(k, 1);
+    out.push(k !== -1);
+  }
   return out;
 }
 
@@ -679,12 +727,12 @@ function draw() {
   }
 
   if (ghost !== null && !ghostCache && cell >= 6) {
-    const [word, dir, gx, gy] = ghost;
+    const { word, dir, x: gx, y: gy, jokers } = ghost;
     for (let i = 0; i < word.length; i++) {
       const x = dir === "H" ? gx + i : gx;
       const y = dir === "V" ? gy + i : gy;
       if (x < gx0 || x > gx1 || y < gy0 || y > gy1) continue;
-      caramel(x, y, word[i]!, false, C.gface, C.gedge, C.gink);
+      caramel(x, y, word[i]!, jokers[i] === true, C.gface, C.gedge, C.gink);
     }
   }
 
@@ -736,7 +784,7 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   // etendue allumait toute une rangee de numeros -- et c'est bien la case de
   // depart que la notation nomme, « H ligne,colonne ».
   const depart = ghost !== null
-    ? { x: ghost[2], y: ghost[3] }
+    ? { x: ghost.x, y: ghost.y }
     : cursor !== null ? { x: cursor.x, y: cursor.y } : null;
   const mark = depart === null ? null
     : { x0: depart.x, y0: depart.y, x1: depart.x, y1: depart.y };
@@ -1368,7 +1416,8 @@ function paintSide() {
           const b = r.querySelector(".place") as HTMLElement | null;
           b?.addEventListener("click", (e) => {
             e.stopPropagation();
-            ghost = [sien.word, sien.dir, sien.x, sien.y];
+            ghost = { word: sien.word, dir: sien.dir, x: sien.x, y: sien.y,
+                      jokers: jokersDuMot(m, sien.word, sien.dir, sien.x, sien.y) };
             reveal(sien.word, sien.dir, sien.x, sien.y);
           });
         }
@@ -1394,7 +1443,8 @@ function paintSide() {
  * les envoie meme pas.
  */
 function focusMove(m: MoveInfo) {
-  ghost = [m.word, m.dir, m.x, m.y];
+  ghost = { word: m.word, dir: m.dir, x: m.x, y: m.y,
+            jokers: jokersDuMot(m, m.word, m.dir, m.x, m.y) };
   $("roadmap").hidden = true;
   reveal(m.word, m.dir, m.x, m.y);
 }
@@ -1462,7 +1512,9 @@ function voirLeCoup(n: number): void {
   piste.appendChild(attente);
   $("rj-sols").scrollTop = 0;
   $("rj-qui").hidden = true;
-  ghost = m ? [m.word, m.dir, m.x, m.y] : null;
+  ghost = m === undefined ? null
+    : { word: m.word, dir: m.dir, x: m.x, y: m.y,
+        jokers: jokersDuMot(m, m.word, m.dir, m.x, m.y) };
   // Le bandeau reprend le tirage de CE coup : on revoit le coup avec ce qu'on
   // avait en main pour le chercher.
   paintSide();
@@ -1546,7 +1598,8 @@ function montrerQui(m: MoveInfo, titre: string, noms: string[]): void {
       `<span class="s">${p ? p.score : 0}</span>`;
     if (p !== undefined) {
       r.addEventListener("click", () => {
-        ghost = [p.word, p.dir, p.x, p.y];
+        ghost = { word: p.word, dir: p.dir, x: p.x, y: p.y,
+                  jokers: jokersDuMot(m, p.word, p.dir, p.x, p.y) };
         reveal(p.word, p.dir, p.x, p.y);
       });
     }
@@ -1739,10 +1792,11 @@ function marquerLaChoisie(deroule = false, choisiParLeJoueur = true): void {
     }
   }
   peindreLaFenetre();
-  ghost = [s.word, s.dir, s.x, s.y];
-  reveal(s.word, s.dir, s.x, s.y);
   const ici = rejeu;
   const joue = ici === null ? undefined : history.find((h) => h.n === ici.n);
+  ghost = { word: s.word, dir: s.dir, x: s.x, y: s.y,
+            jokers: jokersDuMot(joue, s.word, s.dir, s.x, s.y) };
+  reveal(s.word, s.dir, s.x, s.y);
   if (joue === undefined || !choisiParLeJoueur) return;
   // Une ligne choisie a la main montre QUI a joue ce mot-la. Une ligne que
   // personne n'a jouee rend la main a la liste complete, plutot que de laisser
