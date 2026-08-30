@@ -1980,7 +1980,11 @@ async function peuplerSalons(): Promise<void> {
   }
   box.replaceChildren();
   const moi = ($("name") as HTMLInputElement).value.trim();
-  for (const s of data.salons) {
+  // La grille permanente d'abord, toujours : c'est celle qu'on vient jouer, et
+  // elle se retrouvait au milieu des salons du moment, a une place qui changeait
+  // avec eux. Le reste garde l'ordre du serveur, du plus ancien au plus recent.
+  const liste = [...data.salons].sort((a, b) => Number(b.mondiale) - Number(a.mondiale));
+  for (const s of liste) {
     const b = document.createElement("div");
     b.className = "salon";
     b.setAttribute("role", "button");

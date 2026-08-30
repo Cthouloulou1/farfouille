@@ -1589,6 +1589,29 @@ autre joueur présent.
 chrono. Elle n'a pas de propriétaire et sa configuration est **verrouillée** —
 aucun visiteur ne doit pouvoir la reparamétrer ou la relancer.
 
+Elle figure **toujours en tête** de la liste des salons. C'est le jeu par défaut
+du site ; la laisser prendre son rang parmi les salons du moment lui donnait une
+place qui changeait avec eux.
+
+### Rouvrir une partie ancienne
+
+Deux options, à ne pas confondre :
+
+| option | effet |
+|---|---|
+| `--partie <nom>` | la partie nommée **prend la place de la grille permanente**, avec ses propres réglages, chrono compris, et **se remet à jouer** |
+| `--rouvrir <nom>` | la partie nommée devient **un salon de plus**, à côté de la grille permanente, qui garde sa place |
+
+`--rouvrir` est ce qu'on veut presque toujours : revoir une partie sans déloger
+le jeu du site. Le salon s'inscrit au registre, donc une seule fois suffit ;
+`--proprietaire <pseudo>` dit à qui il appartient, faute de quoi personne ne
+pourra le refermer.
+
+Une partie rouverte **continue de se jouer** si elle n'est pas close : son
+journal n'est pas une copie d'archive, c'est le fichier vivant. Pour la
+consulter figée, on en copie le journal et on donne à la copie un `coupsMax`
+égal à son nombre de coups : elle se charge close, sans calculer de top.
+
 **Qui arrive en cours de duplicate joue sans être compté.** On ne le refuse pas :
 il voit la grille, il cherche, et **s'il trouve le top il figure dans la liste
 des trouveurs**. Il entre au classement à la partie suivante. Son statut

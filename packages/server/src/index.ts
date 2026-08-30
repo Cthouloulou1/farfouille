@@ -42,6 +42,21 @@ const LAYOUT = arg("pavage", "pave1") as LayoutName;
 /** Bouton "reveler le top" : commodite de test, absente pour les joueurs. */
 const REVEAL = process.argv.includes("--reveler");
 
+/**
+ * Parties du disque a rouvrir DANS UN SALON, separees par des virgules.
+ *
+ * A ne pas confondre avec `--partie`, qui met une partie a la place de la
+ * grille permanente. Ici, elle devient un salon de plus : la grille permanente
+ * garde sa place, et l'ancienne partie se consulte a cote.
+ */
+const ROUVRIR = arg("rouvrir", "").split(",").map((s) => s.trim()).filter((s) => s !== "");
+/** A qui appartiennent les salons ainsi rouverts -- pour pouvoir les refermer. */
+const PROPRIETAIRE = arg("proprietaire", "") || null;
+
+/** « top-leger » se lit mieux « Top leger ». */
+const joliNom = (id: string): string =>
+  id.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+
 setLayout(LAYOUT);
 
 /** Instant du demarrage : sert a reperer un serveur plus vieux que la page. */
@@ -252,6 +267,31 @@ async function ouvrirLesSalons(): Promise<void> {
       console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
     }
   }
+  // --rouvrir : une partie du disque reprend sa place DANS UN SALON, et non a
+  // celle de la grille permanente. C'est ce qu'on veut presque toujours quand on
+  // revient sur une ancienne partie : la revoir sans deloger le jeu du site.
+  // Elle s'inscrit au registre, donc une seule fois suffit.
+  for (const id of ROUVRIR) {
+    if (tousLesSalons().some((s) => s.id === id)) {
+      console.log(`[salon] "${id}" etait deja au registre, rien a rouvrir`);
+      continue;
+    }
+    if (Game.configEnregistree(id) === null) {
+      console.warn(`[salon] "${id}" introuvable sur le disque -- voir npm run parties`);
+      continue;
+    }
+    try {
+      const s = await ouvrirSalon({
+        id, nom: joliNom(id), proprietaire: PROPRIETAIRE, prive: false,
+        layout: LAYOUT, cfg: configParDefaut(), nouveau: true,
+      });
+      surveiller(s);
+      console.log(`[salon] "${s.nom}" (${id}) rouvert : ${s.partie.moves.length} coups`);
+    } catch (err) {
+      console.warn(`[salon] "${id}" non rouvert : ${(err as Error).message}`);
+    }
+  }
+
   pret = true;
   const n = tousLesSalons().length;
   console.log(`  ${n} salon${n > 1 ? "s" : ""} pret${n > 1 ? "s" : ""} ` +
