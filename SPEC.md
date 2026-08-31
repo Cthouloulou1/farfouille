@@ -2057,6 +2057,60 @@ d'abord, les sous-tops ensuite — **toutes les solutions** sur un plateau born�
 les mieux classées sur une grille infinie. Le coup réellement joué y est
 surligné.
 
+### Chercher un mot sur toute la grille
+
+Sur une grille infinie, seuls les **cent premiers paliers** sont enregistrés :
+l'immense majorité des coups jouables n'existe nulle part. Chercher `MA` dans la
+liste ne rendait donc rien — alors qu'il se posait à cinq cent soixante-neuf
+endroits.
+
+**Le champ fait deux choses, et c'est ce qui le rend utile.** En tapant, il
+filtre instantanément les paliers déjà là. Sur **Entrée**, il va chercher le mot
+partout ailleurs. Rien ne part tant qu'on tape : un balayage par frappe ferait
+cinq recherches pour un mot de cinq lettres, dont quatre sur des mots incomplets.
+
+**Chercher un mot donné n'est pas le même problème que trouver tous les coups.**
+Le solveur explore le dictionnaire depuis chaque ancrage avec toutes les
+combinaisons du tirage ; ici le mot est connu, et il ne reste qu'à essayer, pour
+chaque ancrage et chaque décalage, s'il tient. On ne touche plus au GADDAG.
+
+Mesuré sur la grille permanente réelle — 11 647 coups, 66 800 caramels, 71 411
+ancrages :
+
+| | |
+|---|---|
+| génération complète des 960 816 coups | 8,3 s |
+| le calcul que fait le serveur à chaque coup | 1,6 s |
+| **balayage d'un mot** | **0,15 à 0,5 s** |
+| reconstruire la position d'un coup passé | 187 ms |
+
+Le coût monte avec la **longueur du mot** — L décalages par ancrage — pas avec le
+nombre de résultats.
+
+**Le balayage tourne dans le navigateur.** Le client a déjà la grille et le
+DAWG : le contrôle des mots croisés n'a besoin que du DAWG, pas du GADDAG. Aucun
+aller-retour, et surtout aucune concurrence avec le solveur — qui, sur la grille
+permanente, met 1,6 s à calculer un coup dont le chrono dure une seconde.
+
+Quatre règles :
+
+- la recherche ne porte que sur un **coup déjà joué**. Le rejeu ne s'ouvre pas
+  ailleurs, et le plateau reconstruit s'arrête au coup d'avant : le top du coup
+  en cours reste hors d'atteinte, comme il doit l'être ;
+- un mot **absent du dictionnaire** est refusé tout de suite, sans balayer
+  soixante-dix mille ancrages pour rien ;
+- on n'affiche que les **cent meilleurs** placements, avec le compte complet à
+  côté : « 100 sur 9 074 » ;
+- avec un **joker**, un même mot au même endroit vaut plusieurs scores selon la
+  lettre qu'il porte. On prend le meilleur, comme le solveur : le joker va sur la
+  case qui rapporte le moins.
+
+Le balayage ne vaut que s'il rend **exactement** ce que le solveur aurait rendu.
+C'est ce qu'un test établit : on génère tous les coups d'une position, et pour
+vingt mots on vérifie que le balayage retrouve les mêmes placements aux mêmes
+scores, ni un de plus ni un de moins — sur un plateau borné comme sur une grille
+infinie.
+
 **Une ligne par solution, jamais deux.** La colonne de place faisait
 soixante-deux pixels ; `V -91,-196` en demande soixante-trois, et la notation
 passait à la ligne au beau milieu de la liste. Aucune cellule ne se replie, et la

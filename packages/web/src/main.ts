@@ -14,6 +14,7 @@ import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts
 import { valueOf, BLANK } from "../../engine/src/alphabet.ts";
 import { step, noteCoup, type Dir } from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
+import { chercherLeMot } from "../../engine/src/chercher.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cv = $<HTMLCanvasElement>("cv");
@@ -1592,6 +1593,7 @@ function voirLeCoup(n: number): void {
   }
   ($("rj-q") as HTMLInputElement).value = "";
   $("rj-compte").textContent = "";
+  recherche = null;
   peindreLOeil();
   $("rj-top").innerHTML = m === undefined ? "" :
     `<b>${m.word}</b> ${noteCoup(m.dir, m.x, m.y, cfg.bornes)} ` +
@@ -1728,6 +1730,89 @@ let solutionsVues: Solution[] = [];
 /** Index dans `solutionsVues` de la ligne selectionnee, -1 si aucune. */
 let choisie = -1;
 
+/**
+ * Une recherche sur TOUTE la grille, quand on en a demande une.
+ *
+ * Le champ du rejeu fait deux choses, et c'est ce qui le rend utile : en
+ * tapant, il filtre instantanement les paliers deja la ; sur ENTREE, il va
+ * chercher le mot partout ailleurs. Tant que celle-ci n'est pas nulle, c'est
+ * elle qu'on affiche.
+ */
+let recherche: { mot: string; total: number; vues: Solution[] } | null = null;
+
+/** Ce qu'on montre d'une recherche qui ramene des milliers de placements. */
+const PLAFOND_RECHERCHE = 100;
+
+/**
+ * Le plateau tel qu'il etait AVANT le coup examine, garde d'un appel a l'autre.
+ *
+ * Le reconstruire coute 187 ms sur une partie de onze mille coups -- peu, mais
+ * pas assez peu pour le refaire a chaque recherche du meme coup.
+ */
+let plateauRejeu: { n: number; board: Board } | null = null;
+
+function plateauAvant(n: number): Board {
+  if (plateauRejeu !== null && plateauRejeu.n === n) return plateauRejeu.board;
+  const b = new Board(dict, cfg);
+  b.place(tiles.filter((q) => q.n < n).map((q): Placement => (
+    { x: q.x, y: q.y, letter: q.l, blank: q.b === 1 }
+  )));
+  plateauRejeu = { n, board: b };
+  return b;
+}
+
+/**
+ * Cherche le mot tape sur toute la grille du coup examine.
+ *
+ * SUR UNE GRILLE INFINIE, SEULS LES CENT PREMIERS PALIERS SONT ENREGISTRES.
+ * L'immense majorite des coups jouables n'existe donc nulle part, et chercher
+ * un petit mot dans la liste ne rendait rien -- alors qu'il se posait peut-etre
+ * a cinq cents endroits.
+ *
+ * La recherche ne porte que sur un coup DEJA JOUE : le rejeu ne s'ouvre pas
+ * ailleurs, et le plateau reconstruit s'arrete au coup d'avant. Le top du coup
+ * en cours reste hors d'atteinte, comme il doit l'etre.
+ */
+function chercherPartout(): void {
+  const ici = rejeu;
+  if (ici === null) return;
+  const champ = $("rj-q") as HTMLInputElement;
+  const mot = champ.value.trim().toUpperCase();
+  const m = history.find((h) => h.n === ici.n);
+  if (m === undefined) return;
+  if (mot.length < 2) { $("rj-compte").textContent = "au moins deux lettres"; return; }
+  if (!dict.contains(mot)) {
+    recherche = { mot, total: 0, vues: [] };
+    peindreSolutions();
+    $("rj-compte").textContent = "mot inconnu";
+    return;
+  }
+  // Le balayage dure de un a cinq dixiemes de seconde : on laisse l'ecran dire
+  // ce qu'il fait avant de le bloquer, sinon il parait fige sans raison.
+  $("rj-compte").textContent = "recherche…";
+  // Un delai, pas une image : `requestAnimationFrame` ne se declenche pas quand
+  // l'onglet est en arriere-plan, et la recherche restait alors en suspens.
+  setTimeout(() => {
+    {
+    if (rejeu === null || rejeu.n !== ici.n) return;
+    const t0 = performance.now();
+    const tous = chercherLeMot(plateauAvant(ici.n), dict, mot, m.rack);
+    const ms = performance.now() - t0;
+    recherche = {
+      mot, total: tous.length,
+      vues: tous.slice(0, PLAFOND_RECHERCHE).map((s): Solution => ({
+        word: s.word, dir: s.dir, x: s.x, y: s.y, score: s.score,
+        ecart: s.score - m.score, hors: true, noms: [],
+      })),
+    };
+    choisie = -1;
+    peindreSolutions();
+    if (tous.length === 0) $("rj-compte").textContent = "nulle part";
+    console.log(`[rejeu] « ${mot} » cherche en ${ms.toFixed(0)} ms : ${tous.length} placements`);
+    }
+  }, 24);
+}
+
 const echapper = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -1829,16 +1914,40 @@ function peindreSolutions(): void {
   const q = brut.trim().toUpperCase();
   // Une espace finale, ou le bouton « ab » : voir `motEntier`.
   const exact = q !== "" && (motEntier("rj-motEntier") || brut !== brut.trimEnd());
-  solutionsVues = q === "" ? solutions
-    : solutions.filter((s) => exact ? s.word === q : s.word.includes(q));
-
   const box = $("rj-sols");
   const piste = $("rj-piste");
   box.scrollTop = 0;
+
+  // Une recherche large remplace la liste : c'est elle qu'on a demandee, et
+  // elle ne se refiltre pas -- tous ses placements portent deja le mot cherche.
+  if (recherche !== null) {
+    solutionsVues = recherche.vues;
+    if (solutionsVues.length === 0) {
+      piste.style.height = "";
+      piste.innerHTML = `<div class="none" style="padding:10px 15px">`
+        + `« ${echapper(recherche.mot)} » ne se pose nulle part sur cette grille</div>`;
+    } else {
+      piste.style.height = `${solutionsVues.length * H_SOL}px`;
+      peindreLaFenetre();
+    }
+    // Le compte NOMME LE MOT : la liste filtree juste au-dessus disait « 25 sur
+    // 109 » pour les mots qui CONTIENNENT « NI », et celle-ci en donne 68 du mot
+    // NI lui-meme. Sans le mot, les deux nombres semblent se contredire.
+    const n = recherche.total;
+    $("rj-compte").textContent = n > solutionsVues.length
+      ? `${solutionsVues.length} sur ${n} · ${recherche.mot}`
+      : `${n} × ${recherche.mot}`;
+    return;
+  }
+
+  solutionsVues = q === "" ? solutions
+    : solutions.filter((s) => exact ? s.word === q : s.word.includes(q));
+
   if (solutionsVues.length === 0) {
     piste.style.height = "";
     piste.innerHTML = `<div class="none" style="padding:10px 15px">`
-      + `aucun mot ${exact ? "ne vaut" : "ne contient"} « ${echapper(q)} »</div>`;
+      + `aucun mot ${exact ? "ne vaut" : "ne contient"} « ${echapper(q)} »`
+      + `<br><span style="font-size:10.5px">Entrée pour le chercher sur toute la grille</span></div>`;
   } else {
     piste.style.height = `${solutionsVues.length * H_SOL}px`;
     peindreLaFenetre();
@@ -1932,7 +2041,17 @@ $("rj-sols").addEventListener("click", (e) => {
   marquerLaChoisie();
 });
 
+// ENTREE VA CHERCHER PLUS LOIN. Rien ne part tant qu'on tape : un balayage par
+// frappe ferait cinq recherches pour un mot de cinq lettres, dont quatre sur des
+// mots incomplets.
+$("rj-q").addEventListener("keydown", (e) => {
+  if ((e as KeyboardEvent).key !== "Enter") return;
+  e.preventDefault();
+  chercherPartout();
+});
 ($("rj-q") as HTMLInputElement).addEventListener("input", () => {
+  // La liste revient aux paliers des qu'on retouche au champ.
+  recherche = null;
   choisie = -1;
   peindreSolutions();
 });
