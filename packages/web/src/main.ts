@@ -529,13 +529,18 @@ function draw() {
     // c'est ce qu'on regarde quand on prend du recul sur une partie. Son cout
     // est paye a la construction de l'image de cote, pas a chaque deplacement.
     const hMoy = cell - gap * 2;
+    // LA PLACE QUE LE CHIFFRE NE PREND PAS REVIENT A LA LETTRE. En dessous de
+    // dix-huit pixels la valeur n'est pas tracee -- le coin bas du caramel est
+    // libre, et la lettre peut s'y etendre, centree. C'est un ou deux pixels de
+    // haut gagnes sur des lettres qui en font six : au dezoom, cela compte.
+    const serre = hMoy < 18;
     g.textAlign = "center"; g.textBaseline = "middle";
-    g.font = `700 ${Math.max(2, Math.round(hMoy * .62))}px Archivo, system-ui, sans-serif`;
+    g.font = `700 ${Math.max(2, Math.round(hMoy * (serre ? .74 : .62)))}px Archivo, system-ui, sans-serif`;
     for (const q of lot) {
       const px = X(q.x) + gap, py = Y(q.y) + gap;
       const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
       g.fillStyle = q.b === 1 ? C.jedge : C.ink;
-      g.fillText(q.l, px + w / 2, py + h * .53);
+      g.fillText(q.l, px + w / 2, py + h * (serre ? .5 : .53));
     }
     // La valeur du caramel, seulement quand elle tient : sous dix-huit pixels
     // de haut, le chiffre est un point gris qui n'apprend rien.
@@ -921,9 +926,20 @@ async function exporterImage(coup?: number): Promise<void> {
   const y1 = b !== null ? b + 1 : (vide ? 8 : ey1 + marge);
   const cases = { l: x1 - x0 + 1, h: y1 - y0 + 1 };
 
-  // Assez grand pour se lire, assez petit pour tenir en memoire. Un canevas de
-  // six mille pixels de cote pese deja 144 Mo une fois developpe.
-  const COTE_MAX = 6000, PIXELS_MAX = 36e6;
+  // CE PLAFOND EST CE QUI DECIDE DE LA LISIBILITE DES LETTRES.
+  //
+  // La taille d'une case se deduit du plafond divise par le cote de la grille,
+  // et la lettre fait les deux tiers de la case. Sur une grille de 518 cases de
+  // cote -- onze mille coups joues -- le plafond ordinaire donne des cases de
+  // 10 pixels, donc des lettres de 6 : on les devine, on ne les lit pas.
+  //
+  // Le plafond n'est pas une prudence excessive : un canevas se developpe a
+  // quatre octets le pixel, et il faut ensuite l'encoder. Trente-six millions de
+  // pixels pesent deja 144 Mo. La haute definition triple ce budget -- elle est
+  // donc un CHOIX, pas la valeur par defaut, et elle peut echouer sur une
+  // machine peu pourvue.
+  const COTE_MAX = prefs.imageHD ? 10_000 : 6000;
+  const PIXELS_MAX = prefs.imageHD ? 100e6 : 36e6;
   let taille = Math.min(48, Math.floor(COTE_MAX / Math.max(cases.l, cases.h)));
   taille = Math.max(6, taille);
   while (cases.l * taille * cases.h * taille > PIXELS_MAX && taille > 6) taille--;
@@ -938,29 +954,35 @@ async function exporterImage(coup?: number): Promise<void> {
 
   const hors = document.createElement("canvas");
   hors.width = largeur; hors.height = hauteur;
+  // Le navigateur RABOTE en silence un canevas trop grand : on redemande sa
+  // taille plutot que de produire une image vide sans savoir pourquoi.
+  if (hors.width !== largeur || hors.height !== hauteur) {
+    flash(`image trop grande pour ce navigateur · ${largeur} × ${hauteur} px`, "bad");
+    return;
+  }
   const g = hors.getContext("2d");
-  if (g === null) return;
+  if (g === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
 
-  // La grille se dessine sur SON canevas, que l'on pose ensuite sous le
-  // bandeau. `draw()` place les numeros de colonnes tout en haut de ce qu'il
-  // dessine : peindre le bandeau par-dessus les aurait recouverts, et c'est
-  // justement ce qui permet de nommer la case ou l'on joue.
-  const grille = document.createElement("canvas");
-  grille.width = largeur; grille.height = hauteur - BANDEAU;
-  const gg = grille.getContext("2d");
-  if (gg === null) return;
-
-  // On prete a `draw()` un autre canevas et un autre cadrage, puis on rend tout.
+  // UN SEUL CANEVAS, PAS DEUX.
+  //
+  // La grille se dessinait sur le sien pour etre reportee ensuite sous le
+  // bandeau -- deux images de la taille de la page, donc le double de memoire,
+  // et c'est la memoire qui limite la finesse des lettres. Un decalage du repere
+  // suffit : `draw()` peint comme si le bandeau n'existait pas, et ses numeros
+  // de colonnes tombent juste dessous au lieu d'etre recouverts.
   const memoire = { ctx, W, H, ox, oy, cell, cle: cacheCle };
   bouton.disabled = true;
   try {
-    ctx = gg; W = largeur; H = hauteur - BANDEAU; cell = taille;
+    ctx = g; W = largeur; H = hauteur - BANDEAU; cell = taille;
     ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille;
     exportEnCours = true;
     exportJusqua = coup === undefined ? null : coup - 1;
+    g.save();
+    g.translate(0, BANDEAU);
     ctx.fillStyle = css("--field");
     ctx.fillRect(0, 0, W, H);
     draw();
+    g.restore();
   } finally {
     exportEnCours = false;
     exportJusqua = null;
@@ -972,7 +994,6 @@ async function exporterImage(coup?: number): Promise<void> {
   }
 
   if (tirage.length > 0) dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, numero);
-  g.drawImage(grille, 0, BANDEAU);
 
   const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
   if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
@@ -984,7 +1005,8 @@ async function exporterImage(coup?: number): Promise<void> {
   a.download = `${salonNom} — ${quoi} — ${quand}.png`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  flash(`image enregistrée · ${largeur} × ${hauteur} px`, "ok");
+  const mo = blob.size / 1e6;
+  flash(`image enregistrée · ${largeur} × ${hauteur} px · ${mo.toFixed(1)} Mo`, "ok");
 }
 
 /**
@@ -2592,6 +2614,8 @@ interface Preferences {
   vols: boolean;
   /** Hauteur choisie pour chaque section du panneau, `null` = celle d'origine. */
   hauteurs: { live: number | null; journal: number | null };
+  /** Les images de grille sont-elles tirees en haute definition ? */
+  imageHD: boolean;
 }
 const prefs: Preferences = {
   theme: "auto", sons: true,
@@ -2599,6 +2623,7 @@ const prefs: Preferences = {
   // c'est notre valeur de depart, et le panneau permet d'en changer.
   vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
   hauteurs: { live: null, journal: null },
+  imageHD: false,
 };
 const CLE_PREFS = "farfouille.preferences";
 
@@ -2610,6 +2635,7 @@ function lirePreferences(): void {
     if (v.theme === "auto" || v.theme === "light" || v.theme === "dark") prefs.theme = v.theme;
     if (typeof v.sons === "boolean") prefs.sons = v.sons;
     if (typeof v.vols === "boolean") prefs.vols = v.vols;
+    if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
       for (const cle of ["live", "journal"] as const) {
@@ -3140,6 +3166,7 @@ function peuplerPreferences(): void {
     b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.sons));
   }
   $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
+  $("p-image").setAttribute("aria-pressed", String(prefs.imageHD));
 }
 
 for (const b of $("p-theme").querySelectorAll("button")) {
@@ -3162,6 +3189,11 @@ for (const b of $("p-sons").querySelectorAll("button")) {
 // pour comprendre laquelle etait allumee.
 $("p-vols").addEventListener("click", () => {
   prefs.vols = !prefs.vols;
+  garderPreferences();
+  peuplerPreferences();
+});
+$("p-image").addEventListener("click", () => {
+  prefs.imageHD = !prefs.imageHD;
   garderPreferences();
   peuplerPreferences();
 });
@@ -3501,6 +3533,7 @@ let salonChoisi = new URLSearchParams(location.search).get("salon") ?? "";
 
 interface ResumeSalon {
   id: string; nom: string; proprietaire: string | null; mondiale: boolean;
+  permanent?: boolean;
   coups: number; finie: boolean; connectes: number;
   config: { tirage: number; jouables: number; pioche: string; bornes: number | null; joker?: boolean };
 }
@@ -3555,7 +3588,10 @@ async function peuplerSalons(): Promise<void> {
     b.setAttribute("role", "button");
     b.tabIndex = 0;
     const qui = s.mondiale ? '<span class="mondiale">permanent</span>' : `par ${s.proprietaire}`;
-    const etat = s.finie ? "terminée" : `${s.coups} coup${s.coups > 1 ? "s" : ""}`;
+    // La permanence se lit sur la ligne, sinon rien n'expliquerait l'absence du
+    // bouton Supprimer -- on croirait a un oubli.
+    const etat = (s.finie ? "terminée" : `${s.coups} coup${s.coups > 1 ? "s" : ""}`)
+      + (s.permanent && !s.mondiale ? " · permanente" : "");
     b.innerHTML =
       `<span class="icone">${icone(s.config.bornes === null)}</span>` +
       `<span class="nom">${s.nom}</span>` +
@@ -3565,8 +3601,9 @@ async function peuplerSalons(): Promise<void> {
     b.addEventListener("keydown", (e) => {
       if ((e as KeyboardEvent).key === "Enter") rejoindre(s.id);
     });
-    // Le createur peut retirer son salon.
-    if (!s.mondiale && s.proprietaire === moi && moi !== "") {
+    // Le createur peut retirer son salon -- sauf s'il est permanent : des
+    // milliers de coups joues a plusieurs ne tiennent pas a un clic.
+    if (s.permanent !== true && s.proprietaire === moi && moi !== "") {
       const jeter = document.createElement("button");
       jeter.type = "button";
       jeter.className = "jeter";

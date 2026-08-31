@@ -68,6 +68,21 @@ const PROPRIETAIRE = arg("proprietaire", "") || null;
 const REJEU_OUVERT = new Set(
   arg("rejeu", "top-leger").split(",").map((s) => s.trim()).filter((s) => s !== ""),
 );
+/**
+ * Les salons qu'on ne peut pas supprimer, en plus de la grille mondiale.
+ *
+ * Un salon ordinaire appartient a qui l'a cree et disparait avec lui. Une
+ * grille d'etude, elle, porte des milliers de coups joues a plusieurs pendant
+ * des semaines : elle ne doit pas tenir a un clic, meme celui de son
+ * proprietaire -- qui continue par ailleurs a la regler.
+ *
+ * `--permanentes ""` la rend supprimable de nouveau.
+ */
+const PERMANENTS = new Set(
+  arg("permanentes", "top-leger").split(",").map((s) => s.trim()).filter((s) => s !== ""),
+);
+const estPermanent = (s: Salon): boolean =>
+  s.proprietaire === null || PERMANENTS.has(s.id);
 
 /** « top-leger » se lit mieux « Top leger ». */
 const joliNom = (id: string): string =>
@@ -432,7 +447,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       pret,
       salons: tousLesSalons()
         .filter((s) => !s.prive)
-        .map((s) => resume(s, occupants(s.id).length)),
+        .map((s) => resume(s, occupants(s.id).length, estPermanent(s))),
       max: MAX_SALONS,
     });
     return;
@@ -442,7 +457,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url.startsWith("/api/salon/") && req.method === "GET") {
     const s = salon(decodeURIComponent(url.slice("/api/salon/".length)));
     if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
-    json(res, 200, resume(s, occupants(s.id).length));
+    json(res, 200, resume(s, occupants(s.id).length, estPermanent(s)));
     return;
   }
 
@@ -463,7 +478,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
         `${s.partie.cfg.bornes === null ? "grille infinie" : "15x15"}`);
-      json(res, 200, resume(s, 0));
+      json(res, 200, resume(s, 0, estPermanent(s)));
     } catch (e) {
       json(res, 400, { erreur: (e as Error).message });
     }
@@ -474,8 +489,12 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const id = decodeURIComponent(url.slice("/api/salon/".length));
     const s = salon(id);
     if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
-    if (s.proprietaire === null) {
-      json(res, 403, { erreur: "le salon Topping infini est permanent" });
+    if (estPermanent(s)) {
+      json(res, 403, {
+        erreur: s.proprietaire === null
+          ? "le salon Topping infini est permanent"
+          : `le salon « ${s.nom} » est permanent`,
+      });
       return;
     }
     const par = String(req.headers["x-pseudo"] ?? "");

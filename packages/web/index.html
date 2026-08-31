@@ -422,7 +422,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 #rj-titre { min-width: 92px; }
 .sols { flex: 1; min-height: 0; overflow: auto; padding: 6px 0 10px; }
 .sols-piste { position: relative; }
-.sol { position: absolute; left: 0; right: 0; height: 26px; display: grid; grid-template-columns: minmax(0, 1fr) 62px 34px 34px 24px; gap: 7px; align-items: center; width: 100%; text-align: left; padding: 0 15px; background: transparent; border: 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+/* UNE LIGNE PAR SOLUTION, JAMAIS DEUX. La colonne de place faisait soixante-deux
+   pixels ; « V -91,-196 » en demande soixante-trois, et la notation passait a la
+   ligne au beau milieu de la liste. Aucune cellule ne se replie. */
+.sol { position: absolute; left: 0; right: 0; height: 26px; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 84px 34px 34px 24px; gap: 7px; align-items: center; width: 100%; text-align: left; padding: 0 15px; background: transparent; border: 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.sol > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sol:hover { background: var(--hover); }
 .sol[aria-current="true"] { background: var(--accent-bg); color: var(--accent); }
 .sol.best .w { color: var(--ink); font-weight: 500; }
@@ -804,6 +808,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <p class="apres">Cliquer un coup passé y amène la caméra. Réduits, elle s'y
         pose d'un coup au lieu d'y voler — sur une grande grille, le trajet traverse
         des milliers de cases.</p>
+      </div>
+
+      <div class="reglage">
+        <label>Images</label>
+        <button type="button" class="bascule" id="p-image" aria-pressed="false">
+          <span class="voyant"></span>Enregistrer les grilles en haute définition
+        </button>
+        <p class="apres">Sur une grille de cinq cents cases de côté, l'image passe de
+        5 200 à 9 400 pixels et les lettres de 6 à 11 — lisibles au lieu d'être
+        devinées. Le fichier est bien plus lourd, et le navigateur peut refuser de
+        le produire sur une machine peu pourvue.</p>
       </div>
 
       <p class="apres">Ces réglages sont les vôtres et restent sur cet appareil.

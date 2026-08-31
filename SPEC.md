@@ -2057,6 +2057,11 @@ d'abord, les sous-tops ensuite — **toutes les solutions** sur un plateau born�
 les mieux classées sur une grille infinie. Le coup réellement joué y est
 surligné.
 
+**Une ligne par solution, jamais deux.** La colonne de place faisait
+soixante-deux pixels ; `V -91,-196` en demande soixante-trois, et la notation
+passait à la ligne au beau milieu de la liste. Aucune cellule ne se replie, et la
+colonne tient maintenant des coordonnées à quatre chiffres.
+
 Chaque ligne porte son **écart au top** : `MUCRONE 74 −2` quand le top fait 76.
 C'est l'écart qui dit ce qu'a coûté une solution, pas son score nu. Le top et
 ses isotops portent `top` plutôt que `0`.
@@ -2160,6 +2165,15 @@ créateur, lui, ne s'annonce pas : son bouton reparaît, il n'a rien à apprendr
 dans le même lieu ; supprimer, c'est jeter ce lieu et ce qui s'y est joué. On ne
 confie pas la seconde à qui passe.
 
+**Un salon peut être permanent sans appartenir à personne.** Un salon ordinaire
+appartient à qui l'a créé et disparaît avec lui ; une **grille d'étude** porte
+des milliers de coups joués à plusieurs pendant des semaines, et ne doit pas
+tenir à un clic — pas même celui de son propriétaire, qui continue par ailleurs
+à la régler. `--permanentes` les nomme, `--permanentes ""` les rend supprimables.
+
+Le bouton **Supprimer** disparaît, et la ligne du salon porte « permanente » :
+sans quoi rien n'expliquerait l'absence du bouton, et l'on croirait à un oubli.
+
 **La grille mondiale est un salon comme un autre** : permanent, public, sans
 chrono. Elle n'a pas de propriétaire et sa configuration est **verrouillée** —
 aucun visiteur ne doit pouvoir la reparamétrer ou la relancer.
@@ -2232,6 +2246,48 @@ impossible.
 
 PNG plutôt que JPEG : des lettres nettes sur un fond uni, c'est le cas où le PNG
 gagne sur tous les tableaux, poids compris.
+
+### Ce qui décide de la finesse des lettres
+
+La taille d'une case dans l'image se déduit d'un **plafond divisé par le côté de
+la grille**, et la lettre fait les deux tiers de la case. Sur une grille de
+518 cases de côté — onze mille coups joués — le plafond ordinaire donne des cases
+de dix pixels, donc des lettres de six : on les devine, on ne les lit pas.
+
+Le plafond n'est pas une prudence excessive. Un canevas se développe à **quatre
+octets le pixel**, et il faut ensuite l'encoder : trente-six millions de pixels
+pèsent déjà 144 Mo.
+
+Trois choses l'ont repoussé :
+
+**Un seul canevas au lieu de deux.** La grille se dessinait sur le sien pour être
+reportée ensuite sous le bandeau du tirage — deux images de la taille de la page,
+donc le double de mémoire. Un décalage du repère suffit : `draw()` peint comme si
+le bandeau n'existait pas, et ses numéros de colonnes tombent juste dessous au
+lieu d'être recouverts.
+
+**La place que le chiffre ne prend pas revient à la lettre.** En dessous de
+dix-huit pixels la valeur du caramel n'est pas tracée : le coin bas est libre, la
+lettre peut s'y étendre, centrée. Deux tiers de la case deviennent trois quarts.
+
+**Une haute définition, au choix.** Elle triple le budget mémoire : c'est donc un
+choix, pas la valeur par défaut, et le navigateur peut refuser de produire
+l'image — ce qu'on lui redemande, plutôt que de rendre une image vide sans dire
+pourquoi.
+
+| grille de 518 × 567 cases | case | image | lettre |
+|---|---|---|---|
+| avant | 10 px | 5 210 × 5 687 | 6 px |
+| ordinaire, après | 10 px | 5 210 × 5 687 | **7 px** |
+| haute définition | 17 px | 8 806 × 9 639 | **13 px** |
+
+Mesuré dans le navigateur : les deux tailles s'allouent et s'encodent, en 1,4 s
+et 2,0 s.
+
+> **Une grille entière ne sera jamais confortable à lire.** Il faudrait des cases
+> de trente pixels, soit une image de 15 570 × 17 040 : hors d'atteinte. Pour
+> lire les lettres, c'est une **portion** de grille qu'il faut tirer, pas la
+> grille entière — et c'est ce qui reste à faire.
 
 ### Rouvrir une partie ancienne
 

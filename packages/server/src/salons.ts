@@ -121,13 +121,21 @@ export function tousLesSalons(): Salon[] {
 }
 
 /** Ce qu'un client a besoin de savoir pour choisir un salon. */
-export function resume(s: Salon, connectes: number) {
+export function resume(s: Salon, connectes: number, permanent = false) {
   return {
     id: s.id,
     nom: s.nom,
     proprietaire: s.proprietaire,
     prive: s.prive,
     mondiale: s.proprietaire === null,
+    /**
+     * Un salon qu'on ne peut pas supprimer.
+     *
+     * La grille mondiale l'est par nature -- personne ne la possede. Une grille
+     * d'etude l'est par decision : elle a un proprietaire, qui la regle, mais
+     * onze mille coups joues a plusieurs ne doivent pas tenir a un clic.
+     */
+    permanent: s.proprietaire === null || permanent,
     coups: s.partie.moveNumber,
     finie: s.partie.finie,
     connectes,
