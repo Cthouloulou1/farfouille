@@ -1351,7 +1351,13 @@ function paintSide() {
     : !demarree ? "—"
     : coupsMax === null ? String(moveNumber + 1)
     : `${moveNumber + 1} / ${coupsMax}`;
-  if (rejeu !== null) paintRack();
+  // LE CHEVALET SUIT L'ECRAN, DANS LES DEUX SENS. Il n'etait repeint qu'en
+  // ENTRANT dans le rejeu : en sortir laissait donc le tirage du coup examine
+  // affiche par-dessus la partie en cours, jusqu'au prochain etat recu. Sur une
+  // partie close on ne le voyait pas -- il n'en arrive plus. Sur une grille
+  // vivante, cela dure le temps d'un coup, et sur la grille permanente un coup
+  // peut durer des heures.
+  paintRack();
   // Une partie bornee dans le TEMPS montre ce qu'il lui reste a vivre.
   $("rb-reste-wrap").hidden = rejeu !== null || dureeMax === null || !demarree || finie;
   $("fin").hidden = !finie;
@@ -3614,7 +3620,12 @@ function connect() {
       history.push(mv);
       best = null;
       typed = "";
-      ghost = null;
+      // EN REJEU, LE MOT EN EVIDENCE EST CE QU'ON EXAMINE. Un coup qui tombe
+      // ailleurs ne doit pas l'effacer -- on regarde le passe, pas le direct.
+      // La regle datait des parties closes, ou aucun coup ne tombe plus ; elle
+      // s'est mise a mordre le jour ou le rejeu s'est ouvert sur une partie en
+      // cours, qui pose un coup toutes les deux secondes.
+      if (rejeu === null) ghost = null;
       applyState(m.state);
       paintJournal();
       if (!$("roadmap").hidden) ajouterALaRoute(mv);

@@ -2051,6 +2051,21 @@ qui le dit : le coup en cours est celui que tout le monde cherche, et rien ne
 doit en sortir. Vérifié en interrogeant le protocole directement — le coup 2
 rend ses 22 paliers, le coup 19 en cours rend `null`.
 
+**Le rejeu se met alors à tourner pendant que la partie avance**, ce pour quoi il
+n'avait pas été écrit : il datait des parties closes, où plus rien ne tombe. Deux
+règles s'en sont trouvées fausses.
+
+**Le mot mis en évidence ne s'efface plus.** Un coup posé effaçait la mise en
+évidence — juste, en direct, où elle montrait un coup passé sous une grille qui
+vient de changer ; faux en rejeu, où elle *est* ce qu'on examine. Sur une grille
+qui pose un coup toutes les deux secondes, on ne pouvait plus rien regarder.
+
+**Le chevalet suit l'écran dans les deux sens.** Il n'était repeint qu'en
+*entrant* dans le rejeu : en sortir laissait le tirage du coup examiné affiché
+par-dessus la partie en cours, jusqu'au prochain état reçu. Sur une partie close
+cela ne se voyait pas — il n'en arrive plus. Sur une grille vivante cela dure le
+temps d'un coup, et sur la grille permanente un coup peut durer des heures.
+
 Le rejeu remonte la partie coup par coup. Pour chaque coup il montre le tirage,
 le mot posé et qui l'a trouvé, puis **les paliers** : le top et ses isotops
 d'abord, les sous-tops ensuite — **toutes les solutions** sur un plateau borné,
