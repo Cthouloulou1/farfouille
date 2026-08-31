@@ -621,24 +621,16 @@ export class Game {
   }
 
   /**
-   * Ce que PERSONNE n'a remporte, compte comme le serait un joueur.
+   * Coups que personne n'a remportes, comptes comme le serait un joueur.
    *
-   * Chaque coup distribue exactement un point : entier a qui trouve le top,
-   * moitie-moitie quand un demi-point recompense celui qui s'en est le plus
-   * approche. Ce qui n'est alle a personne revient ici. Les colonnes du
-   * classement font alors le nombre de coups joues, et un total qui tombe juste
-   * se verifie d'un coup d'oeil.
-   *
-   * Compter tout coup sans joueur pour un plein point rendait ce total faux :
-   * un coup a demi-point etait compte 0,5 au joueur ET 1 aux perdus.
+   * UN DEMI-POINT N'EST PAS UNE TROUVAILLE, ET NE RACHETE PAS LE COUP. Il
+   * recompense celui qui s'est le plus approche quand le top a echappe a tout
+   * le monde : le coup reste entierement perdu, et il compte ici pour un plein
+   * point. Les deux ne s'excluent donc pas -- un coup a demi-point vaut 1 aux
+   * perdus ET 0,5 au joueur, et le tableau distribue 1,5 sur ce coup-la.
    */
   get nonTrouves(): number {
-    let perdus = 0;
-    for (const m of this.moves) {
-      if (m.player !== null) continue;
-      perdus += m.demiPoint === undefined ? 1 : 0.5;
-    }
-    return perdus;
+    return this.moves.filter((m) => m.player === null).length;
   }
 
   /**

@@ -621,16 +621,15 @@ centièmes**, comptés depuis le début de la partie.
 
 ### Un résumé en tête, et ce qu'il compte
 
-Un demi-point **n'est pas un top**. Il revient à qui s'en est le plus approché
-quand personne ne l'a trouvé : le compter parmi les tops annonçait « 5 trouvés »
-là où il y en avait un seul et quatre sous-tops. Les deux se comptent
-séparément.
-
-### Un résumé en tête
-
 Une ligne au-dessus du tableau : nombre de coups, points posés, tops trouvés et
 non trouvés, et — en topping seulement — le temps total. C'est ce qu'on regarde
 en premier, et il fallait le reconstituer soi-même en parcourant les lignes.
+
+Un demi-point **n'est pas un top**, et **ne rachète pas le coup**. Le compter
+parmi les tops annonçait « 5 trouvés » là où il y en avait un seul et quatre
+sous-tops ; le compter à part des perdus donnait un total qui ne tombait plus sur
+le nombre de coups. Le coup reste perdu, et le demi-point se lit entre
+parenthèses : « 1 trouvé, 55 non trouvés (dont 4 demi-points) ».
 
 Pas de classement ici. La feuille de route sert à **jeter un coup d'œil à la
 partie** ; le classement a sa place ailleurs.
@@ -661,6 +660,19 @@ rien puisque les lignes ne sont plus toutes là. Il cherche mieux : dans tous le
 coups de la partie et non dans les vingt affichés, et sur le mot comme sur le
 tirage, la place, le trouveur ou le numéro du coup.
 
+**Une espace finale ferme le mot.** Chercher « QI » ramène QIS, QIN, QING et
+TAQIYA avec les QI — ce qui est juste quand on cherche une racine, et faux quand
+on veut compter ses QI. L'espace est le signe naturel de la fin d'un mot :
+« QI  » ne garde que ce qui vaut **exactement** QI. Rien à apprendre, rien à
+cocher, et le geste est déjà dans les doigts.
+
+**Le champ s'efface en fermant la feuille.** Un filtre qu'on retrouve en
+rouvrant est un tableau amputé sans qu'on sache pourquoi : on a cherché « QI »
+il y a un quart d'heure, et la partie de neuf mille coups n'en montre plus douze.
+
+**Un filtre qui ne ramène rien le dit.** Un grand blanc ne distingue pas la
+recherche infructueuse du tableau cassé.
+
 **La liste ne glisse pas sous les yeux.** Sur une grille infinie, un coup neuf
 s'insère en tête et pousse tout le reste d'une ligne : qui lisait le milieu
 voyait le texte se décaler et un clic tomber à côté. Le décalage est rattrapé —
@@ -672,6 +684,54 @@ Chaque ligne est sa propre grille CSS. Une largeur `auto` ou `fr` s'y recalcule
 donc **ligne par ligne**, et le tirage d'une ligne ne tombe pas sous le tirage de
 la précédente. Les colonnes de la feuille de route sont **fixes**, à la seule
 exception du nom du joueur, qui prend ce qui reste.
+
+**Une ligne par coup, jamais deux.** La colonne de place était trop étroite pour
+`H -142,-138` : la notation passait à la ligne, la ligne débordait sur la
+suivante, et la lecture se cassait là où la grille est justement la plus
+intéressante. Aucune cellule ne se replie, la ligne ne dépasse pas sa hauteur, et
+ce qui ne tient pas se termine en points de suspension. La colonne de place tient
+maintenant des coordonnées à quatre chiffres.
+
+**La fenêtre ne change pas de taille.** Elle est fixée à `88vh` — filtrer sur un
+mot qui ne sort qu'une fois la réduisait à presque rien, et une fenêtre qui se
+rétracte à chaque lettre tapée donne l'impression que quelque chose casse.
+
+### La police est celle du système
+
+La feuille de route se lit dans la **monospace du système** — Consolas sur
+Windows, SF Mono sur Mac : celle que le lecteur voit tous les jours dans ses
+tableaux, et qu'il n'a pas à télécharger pour ouvrir la feuille.
+
+### Trier les coups
+
+Un menu dans l'en-tête, à côté de la recherche. L'**ordre de la partie** reste
+celui par défaut — une feuille de match se lit dans l'ordre où elle a été écrite.
+Les autres tris répondent à des questions qu'on se pose après coup : quel a été
+le plus gros coup, le plus long mot, celui qu'on a trouvé le plus vite.
+
+Chaque critère se donne dans les **deux sens, écrits en toutes lettres** :
+« points, du plus cher » ne se lit pas de travers, une flèche dans un coin si. À
+égalité, l'ordre de la partie tranche — sans quoi deux coups de même valeur
+changeraient de place d'un affichage à l'autre. Un coup que personne n'a trouvé
+n'a pas de temps de recherche : il part au bout, dans les deux sens.
+
+### La feuille s'enregistre en un document
+
+Un bouton au bout de la ligne de résumé écrit **une page HTML autonome** sur
+l'ordinateur du lecteur. Elle s'ouvre d'un double-clic dans n'importe quel
+navigateur, s'imprime, et garde ses colonnes. Un tableur demanderait de choisir
+un séparateur et perdrait la mise en page ; une image ne se chercherait pas.
+
+**Un document n'est pas une copie d'écran de l'application.** Ce qu'on enregistre
+se relira ailleurs, hors du jeu, peut-être dans des années : rejouer un coup,
+tirer une image, aimer un coup sont des gestes qui demandent un serveur et un
+salon. Ces boutons ne partent donc pas dans le fichier — il ne reste que le
+tableau.
+
+On enregistre **ce qui est affiché**, filtre et ordre compris : chercher « QI »
+puis enregistrer, c'est vouloir la liste de ses QI, pas la partie entière. Le
+document le dit en tête, pour que personne ne le prenne plus tard pour la feuille
+complète.
 
 ### La colonne du temps n'existe qu'en topping
 
@@ -1610,21 +1670,33 @@ Une partie ne pioche et ne chronomètre que **s'il y a quelqu'un**.
 
 Le coup en cours affiche « en pause » tant que la salle est vide.
 
-### Deux notes quand un coup a traîné
+### La sonnerie dit depuis combien de temps le coup résistait
 
-Sur la grille permanente, **un coup peut durer des heures**. Personne ne reste
-devant : on la laisse ouverte dans un onglet et on fait autre chose. Quand
-quelqu'un finit par trouver le top d'un coup **vieux de plus de cinq minutes**,
-deux sinus courts à la quinte disent qu'il vient de tomber et qu'un tirage neuf
-attend.
+Sur la grille permanente, **un coup peut durer des heures** — ou des jours.
+Personne ne reste devant : on la laisse ouverte dans un onglet et on fait autre
+chose. Quand le coup finit par tomber, le son dit **combien de temps il a
+résisté**. C'est la seule chose qu'on veut savoir de loin, et un signal unique ne
+la disait pas.
 
-Cinq minutes de seuil : en dessous, la partie se suit à l'œil, et une sonnerie
-toutes les deux minutes serait une nuisance, pas un service. Rien non plus pour
-celui qui vient de trouver — il le sait déjà.
+| le coup a duré | ce qu'on entend |
+|---|---|
+| **5 min** | deux notes graves qui descendent, filtrées — on signale, on ne félicite pas |
+| **10 min** | deux notes, mais ça monte, et un harmonique passe |
+| **15 min** | un accord parfait égrené : trois notes suffisent à faire une phrase gaie |
+| **30 min** | la même montée, poussée jusqu'à l'octave, sommet tenu |
+| **1 jour** | une petite fanfare : levée, montée, accord tenu |
+| **10 jours** | un petit orchestre — quatre accords, une basse qui marche dessous, une volée pour finir |
 
-Le son est **synthétisé sur place**, sans fichier à charger, et son enveloppe
-monte et descend en douceur : une attaque franche ou une onde riche font
-sursauter, ce qui est le contraire de ce qu'on cherche.
+En dessous de cinq minutes, **rien**. La partie se suit à l'œil, et une sonnerie
+toutes les deux minutes serait une nuisance, pas un service.
+
+**Celui qui trouve l'entend aussi.** Il sait déjà ce qu'il a fait — mais un
+signal qui vous félicite fait plaisir, et se le refuser n'économise rien.
+
+Tout est **synthétisé sur place**, sans fichier à charger. Un filtre passe-bas
+commun à toutes les voix fait la différence entre le sourd et l'éclatant, bien
+plus que la hauteur des notes ; chaque note monte en vingt millisecondes et
+s'éteint en courbe, car une attaque franche fait sursauter.
 
 ### Le coût du calcul, mesuré
 
@@ -1732,10 +1804,11 @@ classement, quel que soit son compte : on ne voyait plus si la grille menait
 devant la table ou derrière elle. Elle se range maintenant à sa place, en
 points, comme un joueur.
 
-Chaque coup distribue alors **exactement un point** : entier à qui trouve le
-top, moitié-moitié quand un demi-point récompense celui qui s'en est le plus
-approché. Les colonnes du classement font le nombre de coups joués, et un total
-qui tombe juste se vérifie d'un coup d'œil.
+**Un demi-point ne rachète pas le coup.** Le top a échappé à tout le monde : le
+coup reste entièrement perdu et compte pour un plein point à « Non trouvés »,
+tandis que le joueur qui s'en est le plus approché reçoit son demi-point à côté.
+Un coup à demi-point distribue donc **1,5** — un point à la grille, un demi au
+joueur — et c'est voulu : ce sont deux comptes distincts, pas un partage.
 
 ### Le décompte de départ
 
@@ -1869,6 +1942,28 @@ final de la partie, si bien qu'y cliquer depuis le coup 1 posait un mot du coup
 
 Le rejeu **se ferme tout seul** quand la partie qu'il regarde n'existe plus :
 relance du salon, ou départ vers un autre salon.
+
+### Les paramètres du joueur
+
+Une roue crantée au bout du bandeau, **à ne pas confondre avec les réglages du
+salon**. Les réglages décident de la partie et valent pour tout le monde ; les
+paramètres ne regardent que celui qui est devant l'écran, et rien n'en sort de
+son navigateur.
+
+| | |
+|---|---|
+| **Thème** | automatique, clair, sombre. « Automatique » ne pose aucun attribut : la feuille de style suit le navigateur, et **suivra ses changements** — de quoi passer au sombre à la tombée du jour sans rien rouvrir. |
+| **Sons** | activés ou muets, avec **un bouton par palier pour les écouter**. Décrire une sonnerie ne dit rien de ce qu'elle fait dans une pièce : on juge sur pièce, et on règle son volume avant que le coup ne tombe. |
+
+Les valeurs tiennent dans le rangement local du navigateur. Il peut manquer —
+navigation privée, site bloqué, un navigateur qui jette tout en fermant : ce
+n'est pas une panne, on repart des valeurs par défaut et le jeu tourne pareil.
+
+Le mode sombre choisi et le mode sombre demandé par le navigateur portent les
+**mêmes valeurs, écrites deux fois** dans la feuille de style. On aimerait n'en
+écrire qu'une avec `light-dark()`, mais la grille lit ces variables au pinceau,
+par `getComputedStyle`, et une couleur laissée à calculer lui reviendrait sous
+forme de texte qu'elle ne saurait pas peindre.
 
 ### Les salons
 

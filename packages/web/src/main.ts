@@ -1473,7 +1473,7 @@ function paintSide() {
 function focusMove(m: MoveInfo) {
   ghost = { word: m.word, dir: m.dir, x: m.x, y: m.y,
             jokers: jokersDuMot(m, m.word, m.dir, m.x, m.y) };
-  $("roadmap").hidden = true;
+  if (!$("roadmap").hidden) fermerLaRoute();
   reveal(m.word, m.dir, m.x, m.y);
 }
 
@@ -1914,24 +1914,26 @@ $("rj-fin").addEventListener("click", () => voirLeCoup(history.length));
 function enTeteDeLaRoute(): string {
   const n = history.length;
   if (n === 0) return "";
-  // UN DEMI-POINT N'EST PAS UN TOP. Il revient a qui s'en est le plus approche
-  // quand personne ne l'a trouve : le compter parmi les tops disait « 5 trouves »
-  // la ou il y en avait un seul et quatre sous-tops.
+  // UN DEMI-POINT N'EST PAS UN TOP, ET NE RACHETE PAS LE COUP. Le compter parmi
+  // les tops disait « 5 trouves » la ou il y en avait un seul et quatre
+  // sous-tops ; le compter a part des perdus faisait un total qui ne tombait
+  // plus sur le nombre de coups. Le coup reste perdu, et le demi-point se lit
+  // entre parentheses.
   let points = 0, trouves = 0, demis = 0, temps = 0;
   for (const m of history) {
     points += m.score;
     temps += Math.max(0, m.ms);
-    if (duplicate) { if (trouveursDuCoup(m).length > 0) trouves++; }
-    else if (m.player !== null) trouves++;
+    const eu = duplicate ? trouveursDuCoup(m).length > 0 : m.player !== null;
+    if (eu) trouves++;
     else if (m.demiPoint !== undefined) demis++;
   }
-  const perdus = n - trouves - demis;
+  const perdus = n - trouves;
   const bouts = [
     `<b>${n}</b> coup${n > 1 ? "s" : ""}`,
     `<b>${points.toLocaleString("fr")}</b> points`,
     `<b>${trouves}</b> trouvé${trouves > 1 ? "s" : ""}`
-      + (demis > 0 ? `, <b>${demis}</b> demi-point${demis > 1 ? "s" : ""}` : "")
-      + `, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`,
+      + `, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`
+      + (demis > 0 ? ` (dont <b>${demis}</b> demi-point${demis > 1 ? "s" : ""})` : ""),
   ];
   // Le cumul du temps ne vaut qu'en topping : ailleurs, c'est le chrono
   // multiplie par le nombre de coups, ce que personne n'a besoin de lire.
@@ -1985,22 +1987,67 @@ let routeVues: MoveInfo[] = [];
  */
 function filtrerLaRoute(): void {
   const champ = document.getElementById("rm-q") as HTMLInputElement | null;
-  const q = (champ?.value ?? "").trim().toUpperCase();
+  const brut = champ?.value ?? "";
+  const q = brut.trim().toUpperCase();
+  // UNE ESPACE FINALE FERME LE MOT. Chercher « QI » ramenait QIS, QING et
+  // TAQIYA avec les QI, ce qui est juste quand on cherche une racine et faux
+  // quand on veut compter ses QI. L'espace est le signe naturel de la fin d'un
+  // mot ; on ne garde alors que ce qui vaut EXACTEMENT ce qui est tape.
+  const exact = q !== "" && brut !== brut.trimEnd();
+  const tient = (champ2: string): boolean =>
+    exact ? champ2.toUpperCase() === q : champ2.toUpperCase().includes(q);
   // Un plateau borne se lit du premier coup au dernier, une grille infinie a
   // l'envers.
   const base = cfg.bornes !== null ? history : [...history].reverse();
   routeVues = q === "" ? base : base.filter((m) =>
-    m.word.includes(q)
-    || m.notation.toUpperCase().includes(q)
-    || noteCoup(m.dir, m.x, m.y, cfg.bornes).toUpperCase().includes(q)
-    || quiLaTrouve(m, true).toUpperCase().includes(q)
+    tient(m.word)
+    || tient(m.notation)
+    || tient(noteCoup(m.dir, m.x, m.y, cfg.bornes))
+    || tient(quiLaTrouve(m, true))
     || String(m.n) === q);
+  routeVues = trierLaRoute(routeVues);
   const piste = document.getElementById("rm-piste");
   if (piste !== null) piste.style.height = `${routeVues.length * H_RMROW}px`;
   const compte = document.getElementById("rm-compte");
   if (compte !== null) {
     compte.textContent = q === "" ? "" : `${routeVues.length} sur ${history.length}`;
   }
+}
+
+/**
+ * L'ordre des coups dans la feuille de route.
+ *
+ * L'ordre de la partie reste celui par defaut -- une feuille de match se lit
+ * dans l'ordre ou elle a ete ecrite. Les autres tris repondent a des questions
+ * qu'on se pose apres coup : quel a ete le plus gros coup, le plus long mot,
+ * celui qu'on a trouve le plus vite. Chaque critere se donne dans les DEUX
+ * sens, ecrits en toutes lettres : « points, du plus cher » ne se lit pas de
+ * travers, une fleche dans un coin si.
+ *
+ * A egalite, l'ordre de la partie tranche : sans cela, deux coups de meme
+ * valeur changeaient de place d'un affichage a l'autre.
+ */
+function trierLaRoute(coups: MoveInfo[]): MoveInfo[] {
+  const menu = document.getElementById("rm-tri") as HTMLSelectElement | null;
+  const tri = menu?.value ?? "partie";
+  if (tri === "partie") return coups;
+  const cle = tri.slice(0, -1);
+  const sens = tri.endsWith("-") ? -1 : 1;
+  const valeur = (m: MoveInfo): number =>
+    cle === "pts" ? m.score
+    : cle === "len" ? m.word.length
+    // Un coup que personne n'a trouve n'a pas de temps de recherche : il a duré
+    // le chrono entier. Il part au bout, dans les deux sens.
+    : m.player === null ? Number.POSITIVE_INFINITY : Math.max(0, m.ms);
+  return [...coups].sort((a, b) => {
+    const va = valeur(a), vb = valeur(b);
+    if (va !== vb) {
+      if (!Number.isFinite(va)) return 1;
+      if (!Number.isFinite(vb)) return -1;
+      return (va - vb) * sens;
+    }
+    return a.n - b.n;
+  });
 }
 
 /**
@@ -2014,7 +2061,12 @@ function peindreLaRouteVisible(): void {
   const n = routeVues.length;
   const piste = document.getElementById("rm-piste");
   if (piste === null) return;
-  if (n === 0) { piste.innerHTML = ""; return; }
+  // Un filtre qui ne ramene rien laissait un grand blanc, sans rien qui dise si
+  // la recherche avait echoue ou si le tableau s'etait casse.
+  if (n === 0) {
+    piste.innerHTML = `<div class="rm-vide">aucun coup ne correspond</div>`;
+    return;
+  }
   const haut = Math.max(0, Math.floor(body.scrollTop / H_RMROW) - 5);
   const bas = Math.min(n, Math.ceil((body.scrollTop + body.clientHeight) / H_RMROW) + 5);
   let html = "";
@@ -2033,7 +2085,7 @@ $("rm-body").addEventListener("click", (e) => {
   if (image !== null) { void exporterImage(Number(image.dataset["image"])); return; }
   const revoir = cible.closest("[data-revoir]") as HTMLElement | null;
   if (revoir !== null) {
-    $("roadmap").hidden = true;
+    fermerLaRoute();
     voirLeCoup(Number(revoir.dataset["revoir"]));
     return;
   }
@@ -2148,6 +2200,115 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     `<span class="s">${m.score}</span>` +
     `<span class="who">${echapper(quiLaTrouve(m))}</span>` + queue + like + `</div>`;
 }
+const ICONE_ENREGISTRER =
+  '<svg viewBox="0 0 18 18" width="13" height="13" aria-hidden="true">'
+  + '<path d="M9 2v9m0 0-3.4-3.4M9 11l3.4-3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+  + '<path d="M2.6 12.6v1.8a1.6 1.6 0 0 0 1.6 1.6h9.6a1.6 1.6 0 0 0 1.6-1.6v-1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
+/**
+ * La feuille de route, en un document a garder.
+ *
+ * UN DOCUMENT N'EST PAS UNE COPIE D'ECRAN DE L'APPLICATION. Ce qu'on enregistre
+ * se relira ailleurs, hors du jeu, peut-etre dans des annees : les boutons n'y
+ * ont plus de sens -- rejouer un coup, tirer une image, aimer un coup sont des
+ * gestes qui demandent un serveur et un salon. Ils ne partent donc pas dans le
+ * fichier ; ce qui reste est le tableau, et rien d'autre.
+ *
+ * On enregistre CE QUI EST AFFICHE, filtre et ordre compris : chercher « QI »
+ * puis enregistrer, c'est vouloir la liste de ses QI, pas la partie entiere.
+ * Le document le dit en tete, pour que personne ne le prenne plus tard pour la
+ * feuille complete.
+ *
+ * Le format est une page autonome : elle s'ouvre d'un double-clic dans
+ * n'importe quel navigateur, s'imprime, et garde ses colonnes. Un tableur
+ * demanderait de choisir un separateur et perdrait la mise en page ; une image
+ * ne se chercherait pas.
+ */
+function enregistrerLaRoute(): void {
+  if (history.length === 0) { flash("aucun coup à enregistrer", "bad"); return; }
+  const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
+  const q = ($("rm-q") as HTMLInputElement).value.trim();
+  const quand = new Date().toLocaleString("fr", {
+    year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  const titre = `${salonNom} — feuille de route`;
+
+  const colonnes = duplicate
+    ? ["N°", "Tirage", "Mot", "Place", "Points", "Qui", "Écart", "Trouvé"]
+    : ["N°", "Tirage", "Mot", "Place", "Points", "Qui", "Temps", "Cumul"];
+
+  const lignes = routeVues.map((m) => {
+    const trouve = duplicate ? trouveursDuCoup(m).length > 0 : m.player !== null;
+    let fin: string[];
+    if (duplicate) {
+      const mien = m.scores?.[me];
+      const ecart = mien === undefined ? null : mien - m.score;
+      const trouveurs = trouveursDuCoup(m).length;
+      const presents = Object.keys(m.scores ?? {}).length;
+      fin = [ecart === null ? "—" : ecart === 0 ? "top" : String(ecart),
+             presents === 0 ? "" : `${trouveurs}/${presents}`];
+    } else {
+      fin = [trouve ? fmtTime(m.ms) : "×", fmtTime(cumulRoute.get(m.n) ?? 0)];
+    }
+    const cases = [String(m.n), m.notation, m.word,
+                   noteCoup(m.dir, m.x, m.y, cfg.bornes), String(m.score),
+                   quiLaTrouve(m, true), ...fin];
+    return "<tr>" + cases.map((c, i) =>
+      `<td class="${i === 2 ? "mot" : i === 4 ? "pts" : i >= 6 || i === 0 ? "num" : ""}">${echapper(c)}</td>`,
+    ).join("") + "</tr>";
+  }).join("\n");
+
+  // Le resume porte deja ses <b> : on le reprend tel quel, il est de nous.
+  const resume = enTeteDeLaRoute();
+  const filtre = q === ""
+    ? ""
+    : `<p class="filtre">Extrait : les ${routeVues.length} coups qui correspondent à `
+      + `« ${echapper(q)} », sur ${history.length}.</p>`;
+
+  const doc = `<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<title>${echapper(titre)}</title>
+<style>
+  body { margin: 0; padding: 28px 26px 40px; background: #FBFAF7; color: #1C221F;
+         font: 13px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+  h1 { margin: 0 0 3px; font-size: 20px; font-weight: 600; }
+  .quand { margin: 0 0 14px; font-size: 12px; color: #6B7770; }
+  .resume { margin: 0 0 6px; font-size: 12.5px; color: #6B7770; }
+  .resume b { color: #1C221F; font-weight: 600; }
+  .filtre { margin: 0 0 6px; font-size: 12.5px; color: #B4541C; }
+  table { border-collapse: collapse; width: 100%; margin-top: 14px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; padding: 5px 9px; border-bottom: 1.5px solid #C9CFCB;
+       font-weight: 600; font-size: 10px; letter-spacing: .09em;
+       text-transform: uppercase; color: #6B7770; }
+  td { padding: 3px 9px; border-bottom: 1px solid #EBEEEC; color: #4A5651;
+       white-space: nowrap; }
+  td.mot { color: #1C221F; font-weight: 600; letter-spacing: .04em; }
+  td.pts { color: #1E7A4D; font-weight: 600; text-align: right; }
+  td.num { text-align: right; }
+  th:nth-child(5), th:nth-child(7), th:nth-child(8), th:first-child { text-align: right; }
+  tr:nth-child(even) td { background: #F4F2ED; }
+  @media print { body { background: #fff; padding: 0; } tr:nth-child(even) td { background: none; } }
+</style></head><body>
+<h1>${echapper(titre)}</h1>
+<p class="quand">${echapper(quand)}</p>
+<p class="resume">${resume}</p>
+${filtre}
+<table><thead><tr>${colonnes.map((c) => `<th>${c}</th>`).join("")}</tr></thead>
+<tbody>
+${lignes}
+</tbody></table>
+</body></html>`;
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([doc], { type: "text/html;charset=utf-8" }));
+  a.download = `${titre} — ${new Date().toISOString().slice(0, 10)}.html`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  flash(`feuille enregistrée · ${routeVues.length} coup${routeVues.length > 1 ? "s" : ""}`, "ok");
+}
+
 $("rm-open").addEventListener("click", () => {
   // On decouvre AVANT de peindre : le nombre de lignes a poser se deduit de la
   // hauteur du tableau, et un tableau cache n'en a pas. On n'en posait que cinq,
@@ -2161,7 +2322,27 @@ $("rm-open").addEventListener("click", () => {
   $("rm-body").scrollTop = 0;
   peindreLaRouteVisible();
 });
-$("rm-close").addEventListener("click", () => { $("roadmap").hidden = true; });
+$("rm-tri").addEventListener("change", () => {
+  filtrerLaRoute();
+  $("rm-body").scrollTop = 0;
+  peindreLaRouteVisible();
+});
+$("rm-save").innerHTML = ICONE_ENREGISTRER;
+$("rm-save").addEventListener("click", enregistrerLaRoute);
+
+/**
+ * Fermer la feuille efface la recherche.
+ *
+ * Un filtre qu'on retrouve en rouvrant est un tableau amputé sans qu'on sache
+ * pourquoi : on a cherché « QI » il y a un quart d'heure, et la partie de
+ * neuf mille coups n'en montre plus que douze.
+ */
+function fermerLaRoute(): void {
+  $("roadmap").hidden = true;
+  ($("rm-q") as HTMLInputElement).value = "";
+  $("rm-compte").textContent = "";
+}
+$("rm-close").addEventListener("click", fermerLaRoute);
 
 // ---------------------------------------------------------------- chat
 
@@ -2289,39 +2470,223 @@ $("chat-text").addEventListener("keydown", (e) => {
 
 let flashTimer = 0;
 /**
- * Deux notes quand un coup qui trainait vient d'etre trouve.
+ * Les preferences du joueur : les siennes, sur cet appareil.
  *
- * SUR LA GRILLE PERMANENTE, UN COUP PEUT DURER DES HEURES. Personne ne reste
- * devant : on la laisse ouverte dans un onglet et on fait autre chose. Un
- * signal court dit que le coup est tombe et qu'un tirage neuf attend.
+ * A NE PAS CONFONDRE AVEC LES REGLAGES DU SALON, qui decident de la partie et
+ * valent pour tout le monde. Ici, rien ne sort de ce navigateur : le theme et
+ * le son ne regardent que celui qui est devant l'ecran, et les imposer aux
+ * autres n'aurait aucun sens.
  *
- * Cinq minutes de seuil. En dessous, la partie se suit a l'oeil, et une
- * sonnerie toutes les deux minutes serait une nuisance, pas un service. Rien
- * non plus pour celui qui vient de trouver : il le sait deja.
+ * Le rangement local peut manquer -- navigation privee, site bloque, un
+ * navigateur qui jette tout en fermant. Ce n'est pas une panne : on repart des
+ * valeurs par defaut, et le jeu tourne pareil.
  */
-const SEUIL_SONNERIE_MS = 5 * 60_000;
+interface Preferences { theme: "auto" | "light" | "dark"; sons: boolean }
+const prefs: Preferences = { theme: "auto", sons: true };
+const CLE_PREFS = "farfouille.preferences";
+
+function lirePreferences(): void {
+  try {
+    const brut = localStorage.getItem(CLE_PREFS);
+    if (brut === null) return;
+    const v = JSON.parse(brut) as Partial<Preferences>;
+    if (v.theme === "auto" || v.theme === "light" || v.theme === "dark") prefs.theme = v.theme;
+    if (typeof v.sons === "boolean") prefs.sons = v.sons;
+  } catch { /* rien de garde : les valeurs par defaut suffisent */ }
+}
+
+function garderPreferences(): void {
+  try { localStorage.setItem(CLE_PREFS, JSON.stringify(prefs)); }
+  catch { /* rangement refuse : le reglage vaut pour cette session */ }
+}
+
+/**
+ * Applique le theme et repeint la grille.
+ *
+ * « Automatique » ne pose PAS d'attribut : la feuille de style suit alors le
+ * navigateur toute seule, et suivra ses changements -- quelqu'un qui bascule
+ * son systeme en sombre a la tombee du jour n'a rien a rouvrir ici.
+ *
+ * La grille lit ses couleurs a chaque image, mais garde ses caramels dans une
+ * image de cote : il faut l'invalider, sinon les anciennes teintes restent
+ * posees jusqu'au prochain changement d'echelle.
+ */
+function appliquerLeTheme(): void {
+  const r = document.documentElement;
+  if (prefs.theme === "auto") r.removeAttribute("data-theme");
+  else r.setAttribute("data-theme", prefs.theme);
+  cacheCle = "";
+  if (configRecue) draw();
+}
+
+/**
+ * La sonnerie de la grille permanente, par paliers.
+ *
+ * SUR LA GRILLE PERMANENTE, UN COUP PEUT DURER DES HEURES -- ou des jours.
+ * Personne ne reste devant : on la laisse ouverte dans un onglet et on fait
+ * autre chose. Quand le coup finit par tomber, le son dit DEPUIS COMBIEN DE
+ * TEMPS il resistait : c'est la seule chose qu'on veut savoir de loin, et un
+ * signal unique ne la disait pas.
+ *
+ * L'echelle va du sourd a la fete. Cinq minutes, c'est un coup qui a un peu
+ * traine : deux notes graves qui descendent, filtrees, presque un raclement de
+ * gorge. Dix jours, c'est un mur que quelqu'un vient d'abattre : ca s'entend.
+ *
+ * En dessous de cinq minutes, rien. La partie se suit a l'oeil, et une sonnerie
+ * toutes les deux minutes serait une nuisance, pas un service.
+ *
+ * CELUI QUI TROUVE L'ENTEND AUSSI. Il sait deja ce qu'il a fait -- mais un
+ * signal qui vous felicite fait plaisir, et se le refuser n'economise rien.
+ */
+interface Note {
+  /** Hauteur en hertz. */
+  hz: number;
+  /** Depart, en secondes depuis le debut de la sonnerie. */
+  a: number;
+  /** Duree de l'extinction. */
+  d: number;
+  /** Timbre : le sinus est doux, le triangle chante, la dent de scie sonne. */
+  t?: OscillatorType;
+  /** Volume. Les accords empilent des voix : chacune doit rester discrete. */
+  g?: number;
+}
+
+/** Un accord : la meme figure a plusieurs hauteurs, d'un seul coup. */
+const accord = (hzs: number[], a: number, d: number, t: OscillatorType, g: number): Note[] =>
+  hzs.map((hz) => ({ hz, a, d, t, g }));
+
+/** Les degres tempères dont se servent les sonneries. */
+const MI3 = 164.81, SOL3 = 196.00, DO4 = 261.63, MI4 = 329.63, FA4 = 349.23,
+      SOL4 = 392.00, LA4 = 440.00, DO5 = 523.25, RE5 = 587.33, MI5 = 659.25,
+      FA5 = 698.46, SOL5 = 783.99, LA5 = 880.00, DO6 = 1046.50, MI6 = 1318.51;
+
+/**
+ * Les paliers, du plus sobre au plus fetard. Lus du dernier au premier : c'est
+ * le plus haut palier atteint qui sonne.
+ */
+const SONNERIES: { apres: number; nom: string; coupure: number; notes: Note[] }[] = [
+  {
+    apres: 5 * 60_000, nom: "cinq minutes", coupure: 600,
+    // Deux notes graves qui DESCENDENT, sous un filtre qui leur ote tout
+    // eclat : on signale, on ne felicite pas.
+    notes: [
+      { hz: SOL3, a: 0, d: 0.30, t: "sine", g: 0.08 },
+      { hz: MI3, a: 0.17, d: 0.34, t: "sine", g: 0.08 },
+    ],
+  },
+  {
+    apres: 10 * 60_000, nom: "dix minutes", coupure: 1800,
+    // Meme brievete, mais ca MONTE, et le triangle laisse passer un harmonique.
+    notes: [
+      { hz: SOL4, a: 0, d: 0.26, t: "triangle", g: 0.07 },
+      { hz: DO5, a: 0.15, d: 0.32, t: "triangle", g: 0.07 },
+    ],
+  },
+  {
+    apres: 15 * 60_000, nom: "un quart d'heure", coupure: 2800,
+    // Un accord parfait egrene : trois notes suffisent a rendre une phrase gaie.
+    notes: [
+      { hz: DO5, a: 0, d: 0.24, t: "triangle", g: 0.065 },
+      { hz: MI5, a: 0.13, d: 0.24, t: "triangle", g: 0.065 },
+      { hz: SOL5, a: 0.26, d: 0.38, t: "triangle", g: 0.07 },
+    ],
+  },
+  {
+    apres: 30 * 60_000, nom: "une demi-heure", coupure: 4000,
+    // La meme montee, poussee jusqu'a l'octave, et le sommet tenu.
+    notes: [
+      { hz: DO5, a: 0, d: 0.20, t: "triangle", g: 0.06 },
+      { hz: MI5, a: 0.11, d: 0.20, t: "triangle", g: 0.06 },
+      { hz: SOL5, a: 0.22, d: 0.20, t: "triangle", g: 0.06 },
+      { hz: DO6, a: 0.33, d: 0.46, t: "triangle", g: 0.075 },
+      { hz: SOL5, a: 0.33, d: 0.46, t: "sine", g: 0.04 },
+    ],
+  },
+  {
+    apres: 24 * 3600_000, nom: "un jour", coupure: 5200,
+    // Une petite fanfare : levee, montee, et un accord tenu pour finir.
+    notes: [
+      { hz: SOL4, a: 0, d: 0.16, t: "triangle", g: 0.055 },
+      { hz: DO5, a: 0.12, d: 0.16, t: "triangle", g: 0.06 },
+      { hz: MI5, a: 0.24, d: 0.16, t: "triangle", g: 0.06 },
+      { hz: SOL5, a: 0.36, d: 0.18, t: "triangle", g: 0.065 },
+      { hz: MI5, a: 0.50, d: 0.14, t: "triangle", g: 0.05 },
+      { hz: SOL5, a: 0.60, d: 0.14, t: "triangle", g: 0.055 },
+      ...accord([DO5, MI5, SOL5, DO6], 0.72, 0.85, "triangle", 0.045),
+    ],
+  },
+  {
+    apres: 10 * 24 * 3600_000, nom: "dix jours", coupure: 6000,
+    // Un petit orchestre : quatre accords, une basse qui marche dessous, et une
+    // volee de notes pour finir. Deux secondes et demie -- de quoi lever la tete.
+    notes: [
+      ...accord([DO4, MI4, SOL4, DO5], 0.00, 0.55, "triangle", 0.042),
+      { hz: DO4 / 2, a: 0.00, d: 0.55, t: "sine", g: 0.07 },
+      ...accord([DO4, FA4, LA4, DO5], 0.46, 0.55, "triangle", 0.042),
+      { hz: FA4 / 2, a: 0.46, d: 0.55, t: "sine", g: 0.07 },
+      ...accord([RE5, SOL4, SOL5, SOL4], 0.92, 0.50, "triangle", 0.038),
+      { hz: SOL4 / 2, a: 0.92, d: 0.50, t: "sine", g: 0.07 },
+      // La volee : une gamme rapide qui court vers le sommet.
+      { hz: DO5, a: 1.34, d: 0.12, t: "triangle", g: 0.05 },
+      { hz: MI5, a: 1.42, d: 0.12, t: "triangle", g: 0.05 },
+      { hz: SOL5, a: 1.50, d: 0.12, t: "triangle", g: 0.05 },
+      { hz: DO6, a: 1.58, d: 0.14, t: "triangle", g: 0.055 },
+      { hz: MI6, a: 1.66, d: 0.16, t: "triangle", g: 0.05 },
+      ...accord([DO5, MI5, SOL5, DO6], 1.78, 1.10, "triangle", 0.04),
+      { hz: DO4 / 2, a: 1.78, d: 1.10, t: "sine", g: 0.08 },
+      { hz: LA5, a: 1.78, d: 1.10, t: "sine", g: 0.028 },
+    ],
+  },
+];
+
+/** Le premier palier : en dessous, on ne sonne pas. */
+const SEUIL_SONNERIE_MS = SONNERIES[0]!.apres;
 let audio: AudioContext | null = null;
 
-function sonner(): void {
+/** Le palier qu'atteint un coup de cette duree, ou `null` s'il n'en atteint aucun. */
+function palierDeSonnerie(ms: number): (typeof SONNERIES)[number] | null {
+  for (let i = SONNERIES.length - 1; i >= 0; i--) {
+    const p = SONNERIES[i]!;
+    if (ms >= p.apres) return p;
+  }
+  return null;
+}
+
+/**
+ * Joue le palier qui convient a un coup de cette duree.
+ *
+ * Toutes les voix passent par un filtre passe-bas : c'est lui qui fait la
+ * difference entre le sourd et l'eclatant, bien plus que la hauteur des notes.
+ * Chaque note monte en vingt millisecondes et s'eteint en courbe : une attaque
+ * franche fait sursauter, ce qui est le contraire de ce qu'on cherche.
+ */
+function sonner(ms: number): void {
+  if (!prefs.sons) return;
+  const p = palierDeSonnerie(ms);
+  if (p === null) return;
   try {
     audio ??= new AudioContext();
     void audio.resume();
     const son = audio;
-    const t0 = son.currentTime + 0.02;
-    // Deux sinus a la quinte, brefs, montes et eteints en douceur : une attaque
-    // franche ou une onde riche font sursauter, ce qui est tout le contraire.
-    [660, 990].forEach((hz, i) => {
+    const t0 = son.currentTime + 0.03;
+    const filtre = son.createBiquadFilter();
+    filtre.type = "lowpass";
+    filtre.frequency.value = p.coupure;
+    filtre.Q.value = 0.7;
+    filtre.connect(son.destination);
+    for (const n of p.notes) {
       const o = son.createOscillator(), g = son.createGain();
-      o.type = "sine";
-      o.frequency.value = hz;
-      const d = t0 + i * 0.16;
+      o.type = n.t ?? "sine";
+      o.frequency.value = n.hz;
+      const d = t0 + n.a;
+      const v = n.g ?? 0.07;
       g.gain.setValueAtTime(0, d);
-      g.gain.linearRampToValueAtTime(0.07, d + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0005, d + 0.24);
-      o.connect(g).connect(son.destination);
+      g.gain.linearRampToValueAtTime(v, d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0004, d + n.d);
+      o.connect(g).connect(filtre);
       o.start(d);
-      o.stop(d + 0.26);
-    });
+      o.stop(d + n.d + 0.06);
+    }
   } catch { /* le navigateur refuse le son : le jeu n'en depend pas */ }
 }
 
@@ -2436,7 +2801,8 @@ addEventListener("keydown", (e) => {
     if (e.key === "ArrowRight" && rejeu) { voirLeCoup(rejeu.n + 1); e.preventDefault(); return; }
     return;
   }
-  if (!$("roadmap").hidden && e.key === "Escape") { $("roadmap").hidden = true; return; }
+  if (!$("prefs").hidden && e.key === "Escape") { $("prefs").hidden = true; return; }
+  if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
   if (e.key === "Escape") { typed = ""; paintRack(); paintCurrent(); draw(); return; }
@@ -2533,6 +2899,68 @@ function submit() {
 }
 
 $("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
+
+// ---------------------------------------------------------------- paramètres
+
+const ICONE_ROUE =
+  '<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">'
+  + '<circle cx="10" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+  + '<path d="M10 1.6v2.2M10 16.2v2.2M1.6 10h2.2M16.2 10h2.2'
+  + 'M4.1 4.1l1.6 1.6M14.3 14.3l1.6 1.6M15.9 4.1l-1.6 1.6M5.7 14.3l-1.6 1.6"'
+  + ' fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+$("prefs-open").innerHTML = ICONE_ROUE;
+
+function peuplerPreferences(): void {
+  for (const b of $("p-theme").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.theme));
+  }
+  for (const b of $("p-sons").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.sons));
+  }
+}
+
+for (const b of $("p-theme").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    prefs.theme = (b as HTMLElement).dataset["v"] as Preferences["theme"];
+    garderPreferences();
+    appliquerLeTheme();
+    peuplerPreferences();
+  });
+}
+for (const b of $("p-sons").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    prefs.sons = (b as HTMLElement).dataset["v"] === "on";
+    garderPreferences();
+    peuplerPreferences();
+  });
+}
+
+// UN SON SE CHOISIT EN L'ECOUTANT. Decrire une sonnerie ne dit rien de ce
+// qu'elle fait dans une piece ; un bouton par palier laisse juger sur piece,
+// et regler son volume avant que le coup ne tombe.
+for (const p of SONNERIES) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = p.nom;
+  b.addEventListener("click", () => {
+    // On essaie meme en sourdine : c'est le geste qui demande a entendre.
+    const garde = prefs.sons;
+    prefs.sons = true;
+    sonner(p.apres);
+    prefs.sons = garde;
+  });
+  $("p-essais").appendChild(b);
+}
+
+$("prefs-open").addEventListener("click", () => {
+  peuplerPreferences();
+  $("prefs").hidden = false;
+});
+$("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
+
+lirePreferences();
+appliquerLeTheme();
 
 // ---------------------------------------------------------------- chronos
 
@@ -2816,9 +3244,10 @@ function connect() {
       // pour s'en apercevoir.
       const trouve = duplicate ? trouveursDuCoup(mv).length > 0 : mv.player !== null;
       if (!trouve) flash("personne n'a trouvé le top", "bad");
-      // Un coup qui a dure sur la grille permanente : deux notes disent qu'il
-      // vient de tomber. Rien pour celui qui l'a trouve, il le sait.
-      if (salonPermanent && trouve && mv.ms > SEUIL_SONNERIE_MS && mv.player !== me) sonner();
+      // Un coup qui a dure sur la grille permanente : la sonnerie dit combien
+      // de temps il a resiste. Celui qui l'a trouve l'entend aussi -- il le
+      // sait deja, mais se voir feliciter fait plaisir.
+      if (salonPermanent && trouve && mv.ms >= SEUIL_SONNERIE_MS) sonner(mv.ms);
       return;
     }
 
