@@ -97,6 +97,46 @@ const a = await g.paliersDuCoup(2);
 const b = await g.paliersDuCoup(2);
 verifie("deux recalculs donnent le meme resultat", signature(a) === signature(b));
 
+// ON NE RECALCULE PAS DEUX FOIS LE MEME COUP. Dans le rejeu on navigue : coup 7,
+// coup 8, retour au 7. Sans memoire, le retour coutait aussi cher que la
+// premiere visite -- des secondes sur un coup a deux jokers -- pour un resultat
+// identique au caramel pres. La difference doit se voir au chronometre.
+{
+  const frais = new Game(`${ID}-2`, "classique", cfg);
+  await frais.start();
+  frais.presents.add("essai");
+  await frais.reveiller();
+  await frais.demarrer();
+  for (let i = 0; i < 6 && !frais.finie; i++) {
+    await frais.reveal();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  verifie("la partie temoin a avance", frais.moves.length >= 4, `${frais.moves.length} coups`);
+
+  const chrono = async (n: number): Promise<number> => {
+    const t0 = performance.now();
+    await frais.paliersDuCoup(n);
+    return performance.now() - t0;
+  };
+  const premiere = await chrono(3);
+  const seconde = await chrono(3);
+  // On repasse par un autre coup, puis on revient : c'est le vrai geste.
+  await chrono(4);
+  const retour = await chrono(3);
+  verifie("le deuxieme appel ne recalcule pas",
+    seconde < premiere / 4 && seconde < 2,
+    `${premiere.toFixed(1)} ms puis ${seconde.toFixed(1)} ms`);
+  verifie("et le retour apres un detour non plus",
+    retour < premiere / 4 && retour < 2, `${retour.toFixed(1)} ms`);
+  verifie("la reponse gardee est la meme",
+    signature(await frais.paliersDuCoup(3)) === signature(await frais.paliersDuCoup(3)));
+  await frais.stop();
+  for (const s of [".json", ".journal.jsonl", ".verrou", ".secours.json"]) {
+    const f = join(D, `${ID}-2${s}`);
+    if (existsSync(f)) rmSync(f);
+  }
+}
+
 await g.stop();
 nettoyer();
 

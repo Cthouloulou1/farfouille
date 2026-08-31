@@ -3476,11 +3476,11 @@ function connect() {
       // « Top », au journal des coups et sur la grille. Le repeter une seconde
       // en bas de l'ecran n'apprenait rien a personne.
       //
-      // CE QUE PERSONNE N'A TROUVE, EN REVANCHE, N'ETAIT ANNONCE NULLE PART :
-      // le coup passe, la grille avance, et il fallait relire la ligne du top
-      // pour s'en apercevoir.
+      // Rien non plus pour le coup que personne n'a trouve : le tableau « Top »
+      // le dit maintenant en toutes lettres, jeton rouge et points rouges. Un
+      // bandeau qui repete la meme chose une seconde plus bas n'apprend rien --
+      // et il masquait le bas de la grille au moment ou l'on y regarde le mot.
       const trouve = duplicate ? trouveursDuCoup(mv).length > 0 : mv.player !== null;
-      if (!trouve) flash("personne n'a trouvé le top", "bad");
       // Un coup qui a dure sur la grille permanente : la sonnerie dit combien
       // de temps il a resiste. Celui qui l'a trouve l'entend aussi -- il le
       // sait deja, mais se voir feliciter fait plaisir.
@@ -4049,20 +4049,17 @@ async function rejoindre(id: string): Promise<void> {
   salonChoisi = id;
   try { localStorage.setItem("pseudo", me); } catch { /* navigation privee */ }
   $("join-error").hidden = true;
-  $("join").hidden = true;
 
-  await fermerConnexion();
-
-  if (!dictCharge) {
-    const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
-    dict = Dict.fromBytes(bytes);
-    dictCharge = true;
-    new ResizeObserver(resize).observe(cv);
-  }
-  // Table rase AVANT de se brancher. Sans cela, la grille du salon precedent
-  // restait affichee jusqu'a l'arrivee de `hello` : on voyait ses caramels,
-  // parfois HORS des bornes du nouveau plateau, comme si des mots avaient deja
-  // ete joues. La camera, elle, gardait le cadrage de l'ancienne grille.
+  // TABLE RASE AVANT MEME DE DECOUVRIR LA GRILLE.
+  //
+  // Sans cela, ce qui etait peint pour le salon precedent restait a l'ecran
+  // jusqu'a l'arrivee de `hello` : ses caramels, parfois HORS des bornes du
+  // nouveau plateau comme si des mots y avaient deja ete joues -- et son
+  // TIRAGE, le temps que la connexion se ferme et que la nouvelle reponde.
+  //
+  // Le menage se fait donc AVANT le premier `await`, pas apres : entre les deux
+  // il s'ecoule le temps de fermer une liaison, et c'est justement pendant ce
+  // temps-la que l'ecran est decouvert.
   if (rejeu !== null) fermerLeRejeu();
   tiles = [];
   history = [];
@@ -4086,11 +4083,41 @@ async function rejoindre(id: string): Promise<void> {
   salonPermanent = false;
   tempsJoue = 0;
   rejeuOuvert = false;
+  // LA TABLE RASE DOIT SE VOIR, PAS SEULEMENT SE FAIRE. Les variables etaient
+  // bien remises a zero, mais l'ecran gardait ce qu'on y avait peint pour le
+  // salon precedent jusqu'a l'arrivee de `hello` : on voyait un instant le
+  // tirage d'a cote, son classement et son compteur de coups.
+  moveNumber = 0;
+  cumul = 0;
+  solving = false;
+  demarree = false;
+  coupsMax = null;
+  dureeMax = null;
+  debutDeLaPartie = 0;
+  chrono = null;
+  duplicate = false;
+  online = [];
+  servedAt = Date.now();
+  createdAt = Date.now();
+  $("sac").textContent = "";
   cfg = configParDefaut();
   configRecue = false;
-  board = new Board(dict, cfg);
   paintChat(chat);
   paintJournal();
+  paintRack();
+  paintSide();
+  $("join").hidden = true;
+
+  await fermerConnexion();
+
+  if (!dictCharge) {
+    const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
+    dict = Dict.fromBytes(bytes);
+    dictCharge = true;
+    new ResizeObserver(resize).observe(cv);
+  }
+  // Le plateau, lui, attend le dictionnaire : il ne peut pas naitre plus tot.
+  board = new Board(dict, cfg);
   resize();
   connect();
 }

@@ -845,6 +845,27 @@ confondre :
    paliers et le rejeu n'aurait rien à montrer. Une fois dedans, on navigue
    normalement d'un coup à l'autre.
 
+### On ne recalcule pas deux fois le même coup
+
+Sur un plateau borné, les paliers ne sont pas au journal : on les refait à la
+demande. Or dans le rejeu **on navigue** — coup 7, coup 8, retour au 7 — et le
+retour coûtait aussi cher que la première visite, quelques secondes sur un coup
+à deux jokers, pour un résultat identique au caramel près : la position d'avant
+le coup et le tirage ne changent plus, la partie est jouée.
+
+La partie garde donc ce qu'elle a refait. La mémoire se compte en **solutions**
+et non en coups — un coup ordinaire en a quelques centaines, un coup à deux
+jokers sur une position ouverte en a compté 18 655 : compter les coups laisserait
+la mémoire varier d'un facteur cent selon la partie, alors qu'ici on cherche à la
+borner. Soixante mille solutions tiennent dans quelques mégaoctets et couvrent
+une 15×15 entière dans presque tous les cas.
+
+Ce qu'on jette est le plus anciennement **consulté**, pas le plus anciennement
+calculé : qui fait des allers-retours entre deux coups ne doit pas voir l'un des
+deux s'effacer à chaque passage.
+
+> Une grille infinie ne passe jamais par là : ses paliers sont au journal.
+
 ### Les paliers restent en réserve
 
 Un **palier** est un score, avec **tous** les coups qui le réalisent :
@@ -1879,8 +1900,9 @@ savoir : la grille vient de gagner un coup. C'est aussi ce qui décide une
 tablée à recommencer la partie, ce qu'on ne fait jamais à sa place.
 
 Le mot reste lisible — c'est lui qu'on veut voir — mais il porte un jeton
-**NON TROUVÉ** et ses points passent au rouge, et un bandeau bref le dit au
-moment où le coup se clôt.
+**NON TROUVÉ** et ses points passent au rouge. Cela suffit : un bandeau flottant
+qui répétait la même chose une seconde plus bas n'apprenait rien, et masquait le
+bas de la grille au moment où l'on y cherche le mot.
 
 **Ce que personne n'a trouvé concourt avec les joueurs.** La ligne « Non
 trouvé » — au pluriel dès deux — était épinglée en tête du tableau, hors
@@ -1960,9 +1982,19 @@ joueurs. On voudra classer :
 ### Changer de salon efface tout
 
 Entrer dans un salon **vide d'abord l'état du précédent** : caramels, historique,
-chat, curseur, classement. Sans cela la grille de l'ancien salon restait
-affichée jusqu'à l'arrivée de `hello` — on y voyait ses mots, parfois **hors des
-bornes** du nouveau plateau, comme si des coups avaient déjà été joués.
+chat, curseur, classement, tirage, compteurs. Sans cela la grille de l'ancien
+salon restait affichée jusqu'à l'arrivée de `hello` — on y voyait ses mots,
+parfois **hors des bornes** du nouveau plateau, comme si des coups avaient déjà
+été joués.
+
+**La table rase doit se voir, pas seulement se faire.** Remettre les variables à
+zéro ne suffit pas : l'écran garde ce qu'on y a peint jusqu'au prochain
+rafraîchissement. Le ménage repeint donc aussi.
+
+Et il se fait **avant le premier `await`**, pas après. Entre découvrir la grille
+et se débrancher de l'ancien salon, il s'écoule le temps de fermer une liaison —
+et c'est précisément pendant ce temps-là qu'on voyait le tirage d'à côté. Seul le
+plateau attend, parce qu'il lui faut le dictionnaire.
 
 Le **cadrage** se refait quand la configuration arrive, pas avant : c'est elle
 qui dit si la grille est bornée. Le calculer trop tôt le faisait avec la

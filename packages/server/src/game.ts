@@ -145,6 +145,17 @@ interface Saved {
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 
+/**
+ * Ce qu'on garde de paliers refaits, compte en SOLUTIONS et non en coups.
+ *
+ * Un coup ordinaire en a quelques centaines ; un coup a deux jokers sur une
+ * position ouverte en a compte 18 655. Compter les coups laisserait donc la
+ * memoire varier d'un facteur cent selon la partie -- alors qu'ici on cherche
+ * a la borner. Soixante mille solutions tiennent dans quelques megaoctets, et
+ * couvrent une partie 15x15 entiere dans presque tous les cas.
+ */
+const PALIERS_EN_MEMOIRE = 60_000;
+
 /** Duree du decompte d'avant-partie : 3, 2, 1, partez. */
 const DECOMPTE_MS = 3000;
 
@@ -216,6 +227,13 @@ export class Game {
   reliquat: string[] = [];
   rack = "";
   rackNotation = "";
+  /**
+   * Paliers refaits a la demande, gardes le temps de la partie.
+   *
+   * Ne sert qu'aux plateaux bornes, seuls a ne pas les enregistrer au journal.
+   * Une grille infinie les a deja : elle ne passe jamais par ici.
+   */
+  private paliersRefaits = new Map<number, Tier[]>();
   /** Score du top du coup courant. -1 tant que le solveur n'a pas repondu. */
   bestScore = -1;
   isotops = 0;
@@ -1146,6 +1164,23 @@ export class Game {
     const m = this.moves.find((q) => q.n === n);
     if (m === undefined) return [];
     if (m.tiers !== undefined && m.tiers.length > 0) return m.tiers;
+    // ON NE RECALCULE PAS DEUX FOIS LE MEME COUP.
+    //
+    // Sur un plateau borne, les paliers ne sont pas au journal -- on les refait
+    // a la demande, et un coup a deux jokers demande plusieurs secondes. Or on
+    // navigue dans le rejeu : coup 7, coup 8, retour au 7. Sans memoire, le
+    // retour coutait aussi cher que la premiere visite, pour un resultat
+    // identique au caramel pres -- la position d'avant le coup et le tirage ne
+    // changent plus, la partie est jouee.
+    const garde = this.paliersRefaits.get(n);
+    if (garde !== undefined) {
+      // On le remet en queue : c'est le plus ANCIENNEMENT consulte qu'on jette,
+      // pas le plus anciennement calcule. Qui fait des allers-retours entre
+      // deux coups ne doit pas voir l'un des deux s'effacer a chaque passage.
+      this.paliersRefaits.delete(n);
+      this.paliersRefaits.set(n, garde);
+      return garde;
+    }
     const avant: Placement[] = [];
     for (const q of this.moves) {
       if (q.n >= n) break;
@@ -1156,7 +1191,19 @@ export class Game {
       this.pending.set(id, res);
       this.worker.postMessage({ t: "paliers", id, rack: m.rack, avant });
     });
-    return (reply.tiers ?? []) as Tier[];
+    const paliers = (reply.tiers ?? []) as Tier[];
+    this.paliersRefaits.set(n, paliers);
+    // On jette les plus anciennement consultes jusqu'a repasser sous le plafond.
+    // Jamais le dernier arrive : sans quoi un seul coup enorme viderait la
+    // memoire et ne s'y garderait meme pas.
+    let total = 0;
+    for (const v of this.paliersRefaits.values()) for (const p of v) total += p.moves.length;
+    for (const [cle, v] of this.paliersRefaits) {
+      if (total <= PALIERS_EN_MEMOIRE || cle === n) break;
+      for (const p of v) total -= p.moves.length;
+      this.paliersRefaits.delete(cle);
+    }
+    return paliers;
   }
 
   async reveal(): Promise<void> {
