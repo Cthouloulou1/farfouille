@@ -52,6 +52,22 @@ const REVEAL = process.argv.includes("--reveler");
 const ROUVRIR = arg("rouvrir", "").split(",").map((s) => s.trim()).filter((s) => s !== "");
 /** A qui appartiennent les salons ainsi rouverts -- pour pouvoir les refermer. */
 const PROPRIETAIRE = arg("proprietaire", "") || null;
+/**
+ * Les parties dont on peut REVOIR LES COUPS SANS ATTENDRE LA FIN.
+ *
+ * Le rejeu est normalement reserve aux parties closes : avant, montrer les
+ * paliers d'un coup, c'est donner les reponses. Une grille infinie, elle, n'a
+ * pas de fin -- ses isotops et ses sous-tops resteraient a jamais invisibles.
+ *
+ * L'ouverture ne porte donc que sur les COUPS DEJA JOUES, ou le top est de
+ * toute facon public : `paliersDuCoup` ne connait pas le coup en cours et rend
+ * une liste vide, et le rejeu ne propose que des numeros deja au journal.
+ *
+ * `--rejeu ""` la referme, `--rejeu a,b` la donne a d'autres.
+ */
+const REJEU_OUVERT = new Set(
+  arg("rejeu", "top-leger").split(",").map((s) => s.trim()).filter((s) => s !== ""),
+);
 
 /** « top-leger » se lit mieux « Top leger ». */
 const joliNom = (id: string): string =>
@@ -193,6 +209,14 @@ function publicState(s: Salon) {
     rack: g.rackPublic,
     notation: g.notationPublique,
     cumul: g.cumul,
+    // LE TEMPS DE LA PARTIE EST LA SOMME DE SES COUPS, pas l'horloge du mur.
+    // Ce que le serveur passe a chercher le top entre deux coups n'appartient a
+    // personne : le compteur se fige pendant ce temps-la et reprend quand le
+    // coup part. Le total tombe alors exactement sur « cumul des coups joues +
+    // coup en cours ».
+    tempsJoue: g.tempsJoue,
+    /** Peut-on revoir les coups sans attendre la fin de la partie ? */
+    rejeuOuvert: REJEU_OUVERT.has(s.id),
     sac: g.restantDuSac(),
     finie: g.finie,
     solving: g.solving,
@@ -601,8 +625,14 @@ wss.on("connection", (ws) => {
      * fois la partie close, elle devient ce qui permet de la comprendre.
      */
     if (msg.t === "tiers") {
-      if (!s.partie.finie) {
+      if (!s.partie.finie && !REJEU_OUVERT.has(s.id)) {
         send(ws, { t: "tiers", n: Number(msg.n), tiers: null, refus: "partie en cours" });
+        return;
+      }
+      // Garde-fou : on ne montre les paliers que d'un coup DEJA JOUE. Le coup
+      // en cours n'en a pas -- et c'est le top que tout le monde cherche.
+      if (Number(msg.n) > s.partie.moves.length) {
+        send(ws, { t: "tiers", n: Number(msg.n), tiers: null, refus: "coup en cours" });
         return;
       }
       const m = s.partie.moves.find((q) => q.n === Number(msg.n));

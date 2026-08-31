@@ -773,6 +773,16 @@ export class Game {
 
   get moveNumber(): number { return this.moves.length; }
   get cumul(): number { return this.moves.reduce((a, m) => a + m.score, 0); }
+  /**
+   * Temps de jeu accumule : la somme des coups joues.
+   *
+   * Ce que le serveur passe a CHERCHER le top n'y entre pas. Ce temps-la
+   * n'appartient a personne : ni au coup qui vient de tomber, ni a celui qui
+   * n'a pas encore commence. L'ecran fige donc son compteur pendant le calcul
+   * et le reprend quand le coup part -- et le total vaut exactement la somme
+   * des coups plus le coup en cours.
+   */
+  get tempsJoue(): number { return this.moves.reduce((a, m) => a + Math.max(0, m.ms), 0); }
 
   /**
    * Ce qui reste dans le sac, lettres triees. Information PUBLIQUE et attendue :

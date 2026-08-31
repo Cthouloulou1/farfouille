@@ -342,6 +342,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap > div.prefs { width: min(460px, 94vw); }
 .roue { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
 .roue:hover { color: var(--accent); }
+/* Un interrupteur, pas deux boutons : la question appelle oui ou non, et le
+   voyant dit lequel sans qu'on ait a lire deux etiquettes pour comparer. */
+.bascule { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 10px; font-family: inherit; font-size: 12.5px; text-align: left; }
+.bascule .voyant { flex: none; width: 30px; height: 17px; border-radius: 9px; background: var(--field-line); border: 1px solid var(--rule); position: relative; transition: background .14s; }
+.bascule .voyant::after { content: ""; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px var(--shadow); transition: transform .14s; }
+.bascule[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.bascule[aria-pressed="true"] .voyant { background: var(--accent); border-color: var(--accent); }
+.bascule[aria-pressed="true"] .voyant::after { transform: translateX(13px); }
+
 .essais { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .essais button { padding: 4px 8px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
 .essais button:hover { color: var(--accent); border-color: var(--accent); }
@@ -515,7 +524,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="bar">
   <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
   <div class="chrono">
-    <div><span>Grille</span><b id="age">—</b></div>
+    <div><span>Temps</span><b id="age">—</b></div>
     <div><span>Coup en cours</span><b id="elapsed">—</b></div>
   </div>
   <div class="who">
@@ -788,14 +797,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
 
       <div class="reglage">
-        <label>Mouvements de caméra</label>
-        <div class="choix" id="p-vols">
-          <button type="button" data-v="on">Normaux</button>
-          <button type="button" data-v="off">Réduits</button>
-        </div>
-        <p class="apres">Cliquer un coup passé y amène la caméra. « Réduits » l'y pose
-        d'un coup au lieu d'y voler — sur une grande grille, le trajet traverse des
-        milliers de cases.</p>
+        <label>Caméra</label>
+        <button type="button" class="bascule" id="p-vols" aria-pressed="false">
+          <span class="voyant"></span>Réduire les mouvements de caméra
+        </button>
+        <p class="apres">Cliquer un coup passé y amène la caméra. Réduits, elle s'y
+        pose d'un coup au lieu d'y voler — sur une grande grille, le trajet traverse
+        des milliers de cases.</p>
       </div>
 
       <p class="apres">Ces réglages sont les vôtres et restent sur cet appareil.

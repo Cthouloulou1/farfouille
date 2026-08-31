@@ -86,6 +86,10 @@ let coupsMax: number | null = null;
 /** Duree totale prevue en secondes, et instant du premier tirage. */
 let dureeMax: number | null = null;
 let debutDeLaPartie = 0;
+/** Somme des coups joues, en millisecondes. Le calcul du serveur n'y entre pas. */
+let tempsJoue = 0;
+/** Cette partie laisse-t-elle revoir ses coups avant d'etre finie ? */
+let rejeuOuvert = false;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -1224,6 +1228,23 @@ function peindreCaramels(lettres: readonly string[]): void {
  * joue -- un chrono qui defile au centieme est une source d'angoisse, pas
  * d'information -- mais une performance se note precisement.
  */
+/**
+ * Une duree qui TOURNE, arrondie a la seconde.
+ *
+ * Les centiemes ont leur place dans la feuille de route, ou l'on compare des
+ * performances figees : « 0,51 s » contre « 0,64 s » dit quelque chose. Sur un
+ * compteur qui avance, ils ne disent rien -- deux chiffres qui defilent trop
+ * vite pour etre lus, et qui font clignoter toute la ligne. La partie
+ * enregistre toujours les centiemes ; c'est l'affichage qui les laisse.
+ */
+function fmtSecondes(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+  return `${Math.floor(s / 86400)} j ${String(Math.floor((s % 86400) / 3600)).padStart(2, "0")} h`;
+}
+
 function fmtTime(ms: number): string {
   const s = Math.max(0, ms) / 1000;
   // Un compte rond s'ecrit rond : « 5 s », pas « 5.00 s ». C'est le cas d'un
@@ -1314,7 +1335,7 @@ function paintSide() {
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
-  $("rejeu-wrap").hidden = !finie || history.length === 0;
+  $("rejeu-wrap").hidden = (!finie && !rejeuOuvert) || history.length === 0;
   $("rb-cumul").textContent = cumul.toLocaleString("fr");
   // Au duplicate, chacun a son propre total : on le montre a cote du cumul de
   // la grille, pour qu'il se compare d'un coup d'oeil.
@@ -2241,9 +2262,11 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   const image =
     `<button type="button" class="rm-image" data-image="${m.n}"` +
     ` title="image de la grille au coup ${m.n}, avec son tirage">${ICONE_IMAGE}</button>`;
-  // Rejouer CE coup. Seulement sur une partie close : avant, le serveur refuse
-  // les paliers, et le rejeu n'aurait rien a montrer.
-  const rejouer = finie
+  // Rejouer CE coup. Sur une partie close, ou sur une grille qu'on etudie et
+  // qui ouvre son rejeu : ailleurs, le serveur refuse les paliers et le rejeu
+  // n'aurait rien a montrer. Une grille infinie n'a pas de fin -- sans cette
+  // ouverture, ses isotops et ses sous-tops resteraient a jamais invisibles.
+  const rejouer = finie || rejeuOuvert
     ? `<button type="button" class="rm-rejouer" data-revoir="${m.n}" title="revoir le coup ${m.n}">R</button>`
     : `<span class="r"></span>`;
 
@@ -3116,9 +3139,7 @@ function peuplerPreferences(): void {
   for (const b of $("p-sons").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.sons));
   }
-  for (const b of $("p-vols").querySelectorAll("button")) {
-    b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.vols));
-  }
+  $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
 }
 
 for (const b of $("p-theme").querySelectorAll("button")) {
@@ -3136,13 +3157,14 @@ for (const b of $("p-sons").querySelectorAll("button")) {
     peuplerPreferences();
   });
 }
-for (const b of $("p-vols").querySelectorAll("button")) {
-  b.addEventListener("click", () => {
-    prefs.vols = (b as HTMLElement).dataset["v"] === "on";
-    garderPreferences();
-    peuplerPreferences();
-  });
-}
+// Un seul interrupteur : la question est « faut-il reduire ? », elle appelle
+// oui ou non. Deux boutons cote a cote obligeaient a lire les deux etiquettes
+// pour comprendre laquelle etait allumee.
+$("p-vols").addEventListener("click", () => {
+  prefs.vols = !prefs.vols;
+  garderPreferences();
+  peuplerPreferences();
+});
 
 // UN SON SE CHOISIT EN L'ECOUTANT. Decrire une sonnerie ne dit rien de ce
 // qu'elle fait dans une piece ; un bouton par palier laisse juger sur piece,
@@ -3173,9 +3195,6 @@ appliquerLesHauteurs();
 
 // ---------------------------------------------------------------- chronos
 
-/** Instant du dernier coup d'une partie terminee : l'age se fige dessus. */
-let finieA = 0;
-
 setInterval(() => {
   const now = Date.now() + clockSkew;
   // Decompte d'avant-coup : 2, puis 1, puis le jeu commence.
@@ -3186,23 +3205,30 @@ setInterval(() => {
   } else {
     $("decompte").hidden = true;
   }
-  if (finie) {
-    // Partie close : l'age s'arrete au dernier coup, et il n'y a plus de coup
-    // en cours dont on pourrait chronometrer la recherche.
-    $("age").textContent = fmtTime((finieA || servedAt) - createdAt);
-    $("elapsed").textContent = "—";
-    return;
-  }
-  $("age").textContent = fmtTime(now - createdAt);
-  if (dureeMax !== null && debutDeLaPartie !== 0 && demarree && !finie) {
+  // LE TEMPS DE LA PARTIE EST LA SOMME DE SES COUPS, PAS L'HORLOGE DU MUR.
+  //
+  // Entre deux coups, le serveur cherche le top -- une seconde et demie sur une
+  // grande grille. Ce temps-la n'appartient a personne : ni au coup qui vient
+  // de tomber, ni a celui qui n'a pas encore commence. Le compteur se fige donc
+  // pendant le calcul et reprend quand le coup part.
+  //
+  // Ce qui se lit alors tombe juste : « Temps » vaut exactement le cumul des
+  // coups joues plus le coup en cours, et l'on peut suivre l'un par l'autre.
+  // Un salon endormi ne compte pas non plus : personne n'y cherche, et le
+  // chrono repart a plein au premier arrivant -- le total reculerait.
+  const enCours = solving || finie || !demarree || endormi || decompteJusqua > now
+    ? 0 : Math.max(0, now - servedAt);
+  $("age").textContent = demarree ? fmtSecondes(tempsJoue + enCours) : "—";
+  if (finie) { $("elapsed").textContent = "—"; return; }
+  if (dureeMax !== null && debutDeLaPartie !== 0 && demarree) {
     const reste = Math.max(0, debutDeLaPartie + dureeMax * 1000 - now);
     const mn = Math.floor(reste / 60000), sc = Math.floor((reste % 60000) / 1000);
     $("rb-reste").textContent = `${mn}:${String(sc).padStart(2, "0")}`;
   }
-  if (!demarree) { $("elapsed").textContent = "—"; $("age").textContent = "—"; return; }
+  if (!demarree) { $("elapsed").textContent = "—"; return; }
   if (endormi) { $("elapsed").textContent = "en pause"; return; }
   if (solving) { $("elapsed").textContent = "…"; return; }
-  if (chrono === null) { $("elapsed").textContent = fmtTime(now - servedAt); return; }
+  if (chrono === null) { $("elapsed").textContent = fmtSecondes(enCours); return; }
   // Compte a rebours : c'est le temps qui reste qui interesse le joueur.
   const reste = Math.max(0, servedAt + chrono * 1000 - now);
   $("elapsed").textContent = `${Math.ceil(reste / 1000)} s`;
@@ -3217,6 +3243,7 @@ function applyState(s: {
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   gerant?: string | null;
+  tempsJoue?: number; rejeuOuvert?: boolean;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
@@ -3254,6 +3281,8 @@ function applyState(s: {
   coupsMax = s.coupsMax ?? null;
   dureeMax = s.dureeMax ?? null;
   debutDeLaPartie = s.debutDeLaPartie ?? 0;
+  tempsJoue = s.tempsJoue ?? 0;
+  rejeuOuvert = s.rejeuOuvert === true;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -3263,7 +3292,6 @@ function applyState(s: {
   if (s.demarreA === undefined || s.demarreA < __COMPILE_A__) {
     $("perime").hidden = false;
   }
-  if (s.finie === true && !finie) finieA = s.servedAt;
   finie = s.finie === true;
   online = s.online ?? [];
   last = s.last ?? null;
@@ -3395,7 +3423,7 @@ function connect() {
       chat = m.chat ?? [];
       board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
-      typed = ""; ghost = null; best = null; finie = false; finieA = 0;
+      typed = ""; ghost = null; best = null; finie = false;
       cursor = null; marks = [];
       paintChat(chat);
       paintJournal();
@@ -4056,6 +4084,8 @@ async function rejoindre(id: string): Promise<void> {
   nonTrouves = 0;
   gerant = null;
   salonPermanent = false;
+  tempsJoue = 0;
+  rejeuOuvert = false;
   cfg = configParDefaut();
   configRecue = false;
   board = new Board(dict, cfg);

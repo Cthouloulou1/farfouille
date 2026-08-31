@@ -1974,11 +1974,50 @@ Le chrono qui défile s'affiche en **secondes entières** : les dixièmes qui
 tournent sont une source d'angoisse, pas d'information. Le temps **enregistré**
 d'un coup trouvé, lui, se note au **centième** — une performance se mesure.
 
+Cela vaut pour **les deux compteurs du bandeau**, « Temps » et « Coup en cours ».
+Sur une grille sans chrono, ils affichaient des centièmes : deux chiffres qui
+défilent trop vite pour être lus, et qui font clignoter toute la ligne. La partie
+enregistre toujours les centièmes ; c'est l'affichage qui les laisse.
+
+### Le temps d'une partie est la somme de ses coups
+
+**« Temps » n'est pas l'horloge du mur.** Entre deux coups, le serveur cherche le
+top — une seconde et demie sur une grande grille. Ce temps-là n'appartient à
+personne : ni au coup qui vient de tomber, ni à celui qui n'a pas encore
+commencé. Le compteur **se fige** pendant le calcul et reprend quand le coup part.
+
+> À terme, le serveur calculera plusieurs coups à l'avance sur la grille
+> permanente : le top s'affichera en même temps que le tirage suivant, dont le
+> top sera déjà connu, et il n'y aura plus de latence à figer.
+
+Ce qui se lit tombe alors juste, et c'est tout l'intérêt :
+
+> **Temps = cumul des coups joués + coup en cours.**
+
+Le compteur se fige aussi quand la partie n'a pas commencé, pendant le décompte
+de départ, et dans un salon endormi — personne n'y cherche, et le chrono repart
+à plein au premier arrivant : le total reculerait.
+
+Le champ s'appelait « Grille » et donnait l'âge du salon, ce qui n'est pas la
+même chose et ne s'additionnait à rien.
+
 ### Rejouer une partie terminée
 
 Le bouton **Rejouer** n'apparaît **qu'une fois la partie close** — avant, ce
 serait donner les réponses d'une partie en cours. Le serveur refuse d'ailleurs
 les paliers d'une partie qui se joue, quoi que demande le client.
+
+**Sauf sur une grille qu'on étudie.** Une grille infinie n'a pas de fin : ses
+isotops et ses sous-tops resteraient à jamais invisibles, alors que c'est
+justement ce qu'on veut regarder pour connaître les limites du jeu. `--rejeu`
+nomme les parties qui ouvrent leur rejeu sans attendre — `top-leger` par défaut,
+`--rejeu ""` referme tout.
+
+L'ouverture ne porte que sur les **coups déjà joués**, où le top est de toute
+façon public. Le serveur refuse tout numéro au-delà du journal, avec un message
+qui le dit : le coup en cours est celui que tout le monde cherche, et rien ne
+doit en sortir. Vérifié en interrogeant le protocole directement — le coup 2
+rend ses 22 paliers, le coup 19 en cours rend `null`.
 
 Le rejeu remonte la partie coup par coup. Pour chaque coup il montre le tirage,
 le mot posé et qui l'a trouvé, puis **les paliers** : le top et ses isotops
@@ -2038,7 +2077,7 @@ son navigateur.
 |---|---|
 | **Thème** | automatique, clair, sombre. « Automatique » ne pose aucun attribut : la feuille de style suit le navigateur, et **suivra ses changements** — de quoi passer au sombre à la tombée du jour sans rien rouvrir. |
 | **Sons** | activés ou muets, avec **un bouton par palier pour les écouter**. Décrire une sonnerie ne dit rien de ce qu'elle fait dans une pièce : on juge sur pièce, et on règle son volume avant que le coup ne tombe. |
-| **Mouvements de caméra** | normaux ou réduits. Cliquer un coup passé y amène la caméra ; « réduits » l'y **pose** au lieu d'y voler — sur une grande grille, le trajet traverse des milliers de cases. Le navigateur sait déjà que son propriétaire n'aime pas ce qui bouge : `prefers-reduced-motion` donne la valeur de départ. |
+| **Réduire les mouvements de caméra** | un interrupteur, pas deux boutons : la question appelle oui ou non, et le voyant dit lequel sans qu'on ait à lire deux étiquettes pour comparer. Cliquer un coup passé y amène la caméra ; réduits, elle s'y **pose** au lieu d'y voler — sur une grande grille, le trajet traverse des milliers de cases. Le navigateur sait déjà que son propriétaire n'aime pas ce qui bouge : `prefers-reduced-motion` donne la valeur de départ. |
 
 Les valeurs tiennent dans le rangement local du navigateur. Il peut manquer —
 navigation privée, site bloqué, un navigateur qui jette tout en fermant : ce
