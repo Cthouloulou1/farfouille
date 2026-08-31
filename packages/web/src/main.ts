@@ -824,14 +824,34 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   ctx.font = '500 10px "IBM Plex Mono", monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+
+  // LE REPERE DE LA CASE DESIGNEE PASSE AVANT LA GRADUATION.
+  //
+  // Loin de l'origine, « -186 » tombait sur le « -180 » de l'echelle : deux
+  // nombres imprimes l'un sur l'autre, et plus moyen de lire ni la coordonnee
+  // qu'on vient de demander, ni la graduation. Celle qu'on demande gagne -- la
+  // graduation, elle, se retrouve deux crans plus loin, et l'echelle garde son
+  // pas.
+  const texteX = (x: number): string => bornes === null ? String(x) : String(x + bornes + 1);
+  // La ligne monte quand son numero grandit : voir `formatMove`.
+  const texteY = (y: number): string =>
+    bornes === null ? String(-y) : String.fromCharCode(65 + y + bornes);
+
+  const pxMarque = mark === null ? null : ox + mark.x0 * cell + cell / 2;
+  const demiMarqueX = mark === null ? 0 : ctx.measureText(texteX(mark.x0)).width / 2;
+  const pyMarque = mark === null ? null : oy + mark.y0 * cell + cell / 2;
+
   for (let x = gx0; x <= gx1; x++) {
     const on = mark !== null && x >= mark.x0 && x <= mark.x1;
     if (!on && x % stepBy !== 0) continue;
     const px = ox + x * cell + cell / 2;
     if (px < LEFT + 9 || px > W - 4) continue;
     if (bornes !== null && (x < -bornes || x > bornes)) continue;
+    const texte = texteX(x);
+    if (!on && pxMarque !== null
+        && Math.abs(px - pxMarque) < demiMarqueX + ctx.measureText(texte).width / 2 + 3) continue;
     ctx.fillStyle = on ? C.dark! : C.faint!;
-    ctx.fillText(bornes === null ? String(x) : String(x + bornes + 1), px, TOP / 2);
+    ctx.fillText(texte, px, TOP / 2);
   }
   for (let y = gy0; y <= gy1; y++) {
     const on = mark !== null && y >= mark.y0 && y <= mark.y1;
@@ -839,11 +859,10 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     const py = oy + y * cell + cell / 2;
     if (py < TOP + 7 || py > H - 4) continue;
     if (bornes !== null && (y < -bornes || y > bornes)) continue;
+    // Les chiffres font dix pixels de haut : en deca, ils se chevauchent.
+    if (!on && pyMarque !== null && Math.abs(py - pyMarque) < 12) continue;
     ctx.fillStyle = on ? C.dark! : C.faint!;
-    ctx.fillText(
-      // La ligne monte quand son numero grandit : voir `formatMove`.
-      bornes === null ? String(-y) : String.fromCharCode(65 + y + bornes), LEFT / 2, py,
-    );
+    ctx.fillText(texteY(y), LEFT / 2, py);
   }
 }
 
@@ -1113,9 +1132,9 @@ function flyTo(word: string, dir: Dir, x: number, y: number) {
   const to = { cell: t, ox: W / 2 - ((e.x0 + e.x1 + 1) / 2) * t, oy: H / 2 - ((e.y0 + e.y1 + 1) / 2) * t };
   if (anim) cancelAnimationFrame(anim);
   volCible = to;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    cell = to.cell; ox = to.ox; oy = to.oy; draw(); return;
-  }
+  // La camera se POSE au lieu de voler : le trajet donne le mal de mer a
+  // certains, et sur une grande grille il traverse des milliers de cases.
+  if (!prefs.vols) { cell = to.cell; ox = to.ox; oy = to.oy; draw(); return; }
   const from = { cell, ox, oy };
   const cx = (W / 2 - to.ox) / to.cell, cy = (H / 2 - to.oy) / to.cell;
   const nx = (W / 2 - from.ox) / from.cell, ny = (H / 2 - from.oy) / from.cell;
@@ -1280,8 +1299,12 @@ function paintCurrent() {
 function paintSide() {
   // Le numero du coup suivant s'affiche MEME pendant le calcul : le faire
   // disparaitre le temps d'un solveur lent donne l'impression d'un jeu casse.
+  // PARTIE CLOSE, ON MONTRE OU ELLE S'EST ARRETEE. Un duplicate qui se termine
+  // au onzieme coup affiche « 11 » : le tiret effacait le compte au moment
+  // precis ou tout le monde le regardait.
   $("rb-move").textContent = rejeu !== null ? String(rejeu.n)
-    : !demarree || finie ? "—"
+    : finie ? (coupsMax === null ? String(moveNumber) : `${moveNumber} / ${coupsMax}`)
+    : !demarree ? "—"
     : coupsMax === null ? String(moveNumber + 1)
     : `${moveNumber + 1} / ${coupsMax}`;
   if (rejeu !== null) paintRack();
@@ -1457,6 +1480,7 @@ function paintSide() {
   }
 
   $("online").textContent = online.length > 0 ? online.join(", ") : "—";
+  majDesPoignees();
   $("reveal-wrap").hidden = !canReveal;
   ($("reveal") as HTMLButtonElement).disabled = solving;
 }
@@ -1758,15 +1782,20 @@ const MARGE_SOL = 12;
  * complete pour que la barre de defilement dise la verite.
  */
 function peindreSolutions(): void {
-  const q = ($("rj-q") as HTMLInputElement).value.trim().toUpperCase();
-  solutionsVues = q === "" ? solutions : solutions.filter((s) => s.word.includes(q));
+  const brut = ($("rj-q") as HTMLInputElement).value;
+  const q = brut.trim().toUpperCase();
+  // Une espace finale, ou le bouton « ab » : voir `motEntier`.
+  const exact = q !== "" && (motEntier("rj-motEntier") || brut !== brut.trimEnd());
+  solutionsVues = q === "" ? solutions
+    : solutions.filter((s) => exact ? s.word === q : s.word.includes(q));
 
   const box = $("rj-sols");
   const piste = $("rj-piste");
   box.scrollTop = 0;
   if (solutionsVues.length === 0) {
     piste.style.height = "";
-    piste.innerHTML = `<div class="none" style="padding:10px 15px">aucun mot ne contient « ${echapper(q)} »</div>`;
+    piste.innerHTML = `<div class="none" style="padding:10px 15px">`
+      + `aucun mot ${exact ? "ne vaut" : "ne contient"} « ${echapper(q)} »</div>`;
   } else {
     piste.style.height = `${solutionsVues.length * H_SOL}px`;
     peindreLaFenetre();
@@ -1993,7 +2022,7 @@ function filtrerLaRoute(): void {
   // TAQIYA avec les QI, ce qui est juste quand on cherche une racine et faux
   // quand on veut compter ses QI. L'espace est le signe naturel de la fin d'un
   // mot ; on ne garde alors que ce qui vaut EXACTEMENT ce qui est tape.
-  const exact = q !== "" && brut !== brut.trimEnd();
+  const exact = q !== "" && (motEntier("rm-motEntier") || brut !== brut.trimEnd());
   const tient = (champ2: string): boolean =>
     exact ? champ2.toUpperCase() === q : champ2.toUpperCase().includes(q);
   // Un plateau borne se lit du premier coup au dernier, une grille infinie a
@@ -2012,6 +2041,34 @@ function filtrerLaRoute(): void {
   if (compte !== null) {
     compte.textContent = q === "" ? "" : `${routeVues.length} sur ${history.length}`;
   }
+}
+
+/**
+ * Le bouton « mot entier » d'un champ de recherche est-il enfonce ?
+ *
+ * Deux façons de demander la meme chose, parce que les deux se rencontrent :
+ * TERMINER SA RECHERCHE PAR UNE ESPACE, geste deja dans les doigts et qui ne
+ * s'apprend pas ; ou APPUYER SUR « ab », comme dans un editeur de texte, quand
+ * on veut que ça tienne sans y penser.
+ *
+ * Sans cela, chercher « MA » parmi les sous-tops d'un coup ramenait MAS, MAT,
+ * AMAS, MADRE et deux cents autres : le mot de deux lettres qu'on cherchait
+ * etait quelque part dedans, et il fallait le trouver a la main.
+ */
+function motEntier(id: string): boolean {
+  return $(id).getAttribute("aria-pressed") === "true";
+}
+
+/** Branche un bouton « mot entier » sur le champ qu'il commande. */
+function brancherMotEntier(id: string, refaire: () => void): void {
+  const b = $(id);
+  b.innerHTML = '<span>ab</span>';
+  b.setAttribute("aria-pressed", "false");
+  b.title = "mot entier — ou terminez votre recherche par une espace";
+  b.addEventListener("click", () => {
+    b.setAttribute("aria-pressed", String(!motEntier(id)));
+    refaire();
+  });
 }
 
 /**
@@ -2058,6 +2115,7 @@ function trierLaRoute(coups: MoveInfo[]): MoveInfo[] {
  */
 function peindreLaRouteVisible(): void {
   const body = $("rm-body");
+  body.style.setProperty("--w-rn", largeurDesNumeros(7, 38));
   const n = routeVues.length;
   const piste = document.getElementById("rm-piste");
   if (piste === null) return;
@@ -2322,6 +2380,12 @@ $("rm-open").addEventListener("click", () => {
   $("rm-body").scrollTop = 0;
   peindreLaRouteVisible();
 });
+brancherMotEntier("rm-motEntier", () => {
+  filtrerLaRoute();
+  $("rm-body").scrollTop = 0;
+  peindreLaRouteVisible();
+});
+brancherMotEntier("rj-motEntier", () => { choisie = -1; peindreSolutions(); });
 $("rm-tri").addEventListener("change", () => {
   filtrerLaRoute();
   $("rm-body").scrollTop = 0;
@@ -2340,6 +2404,8 @@ $("rm-save").addEventListener("click", enregistrerLaRoute);
 function fermerLaRoute(): void {
   $("roadmap").hidden = true;
   ($("rm-q") as HTMLInputElement).value = "";
+  ($("rm-tri") as HTMLSelectElement).value = "partie";
+  $("rm-motEntier").setAttribute("aria-pressed", "false");
   $("rm-compte").textContent = "";
 }
 $("rm-close").addEventListener("click", fermerLaRoute);
@@ -2368,8 +2434,23 @@ function paintJournal(): void {
 }
 
 /** Pose les lignes du journal qui tombent dans la partie visible. */
+/**
+ * Largeur de la colonne des numeros de coup, en pixels.
+ *
+ * PASSE DIX MILLE COUPS, « 10059 » MORDAIT SUR LE MOT. La colonne etait fixee a
+ * la largeur de quatre chiffres, ce qui suffisait a toutes les parties du
+ * monde -- jusqu'a celle-ci. On la calcule donc sur le nombre de coups joues :
+ * elle ne prend que ce qu'il lui faut, et les colonnes restent alignees d'une
+ * ligne a l'autre puisque toutes lisent la meme valeur.
+ */
+function largeurDesNumeros(parChiffre: number, mini: number): string {
+  const chiffres = String(Math.max(1, history.length)).length;
+  return `${Math.max(mini, Math.round(chiffres * parChiffre + 4))}px`;
+}
+
 function peindreLeJournalVisible(): void {
   const box = $("journal");
+  $("journal-bloc").style.setProperty("--w-n", largeurDesNumeros(6.7, 26));
   const n = history.length;
   if (n === 0) { $("journal-piste").replaceChildren(); return; }
   const haut = Math.max(0, Math.floor(box.scrollTop / H_JROW) - 4);
@@ -2481,8 +2562,21 @@ let flashTimer = 0;
  * navigateur qui jette tout en fermant. Ce n'est pas une panne : on repart des
  * valeurs par defaut, et le jeu tourne pareil.
  */
-interface Preferences { theme: "auto" | "light" | "dark"; sons: boolean }
-const prefs: Preferences = { theme: "auto", sons: true };
+interface Preferences {
+  theme: "auto" | "light" | "dark";
+  sons: boolean;
+  /** La camera vole-t-elle vers un coup, ou s'y pose-t-elle d'un coup ? */
+  vols: boolean;
+  /** Hauteur choisie pour chaque section du panneau, `null` = celle d'origine. */
+  hauteurs: { live: number | null; journal: number | null };
+}
+const prefs: Preferences = {
+  theme: "auto", sons: true,
+  // Le navigateur sait deja que son proprietaire n'aime pas ce qui bouge :
+  // c'est notre valeur de depart, et le panneau permet d'en changer.
+  vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+  hauteurs: { live: null, journal: null },
+};
 const CLE_PREFS = "farfouille.preferences";
 
 function lirePreferences(): void {
@@ -2492,6 +2586,16 @@ function lirePreferences(): void {
     const v = JSON.parse(brut) as Partial<Preferences>;
     if (v.theme === "auto" || v.theme === "light" || v.theme === "dark") prefs.theme = v.theme;
     if (typeof v.sons === "boolean") prefs.sons = v.sons;
+    if (typeof v.vols === "boolean") prefs.vols = v.vols;
+    const h = v.hauteurs;
+    if (h !== undefined && h !== null) {
+      for (const cle of ["live", "journal"] as const) {
+        const n = h[cle];
+        if (n === null || (typeof n === "number" && Number.isFinite(n) && n >= 0)) {
+          prefs.hauteurs[cle] = n;
+        }
+      }
+    }
   } catch { /* rien de garde : les valeurs par defaut suffisent */ }
 }
 
@@ -2900,6 +3004,100 @@ function submit() {
 
 $("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
 
+// ------------------------------------------------- sections du panneau
+
+/**
+ * Les separations du panneau de droite s'attrapent.
+ *
+ * CHACUN NE SUIT PAS LA PARTIE DE LA MEME FAÇON. L'un veut voir tous les coups
+ * joues, l'autre le chat, un troisieme rien que le classement et la grille.
+ * Plutot que de choisir a leur place, on laisse tirer les lignes -- jusqu'a
+ * effacer une section, si c'est ce qu'on veut d'elle. Un double-clic lui rend
+ * sa taille d'origine.
+ *
+ * Deux lignes suffisent : celle qui separe le tableau de bord des coups joues,
+ * et celle qui separe les coups joues du chat. Le chat prend ce qui reste --
+ * il n'a pas de taille propre a defendre, et c'est lui qu'on veut voir grandir
+ * quand on rapetisse le reste.
+ *
+ * Les hauteurs sont gardees avec les autres preferences : on ne rearrange pas
+ * son ecran a chaque visite.
+ */
+const SECTIONS = [
+  { poignee: "poignee-haut", section: "panel-live", cle: "live" },
+  { poignee: "poignee-bas", section: "journal-bloc", cle: "journal" },
+] as const;
+
+/** Ce qu'on laisse au chat, quoi qu'on tire : sans quoi il disparait pour de bon. */
+const RESTE_AU_CHAT = 90;
+
+function reglerHauteur(section: HTMLElement, h: number | null): void {
+  if (h === null) {
+    section.style.height = "";
+    section.style.maxHeight = "";
+    section.classList.remove("regle");
+    return;
+  }
+  // La fenetre a pu retrecir depuis : une hauteur gardee hier ne doit pas
+  // chasser le chat hors de l'ecran aujourd'hui.
+  const cote = document.querySelector(".side")!.getBoundingClientRect().height;
+  const plafond = cote > 0 ? Math.max(0, cote - RESTE_AU_CHAT) : h;
+  section.style.height = `${Math.round(Math.min(h, plafond))}px`;
+  section.style.maxHeight = "none";
+  section.classList.add("regle");
+}
+
+function appliquerLesHauteurs(): void {
+  for (const s of SECTIONS) reglerHauteur($(s.section), prefs.hauteurs[s.cle]);
+  peindreLeJournalVisible();
+}
+
+/** Une poignee n'a de sens qu'entre deux sections visibles. */
+function majDesPoignees(): void {
+  const journal = !$("journal-bloc").hidden;
+  $("poignee-haut").hidden = $("panel-live").hidden || !journal;
+  $("poignee-bas").hidden = !journal;
+}
+
+for (const s of SECTIONS) {
+  const poignee = $(s.poignee), section = $(s.section);
+  poignee.addEventListener("pointerdown", (e) => {
+    const ev = e as PointerEvent;
+    ev.preventDefault();
+    poignee.setPointerCapture(ev.pointerId);
+    poignee.classList.add("tire");
+    document.body.classList.add("redimensionne");
+    const depart = ev.clientY;
+    const h0 = section.getBoundingClientRect().height;
+    const cote = document.querySelector(".side")!.getBoundingClientRect().height;
+    const plafond = Math.max(0, cote - RESTE_AU_CHAT);
+    const bouger = (m: PointerEvent) => {
+      const h = Math.max(0, Math.min(plafond, h0 + m.clientY - depart));
+      prefs.hauteurs[s.cle] = h;
+      reglerHauteur(section, h);
+      peindreLeJournalVisible();
+    };
+    const lacher = () => {
+      poignee.removeEventListener("pointermove", bouger);
+      poignee.removeEventListener("pointerup", lacher);
+      poignee.removeEventListener("pointercancel", lacher);
+      poignee.classList.remove("tire");
+      document.body.classList.remove("redimensionne");
+      garderPreferences();
+    };
+    poignee.addEventListener("pointermove", bouger);
+    poignee.addEventListener("pointerup", lacher);
+    poignee.addEventListener("pointercancel", lacher);
+  });
+  // Rendre a la section sa taille d'origine, sans avoir a la retrouver a l'oeil.
+  poignee.addEventListener("dblclick", () => {
+    prefs.hauteurs[s.cle] = null;
+    reglerHauteur(section, null);
+    peindreLeJournalVisible();
+    garderPreferences();
+  });
+}
+
 // ---------------------------------------------------------------- paramètres
 
 const ICONE_ROUE =
@@ -2918,6 +3116,9 @@ function peuplerPreferences(): void {
   for (const b of $("p-sons").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.sons));
   }
+  for (const b of $("p-vols").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.vols));
+  }
 }
 
 for (const b of $("p-theme").querySelectorAll("button")) {
@@ -2931,6 +3132,13 @@ for (const b of $("p-theme").querySelectorAll("button")) {
 for (const b of $("p-sons").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     prefs.sons = (b as HTMLElement).dataset["v"] === "on";
+    garderPreferences();
+    peuplerPreferences();
+  });
+}
+for (const b of $("p-vols").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    prefs.vols = (b as HTMLElement).dataset["v"] === "on";
     garderPreferences();
     peuplerPreferences();
   });
@@ -2961,6 +3169,7 @@ $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 
 lirePreferences();
 appliquerLeTheme();
+appliquerLesHauteurs();
 
 // ---------------------------------------------------------------- chronos
 

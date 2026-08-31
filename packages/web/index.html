@@ -145,12 +145,17 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
    exacte, et seules celles qui se voient existent : une partie de 1 756 coups
    redessinait 1 756 lignes a CHAQUE coup, soit 197 ms de mise en page par
    seconde sur une partie chronometree a la seconde. */
-.journal-liste { max-height: 112px; overflow-y: auto; }
+.journal { display: flex; flex-direction: column; }
+.journal-liste { flex: 1; min-height: 0; max-height: 112px; overflow-y: auto; }
+/* Une fois la hauteur du bloc reglee a la main, la liste prend tout ce qui
+   reste : c'est le bloc qui commande, plus le plafond de cent douze pixels. */
+.journal.regle { flex: none; }
+.journal.regle .journal-liste { max-height: none; }
 .journal-piste { position: relative; }
 .journal-liste[hidden] { display: none; }
 /* La colonne du mot tient quinze lettres -- 99 px en IBM Plex Mono 11 px --
    barre de defilement comprise : c'est ce qui fixe la largeur du panneau. */
-.jrow { position: absolute; left: 0; right: 0; height: 18px; display: grid; grid-template-columns: 26px minmax(0, 1fr) 72px 26px 54px; gap: 5px; align-items: center; width: 100%; text-align: left; padding: 0 3px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.jrow { position: absolute; left: 0; right: 0; height: 18px; display: grid; grid-template-columns: var(--w-n, 26px) minmax(0, 1fr) 72px 26px 54px; gap: 5px; align-items: center; width: 100%; text-align: left; padding: 0 3px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .jrow:hover { background: var(--hover); }
 .jrow .n { color: var(--ink-faint); }
 .jrow .w { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -180,8 +185,25 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 
 .side { flex: none; width: 360px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .panel { flex: none; overflow-y: auto; max-height: 62%; }
+/* LES SEPARATIONS DU PANNEAU S'ATTRAPENT. Chacun ne suit pas la partie de la
+   meme facon : l'un veut voir tous les coups joues, l'autre le chat, un
+   troisieme rien que le classement. Plutot que de choisir a leur place, on
+   laisse tirer les lignes -- jusqu'a effacer une section, si c'est ce qu'on
+   veut. Un double-clic rend a la section sa taille d'origine.
+
+   La poignee deborde de trois pixels de chaque cote de la ligne qu'elle
+   commande : viser une ligne d'un pixel a la souris est un exercice, pas une
+   interface. */
+.poignee { flex: none; height: 7px; margin: -3px 0 -4px; position: relative; z-index: 3; cursor: row-resize; }
+.poignee::after { content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: transparent; transition: background .12s; }
+.poignee:hover::after, .poignee.tire::after { background: var(--accent); }
+.poignee[hidden] { display: none; }
+body.redimensionne { cursor: row-resize; user-select: none; }
 .panel[hidden] { display: none; }
 .block { padding: 11px 15px; border-bottom: 1px solid var(--rule); }
+/* Vingt pseudos ne doivent pas chasser le classement hors de l'ecran : la liste
+   defile dans sa boite plutot que de pousser tout ce qui suit. */
+#online { max-height: 64px; overflow-y: auto; }
 .block[hidden] { display: none; }
 .head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .head h2 { flex: 1; }
@@ -266,7 +288,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap[hidden] { display: none; }
 /* Hauteur FIXE : filtrer la liste ne doit pas retracter la fenetre a chaque
    lettre tapee -- on croirait que quelque chose casse. */
-.roadmap > div.large { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
+/* LA HAUTEUR FIXE EST CELLE DE LA FEUILLE DE ROUTE, PAS DES REGLAGES. Filtrer
+   la liste ne doit pas retracter la fenetre a chaque lettre tapee -- on croirait
+   que quelque chose casse. Le panneau des reglages, lui, doit garder la hauteur
+   de son contenu : il grandit et retrecit selon la grille choisie. */
+.roadmap > div.large { width: min(980px, 96vw); max-height: 92vh; }
+.roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
 .roadmap header h3 { margin: 0; flex: 1; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 19px; }
@@ -288,12 +315,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    suivante, et la lecture du tableau se cassait la ou la grille est la plus
    interessante. Aucune cellule ne se replie, la ligne ne depasse pas sa
    hauteur, et ce qui ne tient pas se termine en points de suspension. */
-.rmrow { position: absolute; left: 0; right: 0; height: 26px; overflow: hidden; display: grid; grid-template-columns: 38px 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 56px 58px auto; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 0 18px; background: transparent; border: 0; border-radius: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.rmrow { position: absolute; left: 0; right: 0; height: 26px; overflow: hidden; display: grid; grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 56px 58px auto; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 0 18px; background: transparent; border: 0; border-radius: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .rmrow > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* En duplicate, le temps ne dit rien -- le coup dure toujours le chrono
    entier -- et deux autres colonnes le remplacent : l'ecart au top du lecteur,
    et combien de joueurs l'ont trouve sur combien de presents. */
-#rm-body.duplicate .rmrow { grid-template-columns: 38px 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 46px 44px auto; }
+#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 46px 44px auto; }
 .rmrow .cum { text-align: right; color: var(--ink-faint); white-space: nowrap; }
 .rmrow .d { text-align: right; color: var(--ink-faint); }
 .rmrow .d.top { color: var(--accent); }
@@ -372,6 +399,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rj-chercher input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rj-chercher input::-webkit-search-cancel-button { cursor: pointer; }
 .rj-chercher span { font-size: 10.5px; color: var(--ink-faint); }
+.rj-champ { display: flex; align-items: center; gap: 4px; }
+/* « ab » souligne, comme dans un editeur de texte : la recherche ne garde que
+   les mots qui valent exactement ce qui est tape. */
+.motentier { flex: none; padding: 2px 5px; line-height: 1; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); background: var(--ground); border: 1px solid var(--rule); border-radius: 3px; }
+.motentier span { text-decoration: underline; text-underline-offset: 2px; }
+.motentier:hover { color: var(--accent); border-color: var(--accent); }
+.motentier[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .rj-top b { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
 .rj-top .pts { color: var(--accent); font-weight: 500; }
 .fleche { padding: 2px 9px; font-size: 13px; line-height: 1; background: none; }
@@ -560,6 +594,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
     </div>
 
+    <div class="poignee" id="poignee-haut" title="Tirer pour redimensionner — double-clic pour rétablir"></div>
+
     <div class="block journal" id="journal-bloc" hidden>
       <button class="journal-tete" id="journal-tete" aria-expanded="true">
         <span class="tri" id="journal-tri">▾</span>Coups joués<span class="num" id="journal-n"></span>
@@ -589,13 +625,18 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           </svg>
         </button>
         <div class="rj-chercher">
-          <input id="rj-q" type="search" placeholder="chercher un mot…" autocomplete="off" spellcheck="false">
+          <div class="rj-champ">
+            <input id="rj-q" type="search" placeholder="chercher un mot…" autocomplete="off" spellcheck="false">
+            <button type="button" class="motentier" id="rj-motEntier"></button>
+          </div>
           <span id="rj-compte"></span>
         </div>
       </div>
       <div class="sols" id="rj-sols"><div class="sols-piste" id="rj-piste"></div></div>
       <div class="rj-qui" id="rj-qui" hidden></div>
     </div>
+
+    <div class="poignee" id="poignee-bas" title="Tirer pour redimensionner — double-clic pour rétablir"></div>
 
     <div class="chat">
       <h2>Chat</h2>
@@ -746,6 +787,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="essais" id="p-essais"></div>
       </div>
 
+      <div class="reglage">
+        <label>Mouvements de caméra</label>
+        <div class="choix" id="p-vols">
+          <button type="button" data-v="on">Normaux</button>
+          <button type="button" data-v="off">Réduits</button>
+        </div>
+        <p class="apres">Cliquer un coup passé y amène la caméra. « Réduits » l'y pose
+        d'un coup au lieu d'y voler — sur une grande grille, le trajet traverse des
+        milliers de cases.</p>
+      </div>
+
       <p class="apres">Ces réglages sont les vôtres et restent sur cet appareil.
       Ils ne changent rien pour les autres joueurs du salon.</p>
     </div>
@@ -753,11 +805,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 </div>
 
 <div class="roadmap" id="roadmap" hidden>
-  <div class="large">
+  <div class="feuille">
     <header>
       <h3>Feuille de route</h3>
       <input id="rm-q" type="search" placeholder="chercher un mot, une place…"
              autocomplete="off" spellcheck="false">
+      <button type="button" class="motentier" id="rm-motEntier"></button>
       <span id="rm-compte"></span>
       <select id="rm-tri" title="Ordre des coups">
         <option value="partie">ordre de la partie</option>

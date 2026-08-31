@@ -576,10 +576,59 @@ Un mot invalide affiche **« mot non valide »**.
 
 Le tirage est **toujours en ordre alphabétique**, dans tous les cas.
 
+### L'échelle s'efface devant la case désignée
+
+Cliquer une case allume sa colonne et sa ligne dans les règles graduées. Loin de
+l'origine, « -186 » tombait sur le « -180 » de la graduation : deux nombres
+imprimés l'un sur l'autre, et plus moyen de lire ni la coordonnée demandée, ni
+l'échelle.
+
+Celle qu'on demande gagne. La graduation qui la gênerait n'est pas tracée — elle
+se retrouve deux crans plus loin, et l'échelle garde son pas.
+
+### Les colonnes prennent la place qu'il leur faut
+
+Passé dix mille coups, « 10059 » mordait sur le mot dans les coups joués. La
+colonne était fixée à la largeur de quatre chiffres, ce qui suffisait à toutes
+les parties du monde — jusqu'à celle-là.
+
+Elle se calcule maintenant sur le **nombre de coups joués** : elle ne prend que
+ce qu'il lui faut, et les colonnes restent alignées d'une ligne à l'autre
+puisque toutes lisent la même valeur. Vaut pour le journal comme pour la feuille
+de route.
+
+### Une partie close montre où elle s'est arrêtée
+
+Un duplicate qui se termine au onzième coup affiche **11**, pas un tiret. Le
+tiret effaçait le compte au moment précis où toute la table le regardait.
+
 ### Le classement montre ceux qui sont là
 
 Y compris **à zéro**. Disparaître du tableau parce qu'on n'a rien marqué, c'est
 ne pas savoir si l'on joue.
+
+### Les séparations du panneau s'attrapent
+
+Chacun ne suit pas la partie de la même façon : l'un veut voir tous les coups
+joués, l'autre le chat, un troisième rien que le classement et la grille. Plutôt
+que de choisir à leur place, **on laisse tirer les lignes** — jusqu'à effacer une
+section, si c'est ce qu'on veut d'elle. Un **double-clic** lui rend sa taille
+d'origine.
+
+Deux lignes suffisent : celle qui sépare le tableau de bord des coups joués, et
+celle qui sépare les coups joués du chat. Le chat prend ce qui reste — il n'a pas
+de taille propre à défendre, et c'est lui qu'on veut voir grandir quand on
+rapetisse le reste. Quatre-vingt-dix pixels lui sont réservés quoi qu'on tire :
+une section qu'on ne peut plus rattraper n'est pas un réglage, c'est un piège.
+
+La poignée déborde de trois pixels de chaque côté de la ligne qu'elle commande :
+viser une ligne d'un pixel à la souris est un exercice, pas une interface.
+
+Les hauteurs sont gardées avec les autres préférences : on ne réarrange pas son
+écran à chaque visite.
+
+**La liste des joueurs connectés ne pousse pas le reste.** Vingt pseudos
+chassaient le classement hors de l'écran ; elle défile maintenant dans sa boîte.
 
 ### Affichages permanents
 
@@ -666,9 +715,18 @@ on veut compter ses QI. L'espace est le signe naturel de la fin d'un mot :
 « QI  » ne garde que ce qui vaut **exactement** QI. Rien à apprendre, rien à
 cocher, et le geste est déjà dans les doigts.
 
-**Le champ s'efface en fermant la feuille.** Un filtre qu'on retrouve en
-rouvrant est un tableau amputé sans qu'on sache pourquoi : on a cherché « QI »
-il y a un quart d'heure, et la partie de neuf mille coups n'en montre plus douze.
+Un bouton **`ab`**, souligné comme dans un éditeur de texte, demande la même
+chose et **tient sans y penser**. Les deux façons cohabitent parce que les deux
+se rencontrent : l'espace pour une recherche, le bouton pour une série.
+
+La règle vaut aussi dans le **rejeu**, sur les sous-tops d'un coup : chercher
+« MA » y ramenait MAS, MAT, AMAS, MADRE et deux cents autres, et il fallait
+trouver à la main le mot de deux lettres qu'on cherchait.
+
+**Le champ s'efface en fermant la feuille, et l'ordre revient à celui de la
+partie.** Un filtre ou un tri qu'on retrouve en rouvrant est un tableau amputé
+ou rebattu sans qu'on sache pourquoi : on a cherché « QI » il y a un quart
+d'heure, et la partie de neuf mille coups n'en montre plus douze.
 
 **Un filtre qui ne ramène rien le dit.** Un grand blanc ne distingue pas la
 recherche infructueuse du tableau cassé.
@@ -695,6 +753,11 @@ maintenant des coordonnées à quatre chiffres.
 **La fenêtre ne change pas de taille.** Elle est fixée à `88vh` — filtrer sur un
 mot qui ne sort qu'une fois la réduisait à presque rien, et une fenêtre qui se
 rétracte à chaque lettre tapée donne l'impression que quelque chose casse.
+
+Cette hauteur fixe est **celle de la feuille de route seule**. Le panneau des
+réglages, qui partageait la même classe, s'était retrouvé figé à `88vh` alors
+qu'il doit garder la hauteur de son contenu : il grandit et rétrécit selon la
+grille choisie.
 
 ### La police est celle du système
 
@@ -1654,6 +1717,13 @@ a plus rien qui s'épuise.
 > s'arrêter, la partie recharge et continue. Mesuré : un rechargement tous les
 > vingt coups environ.
 
+**Un tirage incomplet est interdit.** On joue sept sur sept : c'est sept
+caramels en main, pas « ce qu'il reste ». Le rechargement ne regardait que
+l'équilibre voyelles / consonnes, si bien qu'un fond de sac de **six lettres
+bien réparties** passait le contrôle — et servait un chevalet de six. Vu en
+partie sur la grille permanente. Le sac se recharge donc aussi **dès que le sac
+et le reliquat réunis ne suffisent plus à remplir un chevalet**.
+
 ### Un salon vide dort
 
 Une partie ne pioche et ne chronomètre que **s'il y a quelqu'un**.
@@ -1669,6 +1739,20 @@ Une partie ne pioche et ne chronomètre que **s'il y a quelqu'un**.
   pendant que la salle était vide n'aurait aucun sens.
 
 Le coup en cours affiche « en pause » tant que la salle est vide.
+
+**La grille permanente, elle, ne dort pas.** Elle n'appartient à personne et son
+temps **se compte** : un coup y dure ce qu'il dure, la nuit comprise, même quand
+plus personne ne regarde. C'est une grille universelle à effort commun — « ce
+coup a résisté trois jours » n'aurait aucun sens si l'horloge s'arrêtait dès que
+la salle se vide, et c'est pourtant ce que sa sonnerie annonce.
+
+Elle n'a pas de chrono : ne pas l'endormir ne dévore donc aucun coup. Un salon
+ordinaire s'endort, lui, pour cette raison exacte.
+
+> Reste un cas : le **redémarrage du serveur**. Le top du coup courant n'est pas
+> conservé, il faut le recalculer, et l'horloge du coup repart de zéro. Le
+> tirage, lui, est identique — la graine le rejoue. C'est la seule remise à zéro
+> qui subsiste.
 
 ### La sonnerie dit depuis combien de temps le coup résistait
 
@@ -1954,6 +2038,7 @@ son navigateur.
 |---|---|
 | **Thème** | automatique, clair, sombre. « Automatique » ne pose aucun attribut : la feuille de style suit le navigateur, et **suivra ses changements** — de quoi passer au sombre à la tombée du jour sans rien rouvrir. |
 | **Sons** | activés ou muets, avec **un bouton par palier pour les écouter**. Décrire une sonnerie ne dit rien de ce qu'elle fait dans une pièce : on juge sur pièce, et on règle son volume avant que le coup ne tombe. |
+| **Mouvements de caméra** | normaux ou réduits. Cliquer un coup passé y amène la caméra ; « réduits » l'y **pose** au lieu d'y voler — sur une grande grille, le trajet traverse des milliers de cases. Le navigateur sait déjà que son propriétaire n'aime pas ce qui bouge : `prefers-reduced-motion` donne la valeur de départ. |
 
 Les valeurs tiennent dans le rangement local du navigateur. Il peut manquer —
 navigation privée, site bloqué, un navigateur qui jette tout en fermant : ce

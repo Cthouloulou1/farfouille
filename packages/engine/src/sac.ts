@@ -191,10 +191,21 @@ export class SacFini implements Pioche {
   draw(reliquat: readonly string[]): DrawResult {
     this.coup++;
     // Sac rechargeable : on le remet a neuf AVANT de piocher, des qu'il devient
-    // trop pauvre d'un cote ou de l'autre.
+    // trop pauvre d'un cote ou de l'autre -- OU TROP PETIT.
+    //
+    // UN TIRAGE INCOMPLET EST INTERDIT. On joue sept sur sept : c'est sept
+    // caramels en main, pas « ce qu'il reste ». Le rechargement ne regardait
+    // que l'equilibre voyelles / consonnes, si bien qu'un fond de sac de six
+    // lettres bien reparties passait le controle -- et servait un tirage de
+    // six. Il faut donc aussi recharger des que le sac et le reliquat reunis ne
+    // suffisent plus a remplir un chevalet.
     if (this.recharge) {
       const { v, c } = this.compte(reliquat);
-      if (v <= 2 || c <= 2) { this.remplir(reliquat); this.rechargements++; }
+      const disponibles = this.caramels.length + reliquat.length;
+      if (v <= 2 || c <= 2 || disponibles < this.tirage) {
+        this.remplir(reliquat);
+        this.rechargements++;
+      }
     }
     const avant = [...this.caramels];
     // LE Y DEVIENT OBLIGATOIRE quand il tient seul un role.

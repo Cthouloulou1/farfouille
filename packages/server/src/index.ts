@@ -760,10 +760,22 @@ wss.on("connection", (ws) => {
     }
     majDuGerant(s);
     // Le dernier parti, la partie s'endort : plus de chrono, plus de calcul.
+    //
+    // LA GRILLE PERMANENTE, ELLE, NE DORT PAS. Elle n'appartient a personne et
+    // son temps SE COMPTE : un coup y dure ce qu'il dure, la nuit comprise,
+    // meme quand plus personne ne regarde. C'est une grille universelle a
+    // effort commun -- « ce coup a resiste trois jours » n'aurait aucun sens si
+    // l'horloge s'arretait des que la salle se vide, et c'est pourtant ce que
+    // sa sonnerie annonce.
+    //
+    // Elle n'a pas de chrono : ne pas l'endormir ne devore donc aucun coup. Un
+    // salon ordinaire s'endort, lui, pour cette raison exacte.
     if (occupants(s.id).length === 0) {
-      s.partie.endormir();
-      console.log(`[salon] "${s.nom}" s'endort, plus personne`);
-      if (s.partie.cfg.bornes !== null && s.proprietaire !== null) rangerPlusTard(s.id);
+      if (s.proprietaire !== null) {
+        s.partie.endormir();
+        console.log(`[salon] "${s.nom}" s'endort, plus personne`);
+        if (s.partie.cfg.bornes !== null) rangerPlusTard(s.id);
+      }
     }
     broadcast(s.id, { t: "state", state: publicState(s) });
   });

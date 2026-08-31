@@ -209,6 +209,60 @@ console.log("\nRetrait d'une lettre -- ce dont la partie joker a besoin\n");
   verifie("on ne peut pas le retirer deux fois", !sac.retirer("K"));
 }
 
+console.log("\nLe sac qui se recharge ne sert jamais un tirage incomplet\n");
+{
+  // UN TIRAGE INCOMPLET EST INTERDIT. Le rechargement ne regardait que
+  // l'equilibre voyelles / consonnes : un fond de sac de six lettres bien
+  // reparties passait le controle, et servait un tirage de SIX. Vu en partie,
+  // sur la grille permanente.
+  //
+  // On joue cinq cents coups d'affilee et on verifie que pas un seul chevalet
+  // n'est parti incomplet -- avec un reliquat qui varie, comme dans une vraie
+  // partie ou l'on ne repose pas toujours tout.
+  const sac = new SacFini(SAC_FRANCAIS, mulberry32(7), 7);
+  sac.recharge = true;
+  let court: string | null = null;
+  let reliquat: string[] = [];
+  for (let coup = 1; coup <= 500 && court === null; coup++) {
+    const d = sac.draw(reliquat);
+    if (d.rack.length !== 7) court = `coup ${coup} : « ${d.rack} » (${d.rack.length} lettres)`;
+    // On garde de zero a trois lettres en main, comme apres un coup joue.
+    reliquat = [...d.rack].slice(0, coup % 4);
+  }
+  verifie("cinq cents tirages, tous a sept lettres", court === null,
+    court ?? "aucun chevalet incomplet");
+
+  // Et le cas precis : un fond de sac trop petit, mais assez EQUILIBRE pour
+  // passer l'ancien controle. Avec une distribution de treize lettres, un
+  // tirage de sept en laisse six -- et si ces six-la comptent au moins trois
+  // voyelles et trois consonnes, l'ancien code les servait telles quelles.
+  //
+  // Le test verifie aussi que cette situation SE PRESENTE : sans quoi il
+  // passerait sans rien eprouver.
+  let vueCourte = false;
+  let manque: string | null = null;
+  for (let graine = 1; graine <= 30; graine++) {
+    const petit = new SacFini({ A: 3, E: 3, I: 1, T: 3, R: 2, S: 1 }, mulberry32(graine), 7);
+    petit.recharge = true;
+    for (let coup = 1; coup <= 6; coup++) {
+      const reste = petit.restant();
+      let v = 0, c = 0;
+      for (const [l, n] of Object.entries(reste)) {
+        if ("AEIOU".includes(l)) v += n; else if (l !== "Y" && l !== "?") c += n;
+      }
+      if (v + c < 7 && v > 2 && c > 2) vueCourte = true;
+      const d = petit.draw([]);
+      if (d.rack.length !== 7 && manque === null) {
+        manque = `graine ${graine}, coup ${coup} : « ${d.rack} »`;
+      }
+    }
+  }
+  verifie("un fond de sac equilibre mais trop court se recharge", manque === null,
+    manque ?? "trente graines, six tirages chacune");
+  verifie("et cette situation s'est bien presentee", vueCourte,
+    vueCourte ? "le cas a ete rencontre" : "JAMAIS RENCONTRE : le test n'eprouve rien");
+}
+
 console.log(echecs === 0
   ? "\nOK : le sac fini distribue, s'epuise, et sait quand la partie est terminee\n"
   : `\n${echecs} ECHEC(S)\n`);
