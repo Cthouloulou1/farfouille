@@ -1218,6 +1218,36 @@ function remaining(): string[] {
  * Pendant le rejeu, c'est le tirage du coup EXAMINE qui s'affiche, pas celui de
  * la partie en cours : on revoit ce coup, on doit voir avec quoi on cherchait.
  */
+/**
+ * L'ordre dans lequel le joueur a range son chevalet.
+ *
+ * DEPLACER SES LETTRES EST UNE FACON DE CHERCHER. On groupe les voyelles, on
+ * met le S au bout, on essaie une terminaison -- c'est le geste de tout joueur
+ * devant un chevalet de bois, et il ne sert a rien s'il ne survit pas a la
+ * premiere lettre tapee.
+ *
+ * L'arrangement porte donc sur le tirage ENTIER, pas sur ce qui reste en main :
+ * on retire les lettres posees en gardant l'ordre des autres, et une lettre
+ * reprise revient a sa place. Il se defait au coup suivant, avec le tirage
+ * auquel il appartenait.
+ */
+let ordreChevalet: string[] = [];
+/** Le tirage auquel cet arrangement se rapporte. */
+let ordrePour = "";
+
+function selonLeChevalet(restant: readonly string[]): string[] {
+  if (rack !== ordrePour) { ordrePour = rack; ordreChevalet = [...rack]; }
+  const reste = [...restant];
+  const out: string[] = [];
+  for (const c of ordreChevalet) {
+    const i = reste.indexOf(c);
+    if (i !== -1) { out.push(c); reste.splice(i, 1); }
+  }
+  // Ce que l'arrangement ne connait pas -- il ne devrait rien rester -- va au
+  // bout plutot que de disparaitre.
+  return [...out, ...reste];
+}
+
 function paintRack() {
   const ici = rejeu;
   if (ici !== null) {
@@ -1225,7 +1255,7 @@ function paintRack() {
     peindreCaramels(m === undefined ? [] : [...m.rack]);
     return;
   }
-  peindreCaramels(remaining());
+  peindreCaramels(selonLeChevalet(remaining()));
 }
 
 function peindreCaramels(lettres: readonly string[]): void {
@@ -1240,9 +1270,75 @@ function peindreCaramels(lettres: readonly string[]): void {
       const v = valueOf(ch);
       if (v) { const s = document.createElement("i"); s.textContent = String(v); el.appendChild(s); }
     }
+    el.dataset["l"] = ch;
     box.appendChild(el);
   }
 }
+
+/**
+ * Prendre un caramel et le poser ailleurs sur le chevalet.
+ *
+ * On deplace l'element LUI-MEME dans la rangee pendant le glissement : les
+ * autres s'ecartent tout seuls, et ce qu'on voit est deja le resultat. Rien a
+ * dessiner, rien a deviner -- et aucune image a fabriquer, un caramel n'etant
+ * qu'une boite avec une bordure.
+ *
+ * Ne change rien a la partie : le chevalet est un aide-memoire, on joue en
+ * tapant. C'est aussi pourquoi on n'y touche pas pendant le rejeu, ou le
+ * tirage montre est celui d'un coup passe.
+ */
+$("rb-tiles").addEventListener("pointerdown", (e) => {
+  const ev = e as PointerEvent;
+  if (rejeu !== null || ev.button !== 0) return;
+  const el = (ev.target as HTMLElement).closest(".caramel") as HTMLElement | null;
+  if (el === null) return;
+  const box = $("rb-tiles");
+  ev.preventDefault();
+  el.setPointerCapture(ev.pointerId);
+  el.classList.add("tire");
+  box.classList.add("range");
+  let bouge = false;
+
+  const glisser = (m: PointerEvent) => {
+    if (!bouge && Math.abs(m.clientX - ev.clientX) < 3) return;
+    bouge = true;
+    // COMBIEN DE CARAMELS LE DOIGT A-T-IL DEPASSES ? C'est la place du notre.
+    // On compte les milieux franchis plutot que d'echanger avec le voisin :
+    // un geste rapide saute plusieurs cases entre deux evenements, et un
+    // echange par voisin prendrait du retard sur la main.
+    const autres = ([...box.children] as HTMLElement[]).filter((c) => c !== el);
+    let place = 0;
+    for (const autre of autres) {
+      const r = autre.getBoundingClientRect();
+      if (m.clientX > r.left + r.width / 2) place++;
+    }
+    const avant = autres[place] ?? null;
+    // On ne touche au document que si la place a vraiment change : reinserer
+    // au meme endroit relance les transitions et fait vibrer la rangee.
+    if (el.nextSibling !== avant) box.insertBefore(el, avant);
+  };
+  const lacher = () => {
+    el.removeEventListener("pointermove", glisser);
+    el.removeEventListener("pointerup", lacher);
+    el.removeEventListener("pointercancel", lacher);
+    el.classList.remove("tire");
+    box.classList.remove("range");
+    if (!bouge) return;
+    // L'arrangement porte sur le tirage entier : ce qui est pose sur la grille
+    // n'est pas affiche, mais garde sa place pour quand on le reprendra.
+    const montres = ([...box.children] as HTMLElement[]).map((c) => c.dataset["l"] ?? "");
+    const caches = [...ordreChevalet];
+    for (const c of montres) {
+      const i = caches.indexOf(c);
+      if (i !== -1) caches.splice(i, 1);
+    }
+    ordreChevalet = [...montres, ...caches];
+    paintRack();
+  };
+  el.addEventListener("pointermove", glisser);
+  el.addEventListener("pointerup", lacher);
+  el.addEventListener("pointercancel", lacher);
+});
 
 /**
  * Un temps ENREGISTRE : celui qu'a mis un joueur pour trouver un coup.

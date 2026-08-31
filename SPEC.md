@@ -630,6 +630,41 @@ Les hauteurs sont gardées avec les autres préférences : on ne réarrange pas 
 **La liste des joueurs connectés ne pousse pas le reste.** Vingt pseudos
 chassaient le classement hors de l'écran ; elle défile maintenant dans sa boîte.
 
+### Le chevalet porte des caramels, pas du texte
+
+**Un caramel est un objet.** On le prend, on le déplace, on ne le sélectionne
+pas : un double-clic dessus surlignait la lettre en bleu, ce qui n'arrive à aucun
+jeu de lettres en bois. Rien à fabriquer pour autant — un caramel n'est qu'une
+boîte avec une bordure, et **aucune image n'est nécessaire**.
+
+**Déplacer ses lettres est une façon de chercher.** On groupe les voyelles, on
+met le S au bout, on essaie une terminaison. C'est le geste de tout joueur devant
+un chevalet de bois, et il ne sert à rien s'il ne survit pas à la première lettre
+tapée : l'arrangement porte donc sur le **tirage entier**, pas sur ce qui reste
+en main. On retire les lettres posées en gardant l'ordre des autres, et une
+lettre reprise revient à sa place. Il se défait au coup suivant, avec le tirage
+auquel il appartenait.
+
+Pendant le glissement, c'est **l'élément lui-même** qui se déplace dans la
+rangée : les autres s'écartent tout seuls, et ce qu'on voit est déjà le résultat.
+On compte les **milieux franchis** plutôt que d'échanger avec le voisin — un
+geste rapide saute plusieurs cases entre deux événements, et un échange par
+voisin prendrait du retard sur la main.
+
+Le chevalet est un aide-mémoire : ranger ses lettres **ne change rien à la
+partie**, on joue en tapant. C'est aussi pourquoi on n'y touche pas pendant le
+rejeu, où le tirage montré est celui d'un coup passé.
+
+### Le bandeau du haut ne porte que l'identité
+
+Les deux durées sont descendues **au chevalet**, dans un rectangle à gauche du
+cumul : le coup à gauche, le temps total à droite. Elles se lisent ensemble — le
+coup en cours s'ajoute au total, et le total n'est que la somme des coups — et
+c'est là qu'on regarde déjà.
+
+Le bandeau n'a donc plus à être haut : **46 pixels, puis 34**. C'est autant de
+grille en plus, sur toute la largeur de l'écran.
+
 ### Affichages permanents
 
 - **À droite** : la meilleure solution que *le joueur* a tapée sur ce coup.
