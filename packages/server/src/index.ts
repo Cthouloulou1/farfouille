@@ -19,7 +19,7 @@ import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
-  MAX_SALONS, type Salon,
+  confierLesReglages, MAX_SALONS, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
@@ -163,6 +163,22 @@ const occupants = (salonId: string): string[] =>
   [...new Set([...clients.values()].filter((c) => c.salon === salonId).map((c) => c.nom))]
     .filter((n) => n !== "");
 
+/**
+ * Remet les manettes du salon dans les mains de quelqu'un qui est la.
+ *
+ * A appeler des que la liste des presents change -- une arrivee, un depart. On
+ * n'annonce que le sens qui a besoin d'etre annonce : celui ou les reglages
+ * echoient a quelqu'un d'autre que le createur. Des manettes qu'on recoit sans
+ * le savoir ne servent a rien. Dans l'autre sens, le createur qui revient
+ * retrouve simplement son bouton, et n'a rien a apprendre.
+ */
+function majDuGerant(s: Salon): void {
+  const neuf = confierLesReglages(s, occupants(s.id));
+  if (neuf === null) return;
+  s.partie.say("", `${neuf} règle le salon en l'absence de ${s.proprietaire}.`);
+  console.log(`[salon] "${s.nom}" : les reglages passent a ${neuf}`);
+}
+
 /** Etat public : jamais le top, jamais la liste des coups jouables (SPEC.md §7). */
 function publicState(s: Salon) {
   const g = s.partie;
@@ -170,6 +186,8 @@ function publicState(s: Salon) {
     salon: s.id,
     nomSalon: s.nom,
     proprietaire: s.proprietaire,
+    // Qui REGLE le salon en ce moment, qui n'est pas toujours qui l'a cree.
+    gerant: s.gerant,
     moveNumber: g.moveNumber,
     // Muets pendant le decompte : la regle vit dans la partie.
     rack: g.rackPublic,
@@ -310,6 +328,15 @@ async function ouvrirLesSalons(): Promise<void> {
     } catch (err) {
       console.warn(`[salon] "${id}" non rouvert : ${(err as Error).message}`);
     }
+  }
+
+  // UN 15x15 VIDE NE PASSE PAS LA NUIT. La regle vaut au depart du dernier
+  // joueur ; encore faut-il qu'elle s'applique aussi aux salons que le serveur
+  // vient de rouvrir du registre, qui n'ont eux jamais eu de depart a observer.
+  // Sans cela, la seance d'hier laissait sa liste de salons morts a celle d'
+  // aujourd'hui.
+  for (const s of tousLesSalons()) {
+    if (s.proprietaire !== null && s.partie.cfg.bornes !== null) rangerPlusTard(s.id);
   }
 
   pret = true;
@@ -540,6 +567,7 @@ wss.on("connection", (ws) => {
       // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
       // la. Le duplicate en a besoin pour savoir qui compter sur un coup.
       cible.partie.presents.add(nom);
+      majDuGerant(cible);
       void cible.partie.reveiller();
       send(ws, {
         t: "hello",
@@ -548,6 +576,7 @@ wss.on("connection", (ws) => {
         salon: cible.id,
         nomSalon: cible.nom,
         proprietaire: cible.proprietaire,
+        gerant: cible.gerant,
         layout: cible.partie.layout,
         // Le client rejoue le calcul du score a chaque frappe : sans la
         // variante, il afficherait la prime d'une autre partie.
@@ -624,11 +653,12 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Relance : reservee au proprietaire du salon. La grille mondiale n'en a
-    // pas, donc personne ne peut la relancer.
+    // Relance : reservee a qui tient les manettes -- le createur quand il est
+    // la, quelqu'un d'autre en son absence. La grille mondiale n'en a pas, donc
+    // personne ne peut la relancer.
     if (msg.t === "relancer") {
-      if (s.proprietaire === null || s.proprietaire !== moi.nom) {
-        send(ws, { t: "result", ok: false, message: "seul le propriétaire relance le salon" });
+      if (s.proprietaire === null || s.gerant !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul le propriétaire règle le salon" });
         return;
       }
       const base = s.partie.cfg;
@@ -728,6 +758,7 @@ wss.on("connection", (ws) => {
     if (moi !== undefined && !occupants(s.id).includes(moi.nom)) {
       s.partie.presents.delete(moi.nom);
     }
+    majDuGerant(s);
     // Le dernier parti, la partie s'endort : plus de chrono, plus de calcul.
     if (occupants(s.id).length === 0) {
       s.partie.endormir();
@@ -747,6 +778,10 @@ wss.on("connection", (ws) => {
  * Pas tout de suite, cependant : recharger sa page, c'est se deconnecter une
  * demi-seconde. Fermer sur-le-champ detruirait le salon sous les pieds de celui
  * qui vient d'appuyer sur F5. On attend donc, et on verifie a nouveau.
+ */
+/**
+ * Assez pour un F5, trop court pour qu'on aille se faire un cafe : le salon
+ * disparait avant qu'on ait pense a y revenir, et c'est ce qu'on veut.
  */
 const DELAI_DE_RANGEMENT = 90_000;
 const rangements = new Map<string, ReturnType<typeof setTimeout>>();

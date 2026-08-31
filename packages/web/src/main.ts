@@ -113,6 +113,16 @@ let cursor: { x: number; y: number; dir: Dir } | null = null;
 let typed = "";
 let best: { word: string; score: number; dir: Dir; x: number; y: number } | null = null;
 let openPlayer: string | null = null;
+/**
+ * Qui REGLE le salon en ce moment -- pas toujours qui l'a cree.
+ *
+ * Le createur parti, les manettes vont a quelqu'un qui est la, et lui
+ * reviennent des qu'il revient. C'est le serveur qui tranche ; l'ecran ne fait
+ * que montrer ou cacher le bouton des reglages.
+ */
+let gerant: string | null = null;
+/** La grille permanente : celle qui n'appartient a personne. */
+let salonPermanent = false;
 let marks: { x: number; y: number }[] = [];
 
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
@@ -1293,8 +1303,17 @@ function paintSide() {
   ll.replaceChildren();
   if (last === null) { lw.className = "word none"; lw.textContent = "—"; lm.textContent = ""; }
   else {
-    lw.className = "word";
-    lw.innerHTML = `<span>${last.word}</span><span class="pts">${last.score}</span>`;
+    // UN TOP QUE PERSONNE N'A TROUVE SE VOIT. Il ne se lisait que dans la ligne
+    // du dessous, en petit, entre la notation et le chrono -- au milieu de ce
+    // qui ne change pas d'un coup a l'autre. Or c'est la seule chose que la
+    // table veut savoir : la grille vient de gagner un coup. C'est aussi ce qui
+    // decide une tablee a recommencer la partie, ce qu'on ne fait pas a sa
+    // place.
+    const trouve = duplicate ? trouveursDuCoup(last).length > 0 : last.player !== null;
+    lw.className = trouve ? "word" : "word rate";
+    lw.innerHTML = `<span>${last.word}</span>`
+      + (trouve ? "" : `<span class="rate">non trouvé</span>`)
+      + `<span class="pts">${last.score}</span>`;
     // Au duplicate, mon ecart au top sur CE coup. Il reste affiche tant que le
      // coup suivant ne l'a pas remplace : c'est le temps qu'on a de le lire.
     const mien = duplicate ? last.scores?.[me] : undefined;
@@ -1315,23 +1334,32 @@ function paintSide() {
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     : Object.entries({ ...presents, ...players })
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  // CE QUE PERSONNE N'A TROUVE CONCOURT AVEC LES JOUEURS. Cette ligne etait
+  // epinglee en tete du tableau, hors classement, quel que soit son compte : on
+  // ne voyait plus si la grille menait devant la table ou derriere elle. Elle
+  // se range maintenant a sa place, et les colonnes font le nombre de coups.
+  if (!duplicate && nonTrouves > 0) {
+    rows.push([PERSONNE, nonTrouves]);
+    rows.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }
   if (rows.length === 0) {
     const s = document.createElement("div");
     s.className = "none"; s.textContent = "personne encore";
     rank.appendChild(s);
   }
-  // Ce que personne n'a trouve merite sa ligne : sinon les coups perdus par
-  // tout le monde disparaissent du tableau sans laisser de trace.
-  if (!duplicate && nonTrouves > 0) {
-    const perdu = document.createElement("div");
-    perdu.className = "prow perdu";
-    perdu.innerHTML = `<span class="tri"></span>` +
-      `<span class="nom">Non trouvé${nonTrouves > 1 ? "s" : ""}</span>` +
-      `<span class="likes"></span><span class="num">${nonTrouves}</span>`;
-    rank.appendChild(perdu);
-  }
 
   for (const [name, n] of rows) {
+    if (name === PERSONNE) {
+      // Pas un bouton : il n'y a aucune liste de coups a deplier derriere.
+      const perdu = document.createElement("div");
+      perdu.className = "prow perdu";
+      perdu.innerHTML = `<span class="tri"></span>` +
+        `<span class="nom">Non trouvé${n > 1 ? "s" : ""}</span>` +
+        `<span class="likes"></span>` +
+        `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
+      rank.appendChild(perdu);
+      continue;
+    }
     const row = document.createElement("button");
     row.className = "prow" + (name === me ? " me" : "");
     const got = likes[name] ?? 0;
@@ -1568,6 +1596,14 @@ function quiLaTrouve(m: MoveInfo, complet = false): string {
   }
   return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé");
 }
+
+/**
+ * Le nom sous lequel les coups perdus concourent au classement.
+ *
+ * Un caractere nul en tete : aucun pseudo ne peut le porter, et la ligne se
+ * reconnait sans risquer de se confondre avec un joueur du meme nom.
+ */
+const PERSONNE = "\u0000non trouvé";
 
 /** Qui a joue ce mot, a cet endroit, sur ce coup. */
 function joueursDuMot(m: MoveInfo, word: string, dir: Dir, x: number, y: number): string[] {
@@ -2252,6 +2288,43 @@ $("chat-text").addEventListener("keydown", (e) => {
 // ---------------------------------------------------------------- saisie
 
 let flashTimer = 0;
+/**
+ * Deux notes quand un coup qui trainait vient d'etre trouve.
+ *
+ * SUR LA GRILLE PERMANENTE, UN COUP PEUT DURER DES HEURES. Personne ne reste
+ * devant : on la laisse ouverte dans un onglet et on fait autre chose. Un
+ * signal court dit que le coup est tombe et qu'un tirage neuf attend.
+ *
+ * Cinq minutes de seuil. En dessous, la partie se suit a l'oeil, et une
+ * sonnerie toutes les deux minutes serait une nuisance, pas un service. Rien
+ * non plus pour celui qui vient de trouver : il le sait deja.
+ */
+const SEUIL_SONNERIE_MS = 5 * 60_000;
+let audio: AudioContext | null = null;
+
+function sonner(): void {
+  try {
+    audio ??= new AudioContext();
+    void audio.resume();
+    const son = audio;
+    const t0 = son.currentTime + 0.02;
+    // Deux sinus a la quinte, brefs, montes et eteints en douceur : une attaque
+    // franche ou une onde riche font sursauter, ce qui est tout le contraire.
+    [660, 990].forEach((hz, i) => {
+      const o = son.createOscillator(), g = son.createGain();
+      o.type = "sine";
+      o.frequency.value = hz;
+      const d = t0 + i * 0.16;
+      g.gain.setValueAtTime(0, d);
+      g.gain.linearRampToValueAtTime(0.07, d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0005, d + 0.24);
+      o.connect(g).connect(son.destination);
+      o.start(d);
+      o.stop(d + 0.26);
+    });
+  } catch { /* le navigateur refuse le son : le jeu n'en depend pas */ }
+}
+
 function flash(text: string, kind: "bad" | "ok" | "top") {
   const el = $("flash");
   el.textContent = text;
@@ -2506,6 +2579,7 @@ function applyState(s: {
   players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
+  gerant?: string | null;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
@@ -2534,6 +2608,10 @@ function applyState(s: {
   endormi = s.actif === false;
   duplicate = s.mode === "duplicate";
   nonTrouves = s.nonTrouves ?? 0;
+  // Les manettes changent de mains sans qu'on se reconnecte : le bouton des
+  // reglages suit l'etat, pas le seul message d'accueil.
+  gerant = s.gerant ?? null;
+  $("reglages-open").hidden = gerant !== me;
   decompteJusqua = s.decompteJusqua ?? 0;
   demarree = s.demarree !== false;
   coupsMax = s.coupsMax ?? null;
@@ -2632,12 +2710,14 @@ function connect() {
       // posent, ce que vaut chaque lettre et quelle prime recompense quoi.
       cfg = m.config ? deserialiser(m.config) : configParDefaut();
       board = new Board(dict, cfg);
-      // Seul le proprietaire regle son salon. La grille permanente n'en a pas.
-      $("reglages-open").hidden = m.proprietaire !== me;
+      // Seul le gerant regle son salon. La grille permanente n'en a pas.
+      gerant = m.gerant ?? null;
+      salonPermanent = m.proprietaire === null;
+      $("reglages-open").hidden = gerant !== me;
       $("conn").textContent = `${me} · ${m.nomSalon}`;
       // Une partie qui n'a pas commence s'ouvre sur ses reglages : c'est la
       // qu'on choisit la variante avant de lancer quoi que ce soit.
-      if (m.state?.demarree === false && m.proprietaire === me) {
+      if (m.state?.demarree === false && m.gerant === me) {
         setTimeout(ouvrirReglages, 60);
       }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
@@ -2730,6 +2810,15 @@ function connect() {
       // Pas de bandeau flottant pour annoncer le top : il est deja au tableau
       // « Top », au journal des coups et sur la grille. Le repeter une seconde
       // en bas de l'ecran n'apprenait rien a personne.
+      //
+      // CE QUE PERSONNE N'A TROUVE, EN REVANCHE, N'ETAIT ANNONCE NULLE PART :
+      // le coup passe, la grille avance, et il fallait relire la ligne du top
+      // pour s'en apercevoir.
+      const trouve = duplicate ? trouveursDuCoup(mv).length > 0 : mv.player !== null;
+      if (!trouve) flash("personne n'a trouvé le top", "bad");
+      // Un coup qui a dure sur la grille permanente : deux notes disent qu'il
+      // vient de tomber. Rien pour celui qui l'a trouve, il le sait.
+      if (salonPermanent && trouve && mv.ms > SEUIL_SONNERIE_MS && mv.player !== me) sonner();
       return;
     }
 
@@ -3327,6 +3416,8 @@ async function rejoindre(id: string): Promise<void> {
   points = {};
   negatif = {};
   nonTrouves = 0;
+  gerant = null;
+  salonPermanent = false;
   cfg = configParDefaut();
   configRecue = false;
   board = new Board(dict, cfg);

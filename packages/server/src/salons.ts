@@ -28,6 +28,14 @@ export interface Salon {
   nom: string;
   /** null = la grille mondiale : personne ne la possede, on ne la reregle pas. */
   proprietaire: string | null;
+  /**
+   * Qui regle le salon EN CE MOMENT.
+   *
+   * Le proprietaire est celui qui l'a cree : c'est une identite, elle ne
+   * change pas. Le gerant est celui qui en tient les manettes, et il change
+   * avec les presents. Voir `confierLesReglages`.
+   */
+  gerant: string | null;
   prive: boolean;
   layout: LayoutName;
   partie: Game;
@@ -150,7 +158,8 @@ export async function ouvrirSalon(opts: {
   const partie = new Game(opts.id, opts.layout, cfg);
   await partie.start();
   const s: Salon = {
-    id: opts.id, nom: opts.nom, proprietaire: opts.proprietaire, prive: opts.prive,
+    id: opts.id, nom: opts.nom, proprietaire: opts.proprietaire,
+    gerant: opts.proprietaire, prive: opts.prive,
     layout: opts.layout, partie, creeLe: opts.creeLe ?? Date.now(),
   };
   salons.set(s.id, s);
@@ -187,6 +196,42 @@ export async function relancer(s: Salon, cfg?: ConfigPartie): Promise<string[]> 
   s.partie = new Game(s.id, s.layout, cfg ?? s.partie.cfg);
   await s.partie.start();
   return archives;
+}
+
+/**
+ * A qui sont les reglages du salon, maintenant.
+ *
+ * UN SALON SANS PERSONNE POUR LE REGLER EST UN SALON MORT. Le createur ferme sa
+ * page, et plus personne ne peut relancer une partie ni changer la variante :
+ * il ne reste qu'a refaire un salon ailleurs.
+ *
+ * Les manettes suivent donc les presents, selon deux regles qui ne se
+ * contredisent pas :
+ *
+ * - **le createur les reprend des qu'il revient.** Le salon est le sien, son
+ *   depart n'est le plus souvent qu'un rechargement de page ;
+ * - **en son absence, elles vont a quelqu'un au hasard** parmi les presents, et
+ *   y restent tant que cette personne est la.
+ *
+ * Le tirage au sort vaut mieux que l'anciennete : personne n'a a comprendre
+ * pourquoi c'est tombe sur lui, et il n'y a pas de file d'attente a expliquer.
+ *
+ * Rend le nom du nouveau gerant QUAND IL Y A LIEU DE L'ANNONCER, `null` sinon.
+ * Il n'y a lieu que dans un sens : celui ou les manettes echoient a quelqu'un
+ * d'autre que le createur, car des manettes qu'on recoit sans le savoir ne
+ * servent a rien. Le createur qui revient, lui, voit son bouton reparaitre et
+ * n'a rien a apprendre.
+ */
+export function confierLesReglages(s: Salon, presents: string[]): string | null {
+  // La grille permanente n'a pas de manettes : elle ne se regle pas.
+  if (s.proprietaire === null) return null;
+  const avant = s.gerant;
+  if (presents.includes(s.proprietaire)) s.gerant = s.proprietaire;
+  else if (s.gerant !== null && presents.includes(s.gerant)) return null;
+  else if (presents.length === 0) s.gerant = null;
+  else s.gerant = presents[Math.floor(Math.random() * presents.length)]!;
+  if (s.gerant === avant || s.gerant === null) return null;
+  return s.gerant === s.proprietaire ? null : s.gerant;
 }
 
 /**

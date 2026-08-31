@@ -1610,6 +1610,22 @@ Une partie ne pioche et ne chronomètre que **s'il y a quelqu'un**.
 
 Le coup en cours affiche « en pause » tant que la salle est vide.
 
+### Deux notes quand un coup a traîné
+
+Sur la grille permanente, **un coup peut durer des heures**. Personne ne reste
+devant : on la laisse ouverte dans un onglet et on fait autre chose. Quand
+quelqu'un finit par trouver le top d'un coup **vieux de plus de cinq minutes**,
+deux sinus courts à la quinte disent qu'il vient de tomber et qu'un tirage neuf
+attend.
+
+Cinq minutes de seuil : en dessous, la partie se suit à l'œil, et une sonnerie
+toutes les deux minutes serait une nuisance, pas un service. Rien non plus pour
+celui qui vient de trouver — il le sait déjà.
+
+Le son est **synthétisé sur place**, sans fichier à charger, et son enveloppe
+monte et descend en douceur : une attaque franche ou une onde riche font
+sursauter, ce qui est le contraire de ce qu'on cherche.
+
 ### Le coût du calcul, mesuré
 
 Le temps de recherche du top croît avec le **nombre d'ancrages** — donc sans fin
@@ -1697,10 +1713,29 @@ joueur qui a soumis **la solution la plus rentable, le plus vite**, marque
 **un demi-point**.
 
 Ce coup n'a pas été trouvé : il s'affiche **« non trouvé »**, jamais « révélé ».
-Le classement porte une ligne **« Non trouvé »** — au pluriel dès deux — qui
-compte les coups que personne n'a eus. Dans la liste dépliée du gagnant du
-demi-point, c'est **son mot** qui figure, suivi de **(0.5)** : c'était sa
-meilleure solution, pas le top.
+Dans la liste dépliée du gagnant du demi-point, c'est **son mot** qui figure,
+suivi de **(0.5)** : c'était sa meilleure solution, pas le top.
+
+**Un top que personne n'a trouvé se voit.** Il ne se lisait que dans la ligne
+sous le mot, en petit, entre la notation et le chrono — au milieu de ce qui ne
+change pas d'un coup à l'autre. Or c'est la seule chose que la table veut
+savoir : la grille vient de gagner un coup. C'est aussi ce qui décide une
+tablée à recommencer la partie, ce qu'on ne fait jamais à sa place.
+
+Le mot reste lisible — c'est lui qu'on veut voir — mais il porte un jeton
+**NON TROUVÉ** et ses points passent au rouge, et un bandeau bref le dit au
+moment où le coup se clôt.
+
+**Ce que personne n'a trouvé concourt avec les joueurs.** La ligne « Non
+trouvé » — au pluriel dès deux — était épinglée en tête du tableau, hors
+classement, quel que soit son compte : on ne voyait plus si la grille menait
+devant la table ou derrière elle. Elle se range maintenant à sa place, en
+points, comme un joueur.
+
+Chaque coup distribue alors **exactement un point** : entier à qui trouve le
+top, moitié-moitié quand un demi-point récompense celui qui s'en est le plus
+approché. Les colonnes du classement font le nombre de coups joués, et un total
+qui tombe juste se vérifie d'un coup d'œil.
 
 ### Le décompte de départ
 
@@ -1708,6 +1743,11 @@ Option, décochée par défaut : **3, 2, 1** en grand sur la grille, **une seule
 fois, avant le premier coup**. C'est un signal de départ, pas une pause avant
 chaque coup. Le chrono ne part qu'après — personne ne perd de temps sur le
 décompte, et la saisie est gelée pendant.
+
+Il se lit **d'un bout à l'autre de la pièce** : caractères droits, sans
+empattements, et un **cerne noir** qui les détache de ce qu'il y a dessous —
+sans lui, un 3 vert posé sur une case verte disparaît à moitié. Le trait se
+peint **derrière** la lettre, pour la border sans la manger.
 
 **Le tirage n'est pas envoyé pendant le décompte.** « 3, 2, 1 » est un départ, et
 partir en ayant déjà lu ses lettres n'en est pas un. Le cacher à l'écran ne
@@ -1845,8 +1885,29 @@ lance une nouvelle **dans le même salon**. Les gens et le chat restent, la part
 change : on passe du duplicate à la battle sans que personne se redonne
 rendez-vous. Le paramétrage se fait **depuis l'intérieur** du salon.
 
-Le propriétaire est celui qui a créé le salon ; s'il part, le réglage passe à un
-autre joueur présent.
+**Le propriétaire est celui qui a créé le salon — le gérant est celui qui en
+tient les manettes.** Les deux se confondent tant que le créateur est là.
+
+Un salon sans personne pour le régler est un salon mort : le créateur ferme sa
+page, et plus personne ne peut relancer une partie ni changer la variante. Il ne
+reste qu'à refaire un salon ailleurs. Les manettes suivent donc les présents,
+selon deux règles qui ne se contredisent pas :
+
+- **le créateur les reprend dès qu'il revient.** Le salon est le sien, et son
+  départ n'est le plus souvent qu'un rechargement de page ;
+- **en son absence, elles vont à quelqu'un au hasard** parmi les présents, et y
+  restent tant que cette personne est là.
+
+Le tirage au sort vaut mieux que l'ancienneté : personne n'a à comprendre
+pourquoi c'est tombé sur lui, et il n'y a pas de file d'attente à expliquer.
+
+Le passage **s'annonce au chat** — « Ana règle le salon en l'absence de Zulu » —
+car des manettes qu'on reçoit sans le savoir ne servent à rien. Le retour du
+créateur, lui, ne s'annonce pas : son bouton reparaît, il n'a rien à apprendre.
+
+**Supprimer le salon reste au créateur seul.** Régler, c'est relancer une partie
+dans le même lieu ; supprimer, c'est jeter ce lieu et ce qui s'y est joué. On ne
+confie pas la seconde à qui passe.
 
 **La grille mondiale est un salon comme un autre** : permanent, public, sans
 chrono. Elle n'a pas de propriétaire et sa configuration est **verrouillée** —
@@ -1876,6 +1937,10 @@ séance ; personne n'y revient le lendemain, et la laisser au registre encombre
 la liste et garde un fil de calcul pour rien. Pas sur-le-champ, cependant :
 recharger sa page, c'est se déconnecter une demi-seconde. On attend **quatre-
 vingt-dix secondes**, puis on vérifie à nouveau que la salle est vide.
+
+La règle vaut au départ du dernier joueur, **et au démarrage du serveur** : les
+salons bornés relus du registre n'ont, eux, jamais eu de départ à observer, et
+la séance d'hier laissait sa liste de salles mortes à celle d'aujourd'hui.
 
 La grille permanente ne se referme jamais, et les salons sur grille infinie
 restent tant qu'on ne les supprime pas à la main.

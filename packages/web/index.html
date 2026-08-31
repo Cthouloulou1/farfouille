@@ -106,7 +106,11 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .flash.ok { background: var(--panel); color: var(--ink); border: 1px solid var(--rule); }
 .flash.top { background: var(--accent-bg); color: var(--accent); }
 
-.decompte { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: "Instrument Serif", Georgia, serif; font-size: clamp(90px, 22vh, 220px); line-height: 1; color: var(--accent); text-shadow: 0 4px 30px var(--shadow); pointer-events: none; }
+/* Le decompte se lit d'un bout a l'autre de la piece : caracteres droits,
+   plus grands, et un cerne noir qui les detache de la grille par-dessous --
+   sans lui, un 3 vert sur une case verte disparait a moitie. `paint-order`
+   pose le trait DERRIERE la lettre, pour qu'il la borde sans la manger. */
+.decompte { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: Archivo, system-ui, sans-serif; font-weight: 700; font-size: clamp(130px, 32vh, 300px); line-height: 1; color: var(--accent); -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 4px 30px var(--shadow); pointer-events: none; }
 .decompte[hidden] { display: none; }
 .fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; text-align: center; letter-spacing: .04em; }
 .fin[hidden] { display: none; }
@@ -168,6 +172,10 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .word { font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
 .word .pts { margin-left: auto; font-size: 17px; color: var(--accent); font-weight: 500; }
 .word.none { color: var(--ink-faint); font-size: 13px; letter-spacing: 0; }
+/* Un top que personne n'a trouve : le mot reste lisible -- c'est lui qu'on veut
+   voir -- mais ses points passent au rouge, et un jeton le dit en toutes lettres. */
+.word .rate { padding: 1px 6px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-family: Archivo, system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+.word.rate .pts { color: var(--warn); }
 button.word { cursor: pointer; }
 button.word:hover { color: var(--accent); border-color: transparent; }
 .sub { font-size: 11.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
