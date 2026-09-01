@@ -368,12 +368,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roue:hover { color: var(--accent); }
 /* Un interrupteur, pas deux boutons : la question appelle oui ou non, et le
    voyant dit lequel sans qu'on ait a lire deux etiquettes pour comparer. */
-/* LE VOLUME S'ETEINT AVEC LES SONS. Un curseur qui reste vif sous un reglage
-   « muets » invite a le pousser pour comprendre pourquoi rien ne sort. */
-.glissiere { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
-.glissiere input { flex: 1; accent-color: var(--ink-soft); }
-.glissiere span { font-family: "IBM Plex Mono", monospace; font-size: .78em; color: var(--ink-faint); min-width: 3.4em; text-align: right; }
-.glissiere.muet { opacity: .38; pointer-events: none; }
 .bascule { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; font-family: inherit; font-size: .88em; text-align: left; }
 .bascule .voyant { flex: none; width: 30px; height: 17px; border-radius: 9px; background: var(--field-line); border: 1px solid var(--rule); position: relative; transition: background .14s; }
 .bascule .voyant::after { content: ""; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px var(--shadow); transition: transform .14s; }
@@ -818,11 +812,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="choix" id="p-sons">
           <button type="button" data-v="on">Activés</button>
           <button type="button" data-v="off">Muets</button>
-        </div>
-        <div class="glissiere" id="p-volume-ligne">
-          <input type="range" id="p-volume" min="0" max="100" step="5" value="70"
-                 aria-label="Volume des sonneries">
-          <span id="p-volume-vu">70 %</span>
         </div>
       </div>
 

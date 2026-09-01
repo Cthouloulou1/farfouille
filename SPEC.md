@@ -2775,12 +2775,31 @@ Trois précautions, chacune pour une raison précise :
 **Rien de tout cela ne sort.** Ni l'état public, ni le journal, ni le terminal
 de l'hôte ne voient la file : elle contient les tirages à venir et leurs tops.
 
-### La partie joker en est exclue
+### La partie joker aussi
 
-Le joker posé devient une **vraie lettre tirée du sac**. La grille qui suit ne
-dépend donc pas seulement du top, mais de ce qu'il reste dans le sac au moment
-où il est joué. On ne devine pas ce qu'on ne sait pas : en partie joker, le
-serveur calcule en direct, comme avant.
+Le joker posé devient une **vraie lettre tirée du sac** : la grille qui suit
+dépend donc de l'état du sac, et non du seul top. Elle en dépend, mais elle n'en
+dépend pas *secrètement* — dès que le top est connu, la lettre l'est aussi.
+
+Le double prend donc la décision sur **sa copie du sac**, et la note ; la partie
+la rejoue telle quelle sur le vrai sac au moment de poser le coup. Elle ne peut
+plus la prendre elle-même : ce qui va sur la grille du solveur doit déjà être la
+vraie lettre, sinon le coup suivant se chercherait sur une grille où un R vaut
+zéro pour toujours.
+
+Deux ordres à ne pas inverser, et le code le dit à l'endroit où ils comptent :
+le **reliquat se prend avant la substitution** — c'est un joker qui a quitté le
+tirage, même si c'est un R qui s'est posé — et la **pose vient après**.
+
+> Ce faisant, un bug plus ancien est apparu : **une partie joker ne se relisait
+> pas.** Le journal garde le résultat de la substitution — un R ordinaire, dont
+> rien ne disait plus qu'un joker l'avait joué. À la reprise, le reliquat se
+> recalculait en cherchant ce R dans un tirage qui n'avait qu'un joker, et la
+> partie refusait de s'ouvrir ; le sac, lui, gardait des caramels déjà posés.
+> Chaque coup porte désormais la trace de ce que ses jokers sont devenus.
+> Un journal antérieur se rouvre quand même, sur une règle qui n'est pas sûre
+> mais qui vaut mieux qu'un refus : une lettre absente du tirage vient d'un
+> joker.
 
 ### Le décompte sert à quelque chose
 
@@ -2838,6 +2857,12 @@ chaque top depuis zéro avec le moteur seul** — sans serveur, sans fil de calc
 sans avance. Même mot, même sens, même case, même score, coup par coup. Puis
 elle relit la partie depuis son journal et vérifie que les tirages sont les
 mêmes : une pioche qui aurait dérivé se verrait là.
+
+Elle recommence ensuite **en partie joker**, où la grille de référence se
+construit sur les placements du journal — un vrai R là où un R a été joué. Si le
+solveur avait posé un joker à la place, l'écart se verrait dès le coup suivant.
+Puis elle arrête la partie, la rouvre, et vérifie que le tirage servi et le sac
+sont **identiques au caramel près**.
 
 `check_clone.ts` éprouve la pierre sur laquelle tout repose : une pioche copiée
 tire exactement la même suite que l'originale — quarante tirages devinés

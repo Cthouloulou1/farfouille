@@ -101,6 +101,21 @@ export interface PlayedMove {
    * va au joueur qui avait propose la solution la plus rentable, le plus vite.
    */
   demiPoint?: { joueur: string; word: string; score: number };
+  /**
+   * PARTIE JOKER : ce que les jokers de ce coup sont devenus (SPEC.md §16).
+   *
+   * `sortis` liste les lettres qui ont quitte le sac -- un joker qui joue un R
+   * fait sortir un vrai R, et ce R vaudra ses points pour toujours. `restes`
+   * compte les jokers qui n'ont pas trouve leur lettre et sont restes jokers.
+   *
+   * SANS CETTE TRACE, UNE PARTIE JOKER NE SE RELIT PAS. Ce qui est ecrit dans
+   * `placements` est le resultat de la substitution : un R ordinaire, dont rien
+   * ne dit plus qu'un joker l'a joue. A la reprise, le reliquat se recalculait
+   * alors en cherchant un R dans un tirage qui n'avait qu'un joker -- et la
+   * partie refusait de s'ouvrir. Le sac, lui, ne perdait pas les lettres
+   * sorties, et sa composition derivait.
+   */
+  jokers?: { sortis: string[]; restes: number };
 }
 
 export interface ChatMessage {
@@ -191,6 +206,17 @@ interface CoupPret {
   tiers: Tier[];
   /** Ce qui restera en main apres le top -- le point de depart du tirage suivant. */
   reliquatApres: string[];
+  /**
+   * PARTIE JOKER : ce que les jokers de ce coup ont decide.
+   *
+   * `sorties` liste les lettres qui quittent le sac pour de vrai -- un joker
+   * qui joue un R fait sortir un vrai R. `restes` compte les jokers qui sont
+   * restes jokers, faute de lettre disponible. Le double a pris ces decisions
+   * sur sa copie du sac ; il faut pouvoir les rejouer telles quelles sur le
+   * vrai, sinon les deux sacs divergeraient au coup suivant.
+   */
+  jokersSortis: string[];
+  jokersRestes: number;
 }
 
 /**
@@ -362,6 +388,17 @@ export class Game {
    */
   private sacAvance: Pioche | null = null;
   private reliquatAvance: string[] = [];
+  /** La reserve de jokers du double, en partie joker. */
+  private jokersAvance = 0;
+  /**
+   * Le coup en cours, tel que le double l'a prepare.
+   *
+   * Il porte le reliquat et les decisions de joker prises SUR LA COPIE du sac.
+   * `commit` les rejoue sur le vrai plutot que de les reprendre a son compte :
+   * a ce moment-la les placements sont deja resolus, et la question ne peut
+   * plus se poser dans le bon ordre. Vaut `null` quand l'avance ne tourne pas.
+   */
+  private pretCourant: CoupPret | null = null;
   /** Le coup servi vient de la file : sa pose est deja faite chez le solveur. */
   private posePrise = false;
   /** Combien de coups ont ete servis SANS ATTENTE, parce qu'ils etaient prets. */
@@ -662,14 +699,34 @@ export class Game {
         );
       }
       this.players = saved.players ?? {};
+      let sansTrace = 0;
       for (const m of saved.moves) {
         // La pioche doit etre refaite dans l'ordre : c'est elle qui porte l'etat
-        // de compensation, et il depend de tout l'historique.
-        this.bag.draw(this.reliquat);
+        // de compensation, et il depend de tout l'historique. En partie joker
+        // elle est completee SANS le joker, exactement comme au tirage.
+        const gardeJoker = this.cfg.joker && this.jokersEnReserve > 0;
+        this.bag.draw(gardeJoker ? this.reliquat.filter((c) => c !== BLANK) : this.reliquat);
         this.board.place(m.placements);
         this.worker.postMessage({ t: "place", placements: m.placements });
-        this.reliquat = Bag.remainder(m.rack, m.placements);
+        if (this.cfg.joker) {
+          const trace = m.jokers;
+          if (trace === undefined) sansTrace++;
+          this.reliquat = Bag.remainder(m.rack, Game.avantSubstitution(m, trace));
+          // Les lettres que les jokers ont fait sortir doivent RESSORTIR : le
+          // sac n'en a plus, et sans cela sa composition derive coup apres coup.
+          const sac = this.bag as SacFini;
+          if (typeof sac.retirer === "function") {
+            for (const l of trace?.sortis ?? []) sac.retirer(l);
+          }
+          this.jokersEnReserve -= trace?.restes ?? 0;
+        } else {
+          this.reliquat = Bag.remainder(m.rack, m.placements);
+        }
         this.moves.push(m);
+      }
+      if (sansTrace > 0) {
+        console.warn(`[partie] ${sansTrace} coup(s) joker sans trace de substitution : ` +
+          `le reliquat est reconstitue au mieux`);
       }
       this.posesSolveur = this.moves.length;
       console.log(`[partie] ${this.moves.length} coups rejoues`);
@@ -682,6 +739,41 @@ export class Game {
     // On ne pioche PAS ici : le premier joueur qui entre declenchera le
     // calcul. Distribuer au demarrage faisait calculer le top de chaque salon
     // enregistre, y compris ceux que personne n'ouvrira.
+  }
+
+  /**
+   * Les placements d'un coup joker TELS QU'ILS ONT QUITTE LE TIRAGE.
+   *
+   * Le journal garde le resultat de la substitution -- un vrai R -- mais le
+   * reliquat se compte sur le tirage, ou il n'y avait qu'un joker. On remet
+   * donc le drapeau sur les lettres que la trace signale comme sorties du sac.
+   *
+   * SANS TRACE -- un journal joker d'avant son existence -- on se rabat sur une
+   * regle qui n'est pas sure mais qui ouvre la partie : une lettre absente du
+   * tirage ne peut venir que d'un joker. Elle se trompe quand le joker a joue
+   * une lettre que le tirage contenait par ailleurs ; c'est mieux que de
+   * refuser d'ouvrir.
+   */
+  private static avantSubstitution(
+    m: PlayedMove, trace: { sortis: string[]; restes: number } | undefined,
+  ): Placement[] {
+    if (trace === undefined) {
+      const reste = [...m.rack];
+      return m.placements.map((p) => {
+        if (p.blank) return p;
+        const i = reste.indexOf(p.letter);
+        if (i !== -1) { reste.splice(i, 1); return p; }
+        return { ...p, blank: true };
+      });
+    }
+    const sortis = [...trace.sortis];
+    return m.placements.map((p) => {
+      if (p.blank) return p;
+      const i = sortis.indexOf(p.letter);
+      if (i === -1) return p;
+      sortis.splice(i, 1);
+      return { ...p, blank: true };
+    });
   }
 
   /**
@@ -848,6 +940,7 @@ export class Game {
     this.isotops = 0;
     this.tiers = [];
     this.posePrise = false;
+    this.pretCourant = null;
 
     // LE COUP EST-IL DEJA PRET ? Voir SPEC.md §17.
     //
@@ -873,6 +966,7 @@ export class Game {
       this.isotops = pret.isotops;
       this.tiers = pret.tiers;
       this.posePrise = true;
+      this.pretCourant = pret;
       // « Pret » veut dire servi SANS LA MOINDRE ATTENTE. Un coup qu'il a fallu
       // attendre -- parce que le pas de calcul courait encore -- compte comme
       // un coup calcule en direct : c'est bien ce que les joueurs ont vu.
@@ -964,7 +1058,14 @@ export class Game {
     // le faire patienter trois secondes bloquerait la reponse a tout le monde.
     const reste = this.decompteJusqua - Date.now();
     if (reste > 0) {
-      setTimeout(() => this.ouvrirLeCoup(msCalcul), reste);
+      // Le coup qu'on ouvrira dans trois secondes doit etre CELUI-CI. Rien ne
+      // devrait le jouer entre-temps -- le tirage n'est pas public -- mais un
+      // reveal en console suffirait, et la minuterie ouvrirait alors un coup
+      // deja passe.
+      const attendu = this.moveNumber;
+      setTimeout(() => {
+        if (this.moveNumber === attendu) this.ouvrirLeCoup(msCalcul);
+      }, reste);
       this.emit();
       return;
     }
@@ -1009,19 +1110,19 @@ export class Game {
   /**
    * Peut-on prendre de l'avance en ce moment ?
    *
-   * Trois refus de principe :
+   * Deux refus de principe :
    *
-   * - **Partie joker.** Le joker pose devient une VRAIE lettre tiree du sac
-   *   (`substituerJokers`) : la grille qui suit ne depend donc pas seulement du
-   *   top, mais de ce qu'il reste dans le sac au moment ou il est joue. Le
-   *   double ne saurait pas le deviner, et poserait des jokers la ou la partie
-   *   posera des lettres. On ne devine pas ce qu'on ne sait pas.
    * - **Salon vide.** Une partie endormie ne pioche pas ; elle n'a pas non plus
    *   a faire tourner un fil de calcul pour personne.
    * - **Partie non commencee ou finie.** Il n'y a pas de suite a preparer.
+   *
+   * LA PARTIE JOKER N'EST PAS EXCLUE. Le joker pose devient une vraie lettre
+   * tiree du sac, mais cette lettre est connue des que le top l'est : le double
+   * prend la meme decision sur SA copie du sac, et la note pour que la vraie
+   * partie la rejoue a l'identique.
    */
   private peutPrendreDeLAvance(): boolean {
-    if (this.arretee || this.avanceRenoncee || this.cfg.joker) return false;
+    if (this.arretee || this.avanceRenoncee) return false;
     if (!this.demarree || this.finie || !this.actif) return false;
     if (this.canonicalTop === null) return false;
     if (this.cfg.coupsMax !== null && this.posesSolveur >= this.cfg.coupsMax) return false;
@@ -1078,15 +1179,34 @@ export class Game {
    */
   private avancerLaGrilleDuSolveur(): void {
     if (this.posePrise || !this.peutPrendreDeLAvance()) return;
-    this.worker.postMessage({ t: "place", placements: this.canonicalTop!.placements });
+    const top = this.canonicalTop!;
+    // LE RELIQUAT SE PREND AVANT LA SUBSTITUTION : c'est un joker qui a quitte
+    // le tirage, meme si c'est un R qui se pose.
+    const reliquatApres = Bag.remainder(this.rack, top.placements);
+    // La copie du sac se prend ICI, avant que les jokers n'y touchent : la
+    // vraie pioche n'en est pas plus loin, et les deux doivent partir ensemble.
+    this.sacAvance = this.bag.cloner();
+    this.jokersAvance = this.jokersEnReserve;
+    // PARTIE JOKER : le double decide ce que devient chaque joker de CE coup,
+    // comme il le fera pour les suivants. `commit` rejouera la decision sur le
+    // vrai sac -- il ne peut plus la prendre lui-meme, puisque ce qui se pose
+    // sur la grille du solveur doit deja etre la vraie lettre.
+    const jokers = this.cfg.joker
+      ? Game.deciderLesJokers(top.placements, this.sacAvance)
+      : { sorties: [], restes: 0 };
+    this.jokersAvance -= jokers.restes;
+    this.pretCourant = {
+      n: this.moveNumber + 1, rack: this.rack, notation: this.rackNotation, top,
+      bestScore: this.bestScore, isotops: this.isotops, tiers: this.tiers,
+      reliquatApres, jokersSortis: jokers.sorties, jokersRestes: jokers.restes,
+    };
+    this.worker.postMessage({ t: "place", placements: top.placements });
     this.posesSolveur++;
     this.posePrise = true;
-    // LE DOUBLE REPART DE LA VRAIE PIOCHE, ici et maintenant. On n'arrive ici
-    // que la file vide : le double n'a donc rien devine au-dela de ce coup-ci,
-    // et le recopier vaut mieux que de tenir a jour un etat qui pourrait
-    // deriver. Une copie coute le tour d'un sac de cent deux caramels.
-    this.sacAvance = this.bag.cloner();
-    this.reliquatAvance = Bag.remainder(this.rack, this.canonicalTop!.placements);
+    // LE DOUBLE REPART DE LA VRAIE PIOCHE. On n'arrive ici que la file vide :
+    // il n'a donc rien devine au-dela de ce coup-ci, et le recopier vaut mieux
+    // que de tenir a jour un etat qui pourrait deriver.
+    this.reliquatAvance = reliquatApres;
   }
 
   /**
@@ -1116,21 +1236,28 @@ export class Game {
     // les caramels au sac et on recommence. Le plafond est celui de la partie.
     const plafond = tiragesInjouables(this.cfg.bornes);
     for (let essai = 0; essai < plafond; essai++) {
-      const draw = sac.draw(this.reliquatAvance);
+      // Le joker ne repasse pas par le sac, chez le double comme en direct.
+      const gardeJoker = this.cfg.joker && this.jokersAvance > 0;
+      const sansJoker = gardeJoker
+        ? this.reliquatAvance.filter((c) => c !== BLANK)
+        : this.reliquatAvance;
+      const draw = sac.draw(sansJoker);
+      const rack = gardeJoker ? [...draw.rack, BLANK].sort().join("") : draw.rack;
+      const notation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
       const id = this.nextId++;
       const reply: any = await new Promise((res) => {
         this.pending.set(id, res);
         this.worker.postMessage({
-          t: "avance", id, rack: draw.rack, moveNumber: n, tiers: 40,
+          t: "avance", id, rack, moveNumber: n, tiers: 40,
         });
       });
       // Le solveur dit combien de coups sa grille porte. Un ecart voudrait dire
       // qu'on a calcule sur une autre position que celle qu'on croit : mieux
       // vaut le savoir bruyamment que servir un faux top.
-      const attendu = this.posesSolveur + (reply.result === null ? 0 : 1);
-      if (typeof reply.coupsPoses === "number" && reply.coupsPoses !== attendu) {
+      if (typeof reply.coupsPoses === "number" && reply.coupsPoses !== this.posesSolveur) {
         this.renoncerALAvance(
-          `le solveur porte ${reply.coupsPoses} coups, la partie en attendait ${attendu}`,
+          `le solveur porte ${reply.coupsPoses} coups, ` +
+          `la partie en attendait ${this.posesSolveur}`,
         );
         return false;
       }
@@ -1143,15 +1270,32 @@ export class Game {
         continue;
       }
       const top = reply.result.top as Move;
+      // LE RELIQUAT SE PREND AVANT LA SUBSTITUTION, comme en direct : c'est
+      // bien un joker qui a quitte le tirage, meme si c'est un R qui s'est
+      // pose. L'ordre compte, et l'inverser jetterait une exception.
+      const reliquatApres = Bag.remainder(rack, top.placements);
+      // PARTIE JOKER : le double decide ici ce que devient chaque joker, sur SA
+      // copie du sac. La vraie partie rejouera la meme decision au moment de
+      // poser le coup, sans redemander au sac ce qu'il contient.
+      const jokers = this.cfg.joker
+        ? Game.deciderLesJokers(top.placements, sac)
+        : { sorties: [], restes: 0 };
+      this.jokersAvance -= jokers.restes;
+      // La pose vient APRES la substitution : ce qui va sur la grille du
+      // solveur doit etre ce qui ira sur celle de la partie -- un vrai R, et
+      // non un joker qui vaudra zero pour toujours.
+      this.worker.postMessage({ t: "place", placements: top.placements });
       this.posesSolveur++;
       this.avance.push({
-        n, rack: draw.rack, notation: draw.notation, top,
+        n, rack, notation, top,
         bestScore: reply.result.bestScore,
         isotops: reply.result.isotops,
         tiers: reply.result.tiers,
-        reliquatApres: Bag.remainder(draw.rack, top.placements),
+        reliquatApres,
+        jokersSortis: jokers.sorties,
+        jokersRestes: jokers.restes,
       });
-      this.reliquatAvance = Bag.remainder(draw.rack, top.placements);
+      this.reliquatAvance = reliquatApres;
       return true;
     }
     return false;
@@ -1400,6 +1544,9 @@ export class Game {
       ...(duplicate ?? {}),
       ...(demiPoint ? { demiPoint } : {}),
     };
+    // La trace des jokers est posee APRES la substitution, plus bas : c'est
+    // elle qui la produit. L'objet `move` n'est ecrit au journal qu'ensuite.
+
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.moves.push(move);
     if (player !== null) this.players[player] = (this.players[player] ?? 0) + 1;
@@ -1410,8 +1557,23 @@ export class Game {
     }
     // Le reliquat se calcule sur le tirage TEL QU'IL A ETE DISTRIBUE, avant
     // toute substitution de joker : c'est bien un joker qui a quitte le tirage.
-    this.reliquat = Bag.remainder(this.rack, top.placements);
-    if (this.cfg.joker) this.substituerJokers(top.placements);
+    //
+    // Quand le coup vient de l'avance, tout cela est DEJA FAIT : le double a
+    // pris le reliquat et decide des jokers avant de poser le coup sur la
+    // grille du solveur. On ne refait donc pas le calcul -- les placements sont
+    // deja resolus, et `Bag.remainder` y chercherait un R la ou le tirage
+    // n'avait qu'un joker -- on rejoue seulement la decision sur le vrai sac.
+    const prepare = this.pretCourant;
+    if (prepare !== null) {
+      this.reliquat = prepare.reliquatApres;
+      if (this.cfg.joker) {
+        this.rejouerLesJokers(prepare);
+        move.jokers = { sortis: prepare.jokersSortis, restes: prepare.jokersRestes };
+      }
+    } else {
+      this.reliquat = Bag.remainder(this.rack, top.placements);
+      if (this.cfg.joker) move.jokers = this.substituerJokers(top.placements);
+    }
     this.board.place(top.placements);
     // Un coup pris dans la file d'avance est DEJA pose chez le solveur : c'est
     // en le posant qu'il a pu chercher le suivant. Le reposer le compterait
@@ -1535,28 +1697,81 @@ export class Game {
    * et la reserve perd une unite. Les deux jokers poses, la partie continue
    * sans (SPEC.md §16).
    */
-  private substituerJokers(placements: Placement[]): void {
-    const sac = this.bag as SacFini;
+  private substituerJokers(
+    placements: Placement[],
+  ): { sortis: string[]; restes: number } {
+    const d = Game.deciderLesJokers(placements, this.bag);
+    this.appliquerLesJokers(d, typeof (this.bag as SacFini).retirer === "function");
+    return { sortis: d.sorties, restes: d.restes };
+  }
+
+  /**
+   * QUI DECIDE, ET SUR QUEL SAC. Le coeur de la substitution, isole pour
+   * pouvoir etre joue sur le double comme sur la vraie pioche.
+   *
+   * Les placements sont modifies sur place : un joker devenu vraie lettre perd
+   * son drapeau. Ce qui est rendu suffit a REJOUER la meme decision ailleurs --
+   * c'est ce qui permet au double de choisir a l'avance et a la partie de le
+   * suivre exactement, sans redemander au sac ce qu'il contient.
+   */
+  private static deciderLesJokers(
+    placements: Placement[], pioche: Pioche,
+  ): { sorties: string[]; restes: number } {
+    const sac = pioche as SacFini;
     const avecSac = typeof sac.retirer === "function";
+    const sorties: string[] = [];
+    let restes = 0;
     for (const p of placements) {
       if (!p.blank) continue;
       // Avec un sac, la lettre jouee par le joker en sort pour de vrai : elle
       // vaudra ses points pour la suite, et le joker revient au tirage.
       if (avecSac && sac.retirer(p.letter)) {
         p.blank = false;
-        console.log(`[partie] le joker joue ${p.letter} : un vrai ${p.letter} sort du sac`);
+        sorties.push(p.letter);
         continue;
       }
       // Sans sac -- ou sans lettre disponible -- le joker se pose lui-meme, a
       // zero pour toujours. La reserve n'en souffre que si elle est finie.
+      restes++;
+    }
+    return { sorties, restes };
+  }
+
+  /** Rejoue une decision de joker sur la VRAIE partie : reserve et journal. */
+  private appliquerLesJokers(
+    d: { sorties: string[]; restes: number }, avecSac: boolean,
+  ): void {
+    for (const l of d.sorties) {
+      console.log(`[partie] le joker joue ${l} : un vrai ${l} sort du sac`);
+    }
+    for (let i = 0; i < d.restes; i++) {
       this.jokersEnReserve--;
       const reste = this.jokersEnReserve === Infinity ? "on en reprend un"
         : `${this.jokersEnReserve} joker${this.jokersEnReserve > 1 ? "s" : ""} en reserve`;
       console.log(
-        `[partie] ${avecSac ? `plus de ${p.letter} dans le sac : ` : ""}` +
+        `[partie] ${avecSac ? "plus de lettre libre dans le sac : " : ""}` +
         `le joker reste sur la grille (${reste})`,
       );
     }
+  }
+
+  /**
+   * La meme substitution, mais rejouee sur le VRAI sac a partir d'une decision
+   * deja prise par le double. Les placements sont deja resolus ; il ne reste
+   * qu'a faire sortir du sac les lettres qui en sont sorties chez le double.
+   */
+  private rejouerLesJokers(pret: CoupPret): void {
+    const sac = this.bag as SacFini;
+    const avecSac = typeof sac.retirer === "function";
+    for (const l of pret.jokersSortis) {
+      if (avecSac && !sac.retirer(l)) {
+        this.renoncerALAvance(`le sac n'avait plus le ${l} promis par l'avance`);
+        return;
+      }
+    }
+    this.appliquerLesJokers(
+      { sorties: pret.jokersSortis, restes: pret.jokersRestes }, avecSac,
+    );
   }
 
   /** Revele le top sans vainqueur. Commodite de test en solo. */

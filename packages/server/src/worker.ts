@@ -50,13 +50,16 @@ export interface PlaceRequest {
  * moment ou le coup precedent tombe, cette seconde est du temps mort a l'ecran.
  * On la prend donc EN AVANCE, pendant que les joueurs cherchent encore.
  *
- * La difference avec `solve` tient en une ligne : le top calcule est POSE
- * aussitot sur la grille du solveur. C'est ce qui permet d'enchainer -- le coup
- * d'apres se cherche sur la position d'apres. La partie etant un topping, le
+ * Le calcul est le meme que celui de `solve` ; c'est la SUITE qui differe. Le
+ * serveur pose aussitot le top rendu, par un `place` ordinaire, et cherche
+ * alors le coup d'apres sur la position d'apres. La partie etant un topping, le
  * coup pose est toujours le top : la position ainsi devinee est la vraie.
  *
- * En consequence le serveur ne renvoie PAS de `place` pour un coup venu d'ici :
- * il serait pose deux fois.
+ * La pose reste du cote du serveur, et n'est pas faite ici, parce qu'en partie
+ * joker elle depend d'une decision qu'il est seul a pouvoir prendre : le joker
+ * qui joue un R fait sortir un vrai R du sac, et c'est ce R qu'il faut poser.
+ * En consequence le serveur ne renvoie pas de second `place` quand ce coup-la
+ * est enfin joue : il serait pose deux fois.
  */
 export interface AvanceRequest {
   t: "avance";
@@ -135,13 +138,6 @@ parentPort!.on(
       moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
     })),
   };
-  // Un coup calcule d'avance se pose TOUT DE SUITE : le suivant se cherche sur
-  // la position qui suivra. Un tirage sans aucun coup jouable ne pose rien --
-  // le serveur le rendra au sac et repiochera, exactement comme en direct.
-  if (msg.t === "avance" && top !== null) {
-    board.place(top.top.placements);
-    coupsPoses++;
-  }
   parentPort!.postMessage({
     t: msg.t === "avance" ? "avancee" : "solved",
     id: msg.id,

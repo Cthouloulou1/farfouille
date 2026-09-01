@@ -126,7 +126,107 @@ await relu.reveiller();
 const ecart = Math.abs(relu.servedAt - servieAvant);
 verifie("l'heure du tirage a survecu a l'arret", ecart < 50,
   `${(Date.now() - relu.servedAt) / 1000 | 0} s d'age retrouves, a ${ecart} ms pres`);
+
 await relu.stop();
+
+// ---------------------------------------------------------------- PARTIE JOKER
+//
+// Le cas qu'on avait cru impossible a preparer : le joker pose devient une
+// VRAIE lettre tiree du sac, si bien que la grille qui suit depend de l'etat du
+// sac. Elle en depend, mais elle n'en depend pas SECRETEMENT : des que le top
+// est connu, la lettre l'est aussi. Le double prend donc la decision sur sa
+// copie du sac, et la partie la rejoue telle quelle sur le vrai.
+//
+// Ce qui doit tenir : la grille du solveur porte le vrai R et non un joker a
+// zero point, les deux sacs perdent les memes caramels, et la reserve de jokers
+// descend des deux cotes au meme rythme.
+console.log("\n  — en partie joker —\n");
+const IDJ = ID + "-joker";
+const netJ = (): void => {
+  for (const s of [".json", ".journal.jsonl", ".verrou", ".secours.json"]) {
+    const f = join(D, `${IDJ}${s}`);
+    if (existsSync(f)) rmSync(f);
+  }
+};
+netJ();
+const cfgJ = avec(configParDefaut(), {
+  bornes: 7, pioche: "sac102", chrono: null, joker: true,
+});
+const j = new Game(IDJ, "classique", cfgJ);
+await j.start();
+j.presents.add("essai");
+await j.reveiller();
+await j.demarrer();
+const pretsJ0 = j.coupsPrets;
+for (let i = 0; i < 10 && !j.finie; i++) { await dors(120); await j.reveal(); }
+
+verifie("la partie joker a avance", j.moves.length >= 9, `${j.moves.length} coups`);
+verifie("et ses coups etaient prets d'avance", j.coupsPrets - pretsJ0 >= 8,
+  `${j.coupsPrets - pretsJ0} sur ${j.moves.length}`);
+
+// Des jokers ont-ils vraiment ete substitues ? Sans cela le test ne prouve rien.
+const sortis = j.moves.flatMap((m) => m.jokers?.sortis ?? []);
+const restes = j.moves.reduce((a, m) => a + (m.jokers?.restes ?? 0), 0);
+verifie("des jokers ont bien joue de vraies lettres", sortis.length >= 3,
+  `${sortis.length} lettres sorties du sac (${sortis.join(" ")}), ${restes} joker(s) reste(s)`);
+
+// LE JUGE DE PAIX, version joker : la grille de reference se construit sur les
+// placements du journal -- ceux d'apres substitution, un vrai R la ou un R a
+// ete joue. Si le solveur avait pose un joker a la place, les tops suivants
+// seraient calcules sur une grille qui vaut moins de points, et l'ecart se
+// verrait des le coup d'apres.
+const plateauJ = new Board(dawg, cfgJ);
+let fauxJ = 0, premierFauxJ = "";
+for (const m of j.moves) {
+  const gen = generateMoves(plateauJ, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
+  const top = pickTop(gen.moves, mulberry32(moveSeed(j.seed, m.n)), cfgJ.joker);
+  const attendu = top === null ? null : top.top;
+  const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
+    && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;
+  if (!pareil && premierFauxJ === "") {
+    premierFauxJ = `coup ${m.n} : ${m.word} ${m.score} pts, attendu ` +
+      (attendu === null ? "aucun coup" : `${attendu.word} ${attendu.score} pts`);
+  }
+  if (!pareil) fauxJ++;
+  plateauJ.place(m.placements);
+}
+verifie("chaque top joker est bien LE top de sa position", fauxJ === 0,
+  fauxJ === 0 ? `${j.moves.length} coups verifies un a un` : premierFauxJ);
+
+// UNE PARTIE JOKER DOIT SE RELIRE. Le journal garde le resultat de la
+// substitution ; sans la trace de ce que les jokers ont fait, le reliquat se
+// recalculait en cherchant un R dans un tirage qui n'avait qu'un joker, et la
+// partie refusait de s'ouvrir. Le sac, lui, gardait des caramels deja poses.
+const reserveAvant = j.jokersEnReserve;
+// On compare l'etat APRES que le coup suivant a ete servi des deux cotes :
+// `start` rejoue les coups mais ne pioche pas, et comparer avant reviendrait a
+// comparer un sac qui a servi un tirage de plus a un sac qui ne l'a pas encore
+// fait. Le tirage lui-meme est la meilleure preuve de synchronisation.
+const sacAvant = j.restantDuSac();
+const tirageAvant = j.rack;
+await j.stop();
+let releve = "";
+let jr: Game | null = null;
+try {
+  jr = new Game(IDJ, "classique", cfgJ);
+  await jr.start();
+} catch (e) { releve = (e as Error).message; }
+verifie("la partie joker se relit sans broncher", releve === "", releve);
+if (jr !== null) {
+  verifie("elle retrouve les memes coups", jr.moves.length === j.moves.length
+    && jr.moves.every((m, i) => m.rack === j.moves[i]!.rack && m.word === j.moves[i]!.word),
+    `${jr.moves.length} coups rejoues`);
+  verifie("et la meme reserve de jokers", jr.jokersEnReserve === reserveAvant,
+    `${jr.jokersEnReserve} contre ${reserveAvant}`);
+  jr.presents.add("essai");
+  await jr.reveiller();
+  verifie("le tirage suivant est le meme qu'avant l'arret", jr.rack === tirageAvant,
+    `${jr.rack} contre ${tirageAvant}`);
+  verifie("et le sac aussi, caramel par caramel", jr.restantDuSac() === sacAvant,
+    `${jr.restantDuSac().length} caramels contre ${sacAvant.length}`);
+  await jr.stop();
+}
+netJ();
 
 nettoyer();
 console.log(echecs === 0
