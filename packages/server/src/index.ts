@@ -405,8 +405,12 @@ function configDeDepart(infinie: boolean) {
   const base = configParDefaut();
   return infinie
     ? avec(base, { bornes: null, pioche: "probabilites" })
+    // UN SALON NEUF EST UN BLITZ. Sans chrono, un salon ouvert reste sur son
+    // premier coup jusqu'a ce que quelqu'un trouve le top -- ce qui peut durer
+    // longtemps si personne ne le voit. Soixante secondes, c'est le rythme
+    // auquel on joue a plusieurs, et cela se change en deux clics.
     : avec(base, {
-        bornes: 7, pioche: "sac102",
+        bornes: 7, pioche: "sac102", chrono: 60,
         pavage: LAYOUTS.classique15, pavageNom: "classique15",
       });
 }

@@ -680,6 +680,21 @@ loin de l'endroit où l'on cherchait : sa place se lit sur les règles, sans avo
 à le suivre des yeux sur la grille. Ce qu'on **désigne** l'emporte : quand il y a
 un curseur, c'est lui qu'on suit.
 
+### Le bord du plateau, d'une seule épaisseur et sans lisière
+
+Un trait **centré sur le contour** laissait un cheveu clair entre lui et les
+cases. La cause n'est pas le trait : le fond du plateau s'arrondit au pixel de
+**mise en page**, les cases au pixel **d'écran**, et les deux ne tombent pas au
+même endroit dès que l'affichage n'est pas à 100 %.
+
+Quatre bandes pleines, à coordonnées entières, qui **mordent d'un pixel** sur les
+cases : plus rien ne peut passer entre les deux, et l'épaisseur est la même des
+quatre côtés par construction. Tracées **en dernier**, après les caramels — un
+caramel de bord recouvrait le trait.
+
+Mesuré au pixel sur les quatre bords : 4 px partout, et le fond passe directement
+à la bordure puis à la case, sans teinte intermédiaire.
+
 ### Le plateau borné ne colle plus au bas de l'écran
 
 On centrait le plateau dans ce qui restait **sous** une bande de repères de
@@ -702,6 +717,25 @@ grille à ce moment** — pas où elle a fini.
 La grille s'est vidée, le compteur est revenu à 1, le tirage a changé. Un bandeau
 qui répète ce que l'écran montre déjà masque la grille au moment précis où l'on
 veut la regarder.
+
+### Les panneaux grandissent vers le bas
+
+Centré, un panneau qui gagne une section **remonte d'autant** : on clique
+« Infinie », la section des bornes apparaît, et tout le panneau glisse sous le
+curseur. Ancré en haut, ce qui apparaît apparaît **dessous** — là où l'on regarde
+déjà — et rien de ce qu'on avait sous les yeux ne bouge. Mesuré : le haut reste à
+22 px pendant que la hauteur passe de 567 à 634.
+
+Les tailles du contenu s'expriment en **`em`**, relatives à celle de la fenêtre :
+une seule valeur à changer pour agrandir tout un panneau, plutôt que vingt
+réglées à la main et qui se désaccordent au premier oubli.
+
+### Un salon neuf démarre en blitz
+
+Sans chrono, un salon qu'on vient d'ouvrir reste sur son premier coup jusqu'à ce
+que quelqu'un trouve le top — ce qui peut durer longtemps si personne ne le voit.
+Soixante secondes, c'est le rythme auquel on joue à plusieurs, et cela se change
+en deux clics.
 
 ### Un réglage qui a besoin d'un paragraphe est un réglage mal nommé
 

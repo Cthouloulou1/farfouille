@@ -447,14 +447,6 @@ function draw() {
     g.stroke();
   };
 
-  // Le bord du plateau, trace franc pour qu'on voie ou la grille s'arrete.
-  if (b !== null) {
-    ctx.strokeStyle = C.bord;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(eX(-b) - 1, eY(-b) - 1, eX(b + 1) - eX(-b) + 2, eY(b + 1) - eY(-b) + 2);
-    ctx.lineWidth = 1;
-  }
-
   if (tiles.length === 0) {
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2;
     ctx.strokeRect(eX(0) + 1, eY(0) + 1, eX(1) - eX(0) - 2, eY(1) - eY(0) - 2);
@@ -801,6 +793,27 @@ function draw() {
       ctx.lineTo(px + w / 2 + m / 1.6, py + h - 3 - m);
     }
     ctx.closePath(); ctx.fill();
+  }
+
+  // LE BORD DU PLATEAU, D'UNE SEULE EPAISSEUR ET SANS LISIERE.
+  //
+  // Un trait centre sur le contour laissait un cheveu clair entre lui et les
+  // cases : le fond du plateau s'arrondit au pixel de MISE EN PAGE, les cases
+  // au pixel D'ECRAN, et les deux ne tombent pas au meme endroit des que
+  // l'affichage n'est pas a 100 %. Quatre bandes pleines, a coordonnees
+  // entieres, qui MORDENT d'un pixel sur les cases : plus rien ne peut passer
+  // entre les deux, et l'epaisseur est la meme des quatre cotes par
+  // construction.
+  //
+  // Trace en DERNIER, apres les caramels : un caramel de bord le recouvrait.
+  if (b !== null) {
+    const E = 3;
+    const x0 = eX(-b), y0 = eY(-b), x1 = eX(b + 1), y1 = eY(b + 1);
+    ctx.fillStyle = C.bord;
+    ctx.fillRect(x0 - E, y0 - E, x1 - x0 + E * 2, E + 1);
+    ctx.fillRect(x0 - E, y1 - 1, x1 - x0 + E * 2, E + 1);
+    ctx.fillRect(x0 - E, y0 - E, E + 1, y1 - y0 + E * 2);
+    ctx.fillRect(x1 - 1, y0 - E, E + 1, y1 - y0 + E * 2);
   }
 
   drawRulers(C, gx0, gx1, gy0, gy1);

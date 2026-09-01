@@ -304,8 +304,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LA HAUTEUR FIXE EST CELLE DE LA FEUILLE DE ROUTE, PAS DES REGLAGES. Filtrer
    la liste ne doit pas retracter la fenetre a chaque lettre tapee -- on croirait
    que quelque chose casse. Le panneau des reglages, lui, doit garder la hauteur
-   de son contenu : il grandit et retrecit selon la grille choisie. */
-.roadmap > div.large { width: min(980px, 96vw); max-height: 92vh; }
+   de son contenu : il grandit et retrecit selon la grille choisie.
+
+   ET IL GRANDIT VERS LE BAS. Centre, ouvrir une section le faisait remonter
+   d'autant : on cliquait « Infinie », et tout le panneau glissait sous le
+   curseur. Ancre en haut, ce qui apparait apparait DESSOUS, la ou l'on regarde
+   deja, et rien de ce qu'on avait sous les yeux ne bouge.
+
+   Les tailles du contenu suivent celle de la fenetre : une seule valeur a
+   changer pour agrandir tout un panneau, plutot que vingt reglees a la main. */
+.roadmap > div.large { width: min(1120px, 96vw); max-height: 88vh; font-size: 15px; }
+.roadmap.enHaut { align-items: flex-start; padding-top: 3vh; }
 .roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
@@ -352,12 +361,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rmrow .t.non { color: var(--warn); }
 .rmrow .like { padding: 1px 5px; font-size: 10.5px; }
 
-.roadmap > div.prefs { width: min(460px, 94vw); }
+.roadmap > div.prefs { width: min(520px, 94vw); font-size: 14px; }
 .roue { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
 .roue:hover { color: var(--accent); }
 /* Un interrupteur, pas deux boutons : la question appelle oui ou non, et le
    voyant dit lequel sans qu'on ait a lire deux etiquettes pour comparer. */
-.bascule { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 10px; font-family: inherit; font-size: 12.5px; text-align: left; }
+.bascule { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; font-family: inherit; font-size: .88em; text-align: left; }
 .bascule .voyant { flex: none; width: 30px; height: 17px; border-radius: 9px; background: var(--field-line); border: 1px solid var(--rule); position: relative; transition: background .14s; }
 .bascule .voyant::after { content: ""; position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px var(--shadow); transition: transform .14s; }
 .bascule[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
@@ -385,7 +394,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .salon .mondiale { color: var(--accent); }
 .salon .jeter { grid-column: 4; grid-row: 1 / 3; padding: 4px 8px; font-size: 11px; color: var(--ink-faint); background: none; }
 .salon .jeter:hover { color: var(--warn); border-color: var(--warn); }
-.creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: 11.5px; color: var(--ink-faint); line-height: 1.45; }
+.creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
 #panel-rejeu { flex: 1; max-height: none; display: flex; flex-direction: column; min-height: 0; }
 #panel-rejeu[hidden] { display: none; }
 .rj-tete { flex: none; display: flex; align-items: center; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
@@ -443,13 +452,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sol .w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .04em; }
 .sol .p { color: var(--ink-faint); }
 .sol .s { text-align: right; color: var(--accent); }
-.rg-corps { padding: 18px 20px 18px; overflow: auto; }
+.rg-corps { padding: 18px 22px 20px; overflow: auto; }
 .reglage { min-width: 0; }
 .reglage.cote-a-cote { display: flex; gap: 26px; align-items: center; margin-top: 14px; }
 .reglage.cote-a-cote label { margin: 0; }
-.rg-corps label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 12px 0 5px; }
+.rg-corps label { display: block; font-size: .8em; color: var(--ink-faint); margin: 13px 0 6px; }
 .reglage > label:first-child { margin-top: 4px; }
-.rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 12.5px; }
+.rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: .85em; }
 .rg-corps label.case em { color: var(--ink-faint); font-style: normal; font-size: 11px; }
 .alerte { margin-top: 12px; padding: 9px 11px; background: var(--warn-bg); color: var(--warn); border-radius: 4px; font-size: 12px; line-height: 1.5; }
 .alerte[hidden] { display: none; }
@@ -491,19 +500,19 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .onglets button:hover:not([aria-pressed="true"]) { color: var(--ink-soft); border-color: transparent; }
 /* La case « Personnalisé » est une option comme les autres : meme boite, meme
    couleur, meme hauteur. Seule sa garniture change. */
-.choix.hautes button, .choix .perso { flex: 1 1 0; min-width: 0; min-height: 52px; height: 52px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-sizing: border-box; }
-.choix .perso { border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); font-family: inherit; font-size: 12.5px; color: var(--ink); cursor: default; }
+.choix.hautes button, .choix .perso { flex: 1 1 0; min-width: 0; min-height: 58px; height: 58px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-sizing: border-box; }
+.choix .perso { border: 1px solid var(--rule); border-radius: 3px; background: var(--ground); font-family: inherit; font-size: .86em; color: var(--ink); cursor: default; }
 .choix .perso span { display: inline-flex; align-items: baseline; gap: 3px; font-size: 10.5px; color: var(--ink-faint); }
 .choix .perso[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .choix .perso input { width: 42px; padding: 1px 4px; font: inherit; font-size: 12px; line-height: 1.2; text-align: center; border: 1px solid var(--rule); border-radius: 3px; background: var(--panel); color: var(--ink); }
 .choix .perso input::-webkit-outer-spin-button, .choix .perso input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .choix.deuxlignes button { height: auto; min-height: 40px; padding: 5px 6px; }
-.nombres button, .choix button { padding: 0; width: 28px; height: 28px; font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--ground); }
+.nombres button, .choix button { padding: 0; width: 32px; height: 32px; font-family: "IBM Plex Mono", monospace; font-size: .82em; background: var(--ground); }
 .nombres button[aria-pressed="true"], .choix button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 500; }
 .nombres button:disabled { opacity: .3; cursor: default; }
 .choix { display: flex; gap: 6px; }
-.choix button { flex: 1 1 0; min-width: 0; padding: 6px 6px; font-family: inherit; font-size: 12.5px; line-height: 1.35; }
-.choix button em { display: block; font-style: normal; font-size: 10.5px; color: var(--ink-faint); }
+.choix button { flex: 1 1 0; min-width: 0; padding: 7px 6px; font-family: inherit; font-size: .86em; line-height: 1.35; }
+.choix button em { display: block; font-style: normal; font-size: .74em; color: var(--ink-faint); }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
 .choix[hidden] { display: none; }
 .join form { background: none; border: 0; padding: 0; width: auto; box-shadow: none; }
@@ -675,7 +684,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
-<div class="roadmap" id="reglages" hidden>
+<div class="roadmap enHaut" id="reglages" hidden>
   <div class="large">
     <div class="rg-corps">
       <div class="reglage">
@@ -780,7 +789,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
-<div class="roadmap" id="prefs" hidden>
+<div class="roadmap enHaut" id="prefs" hidden>
   <div class="prefs">
     <header>
       <h3>Paramètres</h3>
@@ -817,13 +826,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="fr">Française<em>lignes A–O</em></button>
           <button type="button" data-v="en">Anglaise<em>colonnes A–O</em></button>
         </div>
-        <p class="apres">Les deux écoles n'ont pas mis les lettres du même côté du
-        plateau. La règle de lecture est la même — l'axe fixe vient en tête — mais
-        <code>H8</code> désigne un coup horizontal en française et vertical en anglaise.</p>
       </div>
 
       <div class="reglage">
-        <label>Images</label>
+        <label>Captures d'écran</label>
         <button type="button" class="bascule" id="p-image" aria-pressed="false">
           <span class="voyant"></span>Enregistrer les grilles en haute définition
         </button>
