@@ -8,6 +8,7 @@
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
 import { type DrawResult, type RejectPolicy } from "./bag.ts";
+import { mulberry32, mulberryDepuis, type Alea } from "./rng.ts";
 
 /**
  * Le tirage se relache passe un certain nombre de coups. Voir SPEC.md §16.
@@ -78,12 +79,22 @@ export interface Pioche {
    * que 99. Sans effet sur une pioche a probabilites, qui n'a pas de stock.
    */
   rendre(lettres: readonly string[]): void;
+  /**
+   * Une copie exacte, qui tirera la MEME suite.
+   *
+   * C'est ce qui permet de calculer les coups a venir sans toucher a la partie :
+   * le double pioche en avance pendant que la vraie pioche reste ou elle en est
+   * (SPEC.md §17).
+   */
+  cloner(): Pioche;
 }
 
 export class SacFini implements Pioche {
-  private readonly random: () => number;
+  private readonly random: Alea;
   private readonly tirage: number;
   private readonly reject: RejectPolicy;
+  /** La politique vient-elle du dehors ? Voir `cloner`. */
+  private readonly rejetFourni: boolean;
   private readonly distribution: Readonly<Record<string, number>>;
   /**
    * Le sac se recharge-t-il ? Voir SPEC.md §16.
@@ -103,12 +114,13 @@ export class SacFini implements Pioche {
 
   constructor(
     distribution: Readonly<Record<string, number>> = SAC_FRANCAIS,
-    random: () => number = Math.random,
+    random: Alea = mulberry32((Math.random() * 0xffffffff) >>> 0),
     tirage = 7,
     reject?: RejectPolicy,
   ) {
     this.random = random;
     this.tirage = tirage;
+    this.rejetFourni = reject !== undefined;
     // `recharge` est pose APRES la construction : la politique le lit donc a
     // chaque tirage plutot qu'une fois pour toutes.
     this.reject = reject ?? politiqueSacFini(() => this.coup, () => !this.recharge);
@@ -262,6 +274,26 @@ export class SacFini implements Pioche {
 
   rendre(lettres: readonly string[]): void {
     for (const l of lettres) this.caramels.push(l);
+  }
+
+  /**
+   * Une copie exacte, qui tirera EXACTEMENT la meme suite.
+   *
+   * Sert a simuler les coups a venir sans toucher a la partie (SPEC.md §17).
+   * La politique de rejet n'est PAS recopiee quand elle est celle par defaut :
+   * celle-la lit le numero de coup et l'etat de rechargement du sac auquel elle
+   * appartient, et la copier telle quelle lierait le double a l'original.
+   */
+  cloner(): SacFini {
+    const copie = new SacFini(
+      this.distribution, mulberryDepuis(this.random), this.tirage,
+      this.rejetFourni ? this.reject : undefined,
+    );
+    copie.caramels = [...this.caramels];
+    copie.coup = this.coup;
+    copie.recharge = this.recharge;
+    copie.rechargements = this.rechargements;
+    return copie;
   }
 
   restant(): Record<string, number> {

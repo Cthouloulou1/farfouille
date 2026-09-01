@@ -1496,26 +1496,31 @@ qui **reste à construire**, et ce qui **a été vu sans être expliqué**.
 | **Deux colonnes « Coup »** | Sur la barre du chevalet, l'une porte le **numéro** du coup, l'autre sa **durée**. Se lit dans le contexte ; à renommer si l'ambiguïté gêne. |
 | **La police du reste du jeu** | Seule la feuille de route est passée à la monospace du système. Le reste tient encore d'IBM Plex Mono. |
 
+**Écarté :** la **capture d'une portion de grille**. Une fenêtre de 60 × 60 cases
+donnerait des lettres lisibles là où la grille entière n'en donne jamais — mais
+la capture d'écran du système fait déjà exactement cela, sur ce qu'on a sous les
+yeux, et sans rien à apprendre. Un outil qui double une touche du clavier n'est
+pas un outil.
+
 ### À construire
 
 | Sujet | Pourquoi |
 |---|---|
-| **Précalcul de cinq coups d'avance** | Sur la grille permanente, le serveur met 1,6 s à trouver un top. Précalculé, le top s'affiche en même temps que le tirage suivant : plus de latence à figer dans le compteur (§9). |
 | **Rate-limit, cinq soumissions par seconde** | Rien n'empêche aujourd'hui un client de marteler le serveur. |
 | **Comptes optionnels** (mail + argon2id, vérification) | Le pseudo n'est unique que parmi les connectés, et le contrôle de suppression par pseudo est un **garde-fou, pas une frontière de sécurité**. |
 | **Statistiques et records du site** | Les parties entièrement topées les plus rapides, par exemple. |
 | **Nom de domaine et mise en ligne** | |
 | **Version anglaise** | Dictionnaire NWL, interface, et **repères anglais** — déjà écrits (§3), aujourd'hui derrière un réglage manuel qui devra suivre la langue du site. |
 | **Lien direct dans la partie** | Entrer dans la grille permanente depuis un lien, en se nommant sur place. |
-| **Mode battle** | Prévu dans le modèle `Board`, non implémenté. |
-| **Capture d'une portion de grille** | La vraie réponse à « lire les lettres » sur une grande grille : une fenêtre de 60 × 60 cases à 40 pixels la case donne des lettres de 30 pixels, dix fois plus légère que la grille entière (§16). Une grille entière ne sera **jamais** confortable à lire. |
-| **L'heure du tirage à travers un redémarrage** | Le top du coup courant n'est pas conservé : au redémarrage il faut le recalculer, et l'horloge du coup repart de zéro. Seule remise à zéro qui subsiste sur la grille permanente. |
-| **Transmission du salon quand le créateur part** | ✅ **Fait** — voir « les manettes du salon suivent les présents » (§16). |
+| **La grille 21×21** | Une « super grille », avec son propre motif de primes. Les cases restent à donner. |
+| **Les dictionnaires dérivés** | Le *clabbers* (tout anagramme d'un mot du dictionnaire est admis) et le *crabb* (tout mot **contenu** dans un mot est admis : `GF` par `STAGFLATION`). Ce ne sont pas des modes de jeu mais des **langues** : ils se branchent là où se branche l'anglais. Plus tard, le *barbc* (anagrammes du crabb) et le *labber* (crabb du clabbers) — deux ensembles distincts, contre l'intuition. |
+| **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. |
+| **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. |
 
 ### Vu, pas expliqué
 
-Deux symptômes rapportés par des joueurs et **non reproduits**. Ils sont notés
-ici parce qu'une explication inventée serait pire qu'un aveu d'ignorance.
+Un symptôme rapporté par des joueurs et **non reproduit**. Il est noté ici parce
+qu'une explication inventée serait pire qu'un aveu d'ignorance.
 
 **La secousse du plateau 15×15.** Vue par au moins deux joueurs, après qu'un mot
 a été posé par quelqu'un d'autre. Mesuré coup après coup : canevas, bandeau et
@@ -1524,12 +1529,11 @@ lesquels elle *pouvait* arriver ont été supprimés — la bande du reliquat qu
 changeait la hauteur du plateau, et un demi-pixel de recentrage — sans certitude
 que ce fût celui-là. Si elle revient : **la grille se déplace-t-elle ou
 clignote-t-elle sur place**, et **arrive-t-elle aussi quand on est seul** ?
+Elle n'a pas reparu — mais aucun duplicate à plusieurs n'a été joué depuis, et
+c'est justement là qu'elle se montrait.
 
-**Le client figé pendant le rejeu.** Rapporté sur `top-leger`, une ou deux fois.
-Le rejeu a été malmené pendant qu'une partie posait un coup toutes les deux
-secondes, sans lever une seule exception. Le chevalet resté à l'écran en sortant
-du rejeu — lui, corrigé — en donnait peut-être l'impression. Si cela revient :
-**la page répond-elle encore** (chat, boutons) ou tout est-il gelé ?
+**Le client figé pendant le rejeu** est classé : plus aucun cas depuis que le
+chevalet du coup examiné ne reste plus à l'écran en sortant du rejeu.
 
 ---
 
@@ -1591,18 +1595,24 @@ du rejeu — lui, corrigé — en donnait peut-être l'impression. Si cela revie
   ✅ **Les salons** : création, gérance, permanence, ménage, rejeu ouvert.
   ✅ **L'après-partie** : feuille de route, rejeu, recherche d'un mot sur toute
   la grille, captures.
+  ✅ **Les coups d'avance** (§17) : cinq coups préparés pendant que celui-ci se
+  joue, et l'heure du tirage qui survit à un redémarrage.
 
-  ⬜ Précalcul de cinq coups · rate-limit · comptes optionnels · statistiques ·
-  domaine, vérification par mail, mise en ligne.
+  ⬜ Rate-limit · comptes optionnels · statistiques et records · domaine,
+  vérification par mail, mise en ligne.
 
-- **Phase 3 — les grilles multiples. ⏳ EN COURS**
+- **Phase 3 — les grilles multiples. ✅ TERMINÉE**
 
-  ✅ Modèle `Board`, grille mondiale permanente, salons multiples, grilles
-  d'étude.
-  ⬜ Mode battle.
+  Modèle `Board`, grille mondiale permanente, salons multiples, grilles d'étude.
+  Le **mode battle** en fait partie : c'est le nom du topping quand les joueurs
+  y sont classés, et il n'a jamais eu besoin d'autre code que le sien.
 
-- **Phase 4 — l'anglais.** Dictionnaire NWL, interface traduite, repères
-  anglais commandés par la langue du site (§3).
+- **Phase 4 — d'autres grilles, d'autres langues.**
+  La **21×21** et son motif de primes. L'**anglais** : dictionnaire NWL,
+  interface traduite, repères anglais commandés par la langue du site (§3). Puis
+  les **dictionnaires dérivés** — clabbers, crabb, et plus tard barbc et labber
+  — qui se branchent au même endroit que l'anglais, parce que ce sont des
+  langues et non des règles.
 
 ---
 
@@ -2713,3 +2723,127 @@ examiner. Elle croît d'environ **8 ancrages par coup joué**, soit un facteur
 2 300 entre le premier coup et le trois-centième : un rapport linéaire écraserait
 tout. La forme retenue est donc `√ancrages / temps`, à calibrer sur de vraies
 parties.
+
+---
+
+## 17. Les coups d'avance
+
+Chercher un top coûte cher, et de plus en plus cher : cinq millisecondes sur un
+plateau borné, **924 ms au douze-centième coup** d'une grille sans fin, plus
+d'une seconde et demie sur la grille permanente. Ce temps-là se voyait : le coup
+tombait, les caramels se posaient, et le chevalet restait vide le temps que le
+serveur trouve le suivant.
+
+Il n'y a rien à optimiser dans ce calcul. Il y a un moment où le faire.
+
+### Pourquoi c'est possible
+
+**Le coup posé est toujours le top.** En topping comme en duplicate, ce qui
+s'inscrit sur la grille ne dépend pas de ce que les joueurs trouvent : c'est le
+top, trouvé ou non. La suite de la partie est donc **déjà écrite** au moment où
+le coup commence — le tirage suivant, son top, et celui d'après.
+
+On peut la calculer d'avance. Pas la deviner : la calculer.
+
+### Comment
+
+Dès qu'un tirage est servi, le serveur pose son top sur la **grille du solveur**
+— celle du fil de calcul, pas celle de la partie — puis tire les tirages
+suivants dans une **copie de sa pioche** et en cherche les tops. Cinq coups
+d'avance, rangés dans une file privée. Quand le coup se joue pour de bon, le
+suivant est déjà là.
+
+Trois précautions, chacune pour une raison précise :
+
+- **La pioche est copiée, jamais partagée.** Piocher en avance dans le vrai sac
+  ferait disparaître des lettres du reliquat affiché : les joueurs verraient
+  fondre les caramels avant qu'ils ne soient tirés, et en déduiraient les
+  tirages à venir. La copie pioche à part ; la vraie pioche ne bouge qu'au vrai
+  tirage, et l'on **vérifie alors que les deux sont tombées sur le même
+  tirage**. Un désaccord — qui ne devrait jamais survenir — jette l'avance et
+  refait la grille du solveur.
+- **Un coup préparé n'est pas posé deux fois.** Il l'a été chez le solveur pour
+  que le suivant se cherche sur la bonne position ; quand il est enfin joué, la
+  partie le pose sur *sa* grille et se garde bien de le renvoyer au solveur.
+  L'invariant tient en une ligne, et il est vérifié à chaque pas :
+  `grille du solveur = coups joués + coup en cours + coups en file`.
+- **Un seul calcul à la fois.** Le fil du solveur est unique et sert aussi le
+  rejeu. Et lorsqu'un coup est réclamé alors qu'un pas d'avance court déjà, le
+  serveur **attend ce pas** au lieu d'en lancer un second : c'est justement le
+  coup qu'il cherchait.
+
+**Rien de tout cela ne sort.** Ni l'état public, ni le journal, ni le terminal
+de l'hôte ne voient la file : elle contient les tirages à venir et leurs tops.
+
+### La partie joker en est exclue
+
+Le joker posé devient une **vraie lettre tirée du sac**. La grille qui suit ne
+dépend donc pas seulement du top, mais de ce qu'il reste dans le sac au moment
+où il est joué. On ne devine pas ce qu'on ne sait pas : en partie joker, le
+serveur calcule en direct, comme avant.
+
+### Le décompte sert à quelque chose
+
+« 3, 2, 1 » n'est plus une pause après le calcul, mais **pendant**. Le tirage est
+tiré dès le départ et tenu secret — `rackPublic` le tait tant que le décompte
+court — pendant que le solveur cherche le premier top. Les trois secondes qui
+étaient ajoutées à l'attente la couvrent désormais.
+
+### L'heure du tirage survit au redémarrage
+
+Sur une grille sans chrono, un coup dure jusqu'à ce que quelqu'un trouve : des
+heures, parfois des jours. Redémarrer le serveur remettait ce compteur à zéro —
+le coup paraissait neuf, et les sonneries des cinq et dix minutes repartaient
+pour un tour.
+
+Le journal porte donc une ligne de plus par coup, `{"t":"servi","n":…,"at":…}` :
+**l'heure, et rien d'autre**. Ni le tirage, ni le top — le journal est relu par
+le serveur, mais il est aussi lisible par l'hôte, et un coup en cours ne doit se
+lire nulle part.
+
+À la reprise, le dernier tirage servi non joué retrouve son heure. Le temps
+d'arrêt du serveur est donc **compté dans l'âge du coup**, ce qui est bien le
+vrai temps écoulé depuis qu'il a commencé. Un chrono, lui, repart entier :
+reprendre une minuterie interrompue une heure plus tôt ferait expirer le coup à
+la seconde où le serveur revient.
+
+### Mesure
+
+Grille sans fin, 1 200 coups construits, puis douze coups joués à la cadence
+d'une table (3 s par coup) :
+
+| | |
+|---|---|
+| attente médiane entre deux coups | **50 ms** |
+| pire attente | 67 ms |
+| coups servis sans aucune attente | **12 sur 12** |
+| prix brut d'un top sur cette grille | **924 ms** |
+
+Les 50 ms restants ne sont pas du calcul : c'est l'écriture du journal et de
+l'instantané. Le calcul, lui, a disparu de l'attente.
+
+```bash
+node packages/server/tools/mesure_avance.ts 1200 3000 12
+```
+
+À plein régime — un coup révélé aussitôt le précédent joué — l'avance ne sert
+plus : il n'y a pas d'intervalle à remplir, et le serveur attend son propre
+calcul comme avant. C'est le cas de `top-leger`, qui joue un coup par seconde ;
+ce n'est le cas d'aucune partie humaine.
+
+### Vérification
+
+`check_avance.ts` joue une partie complète, aux deux rythmes, puis **recalcule
+chaque top depuis zéro avec le moteur seul** — sans serveur, sans fil de calcul,
+sans avance. Même mot, même sens, même case, même score, coup par coup. Puis
+elle relit la partie depuis son journal et vérifie que les tirages sont les
+mêmes : une pioche qui aurait dérivé se verrait là.
+
+`check_clone.ts` éprouve la pierre sur laquelle tout repose : une pioche copiée
+tire exactement la même suite que l'originale — quarante tirages devinés
+d'avance, sur les trois pioches — **sans rien lui prendre**.
+
+```bash
+node packages/engine/test/check_clone.ts
+node packages/server/test/check_avance.ts
+```

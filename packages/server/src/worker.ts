@@ -44,6 +44,29 @@ export interface PlaceRequest {
 }
 
 /**
+ * Le meme calcul, mais pour un coup QUI N'EST PAS ENCORE JOUE.
+ *
+ * Sur une grande grille, chercher le top demande plus d'une seconde : jouee au
+ * moment ou le coup precedent tombe, cette seconde est du temps mort a l'ecran.
+ * On la prend donc EN AVANCE, pendant que les joueurs cherchent encore.
+ *
+ * La difference avec `solve` tient en une ligne : le top calcule est POSE
+ * aussitot sur la grille du solveur. C'est ce qui permet d'enchainer -- le coup
+ * d'apres se cherche sur la position d'apres. La partie etant un topping, le
+ * coup pose est toujours le top : la position ainsi devinee est la vraie.
+ *
+ * En consequence le serveur ne renvoie PAS de `place` pour un coup venu d'ici :
+ * il serait pose deux fois.
+ */
+export interface AvanceRequest {
+  t: "avance";
+  id: number;
+  rack: string;
+  moveNumber: number;
+  tiers: number;
+}
+
+/**
  * Refaire les paliers d'un coup PASSE, pour le rejeu.
  *
  * Sur un plateau borne, les paliers ne sont plus ecrits dans le journal : ils
@@ -62,9 +85,21 @@ export interface PaliersRequest {
   avant: Placement[];
 }
 
-parentPort!.on("message", (msg: SolveRequest | PlaceRequest | PaliersRequest) => {
+/**
+ * Combien de coups la grille du solveur porte.
+ *
+ * Ne sert qu'a se faire confiance : chaque demande dit sur quel numero de coup
+ * elle croit tomber, et un desaccord se voit tout de suite plutot que de
+ * produire, en silence, le top d'une autre position.
+ */
+let coupsPoses = 0;
+
+parentPort!.on(
+  "message",
+  (msg: SolveRequest | PlaceRequest | PaliersRequest | AvanceRequest) => {
   if (msg.t === "place") {
     board.place(msg.placements);
+    coupsPoses++;
     return;
   }
   if (msg.t === "paliers") {
@@ -91,18 +126,27 @@ parentPort!.on("message", (msg: SolveRequest | PlaceRequest | PaliersRequest) =>
   const top = pickTop(
     gen.moves, mulberry32(moveSeed(seed, msg.moveNumber)), board.cfg.joker,
   );
+  const result = top === null ? null : {
+    top: top.top,
+    bestScore: top.bestScore,
+    isotops: top.isotops.length,
+    tiers: top.tiers.map((g) => ({
+      score: g[0]!.score,
+      moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
+    })),
+  };
+  // Un coup calcule d'avance se pose TOUT DE SUITE : le suivant se cherche sur
+  // la position qui suivra. Un tirage sans aucun coup jouable ne pose rien --
+  // le serveur le rendra au sac et repiochera, exactement comme en direct.
+  if (msg.t === "avance" && top !== null) {
+    board.place(top.top.placements);
+    coupsPoses++;
+  }
   parentPort!.postMessage({
-    t: "solved",
+    t: msg.t === "avance" ? "avancee" : "solved",
     id: msg.id,
     ms: performance.now() - t0,
-    result: top === null ? null : {
-      top: top.top,
-      bestScore: top.bestScore,
-      isotops: top.isotops.length,
-      tiers: top.tiers.map((g) => ({
-        score: g[0]!.score,
-        moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
-      })),
-    },
+    coupsPoses,
+    result,
   });
 });

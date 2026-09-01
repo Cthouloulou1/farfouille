@@ -14,6 +14,7 @@
  * le W ressuscite (1 tirage sur 158 au lieu de 1 sur 270).
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
+import { mulberryDepuis, type Alea } from "./rng.ts";
 
 export const RACK_SIZE = 7;
 
@@ -83,7 +84,7 @@ export const strictRejectPolicy: RejectPolicy = (rack) => {
 
 export class Bag {
   private readonly cfg: BagConfig;
-  private readonly random: () => number;
+  private readonly random: Alea;
   private readonly letters: string[];
   private readonly base: number[];
   /** Tirages ecoules depuis la derniere sortie de chaque lettre. */
@@ -93,7 +94,7 @@ export class Bag {
   private readonly tirage: number;
 
   constructor(
-    cfg: BagConfig, random: () => number,
+    cfg: BagConfig, random: Alea,
     reject: RejectPolicy = strictRejectPolicy, tirage = RACK_SIZE,
   ) {
     this.cfg = cfg;
@@ -177,6 +178,19 @@ export class Bag {
   /** Compteurs de compensation, pour les tests. Un zero signifie "vient de sortir". */
   counters(): number[] {
     return [...this.k];
+  }
+
+  /**
+   * Une copie exacte, qui tirera EXACTEMENT la meme suite.
+   *
+   * Sert a simuler les coups a venir sans toucher a la partie (SPEC.md §17) :
+   * le double pioche en avance, la vraie pioche reste ou elle en est, et on
+   * verifie a chaque coup que les deux tombent d'accord.
+   */
+  cloner(): Bag {
+    const copie = new Bag(this.cfg, mulberryDepuis(this.random), this.reject, this.tirage);
+    copie.k = [...this.k];
+    return copie;
   }
 
   /** Rien ne s'epuise : une partie sur probabilites ponderees ne finit jamais. */

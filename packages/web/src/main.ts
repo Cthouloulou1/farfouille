@@ -3020,6 +3020,14 @@ let flashTimer = 0;
 interface Preferences {
   theme: "auto" | "light" | "dark";
   sons: boolean;
+  /**
+   * Volume des sonneries, de 0 a 1.
+   *
+   * Le reglage du systeme ne suffit pas : ces sonneries partagent l'oreille
+   * avec de la musique et des appels, et on garde la grille ouverte des heures
+   * dans un onglet. Le bon volume pour elle n'est pas celui du reste.
+   */
+  volume: number;
   /** La camera vole-t-elle vers un coup, ou s'y pose-t-elle d'un coup ? */
   vols: boolean;
   /** Hauteur choisie pour chaque section du panneau, `null` = celle d'origine. */
@@ -3030,7 +3038,7 @@ interface Preferences {
   reperes: Reperes;
 }
 const prefs: Preferences = {
-  theme: "auto", sons: true,
+  theme: "auto", sons: true, volume: 0.7,
   // Le navigateur sait deja que son proprietaire n'aime pas ce qui bouge :
   // c'est notre valeur de depart, et le panneau permet d'en changer.
   vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -3047,6 +3055,7 @@ function lirePreferences(): void {
     const v = JSON.parse(brut) as Partial<Preferences>;
     if (v.theme === "auto" || v.theme === "light" || v.theme === "dark") prefs.theme = v.theme;
     if (typeof v.sons === "boolean") prefs.sons = v.sons;
+    if (typeof v.volume === "number" && v.volume >= 0 && v.volume <= 1) prefs.volume = v.volume;
     if (typeof v.vols === "boolean") prefs.vols = v.vols;
     if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
     if (v.reperes === "fr" || v.reperes === "en") prefs.reperes = v.reperes;
@@ -3256,7 +3265,12 @@ function sonner(ms: number): void {
     filtre.type = "lowpass";
     filtre.frequency.value = p.coupure;
     filtre.Q.value = 0.7;
-    filtre.connect(son.destination);
+    // Un seul robinet en sortie : les volumes ecrits dans les notes disent
+    // l'equilibre ENTRE les voix d'un accord, celui-ci dit la force de
+    // l'ensemble. Les melanger reviendrait a redessiner chaque sonnerie.
+    const maitre = son.createGain();
+    maitre.gain.value = prefs.volume;
+    filtre.connect(maitre).connect(son.destination);
     for (const n of p.notes) {
       const o = son.createOscillator(), g = son.createGain();
       o.type = n.t ?? "sine";
@@ -3629,6 +3643,10 @@ function peuplerPreferences(): void {
   for (const b of $("p-sons").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String(((b as HTMLElement).dataset["v"] === "on") === prefs.sons));
   }
+  const vol = $("p-volume") as HTMLInputElement;
+  vol.value = String(Math.round(prefs.volume * 100));
+  $("p-volume-vu").textContent = `${Math.round(prefs.volume * 100)} %`;
+  $("p-volume-ligne").classList.toggle("muet", !prefs.sons);
   $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
   $("p-image").setAttribute("aria-pressed", String(prefs.imageHD));
   for (const b of $("p-reperes").querySelectorAll("button")) {
@@ -3651,6 +3669,17 @@ for (const b of $("p-sons").querySelectorAll("button")) {
     peuplerPreferences();
   });
 }
+// LE CURSEUR SE FAIT ENTENDRE. Regler un volume a l'aveugle, sur des sonneries
+// qu'on n'entendra que dans cinq minutes, n'a pas de sens : on joue donc la
+// premiere -- la plus sobre -- a chaque fois que le curseur s'arrete.
+$("p-volume").addEventListener("input", () => {
+  prefs.volume = Number(($("p-volume") as HTMLInputElement).value) / 100;
+  $("p-volume-vu").textContent = `${Math.round(prefs.volume * 100)} %`;
+});
+$("p-volume").addEventListener("change", () => {
+  garderPreferences();
+  sonner(SEUIL_SONNERIE_MS);
+});
 // Un seul interrupteur : la question est « faut-il reduire ? », elle appelle
 // oui ou non. Deux boutons cote a cote obligeaient a lire les deux etiquettes
 // pour comprendre laquelle etait allumee.

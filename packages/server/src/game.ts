@@ -160,6 +160,40 @@ const PALIERS_EN_MEMOIRE = 60_000;
 const DECOMPTE_MS = 3000;
 
 /**
+ * Combien de coups on calcule d'avance. Voir SPEC.md §17.
+ *
+ * Le prix d'un top monte avec la grille : cinq millisecondes sur un plateau
+ * borne, plus d'une seconde au dix-millieme coup d'une grille sans fin. En
+ * direct, ce temps-la se voit -- le coup precedent est tombe, les caramels
+ * sont poses, et le tirage suivant se fait attendre.
+ *
+ * Cinq coups d'avance suffisent : au rythme ou l'on joue, ils representent
+ * plusieurs minutes de marge, et ils tiennent en memoire. En chercher
+ * davantage ne ferait qu'immobiliser plus longtemps le fil du solveur, qui
+ * doit rester disponible pour le rejeu.
+ */
+const COUPS_D_AVANCE = 5;
+
+/**
+ * Un coup entierement pret, tire et resolu, qui n'a pas encore ete servi.
+ *
+ * CES DONNEES NE SORTENT JAMAIS. Ni l'etat public, ni le journal, ni le
+ * terminal n'en voient la couleur : elles disent le tirage a venir et son top,
+ * c'est-a-dire tout ce qu'un joueur aurait interet a savoir.
+ */
+interface CoupPret {
+  n: number;
+  rack: string;
+  notation: string;
+  top: Move;
+  bestScore: number;
+  isotops: number;
+  tiers: Tier[];
+  /** Ce qui restera en main apres le top -- le point de depart du tirage suivant. */
+  reliquatApres: string[];
+}
+
+/**
  * Combien de tirages sans le moindre coup jouable avant de clore la partie.
  *
  * Un tirage dont rien ne se pose est deja rarissime -- il faut une grille tres
@@ -241,6 +275,17 @@ export class Game {
   private canonicalTop: Move | null = null;
   /** Instant ou le tirage courant a ete diffuse. Le chrono du coup part de la. */
   servedAt = 0;
+  /**
+   * L'heure du tirage retrouvee au journal, quand le serveur redemarre.
+   *
+   * Sur une grille sans chrono, un coup dure jusqu'a ce que quelqu'un trouve le
+   * top -- des heures, parfois des jours. Redemarrer le serveur remettait ce
+   * compteur a zero : le coup paraissait neuf, et les sonneries des cinq et dix
+   * minutes repartaient pour un tour. L'heure du tirage est donc ecrite au
+   * journal, et reprise ici. Zero quand il n'y a rien a reprendre.
+   */
+  private repriseServie = 0;
+  private repriseCoup = 0;
   /** Minuterie du coup en cours, quand la partie est chronometree. */
   private echeance: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -297,6 +342,50 @@ export class Game {
   /** DUPLICATE : qui etait present quand le tirage est tombe. */
   private participants = new Set<string>();
   solving = false;
+
+  /**
+   * LES COUPS D'AVANCE. Voir SPEC.md §17.
+   *
+   * La file des coups deja tires et deja resolus, dans l'ordre. Elle est
+   * strictement privee : rien ici ne part aux clients, ne s'ecrit au journal,
+   * ni ne s'affiche au terminal.
+   */
+  private avance: CoupPret[] = [];
+  /**
+   * La pioche du double, une COPIE de la vraie.
+   *
+   * Piocher dans le vrai sac pour calculer d'avance avancerait aussi le
+   * reliquat affiche : les joueurs verraient disparaitre des lettres avant
+   * qu'elles ne soient tirees, et pourraient en deduire les tirages a venir.
+   * Le double pioche donc a part, et la vraie pioche ne bouge qu'au moment du
+   * vrai tirage -- ou l'on verifie que les deux tombent bien d'accord.
+   */
+  private sacAvance: Pioche | null = null;
+  private reliquatAvance: string[] = [];
+  /** Le coup servi vient de la file : sa pose est deja faite chez le solveur. */
+  private posePrise = false;
+  /** Combien de coups ont ete servis SANS ATTENTE, parce qu'ils etaient prets. */
+  coupsPrets = 0;
+  /**
+   * Combien de coups ont du etre cherches en direct, la file vide et aucun pas
+   * de calcul en cours. C'est le compte des occasions manquees.
+   */
+  calculsDirects = 0;
+  private avanceEnCours = false;
+  /** Le pas de calcul en cours, s'il y en a un. Voir `deal` : on l'attend. */
+  private pasDAvance: Promise<boolean> | null = null;
+  /** Un desaccord entre le double et la vraie partie : on renonce, sans risque. */
+  private avanceRenoncee = false;
+  /** La partie est arretee : plus rien ne doit partir au fil de calcul. */
+  private arretee = false;
+  /**
+   * Combien de coups la grille du SOLVEUR porte.
+   *
+   * Elle prend de l'avance sur celle de la partie : le coup en cours y est deja
+   * pose, et les coups prets aussi. C'est ce compte, et non le numero du coup
+   * joue, qui dit sur quelle position le prochain calcul tombera.
+   */
+  private posesSolveur = 0;
 
   private nextId = 1;
   private pending = new Map<number, (r: any) => void>();
@@ -384,6 +473,12 @@ export class Game {
    * et le verrou empecherait la nouvelle partie de s'ouvrir.
    */
   async stop(): Promise<void> {
+    // D'ABORD couper l'avance. Les demandes en attente vont etre denouees juste
+    // en dessous ; sans ce drapeau, la boucle de calcul en relancerait une
+    // aussitot, vers un fil qui n'existe plus, et n'aurait plus jamais de
+    // reponse.
+    this.arretee = true;
+    this.viderLAvance();
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.releaseLock();
     for (const [, done] of this.pending) done({ result: null, ms: 0 });
@@ -479,6 +574,23 @@ export class Game {
   onChat(fn: (m: ChatMessage) => void): void { this.surChat.push(fn); }
   private emit(): void { for (const f of this.listeners) f(); }
 
+  /**
+   * Ouvre le fil du solveur. A part, parce qu'il faut savoir le refaire : voir
+   * `renoncerALAvance`.
+   */
+  private demarrerLeSolveur(): void {
+    this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
+      workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
+    });
+    this.worker.on("message", (m: any) => {
+      if (m.t !== "solved" && m.t !== "paliers" && m.t !== "avancee") return;
+      const done = this.pending.get(m.id);
+      this.pending.delete(m.id);
+      done?.(m);
+    });
+    this.worker.on("error", (e) => console.error("[solveur]", e));
+  }
+
   /** Rejoue le journal, puis prepare le coup courant. */
   async start(): Promise<void> {
     this.acquireLock();
@@ -540,16 +652,7 @@ export class Game {
       this.bag = sac;
     }
 
-    this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
-    });
-    this.worker.on("message", (m: any) => {
-      if (m.t !== "solved" && m.t !== "paliers") return;
-      const done = this.pending.get(m.id);
-      this.pending.delete(m.id);
-      done?.(m);
-    });
-    this.worker.on("error", (e) => console.error("[solveur]", e));
+    this.demarrerLeSolveur();
 
     if (saved !== null) {
       if (saved.layout !== this.layout) {
@@ -568,6 +671,7 @@ export class Game {
         this.reliquat = Bag.remainder(m.rack, m.placements);
         this.moves.push(m);
       }
+      this.posesSolveur = this.moves.length;
       console.log(`[partie] ${this.moves.length} coups rejoues`);
     } else {
       console.log(`[partie] nouvelle grille, graine ${this.seed.slice(0, 8)}`);
@@ -590,7 +694,12 @@ export class Game {
       createdAt: Date.now(), moves: [], players: {}, chat: [],
     };
     const byNumber = new Map<number, PlayedMove>();
+    let servi: { n: number; at: number } | null = null;
     for (const ev of events) {
+      if (ev["t"] === "servi") {
+        servi = { n: ev["n"] as number, at: ev["at"] as number };
+        continue;
+      }
       if (ev["t"] === "grille") {
         out.seed = ev["seed"] ?? out.seed;
         out.createdAt = ev["createdAt"] ?? out.createdAt;
@@ -609,6 +718,21 @@ export class Game {
         if (ev["on"] === true && i === -1) likes.push(ev["who"] as string);
         if (ev["on"] === false && i !== -1) likes.splice(i, 1);
       }
+    }
+    // L'HEURE DU COUP EN COURS SURVIT AU REDEMARRAGE. Voir SPEC.md §17.
+    //
+    // Le dernier tirage servi n'a pas ete joue : c'est celui que la partie va
+    // reprendre. Son heure est celle a laquelle il est VRAIMENT parti, et sur
+    // une grille sans chrono c'est tout ce qui compte -- un coup qui dure
+    // depuis six heures doit continuer d'en dire six, meme si le serveur a
+    // redemarre entre-temps, et les sonneries des cinq et dix minutes ne
+    // doivent pas repartir de zero.
+    //
+    // Un chrono, lui, repart entier : reprendre une minuterie interrompue
+    // ferait expirer le coup a la seconde ou le serveur revient.
+    if (servi !== null && servi.n === out.moves.length + 1 && this.cfg.chrono === null) {
+      this.repriseCoup = servi.n;
+      this.repriseServie = servi.at;
     }
     // Le classement se recompte, il ne se stocke pas : ainsi il ne peut pas
     // deriver de la liste des coups.
@@ -692,6 +816,8 @@ export class Game {
       this.finie = true;
       this.solving = false;
       this.canonicalTop = null;
+      // Les coups prets ne seront jamais servis : la partie s'arrete ici.
+      this.viderLAvance();
       // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
       // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
       // qui restent dans le sac ne sont pas piochés : ils ne serviront plus.
@@ -721,7 +847,54 @@ export class Game {
     this.canonicalTop = null;
     this.isotops = 0;
     this.tiers = [];
+    this.posePrise = false;
+
+    // LE COUP EST-IL DEJA PRET ? Voir SPEC.md §17.
+    //
+    // Le double a pioche et cherche ce coup-la pendant que le precedent se
+    // jouait. On verifie que sa pioche est tombee sur le MEME tirage que la
+    // vraie -- c'est la seule chose qui puisse les separer, et elle ne le
+    // devrait jamais : les deux suivent la meme suite aleatoire. Si les deux
+    // divergent quand meme, on jette l'avance et on calcule en direct : le
+    // resultat est le bon, il arrive seulement plus tard.
+    // UN CALCUL DEJA LANCE EST UN CALCUL QU'ON N'A PAS A REFAIRE. Quand la file
+    // est vide et qu'un pas d'avance court, ce pas cherche precisement le coup
+    // qu'on est en train de servir : l'attendre est plus court que de relancer
+    // la meme recherche en parallele -- et cela evite surtout que les deux
+    // posent le meme coup chacun de son cote sur la grille du solveur.
+    const sansAttendre = this.avance.length > 0;
+    if (this.avance.length === 0 && this.pasDAvance !== null) {
+      await this.pasDAvance.catch(() => false);
+    }
+    const pret = this.avance.shift();
+    if (pret !== undefined && pret.rack === this.rack && pret.n === this.moveNumber + 1) {
+      this.canonicalTop = pret.top;
+      this.bestScore = pret.bestScore;
+      this.isotops = pret.isotops;
+      this.tiers = pret.tiers;
+      this.posePrise = true;
+      // « Pret » veut dire servi SANS LA MOINDRE ATTENTE. Un coup qu'il a fallu
+      // attendre -- parce que le pas de calcul courait encore -- compte comme
+      // un coup calcule en direct : c'est bien ce que les joueurs ont vu.
+      if (sansAttendre) this.coupsPrets++;
+      this.ouvrirLeDecompte();
+      this.servir(0);
+      return;
+    }
+    if (pret !== undefined) {
+      this.renoncerALAvance(
+        `le coup ${pret.n} prepare ne repond pas au coup ${this.moveNumber + 1} servi`,
+      );
+    }
+
     this.solving = true;
+    this.calculsDirects++;
+    // LE DECOMPTE COURT PENDANT LE CALCUL. « 3, 2, 1 » n'est pas du repos : le
+    // tirage y est deja tire mais tenu secret, et ces trois secondes sont
+    // exactement celles qu'il faut au serveur pour trouver le top du premier
+    // coup. Les depenser deux fois -- chercher, puis decompter -- retardait le
+    // depart sans rien apporter a personne.
+    this.ouvrirLeDecompte();
     this.emit();
 
     const id = this.nextId++;
@@ -761,6 +934,7 @@ export class Game {
         this.bestScore = -1;
         this.isotops = 0;
         this.tiers = [];
+        this.viderLAvance();
         this.emit();
         return;
       }
@@ -773,20 +947,246 @@ export class Game {
     this.bestScore = reply.result.bestScore;
     this.isotops = reply.result.isotops;
     this.tiers = reply.result.tiers;
+    this.servir(reply.ms);
+  }
+
+  /**
+   * Le tirage part. C'est ici, et nulle part ailleurs, que le coup commence.
+   *
+   * `msCalcul` vaut zero pour un coup pris dans la file d'avance : il n'a rien
+   * coute a ce moment-la, il etait deja pret.
+   */
+  private servir(msCalcul: number): void {
+    // Ce qui reste du decompte, s'il court encore. Le tirage n'apparait qu'a
+    // zero -- `rackPublic` le tait jusque-la -- et le coup ne s'ouvre qu'apres.
+    //
+    // On n'ATTEND PAS ici : `deal` est appele depuis le message d'un joueur, et
+    // le faire patienter trois secondes bloquerait la reponse a tout le monde.
+    const reste = this.decompteJusqua - Date.now();
+    if (reste > 0) {
+      setTimeout(() => this.ouvrirLeCoup(msCalcul), reste);
+      this.emit();
+      return;
+    }
+    this.ouvrirLeCoup(msCalcul);
+  }
+
+  /** Le tirage devient public, le chrono part, le coup commence. */
+  private ouvrirLeCoup(msCalcul: number): void {
+    this.decompteJusqua = 0;
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
-    this.servedAt = Date.now();
+    //
+    // Sauf a la reprise d'un serveur arrete : le coup avait alors commence
+    // AVANT, et sur une grille sans chrono son age est ce qui compte. On
+    // retrouve son heure au journal plutot que de la reinventer.
+    const n = this.moveNumber + 1;
+    const reprise = this.repriseCoup === n ? this.repriseServie : 0;
+    this.repriseCoup = 0;
+    this.repriseServie = 0;
+    this.servedAt = reprise !== 0 ? reprise : Date.now();
     if (this.debutDeLaPartie === 0) this.debutDeLaPartie = this.servedAt;
-    this.decompteJusqua = 0;
-    if (!this.lancerLeDecompte()) this.armerLeChrono();
+    // Un chrono, lui, repart entier : reprendre une minuterie interrompue une
+    // heure plus tot ferait expirer le coup a la seconde ou le serveur revient.
+    this.armerLeChrono();
+    // L'HEURE DU TIRAGE VA AU JOURNAL, et rien d'autre. Ni le tirage, ni le
+    // top : le journal est relu par le serveur, mais il est aussi lisible par
+    // l'hote, et un coup en cours ne doit se lire nulle part.
+    this.append({ t: "servi", n, at: this.servedAt });
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
     // clients, mais quelqu'un qui regarde le terminal de l'hote les lirait.
     console.log(
-      `[partie] coup ${this.moveNumber + 1} · tirage ${this.rackNotation} · ` +
-      `calcule en ${reply.ms.toFixed(0)} ms`,
+      `[partie] coup ${n} · tirage ${this.rackNotation} · ` +
+      (msCalcul > 0 ? `calcule en ${msCalcul.toFixed(0)} ms` : `pret d'avance`),
     );
     this.emit();
+    // Et on prend de l'avance sur ce qui vient.
+    this.avancerLaGrilleDuSolveur();
+    void this.precalculer();
+  }
+
+  /**
+   * Peut-on prendre de l'avance en ce moment ?
+   *
+   * Trois refus de principe :
+   *
+   * - **Partie joker.** Le joker pose devient une VRAIE lettre tiree du sac
+   *   (`substituerJokers`) : la grille qui suit ne depend donc pas seulement du
+   *   top, mais de ce qu'il reste dans le sac au moment ou il est joue. Le
+   *   double ne saurait pas le deviner, et poserait des jokers la ou la partie
+   *   posera des lettres. On ne devine pas ce qu'on ne sait pas.
+   * - **Salon vide.** Une partie endormie ne pioche pas ; elle n'a pas non plus
+   *   a faire tourner un fil de calcul pour personne.
+   * - **Partie non commencee ou finie.** Il n'y a pas de suite a preparer.
+   */
+  private peutPrendreDeLAvance(): boolean {
+    if (this.arretee || this.avanceRenoncee || this.cfg.joker) return false;
+    if (!this.demarree || this.finie || !this.actif) return false;
+    if (this.canonicalTop === null) return false;
+    if (this.cfg.coupsMax !== null && this.posesSolveur >= this.cfg.coupsMax) return false;
+    return true;
+  }
+
+  /**
+   * CALCULE LES COUPS SUIVANTS PENDANT QUE CELUI-CI SE JOUE. Voir SPEC.md §17.
+   *
+   * Le principe tient a une propriete de la partie : en topping comme en
+   * duplicate, LE COUP POSE EST TOUJOURS LE TOP. La suite de la partie ne
+   * depend donc pas de ce que les joueurs trouveront -- elle est deja ecrite,
+   * et on peut la calculer d'avance sans rien deviner.
+   *
+   * Le double avance en deux temps, coup par coup : on pose le top connu sur la
+   * grille du solveur, on tire le tirage suivant dans la pioche copiee, et on
+   * cherche son top. Ce qui en sort est range dans une file privee.
+   *
+   * Un seul calcul court a la fois. Le fil du solveur est unique et sert aussi
+   * le rejeu : l'occuper de cinq demandes d'un coup ferait attendre un joueur
+   * qui feuillette la feuille de route.
+   */
+  private async precalculer(): Promise<void> {
+    if (this.avanceEnCours || this.sacAvance === null || !this.peutPrendreDeLAvance()) return;
+    this.avanceEnCours = true;
+    try {
+      while (this.avance.length < COUPS_D_AVANCE && this.peutPrendreDeLAvance()) {
+        // Le pas courant est expose : `deal` s'en sert pour ATTENDRE plutot que
+        // de relancer en direct un calcul qui est deja en train de se faire.
+        const pas = this.unCoupDAvance();
+        this.pasDAvance = pas;
+        const suite = await pas;
+        this.pasDAvance = null;
+        if (!suite) break;
+      }
+    } finally {
+      this.avanceEnCours = false;
+      this.pasDAvance = null;
+    }
+  }
+
+  /**
+   * Pose le top du coup COURANT sur la grille du solveur, et remet le double
+   * de la pioche a hauteur.
+   *
+   * C'est le premier pas de l'avance : sans lui, le coup suivant se chercherait
+   * sur la position d'avant. On le fait ici, TOUT DE SUITE apres avoir servi le
+   * tirage, et non dans la boucle : `commit` lit `posePrise` pour savoir s'il
+   * doit poser a son tour, et un joueur qui tape un mot deja trouve peut
+   * arriver dans la milliseconde.
+   *
+   * Ne s'applique qu'au coup servi EN DIRECT -- un coup pris dans la file est
+   * deja pose, et le double est deja plus loin.
+   */
+  private avancerLaGrilleDuSolveur(): void {
+    if (this.posePrise || !this.peutPrendreDeLAvance()) return;
+    this.worker.postMessage({ t: "place", placements: this.canonicalTop!.placements });
+    this.posesSolveur++;
+    this.posePrise = true;
+    // LE DOUBLE REPART DE LA VRAIE PIOCHE, ici et maintenant. On n'arrive ici
+    // que la file vide : le double n'a donc rien devine au-dela de ce coup-ci,
+    // et le recopier vaut mieux que de tenir a jour un etat qui pourrait
+    // deriver. Une copie coute le tour d'un sac de cent deux caramels.
+    this.sacAvance = this.bag.cloner();
+    this.reliquatAvance = Bag.remainder(this.rack, this.canonicalTop!.placements);
+  }
+
+  /**
+   * Un coup d'avance : un tirage, un top, une entree dans la file.
+   *
+   * Rend faux quand il n'y a plus rien a preparer -- sac epuise, tirage
+   * injouable a repetition, ou desaccord.
+   */
+  private async unCoupDAvance(): Promise<boolean> {
+    const sac = this.sacAvance!;
+    if (sac.estFinie(this.reliquatAvance)) return false;
+    // L'INVARIANT DE L'AVANCE, en une ligne : la grille du solveur porte les
+    // coups joues, plus le coup en cours, plus ceux qui attendent dans la file.
+    // Tout le reste en decoule -- le numero du prochain calcul, et le fait que
+    // `commit` ne doit pas reposer un coup deja pose.
+    const attendu = this.moveNumber + (this.posePrise ? 1 : 0) + this.avance.length;
+    if (this.posesSolveur !== attendu) {
+      this.renoncerALAvance(
+        `la grille du solveur porte ${this.posesSolveur} coups, ` +
+        `l'avance en comptait ${attendu}`,
+      );
+      return false;
+    }
+    const n = this.posesSolveur + 1;
+
+    // Le meme cycle qu'en direct : on tire, et si rien n'est jouable on rend
+    // les caramels au sac et on recommence. Le plafond est celui de la partie.
+    const plafond = tiragesInjouables(this.cfg.bornes);
+    for (let essai = 0; essai < plafond; essai++) {
+      const draw = sac.draw(this.reliquatAvance);
+      const id = this.nextId++;
+      const reply: any = await new Promise((res) => {
+        this.pending.set(id, res);
+        this.worker.postMessage({
+          t: "avance", id, rack: draw.rack, moveNumber: n, tiers: 40,
+        });
+      });
+      // Le solveur dit combien de coups sa grille porte. Un ecart voudrait dire
+      // qu'on a calcule sur une autre position que celle qu'on croit : mieux
+      // vaut le savoir bruyamment que servir un faux top.
+      const attendu = this.posesSolveur + (reply.result === null ? 0 : 1);
+      if (typeof reply.coupsPoses === "number" && reply.coupsPoses !== attendu) {
+        this.renoncerALAvance(
+          `le solveur porte ${reply.coupsPoses} coups, la partie en attendait ${attendu}`,
+        );
+        return false;
+      }
+      // Une partie qu'on arrete denoue ses demandes en attente : ce qui revient
+      // ici n'est pas une reponse du solveur, et il n'y a plus rien a preparer.
+      if (this.arretee) return false;
+      if (reply.result === null) {
+        sac.rendre([...draw.rack]);
+        this.reliquatAvance = [];
+        continue;
+      }
+      const top = reply.result.top as Move;
+      this.posesSolveur++;
+      this.avance.push({
+        n, rack: draw.rack, notation: draw.notation, top,
+        bestScore: reply.result.bestScore,
+        isotops: reply.result.isotops,
+        tiers: reply.result.tiers,
+        reliquatApres: Bag.remainder(draw.rack, top.placements),
+      });
+      this.reliquatAvance = Bag.remainder(draw.rack, top.placements);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * On renonce a l'avance, et on remet le solveur d'aplomb.
+   *
+   * Ne devrait jamais arriver : le double suit la meme suite aleatoire que la
+   * partie, et le coup pose est toujours le top. Mais si les deux divergeaient,
+   * la grille du solveur porterait des coups qui ne seront jamais joues, et
+   * TOUS les tops suivants seraient faux. On la refait donc a partir des coups
+   * reellement joues -- c'est long sur une grande grille, et c'est le prix a
+   * payer une fois plutot que de fausser une partie.
+   */
+  private renoncerALAvance(raison: string): void {
+    console.error(`[avance] ${raison} -- on refait la grille du solveur`);
+    this.avance = [];
+    this.sacAvance = null;
+    this.avanceRenoncee = true;
+    this.posePrise = false;
+    for (const [, done] of this.pending) done({ result: null, ms: 0 });
+    this.pending.clear();
+    void this.worker.terminate();
+    this.demarrerLeSolveur();
+    for (const m of this.moves) {
+      this.worker.postMessage({ t: "place", placements: m.placements });
+    }
+    this.posesSolveur = this.moves.length;
+  }
+
+  /** Range la file : ses coups ne seront jamais servis. */
+  private viderLAvance(): void {
+    this.avance = [];
+    this.sacAvance = null;
   }
 
   get moveNumber(): number { return this.moves.length; }
@@ -1013,7 +1413,13 @@ export class Game {
     this.reliquat = Bag.remainder(this.rack, top.placements);
     if (this.cfg.joker) this.substituerJokers(top.placements);
     this.board.place(top.placements);
-    this.worker.postMessage({ t: "place", placements: top.placements });
+    // Un coup pris dans la file d'avance est DEJA pose chez le solveur : c'est
+    // en le posant qu'il a pu chercher le suivant. Le reposer le compterait
+    // deux fois, et la grille du solveur ne serait plus celle de la partie.
+    if (!this.posePrise) {
+      this.worker.postMessage({ t: "place", placements: top.placements });
+      this.posesSolveur++;
+    }
     // Le journal d'abord, force sur le disque : a partir d'ici le coup existe,
     // meme si la machine s'eteint dans la seconde.
     this.append({ t: "coup", move });
@@ -1038,21 +1444,19 @@ export class Game {
    * decompter ? » pour repondre non quatre-vingt-dix-neuf fois sur cent etait
    * une facon detournee de dire une chose qui ne se produit qu'au debut.
    *
-   * Pendant qu'il court, le tirage est affiche mais le chrono n'a pas demarre :
-   * ces trois secondes ne sont prises sur le temps de personne.
+   * IL COURT PENDANT LE CALCUL DU PREMIER TOP, et c'est tout son interet. Le
+   * tirage est deja tire, mais `rackPublic` le tait tant que le decompte n'est
+   * pas fini : les joueurs voient « 3, 2, 1 » exactement pendant que le serveur
+   * cherche. Lance apres le calcul, comme il l'etait, il ajoutait trois
+   * secondes d'attente a une attente.
    *
-   * Rend vrai s'il a ete lance -- le chrono s'armera alors tout seul a sa fin.
+   * Rend vrai s'il court -- qu'il vienne d'etre ouvert ou qu'il coure deja,
+   * ce qui arrive quand un tirage injouable fait repiocher.
    */
-  private lancerLeDecompte(): boolean {
+  private ouvrirLeDecompte(): boolean {
+    if (this.decompteJusqua > Date.now()) return true;
     if (!this.cfg.decompte || this.moves.length > 0 || !this.actif || this.finie) return false;
     this.decompteJusqua = Date.now() + DECOMPTE_MS;
-    this.emit();
-    setTimeout(() => {
-      this.decompteJusqua = 0;
-      this.servedAt = Date.now();
-      this.armerLeChrono();
-      this.emit();
-    }, DECOMPTE_MS);
     return true;
   }
 
@@ -1088,6 +1492,9 @@ export class Game {
     }
     this.armerLeChrono();
     this.emit();
+    // Le salon s'etait vide au milieu d'une avance : elle a pu s'arreter avant
+    // d'avoir ses cinq coups. On la reprend la ou elle en etait.
+    void this.precalculer();
   }
 
   /** Lance la partie : premier tirage, et le chrono si la variante en a un. */
