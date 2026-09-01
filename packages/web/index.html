@@ -364,9 +364,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bascule[aria-pressed="true"] .voyant { background: var(--accent); border-color: var(--accent); }
 .bascule[aria-pressed="true"] .voyant::after { transform: translateX(13px); }
 
-.essais { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
-.essais button { padding: 4px 8px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
-.essais button:hover { color: var(--accent); border-color: var(--accent); }
 
 .join { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ground); z-index: 30; }
 /* Un selecteur de classe bat l'attribut hidden : sans cette regle, masquer
@@ -797,8 +794,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="light">Clair</button>
           <button type="button" data-v="dark">Sombre</button>
         </div>
-        <p class="apres">« Automatique » suit le réglage du navigateur, et le suivra
-        s'il change — de quoi passer au sombre à la tombée du jour sans rien rouvrir ici.</p>
       </div>
 
       <div class="reglage">
@@ -807,12 +802,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="on">Activés</button>
           <button type="button" data-v="off">Muets</button>
         </div>
-        <p class="apres">
-          Sur la grille permanente, un coup trouvé après cinq minutes fait sonner deux
-          notes graves. Plus il a résisté longtemps, plus la sonnerie est gaie — jusqu'au
-          petit orchestre, passé dix jours.
-        </p>
-        <div class="essais" id="p-essais"></div>
       </div>
 
       <div class="reglage">
@@ -820,9 +809,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button type="button" class="bascule" id="p-vols" aria-pressed="false">
           <span class="voyant"></span>Réduire les mouvements de caméra
         </button>
-        <p class="apres">Cliquer un coup passé y amène la caméra. Réduits, elle s'y
-        pose d'un coup au lieu d'y voler — sur une grande grille, le trajet traverse
-        des milliers de cases.</p>
       </div>
 
       <div class="reglage">
@@ -841,14 +827,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button type="button" class="bascule" id="p-image" aria-pressed="false">
           <span class="voyant"></span>Enregistrer les grilles en haute définition
         </button>
-        <p class="apres">Sur une grille de cinq cents cases de côté, l'image passe de
-        5 200 à 9 400 pixels et les lettres de 6 à 11 — lisibles au lieu d'être
-        devinées. Le fichier est bien plus lourd, et le navigateur peut refuser de
-        le produire sur une machine peu pourvue.</p>
       </div>
-
-      <p class="apres">Ces réglages sont les vôtres et restent sur cet appareil.
-      Ils ne changent rien pour les autres joueurs du salon.</p>
     </div>
   </div>
 </div>

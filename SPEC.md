@@ -674,6 +674,12 @@ parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'elle-même
 La ligne et la colonne de la case désignée s'allument, sur un fond discret : la
 notation se lit sans quitter la grille des yeux.
 
+**Le dernier top marque aussi sa ligne et sa colonne**, plus discrètement — sans
+fond, dans la teinte des cases partagées. Le coup vient d'être posé, souvent
+loin de l'endroit où l'on cherchait : sa place se lit sur les règles, sans avoir
+à le suivre des yeux sur la grille. Ce qu'on **désigne** l'emporte : quand il y a
+un curseur, c'est lui qu'on suit.
+
 ### Le plateau borné ne colle plus au bas de l'écran
 
 On centrait le plateau dans ce qui restait **sous** une bande de repères de
@@ -684,6 +690,31 @@ Les repères venant maintenant se coller au plateau, c'est le **bloc entier** �
 plateau plus étiquettes — qu'on centre : autant d'air en haut qu'en bas. La case
 perd un demi-pixel au passage, ce qui ne se voit pas ; le déséquilibre, lui, se
 voyait.
+
+### En rejeu, le cumul est celui du coup qu'on regarde
+
+Montrer le total de la partie à côté d'un coup du milieu ne dit rien de ce
+coup-là. Ce qu'on veut savoir en revoyant le coup 3, c'est **où en était la
+grille à ce moment** — pas où elle a fini.
+
+### Rien n'annonce le début d'une partie
+
+La grille s'est vidée, le compteur est revenu à 1, le tirage a changé. Un bandeau
+qui répète ce que l'écran montre déjà masque la grille au moment précis où l'on
+veut la regarder.
+
+### Un réglage qui a besoin d'un paragraphe est un réglage mal nommé
+
+Le panneau des paramètres portait une notice sous chaque ligne : ce que suivait
+« Automatique », ce que faisaient les six sonneries, ce que coûtait la haute
+définition. Utiles à l'écrire, inutiles à la lecture — on ne lit pas une notice
+pour cocher une case, et six paragraphes empilés font douter qu'on ait compris.
+
+Ne reste que ce qui **ne se devine pas** : le piège des deux écoles de notation,
+où `H8` change de sens d'une convention à l'autre.
+
+Les boutons qui faisaient écouter chaque sonnerie ont servi une fois — à les
+choisir — et n'avaient plus de raison d'être ensuite.
 
 ### Le chevalet porte des caramels, pas du texte
 

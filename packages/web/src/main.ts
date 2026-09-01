@@ -825,7 +825,11 @@ function draw() {
  * parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'
  * elle-meme.
  */
-function reglesCollees(C: Record<string, string>, b: number, mark: { x0: number; y0: number } | null): void {
+function reglesCollees(
+  C: Record<string, string>, b: number,
+  mark: { x0: number; y0: number } | null,
+  dernier: { x: number; y: number } | null,
+): void {
   const R = REGLE_BORNEE;
   const g0x = ox - b * cell, g0y = oy - b * cell;
   ctx.textAlign = "center";
@@ -834,22 +838,24 @@ function reglesCollees(C: Record<string, string>, b: number, mark: { x0: number;
 
   for (let x = -b; x <= b; x++) {
     const on = mark !== null && mark.x0 === x;
+    const passe = !on && dernier !== null && dernier.x === x;
     const cx = ox + x * cell + cell / 2, cy = g0y - R / 2;
     if (on) {
       ctx.fillStyle = C.abg!;
       ctx.fillRect(ox + x * cell + 1, g0y - R + 1, cell - 2, R - 3);
     }
-    ctx.fillStyle = on ? C.accent! : C.faint!;
+    ctx.fillStyle = on ? C.accent! : passe ? C.mark! : C.faint!;
     ctx.fillText(nomColonne(x, b), cx, cy);
   }
   for (let y = -b; y <= b; y++) {
     const on = mark !== null && mark.y0 === y;
+    const passe = !on && dernier !== null && dernier.y === y;
     const cx = g0x - R / 2, cy = oy + y * cell + cell / 2;
     if (on) {
       ctx.fillStyle = C.abg!;
       ctx.fillRect(g0x - R + 1, oy + y * cell + 1, R - 3, cell - 2);
     }
-    ctx.fillStyle = on ? C.accent! : C.faint!;
+    ctx.fillStyle = on ? C.accent! : passe ? C.mark! : C.faint!;
     ctx.fillText(nomLigne(y, b), cx, cy);
   }
 }
@@ -869,7 +875,12 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     : cursor !== null ? { x: cursor.x, y: cursor.y } : null;
   const mark = depart === null ? null
     : { x0: depart.x, y0: depart.y, x1: depart.x, y1: depart.y };
-  if (bornes !== null) { reglesCollees(C, bornes, mark); return; }
+  // LE DERNIER TOP MARQUE SA LIGNE ET SA COLONNE, plus discretement. Le coup
+  // vient d'etre pose, souvent loin de l'ecran ou l'on cherchait : sa place se
+  // lit alors sur les regles, sans avoir a le suivre des yeux sur la grille.
+  // Ce qu'on DESIGNE l'emporte : quand on a un curseur, c'est lui qu'on suit.
+  const dernier = rejeu === null && last !== null ? { x: last.x, y: last.y } : null;
+  if (bornes !== null) { reglesCollees(C, bornes, mark, dernier); return; }
   if (mark !== null) {
     ctx.fillStyle = C.abg!;
     const sx = ox + mark.x0 * cell, sw = (mark.x1 - mark.x0 + 1) * cell;
@@ -920,7 +931,8 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     const texte = texteX(x);
     if (!on && pxMarque !== null
         && Math.abs(px - pxMarque) < demiMarqueX + ctx.measureText(texte).width / 2 + 3) continue;
-    ctx.fillStyle = on ? C.dark! : C.faint!;
+    ctx.fillStyle = on ? C.dark!
+      : dernier !== null && dernier.x === x ? C.mark! : C.faint!;
     ctx.fillText(texte, px, TOP / 2);
   }
   for (let y = gy0; y <= gy1; y++) {
@@ -931,7 +943,8 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     if (bornes !== null && (y < -bornes || y > bornes)) continue;
     // Les chiffres font dix pixels de haut : en deca, ils se chevauchent.
     if (!on && pyMarque !== null && Math.abs(py - pyMarque) < 12) continue;
-    ctx.fillStyle = on ? C.dark! : C.faint!;
+    ctx.fillStyle = on ? C.dark!
+      : dernier !== null && dernier.y === y ? C.mark! : C.faint!;
     ctx.fillText(texteY(y), LEFT / 2, py);
   }
 }
@@ -1552,7 +1565,12 @@ function paintSide() {
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
   $("rejeu-wrap").hidden = (!finie && !rejeuOuvert) || history.length === 0;
-  $("rb-cumul").textContent = cumul.toLocaleString("fr");
+  // EN REJEU, LE CUMUL EST CELUI DU COUP QU'ON REGARDE. Montrer le total de la
+  // partie a cote d'un coup du milieu ne dit rien de ce coup-la : ce qu'on veut
+  // savoir, c'est ou en etait la grille a ce moment.
+  const ici = rejeu;
+  $("rb-cumul").textContent = (ici === null ? cumul
+    : history.reduce((s, m) => m.n <= ici.n ? s + m.score : s, 0)).toLocaleString("fr");
   // Au duplicate, chacun a son propre total : on le montre a cote du cumul de
   // la grille, pour qu'il se compare d'un coup d'oeil.
   $("rb-score-wrap").hidden = !duplicate;
@@ -3541,23 +3559,6 @@ for (const b of $("p-reperes").querySelectorAll("button")) {
   });
 }
 
-// UN SON SE CHOISIT EN L'ECOUTANT. Decrire une sonnerie ne dit rien de ce
-// qu'elle fait dans une piece ; un bouton par palier laisse juger sur piece,
-// et regler son volume avant que le coup ne tombe.
-for (const p of SONNERIES) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.textContent = p.nom;
-  b.addEventListener("click", () => {
-    // On essaie meme en sourdine : c'est le geste qui demande a entendre.
-    const garde = prefs.sons;
-    prefs.sons = true;
-    sonner(p.apres);
-    prefs.sons = garde;
-  });
-  $("p-essais").appendChild(b);
-}
-
 $("prefs-open").addEventListener("click", () => {
   peuplerPreferences();
   $("prefs").hidden = false;
@@ -3807,7 +3808,9 @@ function connect() {
       // La relance a pu changer de grille : on recadre selon la NOUVELLE.
       if (cfg.bornes !== null) cadrer();
       else { ox = W / 2 - cell / 2; oy = H / 2 - cell / 2; }
-      flash("nouvelle partie dans ce salon", "ok");
+      // Rien a annoncer : la grille s'est videe, le compteur est revenu a 1 et
+      // le tirage a change. Un bandeau qui repete ce que l'ecran montre deja
+      // masque la grille au moment ou l'on veut justement la regarder.
       draw();
       return;
     }
