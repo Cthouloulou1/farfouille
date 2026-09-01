@@ -84,7 +84,66 @@ export function formatMoveBorne(dir: Dir, x: number, y: number, bornes: number):
   return dir === "H" ? `${ligne}${colonne}` : `${colonne}${ligne}`;
 }
 
+/**
+ * Notation d'un coup sur une grille bornee, A LA MANIERE ANGLAISE.
+ *
+ * Les deux ecoles n'ont pas mis les reperes du meme cote du plateau :
+ *
+ * | | lignes | colonnes | centre horizontal | centre vertical |
+ * |---|---|---|---|---|
+ * | francaise | A a O | 1 a 15 | `H8` | `8H` |
+ * | anglaise  | 1 a 15 | A a O | `8H` | `H8` |
+ *
+ * La regle de lecture, elle, est la MEME des deux cotes : c'est l'axe FIXE qui
+ * vient en tete. Un mot horizontal tient sur une ligne, donc le repere de la
+ * ligne d'abord ; un mot vertical tient sur une colonne, donc celui de la
+ * colonne. Ce qui change n'est pas la grammaire, c'est l'alphabet des axes.
+ *
+ * Piege : au centre, les deux notations produisent les memes deux chaines en
+ * les echangeant. `H8` designe un coup horizontal en francais et un coup
+ * VERTICAL en anglais. Une partie ne doit donc jamais melanger les deux.
+ */
+export function formatMoveBorneAnglais(
+  dir: Dir, x: number, y: number, bornes: number,
+): string {
+  const colonne = String.fromCharCode(65 + x + bornes);
+  const ligne = y + bornes + 1;
+  return dir === "H" ? `${ligne}${colonne}` : `${colonne}${ligne}`;
+}
+
+/** De quel cote du plateau se lisent les lettres. */
+export type Reperes = "fr" | "en";
+
+/**
+ * Les reperes en vigueur, pour tout ce qui s'affiche.
+ *
+ * Un reglage de LECTEUR, pas de partie : deux joueurs du meme salon peuvent
+ * lire la meme grille dans deux conventions sans que rien ne change au jeu.
+ * C'est aussi pourquoi il vit ici plutot que dans la configuration, qui voyage
+ * avec la grille et vaut pour tout le monde.
+ */
+let reperes: Reperes = "fr";
+export function setReperes(r: Reperes): void { reperes = r; }
+export function reperesActifs(): Reperes { return reperes; }
+
+/** L'etiquette d'une colonne, dans les reperes en vigueur. */
+export function nomColonne(x: number, bornes: number): string {
+  return reperes === "en"
+    ? String.fromCharCode(65 + x + bornes)
+    : String(x + bornes + 1);
+}
+
+/** L'etiquette d'une ligne, dans les reperes en vigueur. */
+export function nomLigne(y: number, bornes: number): string {
+  return reperes === "en"
+    ? String(y + bornes + 1)
+    : String.fromCharCode(65 + y + bornes);
+}
+
 /** La notation qui convient a la grille : bornee ou infinie. */
 export function noteCoup(dir: Dir, x: number, y: number, bornes: number | null): string {
-  return bornes === null ? formatMove(dir, x, y) : formatMoveBorne(dir, x, y, bornes);
+  if (bornes === null) return formatMove(dir, x, y);
+  return reperes === "en"
+    ? formatMoveBorneAnglais(dir, x, y, bornes)
+    : formatMoveBorne(dir, x, y, bornes);
 }

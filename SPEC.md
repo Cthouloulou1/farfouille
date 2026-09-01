@@ -124,6 +124,33 @@ H8     le centre, horizontalement        8H    le centre, verticalement
 L'ordre de la paire dépend donc du sens. C'est voulu : c'est ce que lit un
 joueur de duplicate, et l'inverser rendrait la notation étrangère à l'usage.
 
+#### Les deux écoles : française et anglaise
+
+Les deux mondes du scrabble n'ont pas mis les lettres du même côté du plateau.
+
+| | lignes | colonnes | centre horizontal | centre vertical |
+|---|---|---|---|---|
+| **française** | A à O | 1 à 15 | `H8` | `8H` |
+| **anglaise** | 1 à 15 | A à O | `8H` | `H8` |
+
+**La règle de lecture est la même des deux côtés** : c'est l'axe **fixe** qui
+vient en tête. Un mot horizontal tient sur une ligne, donc le repère de la ligne
+d'abord ; un mot vertical tient sur une colonne, donc celui de la colonne. Ce qui
+change n'est pas la grammaire, c'est l'alphabet des axes.
+
+> ⚠️ **Piège.** Au centre, les deux notations produisent les mêmes deux chaînes
+> en les échangeant : `H8` désigne un coup **horizontal** en française et un coup
+> **vertical** en anglaise. Une partie ne doit jamais mélanger les deux.
+
+C'est un réglage de **lecteur**, pas de partie : deux joueurs du même salon
+peuvent lire la même grille dans deux conventions sans que rien ne change au jeu.
+Il vit donc dans les paramètres, à côté du thème, et non dans la configuration —
+qui voyage avec la grille et vaut pour tout le monde. C'est ce qui permettra de
+servir le site en anglais sans toucher au moteur.
+
+Vérifié : le même mot horizontal partant de la ligne 8, colonne 3, se lit `H3`
+en française et `8C` en anglaise.
+
 ### Cases bonus
 
 `bonus(x, y)` **doit être une fonction pure, sans aucun stockage**. C'est ce qui
@@ -630,6 +657,34 @@ Les hauteurs sont gardées avec les autres préférences : on ne réarrange pas 
 **La liste des joueurs connectés ne pousse pas le reste.** Vingt pseudos
 chassaient le classement hors de l'écran ; elle défile maintenant dans sa boîte.
 
+### Les repères d'un plateau borné se collent au plateau
+
+Sur une **grille infinie**, les repères restent épinglés au bord du canevas : la
+grille défile sous eux, et une étiquette qui suivrait le plateau sortirait de
+l'écran.
+
+Un **plateau borné**, lui, ne bouge pas. Ses repères n'ont donc aucune raison de
+vivre à l'autre bout du canevas, loin de la case qu'ils nomment — c'est ainsi que
+le font les jeux de société et les logiciels de scrabble, et cela se lit bien
+mieux.
+
+**En haut et à gauche seulement.** Un plateau de bois les répète des quatre côtés
+parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'elle-même.
+
+La ligne et la colonne de la case désignée s'allument, sur un fond discret : la
+notation se lit sans quitter la grille des yeux.
+
+### Le plateau borné ne colle plus au bas de l'écran
+
+On centrait le plateau dans ce qui restait **sous** une bande de repères de
+trente-quatre pixels collée au bord du canevas. Il se retrouvait avec quarante
+pixels au-dessus et six en dessous — l'air d'avoir glissé au fond de l'écran.
+
+Les repères venant maintenant se coller au plateau, c'est le **bloc entier** —
+plateau plus étiquettes — qu'on centre : autant d'air en haut qu'en bas. La case
+perd un demi-pixel au passage, ce qui ne se voit pas ; le déséquilibre, lui, se
+voyait.
+
 ### Le chevalet porte des caramels, pas du texte
 
 **Un caramel est un objet.** On le prend, on le déplace, on ne le sélectionne
@@ -645,11 +700,24 @@ en main. On retire les lettres posées en gardant l'ordre des autres, et une
 lettre reprise revient à sa place. Il se défait au coup suivant, avec le tirage
 auquel il appartenait.
 
-Pendant le glissement, c'est **l'élément lui-même** qui se déplace dans la
-rangée : les autres s'écartent tout seuls, et ce qu'on voit est déjà le résultat.
-On compte les **milieux franchis** plutôt que d'échanger avec le voisin — un
-geste rapide saute plusieurs cases entre deux événements, et un échange par
-voisin prendrait du retard sur la main.
+**Le caramel suit le doigt.** Il ne change pas de place dans la rangée tant qu'on
+le tient : on le *déplace*, sous le curseur, et ce sont les autres qui s'écartent
+d'une place pour lui faire de la place — comme une main qui pousse une pièce de
+bois entre deux autres. Sa place visée se déduit du chemin parcouru, arrondie au
+plus proche ; elle n'est inscrite dans la rangée qu'au moment où on le lâche.
+
+Échanger deux lettres à l'instant où l'on franchit un milieu donnait un
+sautillement dont on ne comprenait ni la cause ni la règle.
+
+Le caramel tenu se déplace **sans transition** — une animation le ferait traîner
+derrière le curseur. Les autres, eux, glissent : c'est ce glissement qui montre
+la place qui s'ouvre.
+
+**Les caramels prennent la place qu'ils ont.** Sept lettres tiennent largement
+dans la barre, quinze non : une taille fixe obligerait à choisir entre des
+caramels minuscules pour tout le monde et une rangée qui déborde sur les
+compteurs. Elle se décide donc au nombre de lettres — 54, 46 ou 38 pixels — et le
+tirage ordinaire y gagne.
 
 Le chevalet est un aide-mémoire : ranger ses lettres **ne change rien à la
 partie**, on joue en tapant. C'est aussi pourquoi on n'y touche pas pendant le

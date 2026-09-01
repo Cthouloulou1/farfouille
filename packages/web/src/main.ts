@@ -12,7 +12,9 @@ import { Board, type Placement } from "../../engine/src/board.ts";
 import { configParDefaut, deserialiser, type ConfigPartie } from "../../engine/src/config.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { valueOf, BLANK } from "../../engine/src/alphabet.ts";
-import { step, noteCoup, type Dir } from "../../engine/src/coords.ts";
+import {
+  step, noteCoup, setReperes, nomColonne, nomLigne, type Dir, type Reperes,
+} from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 import { chercherLeMot } from "../../engine/src/chercher.ts";
 
@@ -179,20 +181,35 @@ function resize() {
  * deplacer ou le dezoomer n'apporte que des reglages a refaire et des lignes
  * qui bougent sous les yeux du joueur.
  */
+/** Largeur de la bande d'etiquettes collee au plateau borne. */
+const REGLE_BORNEE = 22;
+/** Air laisse autour de l'ensemble plateau + etiquettes. */
+const MARGE_BORNEE = 16;
+
+/**
+ * Cadre le plateau borne, ETIQUETTES COMPRISES.
+ *
+ * On centrait le plateau dans ce qui restait sous une bande de reperes de
+ * trente-quatre pixels, collee au bord du canevas : il se retrouvait avec
+ * quarante pixels au-dessus et six en dessous, l'air d'avoir glisse au fond de
+ * l'ecran. Les reperes viennent maintenant se coller au plateau, et c'est le
+ * BLOC ENTIER qu'on centre -- autant d'air en haut qu'en bas.
+ */
 function cadrer(): void {
   const b = cfg.bornes;
   if (b === null) return;
   const cotes = b * 2 + 1;
-  const RULE = 34;   // place laissee aux regles, en haut et a gauche
-  cell = Math.max(12, Math.floor(Math.min(W - RULE - 12, H - RULE - 12) / cotes));
+  const dispo = Math.min(W, H) - REGLE_BORNEE - MARGE_BORNEE * 2;
+  cell = Math.max(12, Math.floor(dispo / cotes));
   const taille = cell * cotes;
+  const bloc = REGLE_BORNEE + taille;
   // Cale sur des pixels d'ecran : la moitie d'un ecart impair de largeur donne
   // un demi-pixel, et le plateau se decalait d'un cheveu a la moindre variation
   // de la mise en page -- ce qui se voit comme une secousse.
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const cale = (v: number) => Math.round(v * dpr) / dpr;
-  ox = cale(RULE + Math.max(0, (W - RULE - taille) / 2) + b * cell);
-  oy = cale(RULE + Math.max(0, (H - RULE - taille) / 2) + b * cell);
+  ox = cale((W - bloc) / 2 + REGLE_BORNEE + b * cell);
+  oy = cale((H - bloc) / 2 + REGLE_BORNEE + b * cell);
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -794,7 +811,51 @@ function draw() {
  * sans compter les cases -- indispensable pour se reperer a l'oral ou dans le
  * chat, sur une grille qui n'a ni centre ni bord.
  */
+/**
+ * Les reperes d'un PLATEAU BORNE, colles au plateau.
+ *
+ * Sur une grille infinie, les reperes doivent rester epingles au bord du
+ * canevas : la grille defile sous eux, et une etiquette qui suivrait le plateau
+ * sortirait de l'ecran. Un plateau borne, lui, ne bouge pas -- ses reperes
+ * n'ont donc aucune raison de vivre a l'autre bout du canevas, loin de la case
+ * qu'ils nomment. C'est ainsi que le font les jeux de societe et les logiciels
+ * de scrabble, et cela se lit bien mieux.
+ *
+ * EN HAUT ET A GAUCHE SEULEMENT. Un plateau de bois les repete des quatre cotes
+ * parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'
+ * elle-meme.
+ */
+function reglesCollees(C: Record<string, string>, b: number, mark: { x0: number; y0: number } | null): void {
+  const R = REGLE_BORNEE;
+  const g0x = ox - b * cell, g0y = oy - b * cell;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `600 ${Math.max(10, Math.min(13, Math.round(cell * .42)))}px Archivo, system-ui, sans-serif`;
+
+  for (let x = -b; x <= b; x++) {
+    const on = mark !== null && mark.x0 === x;
+    const cx = ox + x * cell + cell / 2, cy = g0y - R / 2;
+    if (on) {
+      ctx.fillStyle = C.abg!;
+      ctx.fillRect(ox + x * cell + 1, g0y - R + 1, cell - 2, R - 3);
+    }
+    ctx.fillStyle = on ? C.accent! : C.faint!;
+    ctx.fillText(nomColonne(x, b), cx, cy);
+  }
+  for (let y = -b; y <= b; y++) {
+    const on = mark !== null && mark.y0 === y;
+    const cx = g0x - R / 2, cy = oy + y * cell + cell / 2;
+    if (on) {
+      ctx.fillStyle = C.abg!;
+      ctx.fillRect(g0x - R + 1, oy + y * cell + 1, R - 3, cell - 2);
+    }
+    ctx.fillStyle = on ? C.accent! : C.faint!;
+    ctx.fillText(nomLigne(y, b), cx, cy);
+  }
+}
+
 function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: number, gy1: number) {
+  const bornes = cfg.bornes;
   const TOP = 17, LEFT = 30;
   ctx.fillStyle = C.panel!;
   ctx.fillRect(0, 0, W, TOP);
@@ -808,6 +869,7 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
     : cursor !== null ? { x: cursor.x, y: cursor.y } : null;
   const mark = depart === null ? null
     : { x0: depart.x, y0: depart.y, x1: depart.x, y1: depart.y };
+  if (bornes !== null) { reglesCollees(C, bornes, mark); return; }
   if (mark !== null) {
     ctx.fillStyle = C.abg!;
     const sx = ox + mark.x0 * cell, sw = (mark.x1 - mark.x0 + 1) * cell;
@@ -823,8 +885,6 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   ctx.moveTo(LEFT + .5, 0); ctx.lineTo(LEFT + .5, H);
   ctx.stroke();
 
-  // Sur un plateau ferme, chaque ligne porte son repere : quinze suffisent.
-  const bornes = cfg.bornes;
   // Sur la grille infinie, les coordonnees s'allongent en s'eloignant de
   // l'origine : « -1204 » prend le double de place que « 4 ». Espacer d'une
   // constante faisait donc empieter les nombres au dezoom. On mesure.
@@ -1258,8 +1318,21 @@ function paintRack() {
   peindreCaramels(selonLeChevalet(remaining()));
 }
 
+/**
+ * Les caramels prennent la place qu'ils ont.
+ *
+ * Sept lettres tiennent largement dans la barre, quinze non : une taille fixe
+ * obligerait a choisir entre des caramels minuscules pour tout le monde et une
+ * rangee qui deborde sur les compteurs. Elle se decide donc au nombre de
+ * lettres, et le tirage ordinaire y gagne.
+ */
+function tailleDuCaramel(n: number): number {
+  return n <= 9 ? 54 : n <= 12 ? 46 : 38;
+}
+
 function peindreCaramels(lettres: readonly string[]): void {
   const box = $("rb-tiles");
+  box.style.setProperty("--t", `${tailleDuCaramel(lettres.length)}px`);
   box.replaceChildren();
   for (const ch of lettres) {
     const el = document.createElement("div");
@@ -1278,14 +1351,17 @@ function peindreCaramels(lettres: readonly string[]): void {
 /**
  * Prendre un caramel et le poser ailleurs sur le chevalet.
  *
- * On deplace l'element LUI-MEME dans la rangee pendant le glissement : les
- * autres s'ecartent tout seuls, et ce qu'on voit est deja le resultat. Rien a
- * dessiner, rien a deviner -- et aucune image a fabriquer, un caramel n'etant
- * qu'une boite avec une bordure.
+ * LE CARAMEL SUIT LE DOIGT. Il ne change pas de place dans la rangee tant qu'on
+ * le tient : on le DEPLACE, sous le curseur, et ce sont les autres qui
+ * s'ecartent pour lui faire une place -- comme une main qui pousse une piece de
+ * bois entre deux autres. Echanger deux lettres a l'instant ou l'on franchit un
+ * milieu donnait un sautillement dont on ne comprenait ni la cause ni la regle.
  *
  * Ne change rien a la partie : le chevalet est un aide-memoire, on joue en
- * tapant. C'est aussi pourquoi on n'y touche pas pendant le rejeu, ou le
- * tirage montre est celui d'un coup passe.
+ * tapant. C'est aussi pourquoi on n'y touche pas pendant le rejeu, ou le tirage
+ * montre est celui d'un coup passe.
+ *
+ * Aucune image a fabriquer : un caramel n'est qu'une boite avec une bordure.
  */
 $("rb-tiles").addEventListener("pointerdown", (e) => {
   const ev = e as PointerEvent;
@@ -1293,29 +1369,41 @@ $("rb-tiles").addEventListener("pointerdown", (e) => {
   const el = (ev.target as HTMLElement).closest(".caramel") as HTMLElement | null;
   if (el === null) return;
   const box = $("rb-tiles");
+  const rangee = [...box.children] as HTMLElement[];
+  const depart = rangee.indexOf(el);
+  if (depart === -1) return;
+
+  // Le pas d'une place : la largeur d'un caramel et l'ecart qui le suit. On le
+  // mesure sur la rangee plutot que de le supposer -- la taille des caramels
+  // s'adapte au nombre de lettres.
+  const large = el.getBoundingClientRect().width;
+  const pas = rangee.length > 1
+    ? rangee[1]!.getBoundingClientRect().left - rangee[0]!.getBoundingClientRect().left
+    : large;
+
   ev.preventDefault();
   el.setPointerCapture(ev.pointerId);
   el.classList.add("tire");
   box.classList.add("range");
   let bouge = false;
+  let cible = depart;
 
   const glisser = (m: PointerEvent) => {
-    if (!bouge && Math.abs(m.clientX - ev.clientX) < 3) return;
+    const dx = m.clientX - ev.clientX;
+    if (!bouge && Math.abs(dx) < 3) return;
     bouge = true;
-    // COMBIEN DE CARAMELS LE DOIGT A-T-IL DEPASSES ? C'est la place du notre.
-    // On compte les milieux franchis plutot que d'echanger avec le voisin :
-    // un geste rapide saute plusieurs cases entre deux evenements, et un
-    // echange par voisin prendrait du retard sur la main.
-    const autres = ([...box.children] as HTMLElement[]).filter((c) => c !== el);
-    let place = 0;
-    for (const autre of autres) {
-      const r = autre.getBoundingClientRect();
-      if (m.clientX > r.left + r.width / 2) place++;
+    // Le caramel tenu suit le doigt, sans contrainte : c'est lui qu'on regarde.
+    el.style.transform = `translateX(${dx}px)`;
+    // Sa place VISEE se deduit du chemin parcouru, arrondie au plus proche.
+    cible = Math.max(0, Math.min(rangee.length - 1, depart + Math.round(dx / pas)));
+    // Les autres s'ecartent d'une place, dans le sens ou le trou se creuse.
+    for (let i = 0; i < rangee.length; i++) {
+      if (i === depart) continue;
+      const decale = cible > depart && i > depart && i <= cible ? -pas
+        : cible < depart && i >= cible && i < depart ? pas
+        : 0;
+      rangee[i]!.style.transform = decale === 0 ? "" : `translateX(${decale}px)`;
     }
-    const avant = autres[place] ?? null;
-    // On ne touche au document que si la place a vraiment change : reinserer
-    // au meme endroit relance les transitions et fait vibrer la rangee.
-    if (el.nextSibling !== avant) box.insertBefore(el, avant);
   };
   const lacher = () => {
     el.removeEventListener("pointermove", glisser);
@@ -1323,10 +1411,13 @@ $("rb-tiles").addEventListener("pointerdown", (e) => {
     el.removeEventListener("pointercancel", lacher);
     el.classList.remove("tire");
     box.classList.remove("range");
-    if (!bouge) return;
+    for (const c of rangee) c.style.transform = "";
+    if (!bouge || cible === depart) return;
     // L'arrangement porte sur le tirage entier : ce qui est pose sur la grille
     // n'est pas affiche, mais garde sa place pour quand on le reprendra.
-    const montres = ([...box.children] as HTMLElement[]).map((c) => c.dataset["l"] ?? "");
+    const montres = rangee.map((c) => c.dataset["l"] ?? "");
+    const [pris] = montres.splice(depart, 1);
+    montres.splice(cible, 0, pris ?? "");
     const caches = [...ordreChevalet];
     for (const c of montres) {
       const i = caches.indexOf(c);
@@ -2837,6 +2928,8 @@ interface Preferences {
   hauteurs: { live: number | null; journal: number | null };
   /** Les images de grille sont-elles tirees en haute definition ? */
   imageHD: boolean;
+  /** De quel cote du plateau se lisent les lettres : « fr » ou « en ». */
+  reperes: Reperes;
 }
 const prefs: Preferences = {
   theme: "auto", sons: true,
@@ -2845,6 +2938,7 @@ const prefs: Preferences = {
   vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
   hauteurs: { live: null, journal: null },
   imageHD: false,
+  reperes: "fr",
 };
 const CLE_PREFS = "farfouille.preferences";
 
@@ -2857,6 +2951,7 @@ function lirePreferences(): void {
     if (typeof v.sons === "boolean") prefs.sons = v.sons;
     if (typeof v.vols === "boolean") prefs.vols = v.vols;
     if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
+    if (v.reperes === "fr" || v.reperes === "en") prefs.reperes = v.reperes;
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
       for (const cle of ["live", "journal"] as const) {
@@ -2885,6 +2980,22 @@ function garderPreferences(): void {
  * image de cote : il faut l'invalider, sinon les anciennes teintes restent
  * posees jusqu'au prochain changement d'echelle.
  */
+/**
+ * Applique les reperes choisis, et repeint tout ce qui porte une notation.
+ *
+ * Le changement touche la grille, le journal, la feuille de route, le rejeu et
+ * le chat : partout ou une case se nomme. On repeint donc large plutot que de
+ * tenir la liste des endroits concernes, qui serait fausse au premier ajout.
+ */
+function appliquerLesReperes(): void {
+  setReperes(prefs.reperes);
+  if (!configRecue) return;
+  cacheCle = "";
+  paintJournal();
+  paintSide();
+  draw();
+}
+
 function appliquerLeTheme(): void {
   const r = document.documentElement;
   if (prefs.theme === "auto") r.removeAttribute("data-theme");
@@ -3388,6 +3499,9 @@ function peuplerPreferences(): void {
   }
   $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
   $("p-image").setAttribute("aria-pressed", String(prefs.imageHD));
+  for (const b of $("p-reperes").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.reperes));
+  }
 }
 
 for (const b of $("p-theme").querySelectorAll("button")) {
@@ -3418,6 +3532,14 @@ $("p-image").addEventListener("click", () => {
   garderPreferences();
   peuplerPreferences();
 });
+for (const b of $("p-reperes").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    prefs.reperes = (b as HTMLElement).dataset["v"] as Reperes;
+    garderPreferences();
+    appliquerLesReperes();
+    peuplerPreferences();
+  });
+}
 
 // UN SON SE CHOISIT EN L'ECOUTANT. Decrire une sonnerie ne dit rien de ce
 // qu'elle fait dans une piece ; un bouton par palier laisse juger sur piece,
@@ -3443,6 +3565,7 @@ $("prefs-open").addEventListener("click", () => {
 $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 
 lirePreferences();
+setReperes(prefs.reperes);
 appliquerLeTheme();
 appliquerLesHauteurs();
 
