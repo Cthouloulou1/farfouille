@@ -710,10 +710,12 @@ On centrait le plateau dans ce qui restait **sous** une bande de repères de
 trente-quatre pixels collée au bord du canevas. Il se retrouvait avec quarante
 pixels au-dessus et six en dessous — l'air d'avoir glissé au fond de l'écran.
 
-Les repères venant maintenant se coller au plateau, c'est le **bloc entier** —
-plateau plus étiquettes — qu'on centre : autant d'air en haut qu'en bas. La case
-perd un demi-pixel au passage, ce qui ne se voit pas ; le déséquilibre, lui, se
-voyait.
+Les repères venant se coller au plateau, c'est le **bloc entier** — plateau plus
+étiquettes — qui se pose : centré en largeur, **en haut** en hauteur. Centré
+verticalement il descendait de tout l'air qui restait, et sur une fenêtre haute
+et étroite — où c'est la **largeur** qui décide de la taille des cases — cet air
+se compte en centaines de pixels. On lit une grille du haut vers le bas ;
+l'espace qui reste va donc dessous.
 
 ### En rejeu, le cumul est celui du coup qu'on regarde
 
@@ -802,6 +804,23 @@ un mot, et ce qui revient en main n'a plus de raison de garder l'arrangement
 d'avant : c'était celui d'une idée qu'on vient d'essayer. L'arrangement **tient
 pendant la frappe** — le voir se défaire lettre après lettre serait insupportable
 — et se défait quand la main est rendue.
+
+### Les raccourcis du jeu passent avant ceux du navigateur
+
+| | |
+|---|---|
+| **Ctrl+R** | ouvre et referme la feuille de route |
+| **Ctrl+D** | ouvre les réglages de la partie |
+| **Ctrl+A** | range le chevalet |
+
+`Ctrl+R` rechargerait la page — au milieu d'une partie, c'est perdre son tirage
+en cours et se reconnecter pour rien. `Ctrl+D` poserait un signet. Ni l'un ni
+l'autre n'a de sens ici, et tous deux se trouvent sous les doigts quand on joue.
+On les prend, et on les rend à leur usage dès qu'on est dans une **zone de
+saisie** — celles-ci reçoivent les touches avant le jeu.
+
+`Ctrl+D` ne fait rien là où le bouton des réglages n'est pas là : un raccourci ne
+donne pas un droit que l'écran refuse.
 
 **Ctrl+A range le chevalet**, comme sur le logiciel historique. Le navigateur s'en
 sert pour tout sélectionner, mais la touche n'arrive ici que hors de toute zone
@@ -982,6 +1001,14 @@ Un bouton au bout de la ligne de résumé écrit **une page HTML autonome** sur
 l'ordinateur du lecteur. Elle s'ouvre d'un double-clic dans n'importe quel
 navigateur, s'imprime, et garde ses colonnes. Un tableur demanderait de choisir
 un séparateur et perdrait la mise en page ; une image ne se chercherait pas.
+
+**Un plateau borné n'a pas besoin de marge.** Il n'y a rien au-delà de ses bords,
+et une rangée de cases vides tout autour ne fait qu'éloigner la grille de son
+cadre — quelques pixels suffisent, juste de quoi ne pas couper le cadre lui-même.
+Le **tirage se pose contre la grille**, dans une bande qui ne fait plus que la
+hauteur des caramels. Et **le numéro du coup s'en va** : il ne situe l'image que
+sur une grille sans fin, où la partie n'en finit pas ; sur quinze sur quinze, la
+grille se lit d'un coup d'œil.
 
 **Un document n'est pas une copie d'écran de l'application.** Ce qu'on enregistre
 se relira ailleurs, hors du jeu, peut-être dans des années : rejouer un coup,
@@ -2431,6 +2458,12 @@ créateur, lui, ne s'annonce pas : son bouton reparaît, il n'a rien à apprendr
 **Supprimer le salon reste au créateur seul.** Régler, c'est relancer une partie
 dans le même lieu ; supprimer, c'est jeter ce lieu et ce qui s'y est joué. On ne
 confie pas la seconde à qui passe.
+
+**Une grille permanente ne se rerègle pas.** Relancer, c'est archiver la partie
+en cours et en ouvrir une neuve : sur une grille d'étude qui porte onze mille
+coups, c'est le geste qu'on ne veut surtout pas faire par mégarde. Le bouton des
+réglages disparaît, ils ne s'ouvrent pas d'office le jour où on la crée, et le
+serveur refuse la relance — **un bouton caché est un garde-fou, pas une règle**.
 
 **Un salon peut être permanent sans appartenir à personne.** Un salon ordinaire
 appartient à qui l'a créé et disparaît avec lui ; une **grille d'étude** porte

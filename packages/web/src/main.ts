@@ -130,6 +130,8 @@ let openPlayer: string | null = null;
 let gerant: string | null = null;
 /** La grille permanente : celle qui n'appartient a personne. */
 let salonPermanent = false;
+/** Ce salon ne se supprime ni ne se rerelance : c'est une grille d'etude. */
+let permanent = false;
 let marks: { x: number; y: number }[] = [];
 
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
@@ -215,7 +217,11 @@ function cadrer(): void {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const cale = (v: number) => Math.round(v * dpr) / dpr;
   ox = cale((W - bloc) / 2 + REGLE_BORNEE + b * cell);
-  oy = cale((H - bloc) / 2 + REGLE_BORNEE + b * cell);
+  // EN HAUTEUR, LE PLATEAU SE POSE EN HAUT. Centre, il descendait de tout l'air
+  // qui restait -- et sur une fenetre haute et etroite, ou c'est la LARGEUR qui
+  // decide de la taille des cases, cet air se compte en centaines de pixels. On
+  // lit une grille du haut vers le bas ; l'espace qui reste va donc dessous.
+  oy = cale(MARGE_BORNEE + REGLE_BORNEE + b * cell);
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -1019,11 +1025,15 @@ async function exporterImage(coup?: number): Promise<void> {
   // dessus du dernier caramel pose et redescendre le toucher. Une marge de deux
   // cases coupait ces coups-la de l'image, et le top devenait introuvable pour
   // qui cherche dessus.
+  // UN PLATEAU BORNE N'A PAS BESOIN DE MARGE : il n'y a rien au-dela de ses
+  // bords, et une rangee de cases vides tout autour ne fait qu'eloigner la
+  // grille de son cadre. Les reperes, eux, restent -- ce sont eux qui nomment
+  // les cases.
   const marge = cfg.jouables + 1;
-  const x0 = b !== null ? -b - 1 : (vide ? -8 : ex0 - marge);
-  const x1 = b !== null ? b + 1 : (vide ? 8 : ex1 + marge);
-  const y0 = b !== null ? -b - 1 : (vide ? -8 : ey0 - marge);
-  const y1 = b !== null ? b + 1 : (vide ? 8 : ey1 + marge);
+  const x0 = b !== null ? -b : (vide ? -8 : ex0 - marge);
+  const x1 = b !== null ? b : (vide ? 8 : ex1 + marge);
+  const y0 = b !== null ? -b : (vide ? -8 : ey0 - marge);
+  const y1 = b !== null ? b : (vide ? 8 : ey1 + marge);
   const cases = { l: x1 - x0 + 1, h: y1 - y0 + 1 };
 
   // CE PLAFOND EST CE QUI DECIDE DE LA LISIBILITE DES LETTRES.
@@ -1044,13 +1054,24 @@ async function exporterImage(coup?: number): Promise<void> {
   taille = Math.max(6, taille);
   while (cases.l * taille * cases.h * taille > PIXELS_MAX && taille > 6) taille--;
 
-  const REGLE = { x: 30, y: 17 };
+  // La place des reperes : collee au plateau sur une grille bornee, la bande du
+  // bord de l'ecran sur une grille infinie -- comme a l'ecran.
+  const REGLE = b !== null
+    ? { x: REGLE_BORNEE + 3, y: REGLE_BORNEE + 3 }
+    : { x: 30, y: 17 };
   // Le bandeau du tirage, quand il y en a un. Ses caramels sont plus grands que
   // ceux de la grille : c'est ce qu'on lit en premier.
   const tailleTirage = Math.max(28, Math.min(64, Math.round(cases.l * taille / 26)));
-  const BANDEAU = tirage.length > 0 ? Math.round(tailleTirage * 1.9) : 0;
-  const largeur = Math.round(cases.l * taille) + REGLE.x;
-  const hauteur = Math.round(cases.h * taille) + REGLE.y + BANDEAU;
+  // Le tirage se pose JUSTE AU-DESSUS de la grille sur un plateau borne : le
+  // bandeau ne fait plus que la hauteur des caramels et un peu d'air.
+  const BANDEAU = tirage.length === 0 ? 0
+    : Math.round(tailleTirage * (b === null ? 1.9 : 1.35));
+  // TRES PEU D'AIR, MAIS PAS ZERO : le cadre du plateau borde ses cases par
+  // l'exterieur, et sans ces quelques pixels il serait coupe net a droite et en
+  // bas. C'est la seule marge qui reste sur un plateau borne.
+  const AIR = b === null ? 0 : 6;
+  const largeur = Math.round(cases.l * taille) + REGLE.x + AIR;
+  const hauteur = Math.round(cases.h * taille) + REGLE.y + BANDEAU + AIR;
 
   const hors = document.createElement("canvas");
   hors.width = largeur; hors.height = hauteur;
@@ -1093,7 +1114,12 @@ async function exporterImage(coup?: number): Promise<void> {
     draw();
   }
 
-  if (tirage.length > 0) dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, numero);
+  // Le numero du coup n'a de sens que sur une grille SANS FIN, ou il situe
+  // l'image dans une partie qui n'en finit pas. Sur un plateau borne, la grille
+  // se lit d'un coup d'oeil et le numero n'apprend rien.
+  if (tirage.length > 0) {
+    dessinerLeTirage(g, tirage, largeur, BANDEAU, tailleTirage, b === null ? numero : null);
+  }
 
   const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
   if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
@@ -1118,7 +1144,7 @@ async function exporterImage(coup?: number): Promise<void> {
  */
 function dessinerLeTirage(
   g: CanvasRenderingContext2D, lettres: readonly string[],
-  largeur: number, hauteur: number, taille: number, coup: number,
+  largeur: number, hauteur: number, taille: number, coup: number | null,
 ): void {
   g.save();
   g.fillStyle = css("--panel");
@@ -1151,10 +1177,12 @@ function dessinerLeTirage(
   }
 
   // Le numero du coup, discret, a gauche : de quoi retrouver la position.
-  g.fillStyle = css("--ink-faint");
-  g.font = `500 ${Math.round(taille * .32)}px "IBM Plex Mono", monospace`;
-  g.textAlign = "left"; g.textBaseline = "middle";
-  g.fillText(`COUP ${coup}`, 14, hauteur / 2);
+  if (coup !== null) {
+    g.fillStyle = css("--ink-faint");
+    g.font = `500 ${Math.round(taille * .32)}px "IBM Plex Mono", monospace`;
+    g.textAlign = "left"; g.textBaseline = "middle";
+    g.fillText(`COUP ${coup}`, 14, hauteur / 2);
+  }
   g.restore();
 }
 
@@ -3360,6 +3388,24 @@ addEventListener("keydown", (e) => {
   if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
+  // LES RACCOURCIS DU JEU PASSENT AVANT CEUX DU NAVIGATEUR.
+  //
+  // Ctrl+R rechargerait la page -- au milieu d'une partie, c'est perdre son
+  // tirage en cours et se reconnecter pour rien. Ctrl+D poserait un signet. Ni
+  // l'un ni l'autre n'a de sens ici, et tous deux se trouvent sous les doigts
+  // quand on joue. On les prend, et on les rend a leur usage des qu'on est dans
+  // une zone de saisie -- celles-ci ont rendu la main plus haut.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
+    e.preventDefault();
+    if ($("roadmap").hidden) { $("roadmap").hidden = false; paintRoadmap(); }
+    else fermerLaRoute();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
+    e.preventDefault();
+    if (!$("reglages-open").hidden) ouvrirReglages();
+    return;
+  }
   // CTRL+A RANGE LE CHEVALET, comme sur le logiciel historique. Le navigateur
   // s'en sert pour tout selectionner, mais nous sommes hors de toute zone de
   // saisie -- celles-ci ont rendu la main plus haut -- et il n'y a ici rien a
@@ -3681,7 +3727,7 @@ function applyState(s: {
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   gerant?: string | null;
-  tempsJoue?: number; rejeuOuvert?: boolean;
+  tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
@@ -3713,7 +3759,12 @@ function applyState(s: {
   // Les manettes changent de mains sans qu'on se reconnecte : le bouton des
   // reglages suit l'etat, pas le seul message d'accueil.
   gerant = s.gerant ?? null;
-  $("reglages-open").hidden = gerant !== me;
+  permanent = s.permanent === true;
+  // UNE GRILLE PERMANENTE NE SE REREGLE PAS. Relancer, c'est archiver la partie
+  // en cours et en ouvrir une neuve : sur une grille d'etude qui porte onze
+  // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
+  // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
+  $("reglages-open").hidden = gerant !== me || permanent;
   decompteJusqua = s.decompteJusqua ?? 0;
   demarree = s.demarree !== false;
   coupsMax = s.coupsMax ?? null;
@@ -3816,11 +3867,14 @@ function connect() {
       // Seul le gerant regle son salon. La grille permanente n'en a pas.
       gerant = m.gerant ?? null;
       salonPermanent = m.proprietaire === null;
-      $("reglages-open").hidden = gerant !== me;
+      permanent = m.permanent === true;
+      $("reglages-open").hidden = gerant !== me || permanent;
       $("conn").textContent = `${me} · ${m.nomSalon}`;
       // Une partie qui n'a pas commence s'ouvre sur ses reglages : c'est la
       // qu'on choisit la variante avant de lancer quoi que ce soit.
-      if (m.state?.demarree === false && m.gerant === me) {
+      // Une grille permanente ne s'ouvre pas non plus sur ses reglages : elle
+      // n'est pas la pour etre reglee, meme le jour ou on la cree.
+      if (m.state?.demarree === false && m.gerant === me && !permanent) {
         setTimeout(ouvrirReglages, 60);
       }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
@@ -4543,6 +4597,7 @@ async function rejoindre(id: string): Promise<void> {
   nonTrouves = 0;
   gerant = null;
   salonPermanent = false;
+  permanent = false;
   tempsJoue = 0;
   rejeuOuvert = false;
   // LA TABLE RASE DOIT SE VOIR, PAS SEULEMENT SE FAIRE. Les variables etaient

@@ -232,6 +232,8 @@ function publicState(s: Salon) {
     tempsJoue: g.tempsJoue,
     /** Peut-on revoir les coups sans attendre la fin de la partie ? */
     rejeuOuvert: REJEU_OUVERT.has(s.id),
+    /** Grille permanente : ni supprimee, ni relancee. */
+    permanent: estPermanent(s),
     sac: g.restantDuSac(),
     finie: g.finie,
     solving: g.solving,
@@ -624,6 +626,10 @@ wss.on("connection", (ws) => {
         nomSalon: cible.nom,
         proprietaire: cible.proprietaire,
         gerant: cible.gerant,
+        // Le message d'accueil se suffit a lui-meme : le client decide d'ouvrir
+        // les reglages AVANT d'avoir applique l'etat, et il lui faut savoir des
+        // cette ligne-la si la grille se regle ou non.
+        permanent: estPermanent(cible),
         layout: cible.partie.layout,
         // Le client rejoue le calcul du score a chaque frappe : sans la
         // variante, il afficherait la prime d'une autre partie.
@@ -710,6 +716,14 @@ wss.on("connection", (ws) => {
     // la, quelqu'un d'autre en son absence. La grille mondiale n'en a pas, donc
     // personne ne peut la relancer.
     if (msg.t === "relancer") {
+      // UNE GRILLE PERMANENTE NE SE RELANCE PAS. Relancer archive la partie en
+      // cours et en ouvre une neuve : sur une grille d'etude qui porte des
+      // milliers de coups, c'est le geste qu'on ne veut pas voir arriver par
+      // megarde. L'ecran cache deja le bouton ; ceci est la regle.
+      if (estPermanent(s)) {
+        send(ws, { t: "result", ok: false, message: "cette grille est permanente" });
+        return;
+      }
       if (s.proprietaire === null || s.gerant !== moi.nom) {
         send(ws, { t: "result", ok: false, message: "seul le propriétaire règle le salon" });
         return;
