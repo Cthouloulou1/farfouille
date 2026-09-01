@@ -116,7 +116,19 @@ let servedAt = Date.now();
 /** Ecart entre l'horloge du serveur et la notre. */
 let clockSkew = 0;
 
-let cursor: { x: number; y: number; dir: Dir } | null = null;
+/**
+ * Ou l'on ecrit, et dans quel sens.
+ *
+ * `rec` -- a reculons -- inverse la marche : les lettres se posent vers la
+ * GAUCHE ou vers le HAUT, et le mot s'ecrit donc a l'envers. C'est une facon
+ * de gagner du temps quand on repere d'abord la FIN du mot : on pose le
+ * curseur sur le collage et on tape, au lieu de compter les cases en arriere
+ * pour trouver ou commencer. Voir SPEC.md §18.
+ *
+ * Le moteur, lui, ne connait que la gauche-droite et le haut-bas : c'est
+ * `coupCanonique` qui retourne la chose avant de la lui donner.
+ */
+let cursor: { x: number; y: number; dir: Dir; rec: boolean } | null = null;
 let typed = "";
 let best: { word: string; score: number; dir: Dir; x: number; y: number } | null = null;
 let openPlayer: string | null = null;
@@ -234,9 +246,100 @@ function roundRect(x: number, y: number, w: number, h: number, r: number) {
   ctx.closePath();
 }
 
+/**
+ * Le sens suivant, quand on appuie sur espace.
+ *
+ * A DEUX SENS -- le reglage par defaut -- on alterne droite et bas, les deux
+ * seuls sens dans lesquels un mot se lit. A QUATRE, le tour se poursuit par la
+ * gauche et le haut : le mot s'ecrit alors a reculons, ce qui va plus vite
+ * quand c'est la FIN du mot qu'on a reperee d'abord (SPEC.md §18).
+ */
+function pivoter(
+  c: { x: number; y: number; dir: Dir; rec: boolean },
+): { x: number; y: number; dir: Dir; rec: boolean } {
+  const tour: { dir: Dir; rec: boolean }[] = prefs.quatre
+    ? [{ dir: "H", rec: false }, { dir: "V", rec: false },
+       { dir: "H", rec: true }, { dir: "V", rec: true }]
+    : [{ dir: "H", rec: false }, { dir: "V", rec: false }];
+  const i = tour.findIndex((s) => s.dir === c.dir && s.rec === c.rec);
+  const suivant = tour[(i + 1) % tour.length]!;
+  return { x: c.x, y: c.y, ...suivant };
+}
+
+/** Le pas du curseur, dans le sens ou il marche. */
+function pasDuCurseur(): { dx: number; dy: number } {
+  if (cursor === null) return { dx: 1, dy: 0 };
+  const { dx, dy } = step(cursor.dir);
+  return cursor.rec ? { dx: -dx, dy: -dy } : { dx, dy };
+}
+
+/**
+ * Le coup TEL QUE LE MOTEUR L'ATTEND : un depart, un sens, et les lettres dans
+ * l'ordre de lecture.
+ *
+ * Un curseur qui recule pose ses lettres de droite a gauche : la premiere tapee
+ * est la DERNIERE du mot. Le moteur n'a pas a le savoir -- on lui rend le mot a
+ * l'endroit, en partant de la case la plus lointaine atteinte. Les cases
+ * occupees se sautent de la meme facon dans un sens comme dans l'autre, si bien
+ * que les deux lectures posent exactement les memes caramels.
+ */
+function coupCanonique(): { dir: Dir; x: number; y: number; typed: string } | null {
+  if (cursor === null) return null;
+  if (!cursor.rec) return { dir: cursor.dir, x: cursor.x, y: cursor.y, typed };
+  const cases = typedCells();
+  if (cases.length === 0) return null;
+  const fin = cases[cases.length - 1]!;
+  return {
+    dir: cursor.dir, x: fin.x, y: fin.y,
+    typed: [...typed].reverse().join(""),
+  };
+}
+
+/**
+ * Une case LIBRE au milieu de ce qu'on regarde.
+ *
+ * C'est la ou le curseur apparait quand on appuie sur une fleche sans en avoir
+ * un. Le milieu de l'ecran est le seul endroit qui ne surprenne pas -- et il
+ * doit etre libre : poser le curseur sur une lettre deja posee obligerait a
+ * repartir avant meme d'avoir commence. On s'ecarte donc en spirale jusqu'a
+ * trouver de la place, ce qui est immediat meme sur une grille dense.
+ */
+function caseLibreAuCentre(): { x: number; y: number } | null {
+  const cx = Math.floor((W / 2 - ox) / cell), cy = Math.floor((H / 2 - oy) / cell);
+  for (let r = 0; r < 60; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        // Seulement le CONTOUR du carre de rayon r : l'interieur a deja ete vu.
+        if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const x = cx + dx, y = cy + dy;
+        if (!board.dansLesBornes(x, y)) continue;
+        if (board.at(x, y) === undefined) return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Ramene le curseur dans l'ecran, s'il vient d'en sortir.
+ *
+ * On DEPLACE le strict necessaire, sans recentrer : une grille qui saute a
+ * chaque fleche fait perdre le fil de ce qu'on lisait. Deux cases de marge
+ * suffisent a voir ou l'on va.
+ */
+function suivreLeCurseur(): void {
+  if (cursor === null || cfg.bornes !== null) return;
+  const m = cell * 2;
+  const px = ox + cursor.x * cell, py = oy + cursor.y * cell;
+  if (px < m) ox += m - px;
+  if (px + cell > W - m) ox -= px + cell - (W - m);
+  if (py < m) oy += m - py;
+  if (py + cell > H - m) oy -= py + cell - (H - m);
+}
+
 function typedCells(): { x: number; y: number; letter: string }[] {
   if (cursor === null) return [];
-  const { dx, dy } = step(cursor.dir);
+  const { dx, dy } = pasDuCurseur();
   const out: { x: number; y: number; letter: string }[] = [];
   let i = 0, px = cursor.x, py = cursor.y, guard = 0;
   while (i < typed.length && guard++ < 40) {
@@ -248,7 +351,7 @@ function typedCells(): { x: number; y: number; letter: string }[] {
 
 function nextFree(): { x: number; y: number } | null {
   if (cursor === null) return null;
-  const { dx, dy } = step(cursor.dir);
+  const { dx, dy } = pasDuCurseur();
   const busy = new Set(typedCells().map((c) => `${c.x},${c.y}`));
   let px = cursor.x, py = cursor.y, guard = 0;
   while (guard++ < 40) {
@@ -262,7 +365,9 @@ function nextFree(): { x: number; y: number } | null {
 function blankPositions(): Set<string> {
   const out = new Set<string>();
   if (cursor === null || typed.length === 0) return out;
-  const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack, false, true);
+  const c = coupCanonique();
+  if (c === null) return out;
+  const r = resolveTypedWord(board, dict, c.dir, c.x, c.y, c.typed, rack, false, true);
   if (!r.ok) return out;
   // ON APPARIE DANS L'ORDRE, PAS PAR COORDONNEES.
   //
@@ -794,15 +899,21 @@ function draw() {
     ctx.strokeRect(px + 1.5, py + 1.5, w - 3, h - 3);
     ctx.fillStyle = C.cursor;
     ctx.beginPath();
+    // La pointe montre OU IRA LA PROCHAINE LETTRE. C'est la seule chose qui
+    // distingue a l'oeil un curseur qui avance d'un curseur qui recule, et
+    // sans elle on tape trois lettres avant de s'apercevoir du sens.
     const m = w * .22;
-    if (cursor.dir === "H") {
-      ctx.moveTo(px + w - 3, py + h / 2);
-      ctx.lineTo(px + w - 3 - m, py + h / 2 - m / 1.6);
-      ctx.lineTo(px + w - 3 - m, py + h / 2 + m / 1.6);
+    const { dx, dy } = pasDuCurseur();
+    if (dx !== 0) {
+      const bx = dx > 0 ? px + w - 3 : px + 3;
+      ctx.moveTo(bx, py + h / 2);
+      ctx.lineTo(bx - m * dx, py + h / 2 - m / 1.6);
+      ctx.lineTo(bx - m * dx, py + h / 2 + m / 1.6);
     } else {
-      ctx.moveTo(px + w / 2, py + h - 3);
-      ctx.lineTo(px + w / 2 - m / 1.6, py + h - 3 - m);
-      ctx.lineTo(px + w / 2 + m / 1.6, py + h - 3 - m);
+      const by = dy > 0 ? py + h - 3 : py + 3;
+      ctx.moveTo(px + w / 2, by);
+      ctx.lineTo(px + w / 2 - m / 1.6, by - m * dy);
+      ctx.lineTo(px + w / 2 + m / 1.6, by - m * dy);
     }
     ctx.closePath(); ctx.fill();
   }
@@ -1583,8 +1694,9 @@ function paintCurrent() {
   const w = $("cur-word"), meta = $("cur-meta"), bad = $("cur-bad");
   bad.hidden = true;
 
-  if (cursor !== null && typed.length > 0) {
-    const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack, false, true);
+  const canon = coupCanonique();
+  if (cursor !== null && typed.length > 0 && canon !== null) {
+    const r = resolveTypedWord(board, dict, canon.dir, canon.x, canon.y, canon.typed, rack, false, true);
     if (r.ok) {
       w.className = "word";
       w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
@@ -3028,6 +3140,15 @@ interface Preferences {
   imageHD: boolean;
   /** De quel cote du plateau se lisent les lettres : « fr » ou « en ». */
   reperes: Reperes;
+  /**
+   * La barre d'espace fait-elle le tour des QUATRE sens ?
+   *
+   * Par defaut elle alterne droite et bas, les deux seuls sens dans lesquels
+   * un mot se lit. Ouverte aux quatre, elle permet d'ecrire a reculons : on
+   * pose le curseur sur la FIN du mot et on tape a l'envers, ce qui evite de
+   * compter les cases en arriere pour trouver ou commencer (SPEC.md §18).
+   */
+  quatre: boolean;
 }
 const prefs: Preferences = {
   theme: "auto", sons: true,
@@ -3037,6 +3158,7 @@ const prefs: Preferences = {
   hauteurs: { live: null, journal: null },
   imageHD: false,
   reperes: "fr",
+  quatre: false,
 };
 const CLE_PREFS = "farfouille.preferences";
 
@@ -3050,6 +3172,7 @@ function lirePreferences(): void {
     if (typeof v.vols === "boolean") prefs.vols = v.vols;
     if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
     if (v.reperes === "fr" || v.reperes === "en") prefs.reperes = v.reperes;
+    if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
       for (const cle of ["live", "journal"] as const) {
@@ -3352,9 +3475,9 @@ cv.addEventListener("pointerup", (e) => {
   marks = [];
   if (cursor !== null && cursor.x === x && cursor.y === y) {
     // Recliquer la meme case fait pivoter le sens -- mais pas au milieu d'un mot.
-    if (typed.length === 0) cursor = { x, y, dir: cursor.dir === "H" ? "V" : "H" };
+    if (typed.length === 0) cursor = pivoter(cursor);
   } else {
-    cursor = { x, y, dir: p.button === 2 ? "V" : "H" };
+    cursor = { x, y, dir: p.button === 2 ? "V" : "H", rec: false };
     typed = "";
   }
   paintRack(); paintCurrent(); draw();
@@ -3427,7 +3550,7 @@ addEventListener("keydown", (e) => {
     // On pivote, et le mot en cours s'efface : le retourner tel quel poserait
     // les memes caramels dans l'autre sens, ce qui n'a aucun sens.
     if (cursor !== null) {
-      cursor = { ...cursor, dir: cursor.dir === "H" ? "V" : "H" };
+      cursor = pivoter(cursor);
       typed = "";
       paintRack(); paintCurrent(); draw();
     }
@@ -3444,7 +3567,7 @@ addEventListener("keydown", (e) => {
     // infinie, c'est la meme case. Le placement exact est de toute facon
     // recalcule : un premier coup se glisse a la meilleure position qui couvre
     // le centre.
-    if (cursor === null && tiles.length === 0) cursor = { dir: "H", x: -4, y: 0 };
+    if (cursor === null && tiles.length === 0) cursor = { dir: "H", x: -4, y: 0, rec: false };
     if (cursor === null) return;
     if (typed.length >= 15) return;
     // La lettre irait-elle hors du plateau ? Alors elle ne part pas. Mieux vaut
@@ -3458,6 +3581,40 @@ addEventListener("keydown", (e) => {
     // Lettre absente du tirage : il ne se passe simplement rien.
     if (!left.includes(ch) && !left.includes(BLANK)) return;
     typed += ch;
+    paintRack(); paintCurrent(); draw();
+    return;
+  }
+  // LES FLECHES DEPLACENT LE CURSEUR, pas la grille.
+  //
+  // On se place ou l'on veut ecrire sans quitter le clavier : c'est ce qui
+  // separe une saisie confortable d'un aller-retour a la souris a chaque mot.
+  // Le sens d'ecriture, lui, ne change pas -- il appartient a la barre d'espace.
+  //
+  // La grille se deplace toujours a la souris, et avec MAJ + fleche pour qui
+  // preferait le clavier.
+  const fleches: Record<string, { dx: number; dy: number }> = {
+    ArrowLeft: { dx: -1, dy: 0 }, ArrowRight: { dx: 1, dy: 0 },
+    ArrowUp: { dx: 0, dy: -1 }, ArrowDown: { dx: 0, dy: 1 },
+  };
+  const f = fleches[e.key];
+  if (f !== undefined && !e.shiftKey) {
+    e.preventDefault();
+    // SANS CURSEUR, LA FLECHE EN FAIT APPARAITRE UN. Au milieu de ce qu'on
+    // regarde, et sur une case LIBRE : se retrouver sur une lettre deja posee
+    // obligerait a repartir avant meme d'avoir commence.
+    if (cursor === null) {
+      const c = caseLibreAuCentre();
+      if (c === null) return;
+      cursor = { ...c, dir: "H", rec: false };
+      typed = "";
+    } else {
+      // Deplacer, c'est repartir : les lettres en cours n'ont plus d'ancre.
+      const vise = { x: cursor.x + f.dx, y: cursor.y + f.dy };
+      if (!board.dansLesBornes(vise.x, vise.y)) return;
+      cursor = { ...cursor, ...vise };
+      typed = "";
+    }
+    suivreLeCurseur();
     paintRack(); paintCurrent(); draw();
     return;
   }
@@ -3500,7 +3657,9 @@ function submit() {
   if (cursor === null || typed.length === 0) return;
   if (finie) { flash("la partie est terminée", "bad"); return; }
   if (solving) { flash("le coup n'est pas encore prêt", "bad"); return; }
-  const r = resolveTypedWord(board, dict, cursor.dir, cursor.x, cursor.y, typed, rack);
+  const c = coupCanonique();
+  if (c === null) return;
+  const r = resolveTypedWord(board, dict, c.dir, c.x, c.y, c.typed, rack);
   if (!r.ok) {
     flash(r.error === "TROP_DE_CARAMELS"
       ? `C'est une partie ${cfg.jouables} sur ${cfg.tirage}`
@@ -3511,7 +3670,7 @@ function submit() {
   if (best === null || r.move.score > best.score) {
     best = { word: r.move.word, score: r.move.score, dir: r.move.dir, x: r.move.x, y: r.move.y };
   }
-  envoyer({ t: "try", dir: cursor.dir, x: cursor.x, y: cursor.y, typed });
+  envoyer({ t: "try", dir: c.dir, x: c.x, y: c.y, typed: c.typed });
   typed = ""; paintRack(); paintSide(); draw();
 }
 
@@ -3631,6 +3790,7 @@ function peuplerPreferences(): void {
   }
   $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
   $("p-image").setAttribute("aria-pressed", String(prefs.imageHD));
+  $("p-quatre").setAttribute("aria-pressed", String(prefs.quatre));
   for (const b of $("p-reperes").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.reperes));
   }
@@ -3661,6 +3821,19 @@ $("p-vols").addEventListener("click", () => {
 });
 $("p-image").addEventListener("click", () => {
   prefs.imageHD = !prefs.imageHD;
+  garderPreferences();
+  peuplerPreferences();
+});
+$("p-quatre").addEventListener("click", () => {
+  prefs.quatre = !prefs.quatre;
+  // ON NE LAISSE PAS UN CURSEUR A RECULONS derriere soi : le reglage referme,
+  // la barre d'espace ne saurait plus revenir a l'endroit, et le curseur
+  // resterait bloque a ecrire en arriere sans qu'on comprenne pourquoi.
+  if (!prefs.quatre && cursor !== null && cursor.rec) {
+    cursor = { ...cursor, rec: false };
+    typed = "";
+    paintRack(); paintCurrent(); draw();
+  }
   garderPreferences();
   peuplerPreferences();
 });

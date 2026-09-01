@@ -813,6 +813,8 @@ pendant la frappe** — le voir se défaire lettre après lettre serait insuppor
 | **Ctrl+D** | ouvre les réglages de la partie |
 | **Ctrl+E** | ouvre le rejeu |
 | **Ctrl+A** | range le chevalet |
+| **flèches** | déplacent le curseur d'une case (§18) |
+| **Maj + flèches** | déplacent la grille |
 
 `Ctrl+R` rechargerait la page — au milieu d'une partie, c'est perdre son tirage
 en cours et se reconnecter pour rien. `Ctrl+D` poserait un signet. Ni l'un ni
@@ -1506,7 +1508,6 @@ pas un outil.
 
 | Sujet | Pourquoi |
 |---|---|
-| **Rate-limit, cinq soumissions par seconde** | Rien n'empêche aujourd'hui un client de marteler le serveur. |
 | **Comptes optionnels** (mail + argon2id, vérification) | Le pseudo n'est unique que parmi les connectés, et le contrôle de suppression par pseudo est un **garde-fou, pas une frontière de sécurité**. |
 | **Statistiques et records du site** | Les parties entièrement topées les plus rapides, par exemple. |
 | **Nom de domaine et mise en ligne** | |
@@ -1598,8 +1599,10 @@ chevalet du coup examiné ne reste plus à l'écran en sortant du rejeu.
   ✅ **Les coups d'avance** (§17) : cinq coups préparés pendant que celui-ci se
   joue, et l'heure du tirage qui survit à un redémarrage.
 
-  ⬜ Rate-limit · comptes optionnels · statistiques et records · domaine,
-  vérification par mail, mise en ligne.
+  ✅ **Le plafond de messages** (§18) : cinq mots par seconde, trente messages.
+
+  ⬜ Comptes optionnels · statistiques et records · domaine, vérification par
+  mail, mise en ligne.
 
 - **Phase 3 — les grilles multiples. ✅ TERMINÉE**
 
@@ -2801,6 +2804,20 @@ tirage, même si c'est un R qui s'est posé — et la **pose vient après**.
 > mais qui vaut mieux qu'un refus : une lettre absente du tirage vient d'un
 > joker.
 
+### Le tirage part avant le top
+
+Le tirage ne doit rien au top : il sort de la pioche, il est tiré, et le temps
+que le serveur passe à chercher la solution est du temps que les joueurs peuvent
+passer à chercher la leur. Il est donc **diffusé avant que le calcul commence**.
+Ce qu'ils ne peuvent pas faire pendant ce temps, c'est **valider** — départager
+suppose de connaître le top — et c'est la seule chose que `solving` retienne.
+
+> La règle avait été perdue en installant les coups d'avance : le tirage
+> n'était plus diffusé qu'après l'attente du calcul déjà lancé. Sur une grille
+> où le solveur ne suit pas la cadence — `top-leger` joue un coup par seconde
+> quand un top en coûte une et demie — cela faisait une seconde et demie
+> d'écran vide à chaque coup.
+
 ### Le décompte sert à quelque chose
 
 « 3, 2, 1 » n'est plus une pause après le calcul, mais **pendant**. Le tirage est
@@ -2871,4 +2888,93 @@ d'avance, sur les trois pioches — **sans rien lui prendre**.
 ```bash
 node packages/engine/test/check_clone.ts
 node packages/server/test/check_avance.ts
+```
+
+---
+
+## 18. La saisie au clavier, et son plafond
+
+### Les flèches déplacent le curseur
+
+Une fois une case choisie, les **flèches directionnelles** déplacent le curseur
+d'une case à la fois, dans les quatre sens. On se place où l'on veut écrire sans
+quitter le clavier : c'est ce qui sépare une saisie confortable d'un aller-retour
+à la souris à chaque mot.
+
+Sans curseur, une flèche en fait **apparaître un au milieu de ce qu'on regarde**,
+sur une case **libre** — se retrouver sur une lettre déjà posée obligerait à
+repartir avant même d'avoir commencé. On s'écarte en spirale jusqu'à trouver de
+la place, ce qui est immédiat même sur une grille dense.
+
+Le déplacement **efface le mot en cours** : les lettres tapées sont ancrées au
+curseur, les emmener ailleurs n'aurait pas de sens.
+
+La caméra **suit** le curseur, et se contente de le suivre : elle décale le
+strict nécessaire pour le garder à deux cases du bord, sans recentrer. Une grille
+qui saute à chaque flèche fait perdre le fil de ce qu'on lisait.
+
+Les flèches ne déplacent donc plus la grille. Elle se déplace à la souris, et au
+clavier avec **Maj + flèche**.
+
+### Le curseur à quatre directions
+
+Réglage, décoché par défaut.
+
+La barre d'espace fait normalement alterner **droite** et **bas**, les deux seuls
+sens dans lesquels un mot se lit. Ouverte aux quatre, elle poursuit le tour par
+la **gauche** et le **haut** : le curseur recule, et le mot s'écrit à l'envers.
+
+C'est une technique de vitesse. Quand c'est la **fin** du mot qu'on a repérée
+d'abord — un collage, une case bonus à atteindre — on pose le curseur dessus et
+l'on tape à reculons, au lieu de compter les cases en arrière pour trouver où
+commencer.
+
+Le moteur, lui, ne connaît que la gauche-droite et le haut-bas. La conversion se
+fait **au dernier moment**, dans `coupCanonique` : on lui rend le mot à l'endroit
+en partant de la case la plus lointaine atteinte. Les cases occupées se sautent
+de la même façon dans un sens comme dans l'autre, si bien que les deux lectures
+posent exactement les mêmes caramels — c'est ce qui permet de ne rien changer au
+moteur, ni au protocole.
+
+La pointe du curseur montre **où ira la prochaine lettre** : c'est la seule chose
+qui distingue à l'œil un curseur qui avance d'un curseur qui recule, et sans elle
+on tape trois lettres avant de s'apercevoir du sens.
+
+Refermer le réglage **remet le curseur à l'endroit** : sans cela la barre d'espace
+ne saurait plus revenir, et il resterait bloqué à écrire en arrière.
+
+> D'autres raccourcis sont prévus pour poser le curseur d'un coup à des endroits
+> remarquables de la grille. Ils viendront avec le reste du speedrun.
+
+### Cinq mots par seconde
+
+Le serveur répond à chaque mot proposé « valide, 94 points ». Sans plafond, un
+script qui en soumet mille par seconde **trouve le top par force brute** — il
+suffit de garder le meilleur. Ce n'est donc pas d'abord une question de charge,
+c'est une question de triche.
+
+| | |
+|---|---|
+| mots proposés (`try`) | **5 par seconde** |
+| tout le reste | **30 par seconde** |
+
+C'est le rythme d'un joueur rapide qui tape, et c'est beaucoup trop peu pour
+balayer un dictionnaire de 407 128 mots.
+
+Le compte se tient dans un **seau à jetons** : il se remplit continûment, chaque
+message en prend un, et sa capacité vaut le débit d'une seconde. Un plafond
+strict — « pas deux messages à moins de 200 ms » — punirait le joueur qui tape
+deux mots coup sur coup, ce qui arrive quand on a deux idées d'avance. Le seau
+autorise cette rafale courte tout en tenant la **moyenne** au débit.
+
+Le remplissage est continu, et non par paliers remis à zéro chaque seconde : deux
+rafales de part et d'autre d'une frontière passeraient sinon ensemble, soit le
+double du débit.
+
+**Un message ignoré ne reçoit pas de réponse** : répondre à un flot, c'est encore
+le servir. Un seul avertissement par seconde suffit à expliquer à un joueur
+pourquoi ses mots ne partent plus ; au-delà, le silence.
+
+```bash
+node packages/server/test/check_debit.ts
 ```

@@ -942,6 +942,21 @@ export class Game {
     this.posePrise = false;
     this.pretCourant = null;
 
+    // LE TIRAGE PART TOUT DE SUITE, AVANT TOUTE ATTENTE.
+    //
+    // Il ne doit rien au top : il sort de la pioche, il est deja tire, et le
+    // temps que le serveur passe a chercher la solution est du temps que les
+    // joueurs peuvent passer a chercher la leur. Ce qu'ils ne peuvent pas
+    // faire, c'est VALIDER -- pour departager il faut connaitre le top -- et
+    // c'est la seule chose que `solving` retient.
+    //
+    // La regle avait ete perdue en installant les coups d'avance : le tirage
+    // n'etait plus diffuse qu'apres l'attente du calcul deja lance, et sur une
+    // grille ou le solveur ne suit pas la cadence -- une seconde par coup --
+    // cela faisait une seconde et demie d'ecran vide a chaque coup.
+    this.solving = true;
+    this.emit();
+
     // LE COUP EST-IL DEJA PRET ? Voir SPEC.md §17.
     //
     // Le double a pioche et cherche ce coup-la pendant que le precedent se
@@ -981,7 +996,6 @@ export class Game {
       );
     }
 
-    this.solving = true;
     this.calculsDirects++;
     // LE DECOMPTE COURT PENDANT LE CALCUL. « 3, 2, 1 » n'est pas du repos : le
     // tirage y est deja tire mais tenu secret, et ces trois secondes sont
@@ -1051,6 +1065,8 @@ export class Game {
    * coute a ce moment-la, il etait deja pret.
    */
   private servir(msCalcul: number): void {
+    // Le top est connu : on peut de nouveau departager, donc valider.
+    this.solving = false;
     // Ce qui reste du decompte, s'il court encore. Le tirage n'apparait qu'a
     // zero -- `rackPublic` le tait jusque-la -- et le coup ne s'ouvre qu'apres.
     //

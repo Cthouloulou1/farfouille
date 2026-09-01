@@ -27,6 +27,7 @@ import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import { DAWG_PATH } from "../../engine/src/paths.ts";
+import { Seau, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const WEB = join(here, "..", "..", "web");
@@ -177,6 +178,9 @@ const CFG_MONDIALE = (() => {
 /** Qui est connecte, sous quel pseudo, et dans quel salon. */
 interface Client { nom: string; salon: string }
 const clients = new Map<WebSocket, Client>();
+
+interface Debit { mots: Seau; tout: Seau; averti: number }
+const debits = new Map<WebSocket, Debit>();
 
 const send = (ws: WebSocket, msg: unknown): void => {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -584,12 +588,37 @@ wss.on("error", surErreurReseau);
 
 wss.on("connection", (ws) => {
   clients.set(ws, { nom: "", salon: "" });
+  debits.set(ws, {
+    mots: new Seau(SOUMISSIONS_PAR_SECONDE),
+    tout: new Seau(MESSAGES_PAR_SECONDE),
+    averti: 0,
+  });
 
   ws.on("message", async (raw) => {
     let msg: any;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     const moi = clients.get(ws);
     if (moi === undefined) return;
+
+    // LE PLAFOND SE POSE ICI, avant de rien faire du message.
+    //
+    // Un message ignore ne recoit PAS de reponse : repondre a un flot, c'est
+    // encore le servir, et cela double le travail qu'on cherchait a eviter. Un
+    // seul avertissement par seconde suffit a expliquer a un joueur pourquoi
+    // ses mots ne partent plus -- au-dela, le silence.
+    const debit = debits.get(ws);
+    if (debit !== undefined) {
+      const seau = msg.t === "try" ? debit.mots : debit.tout;
+      if (!seau.prendre()) {
+        const now = Date.now();
+        if (msg.t === "try" && now - debit.averti > 1000) {
+          debit.averti = now;
+          send(ws, { t: "result", ok: false, message: "trop de mots d'un coup" });
+        }
+        return;
+      }
+    }
+
     const s = salon(moi.salon);
 
     if (msg.t === "join") {
@@ -820,6 +849,7 @@ wss.on("connection", (ws) => {
   ws.on("close", () => {
     const moi = clients.get(ws);
     clients.delete(ws);
+    debits.delete(ws);
     const s = moi ? salon(moi.salon) : undefined;
     if (s === undefined) return;
     if (moi !== undefined && !occupants(s.id).includes(moi.nom)) {
