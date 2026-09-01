@@ -3406,6 +3406,13 @@ addEventListener("keydown", (e) => {
     if (!$("reglages-open").hidden) ouvrirReglages();
     return;
   }
+  // Ctrl+E ouvre le rejeu -- la ou le bouton l'ouvre, et nulle part ailleurs :
+  // sur une partie en cours, montrer les paliers serait donner les reponses.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "e" || e.key === "E")) {
+    e.preventDefault();
+    if (!$("rejeu-wrap").hidden && rejeu === null) voirLeCoup(1);
+    return;
+  }
   // CTRL+A RANGE LE CHEVALET, comme sur le logiciel historique. Le navigateur
   // s'en sert pour tout selectionner, mais nous sommes hors de toute zone de
   // saisie -- celles-ci ont rendu la main plus haut -- et il n'y a ici rien a

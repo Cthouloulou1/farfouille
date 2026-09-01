@@ -811,6 +811,7 @@ pendant la frappe** — le voir se défaire lettre après lettre serait insuppor
 |---|---|
 | **Ctrl+R** | ouvre et referme la feuille de route |
 | **Ctrl+D** | ouvre les réglages de la partie |
+| **Ctrl+E** | ouvre le rejeu |
 | **Ctrl+A** | range le chevalet |
 
 `Ctrl+R` rechargerait la page — au milieu d'une partie, c'est perdre son tirage
@@ -819,8 +820,9 @@ l'autre n'a de sens ici, et tous deux se trouvent sous les doigts quand on joue.
 On les prend, et on les rend à leur usage dès qu'on est dans une **zone de
 saisie** — celles-ci reçoivent les touches avant le jeu.
 
-`Ctrl+D` ne fait rien là où le bouton des réglages n'est pas là : un raccourci ne
-donne pas un droit que l'écran refuse.
+`Ctrl+D` ne fait rien là où le bouton des réglages n'est pas là, et `Ctrl+E` rien
+là où le rejeu ne s'ouvre pas : **un raccourci ne donne pas un droit que l'écran
+refuse**. Sur une partie en cours, montrer les paliers serait donner les réponses.
 
 **Ctrl+A range le chevalet**, comme sur le logiciel historique. Le navigateur s'en
 sert pour tout sélectionner, mais la touche n'arrive ici que hors de toute zone
@@ -1474,24 +1476,60 @@ TypeScript se contente de charger. Leur langage n'a aucune importance.
 
 ---
 
-## 13. Reporté
+## 13. Ce qui n'est pas fait
 
-Décisions volontairement non prises, à trancher sur des données réelles plutôt
-qu'à l'intuition.
+Trois listes qu'il ne faut pas confondre : ce qui **attend une décision**, ce
+qui **reste à construire**, et ce qui **a été vu sans être expliqué**.
+
+### Décisions non prises
+
+À trancher sur des données réelles plutôt qu'à l'intuition.
 
 | Sujet | État |
 |---|---|
-| **Passage à l'échelle du générateur** | **Arbitré : on l'assume.** Le coût croît linéairement avec le nombre de coups joués (§15) et ne se corrige pas vraiment. Le précalcul de quelques coups d'avance le masque ; dans le cas improbable où les joueurs vont plus vite que la machine, ils attendent. Optimisations déjà faites : ×1,7. |
-| **Taux de scrabbles à 64 %** | Mesuré, pas décidé. Conséquence directe de la table de tirage : le sac classique donnerait 30 % (§15). À arbitrer. |
-| **Motif des cases bonus** | Couture corrigée (période 14, §3) : le taux de ×9 passe de 20 % à 4,6 %. Le motif définitif, conçu pour l'infini, reste à choisir parmi les trois pistes de §3. |
-| **Critère de départage des isotops** | Aléatoire déterministe. Mesure : 74 % des coups ont un top unique, médiane 1 isotop (§15) — l'enjeu est donc mineur, contrairement à ce qu'on craignait. |
+| **Passage à l'échelle du générateur** | **Arbitré : on l'assume.** Le coût croît linéairement avec le nombre de coups joués (§15). Le précalcul de quelques coups d'avance le masque ; dans le cas improbable où les joueurs vont plus vite que la machine, ils attendent. |
+| **Taux de scrabbles à 64 %** | Mesuré, pas décidé. Conséquence directe de la table de tirage : le sac classique donnerait 30 % (§15). |
+| **Motif des cases bonus** | Couture corrigée (période 14, §3). Le motif définitif, conçu pour l'infini, reste à choisir parmi les trois pistes de §3. |
 | **Mots de plus de 15 lettres** | L'ODS s'arrête à 15, la grille non. Les étendre supposerait de dériver pluriels et conjugaisons — ce ne sont plus des formes officielles. |
-| **Réglage fin de alpha et du plafond** | 0.08 et x4, à valider par simulation. |
-| **Rejet probabiliste du tirage** | La politique de rejet est déjà une fonction remplaçable. |
-| **Notifications** | Rien pour l'instant : on revient quand on veut. |
 | **Avantage de ping** | Non résolu. Pistes : mesurer le temps client depuis l'affichage du tirage, avec un plafond anti-triche. |
+| **Nom du jeu** | À trouver. Le mot du jeu est **farfouille**, jamais « scrabble ». |
+| **Deux colonnes « Coup »** | Sur la barre du chevalet, l'une porte le **numéro** du coup, l'autre sa **durée**. Se lit dans le contexte ; à renommer si l'ambiguïté gêne. |
+| **La police du reste du jeu** | Seule la feuille de route est passée à la monospace du système. Le reste tient encore d'IBM Plex Mono. |
+
+### À construire
+
+| Sujet | Pourquoi |
+|---|---|
+| **Précalcul de cinq coups d'avance** | Sur la grille permanente, le serveur met 1,6 s à trouver un top. Précalculé, le top s'affiche en même temps que le tirage suivant : plus de latence à figer dans le compteur (§9). |
+| **Rate-limit, cinq soumissions par seconde** | Rien n'empêche aujourd'hui un client de marteler le serveur. |
+| **Comptes optionnels** (mail + argon2id, vérification) | Le pseudo n'est unique que parmi les connectés, et le contrôle de suppression par pseudo est un **garde-fou, pas une frontière de sécurité**. |
+| **Statistiques et records du site** | Les parties entièrement topées les plus rapides, par exemple. |
+| **Nom de domaine et mise en ligne** | |
+| **Version anglaise** | Dictionnaire NWL, interface, et **repères anglais** — déjà écrits (§3), aujourd'hui derrière un réglage manuel qui devra suivre la langue du site. |
+| **Lien direct dans la partie** | Entrer dans la grille permanente depuis un lien, en se nommant sur place. |
 | **Mode battle** | Prévu dans le modèle `Board`, non implémenté. |
-| **Nom du jeu** | À trouver. |
+| **Capture d'une portion de grille** | La vraie réponse à « lire les lettres » sur une grande grille : une fenêtre de 60 × 60 cases à 40 pixels la case donne des lettres de 30 pixels, dix fois plus légère que la grille entière (§16). Une grille entière ne sera **jamais** confortable à lire. |
+| **L'heure du tirage à travers un redémarrage** | Le top du coup courant n'est pas conservé : au redémarrage il faut le recalculer, et l'horloge du coup repart de zéro. Seule remise à zéro qui subsiste sur la grille permanente. |
+| **Transmission du salon quand le créateur part** | ✅ **Fait** — voir « les manettes du salon suivent les présents » (§16). |
+
+### Vu, pas expliqué
+
+Deux symptômes rapportés par des joueurs et **non reproduits**. Ils sont notés
+ici parce qu'une explication inventée serait pire qu'un aveu d'ignorance.
+
+**La secousse du plateau 15×15.** Vue par au moins deux joueurs, après qu'un mot
+a été posé par quelqu'un d'autre. Mesuré coup après coup : canevas, bandeau et
+bande du reliquat ne bougent pas d'un dixième de pixel. Deux mécanismes par
+lesquels elle *pouvait* arriver ont été supprimés — la bande du reliquat qui
+changeait la hauteur du plateau, et un demi-pixel de recentrage — sans certitude
+que ce fût celui-là. Si elle revient : **la grille se déplace-t-elle ou
+clignote-t-elle sur place**, et **arrive-t-elle aussi quand on est seul** ?
+
+**Le client figé pendant le rejeu.** Rapporté sur `top-leger`, une ou deux fois.
+Le rejeu a été malmené pendant qu'une partie posait un coup toutes les deux
+secondes, sans lever une seule exception. Le chevalet resté à l'écran en sortant
+du rejeu — lui, corrigé — en donnait peut-être l'impression. Si cela revient :
+**la page répond-elle encore** (chat, boutons) ou tout est-il gelé ?
 
 ---
 
@@ -1514,7 +1552,7 @@ qu'à l'intuition.
   node packages/engine/tools/report.ts 500 mondiale
   ```
 
-- **Phase 1 — jouable, en réseau. ✅ PROTOTYPE EN PLACE**
+- **Phase 1 — jouable, en réseau. ✅ TERMINÉE**
   Canvas, caramels, saisie clavier, validation locale par le DAWG, serveur
   autoritaire en WebSocket, solveur dans un fil dédié, sauvegarde sur disque.
 
@@ -1530,32 +1568,41 @@ qu'à l'intuition.
   **Sauvegarde** : seul le journal des coups est écrit. La partie étant
   déterministe, on rejoue les placements au démarrage et le sac retrouve son état
   de compensation. Écriture atomique, pour qu'une coupure ne laisse pas un
-  fichier à moitié écrit.
+  fichier à moitié écrit. **Le journal fait foi** ; l'instantané n'en est qu'une
+  vue, et rien n'y est jamais réécrit.
 
   **La graine est tirée au hasard à la création** et rangée dans la sauvegarde.
   Elle ne dérive surtout pas du nom de la grille : deux grilles nommées pareil
-  rejoueraient sinon exactement la même partie, tirages compris. `--nouvelle`
-  archive la partie en cours et repart sur une grille vierge.
+  rejoueraient sinon exactement la même partie, tirages compris.
 
   **Ouvrir aux autres** sans toucher à la box :
   ```bash
   cloudflared tunnel --url http://localhost:3000
   ```
-  Le serveur tourne sur la machine de l'hôte ; le tunnel lui donne une adresse
-  publique. Aucune inscription : chacun tape un pseudo en arrivant.
 
   > ⚠️ Tous les joueurs pingent la machine de l'hôte. Comme la course se joue à
   > l'ordre d'arrivée, les joueurs géographiquement proches ont un avantage réel.
-  > Sans importance pour un test, à revoir le jour où le classement comptera.
 
-- **Phase 2 — parties paramétrables, comptes, statistiques.** Dans cet ordre :
-  le modèle de partie réglable (§16) — il débloque les variantes ET sert la
-  phase 3 —, puis le précalcul de 5 coups et le rate-limit, puis les comptes
-  optionnels et les statistiques, puis le domaine, la vérification par mail et
-  la mise en ligne.
+- **Phase 2 — parties paramétrables, comptes, statistiques. ⏳ EN COURS**
 
-- **Phase 3 — les grilles multiples.** Modèle `Board`, grille mondiale et
-  vérifiée, salons, mode battle.
+  ✅ **Le modèle de partie réglable** (§16) : variantes X sur Y, duplicate,
+  chrono, bornes, primes, pioches, partie joker, décompte, sacs finis et
+  rechargeables, règles d'arrêt.
+  ✅ **Les salons** : création, gérance, permanence, ménage, rejeu ouvert.
+  ✅ **L'après-partie** : feuille de route, rejeu, recherche d'un mot sur toute
+  la grille, captures.
+
+  ⬜ Précalcul de cinq coups · rate-limit · comptes optionnels · statistiques ·
+  domaine, vérification par mail, mise en ligne.
+
+- **Phase 3 — les grilles multiples. ⏳ EN COURS**
+
+  ✅ Modèle `Board`, grille mondiale permanente, salons multiples, grilles
+  d'étude.
+  ⬜ Mode battle.
+
+- **Phase 4 — l'anglais.** Dictionnaire NWL, interface traduite, repères
+  anglais commandés par la langue du site (§3).
 
 ---
 
