@@ -671,6 +671,15 @@ mieux.
 **En haut et à gauche seulement.** Un plateau de bois les répète des quatre côtés
 parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'elle-même.
 
+**Les bandes du bord de l'écran disparaissent avec eux.** Ce sont elles qui
+portent les repères d'une grille infinie, épinglés pendant qu'elle défile
+dessous ; sur un plateau borné elles ne contenaient plus rien — deux bandeaux
+gris qui mangeaient la place sans rien dire. La place revient au plateau.
+
+**La largeur de la bande suit la taille de son écriture.** Des repères qu'on lit
+de loin ont besoin de place, et cette place vient du plateau : les deux se
+décident ensemble, jamais l'une sans l'autre.
+
 La ligne et la colonne de la case désignée s'allument, sur un fond discret : la
 notation se lit sans quitter la grille des yeux.
 
@@ -723,8 +732,18 @@ veut la regarder.
 Centré, un panneau qui gagne une section **remonte d'autant** : on clique
 « Infinie », la section des bornes apparaît, et tout le panneau glisse sous le
 curseur. Ancré en haut, ce qui apparaît apparaît **dessous** — là où l'on regarde
-déjà — et rien de ce qu'on avait sous les yeux ne bouge. Mesuré : le haut reste à
-22 px pendant que la hauteur passe de 567 à 634.
+déjà — et rien de ce qu'on avait sous les yeux ne bouge.
+
+**Le panneau des réglages s'ouvre sous le reliquat**, jamais au-dessus. Régler
+une partie, c'est regarder le tirage et les lettres restantes en même temps : un
+panneau qui les recouvre oblige à le fermer pour vérifier ce qu'on vient de
+décider. La hauteur se **mesure** à l'ouverture plutôt que de s'écrire en dur —
+la barre du chevalet change de hauteur avec la taille des caramels, qui change
+avec le nombre de lettres, et une constante serait juste aujourd'hui et fausse
+au premier tirage à quinze.
+
+Le panneau des **paramètres**, lui, reste centré : il ne parle pas de la partie
+en cours, il n'a rien à laisser voir derrière lui.
 
 Les tailles du contenu s'expriment en **`em`**, relatives à celle de la fenêtre :
 une seule valeur à changer pour agrandir tout un panneau, plutôt que vingt
@@ -777,6 +796,17 @@ sautillement dont on ne comprenait ni la cause ni la règle.
 Le caramel tenu se déplace **sans transition** — une animation le ferait traîner
 derrière le curseur. Les autres, eux, glissent : c'est ce glissement qui montre
 la place qui s'ouvre.
+
+**Les lettres reviennent en ordre.** On range son chevalet pour chercher, on pose
+un mot, et ce qui revient en main n'a plus de raison de garder l'arrangement
+d'avant : c'était celui d'une idée qu'on vient d'essayer. L'arrangement **tient
+pendant la frappe** — le voir se défaire lettre après lettre serait insupportable
+— et se défait quand la main est rendue.
+
+**Ctrl+A range le chevalet**, comme sur le logiciel historique. Le navigateur s'en
+sert pour tout sélectionner, mais la touche n'arrive ici que hors de toute zone
+de saisie — celles-ci ont rendu la main plus haut — et il n'y a rien à
+sélectionner qu'une grille dessinée.
 
 **Les caramels prennent la place qu'ils ont.** Sept lettres tiennent largement
 dans la barre, quinze non : une taille fixe obligerait à choisir entre des

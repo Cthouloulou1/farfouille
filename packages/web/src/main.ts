@@ -181,10 +181,16 @@ function resize() {
  * deplacer ou le dezoomer n'apporte que des reglages a refaire et des lignes
  * qui bougent sous les yeux du joueur.
  */
-/** Largeur de la bande d'etiquettes collee au plateau borne. */
-const REGLE_BORNEE = 22;
+/**
+ * Largeur de la bande d'etiquettes collee au plateau borne.
+ *
+ * Elle suit la taille de son ecriture : des reperes qu'on lit de loin ont
+ * besoin de place, et cette place vient du plateau. Les deux se decident donc
+ * ensemble, jamais l'une sans l'autre.
+ */
+const REGLE_BORNEE = 26;
 /** Air laisse autour de l'ensemble plateau + etiquettes. */
-const MARGE_BORNEE = 16;
+const MARGE_BORNEE = 8;
 
 /**
  * Cadre le plateau borne, ETIQUETTES COMPRISES.
@@ -847,7 +853,8 @@ function reglesCollees(
   const g0x = ox - b * cell, g0y = oy - b * cell;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `600 ${Math.max(10, Math.min(13, Math.round(cell * .42)))}px Archivo, system-ui, sans-serif`;
+  // On lit ces reperes d'un bout a l'autre de la piece, comme les caramels.
+  ctx.font = `600 ${Math.max(11, Math.min(17, Math.round(cell * .46)))}px Archivo, system-ui, sans-serif`;
 
   for (let x = -b; x <= b; x++) {
     const on = mark !== null && mark.x0 === x;
@@ -876,9 +883,15 @@ function reglesCollees(
 function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: number, gy1: number) {
   const bornes = cfg.bornes;
   const TOP = 17, LEFT = 30;
-  ctx.fillStyle = C.panel!;
-  ctx.fillRect(0, 0, W, TOP);
-  ctx.fillRect(0, 0, LEFT, H);
+  // LES BANDES NE SERVENT QU'A LA GRILLE INFINIE. Ce sont elles qui portent ses
+  // reperes, epingles au bord pendant que la grille defile dessous. Un plateau
+  // borne a les siens colles a lui : les bandes n'y contenaient plus rien, deux
+  // bandeaux gris qui mangeaient la place sans rien dire.
+  if (bornes === null) {
+    ctx.fillStyle = C.panel!;
+    ctx.fillRect(0, 0, W, TOP);
+    ctx.fillRect(0, 0, LEFT, H);
+  }
 
   // Une seule case signalee : celle du DEPART du mot. Souligner toute son
   // etendue allumait toute une rangee de numeros -- et c'est bien la case de
@@ -1334,12 +1347,38 @@ function selonLeChevalet(restant: readonly string[]): string[] {
   return [...out, ...reste];
 }
 
+/** A-t-on des lettres sur la grille ? Sert a savoir quand elles reviennent. */
+let lettresDehors = false;
+
+/**
+ * Range le chevalet dans l'ordre du tirage.
+ *
+ * C'est l'ordre que le serveur envoie -- alphabetique, jokers en tete -- et
+ * celui dans lequel on retrouve ses lettres sans avoir a les chercher.
+ */
+function rangerLeChevalet(): void {
+  ordrePour = rack;
+  ordreChevalet = [...rack];
+  paintRack();
+}
+
 function paintRack() {
   const ici = rejeu;
   if (ici !== null) {
     const m = history.find((q) => q.n === ici.n);
     peindreCaramels(m === undefined ? [] : [...m.rack]);
     return;
+  }
+  // LES LETTRES REVIENNENT EN ORDRE. On range son chevalet pour chercher, on
+  // pose un mot, et ce qui revient en main n'a plus de raison de garder
+  // l'arrangement d'avant : c'etait celui d'une idee qu'on vient d'essayer.
+  // L'arrangement TIENT pendant la frappe -- le voir se defaire lettre apres
+  // lettre serait insupportable -- et se defait quand la main est rendue.
+  if (typed !== "") lettresDehors = true;
+  else if (lettresDehors) {
+    lettresDehors = false;
+    ordrePour = rack;
+    ordreChevalet = [...rack];
   }
   peindreCaramels(selonLeChevalet(remaining()));
 }
@@ -3321,6 +3360,15 @@ addEventListener("keydown", (e) => {
   if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
+  // CTRL+A RANGE LE CHEVALET, comme sur le logiciel historique. Le navigateur
+  // s'en sert pour tout selectionner, mais nous sommes hors de toute zone de
+  // saisie -- celles-ci ont rendu la main plus haut -- et il n'y a ici rien a
+  // selectionner qu'une grille dessinee.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
+    e.preventDefault();
+    rangerLeChevalet();
+    return;
+  }
   if (e.key === "Escape") { typed = ""; paintRack(); paintCurrent(); draw(); return; }
   if (e.key === " " || e.code === "Space") {
     // On pivote, et le mot en cours s'efface : le retourner tel quel poserait
@@ -4347,6 +4395,18 @@ function ouvrirReglages(): void {
   peuplerNombres();
   peuplerPioche();
   $("r-error").hidden = true;
+  // SOUS LE RELIQUAT, PAS PLUS HAUT. Regler une partie, c'est regarder le
+  // tirage et les lettres restantes en meme temps : un panneau qui les
+  // recouvre oblige a le fermer pour verifier ce qu'on vient de decider.
+  //
+  // La hauteur se MESURE plutot que de s'ecrire en dur : la barre du chevalet
+  // change de hauteur avec la taille des caramels, qui change avec le nombre
+  // de lettres. Une constante serait juste aujourd'hui et fausse au premier
+  // tirage a quinze.
+  const bas = Math.round($("sac").getBoundingClientRect().bottom);
+  $("reglages").style.paddingTop = `${bas}px`;
+  ($("reglages").firstElementChild as HTMLElement).style.maxHeight =
+    `${Math.max(240, innerHeight - bas - 14)}px`;
   $("reglages").hidden = false;
 }
 

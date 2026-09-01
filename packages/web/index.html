@@ -313,8 +313,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
    Les tailles du contenu suivent celle de la fenetre : une seule valeur a
    changer pour agrandir tout un panneau, plutot que vingt reglees a la main. */
-.roadmap > div.large { width: min(1120px, 96vw); max-height: 88vh; font-size: 15px; }
-.roadmap.enHaut { align-items: flex-start; padding-top: 3vh; }
+.roadmap > div.large { width: min(1120px, 96vw); max-height: 78vh; font-size: 16.5px; }
+/* SOUS LE RELIQUAT, PAS PLUS HAUT -- la valeur exacte est MESUREE a l'ouverture,
+   voir `ouvrirReglages` ; celle-ci n'est qu'un point de depart raisonnable. */
+.roadmap.enHaut { align-items: flex-start; padding-top: 200px; }
 .roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
@@ -361,7 +363,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rmrow .t.non { color: var(--warn); }
 .rmrow .like { padding: 1px 5px; font-size: 10.5px; }
 
-.roadmap > div.prefs { width: min(520px, 94vw); font-size: 14px; }
+.roadmap > div.prefs { width: min(560px, 94vw); font-size: 15.5px; }
 .roue { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
 .roue:hover { color: var(--accent); }
 /* Un interrupteur, pas deux boutons : la question appelle oui ou non, et le
@@ -789,7 +791,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
-<div class="roadmap enHaut" id="prefs" hidden>
+<div class="roadmap" id="prefs" hidden>
   <div class="prefs">
     <header>
       <h3>Paramètres</h3>
