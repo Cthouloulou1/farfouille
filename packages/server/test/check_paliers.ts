@@ -12,7 +12,7 @@
  * Le test rejoue une partie de 15x15 coup par coup en gardant les paliers, puis
  * les redemande a `paliersDuCoup` et compare mot pour mot.
  */
-import { rmSync, existsSync } from "node:fs";
+import { rmSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Game } from "../src/game.ts";
@@ -139,6 +139,80 @@ verifie("deux recalculs donnent le meme resultat", signature(a) === signature(b)
 
 await g.stop();
 nettoyer();
+
+// ------------------------------------------------ GRILLE SANS FIN : LE JOURNAL
+//
+// Sur une grille sans fin, les paliers SONT ecrits au journal -- les refaire
+// couterait huit secondes au dix-millieme coup. Mais ils n'y sont plus RELUS en
+// memoire : le serveur retient l'octet ou chaque ligne commence et va la
+// chercher quand le rejeu la demande.
+//
+// Ce qui doit tenir : les paliers rendus sont exactement ceux qui ont ete
+// ecrits, avant comme apres un redemarrage -- une adresse d'un octet de travers
+// montrerait les sous-tops d'un autre coup, sans que rien ne le dise.
+console.log("\n  --- grille sans fin, paliers relus au journal ---\n");
+const IDI = ID + "-infini";
+const netI = (): void => {
+  for (const s of [".json", ".journal.jsonl", ".verrou", ".secours.json"]) {
+    const f = join(D, `${IDI}${s}`);
+    if (existsSync(f)) rmSync(f);
+  }
+};
+netI();
+setLayout("pave1");
+const cfgI = avec(configParDefaut(), {
+  bornes: null, pioche: "sac102boucle", chrono: null, mode: "topping",
+});
+const gi = new Game(IDI, "pave1", cfgI);
+await gi.start();
+gi.presents.add("essai");
+await gi.reveiller();
+await gi.demarrer();
+for (let i = 0; i < 6 && !gi.finie; i++) {
+  await gi.reveal();
+  await new Promise((r) => setTimeout(r, 30));
+}
+verifie("la partie sans fin a avance", gi.moves.length >= 5, `${gi.moves.length} coups`);
+
+// Les paliers ne doivent PAS occuper la memoire.
+const enMemoire = gi.moves.filter((m) => m.tiers !== undefined && m.tiers.length > 0).length;
+verifie("aucun palier garde en memoire", enMemoire === 0,
+  enMemoire === 0 ? "ils restent au journal" : `${enMemoire} coups en portent`);
+
+// Le journal, lui, doit les porter : c'est lui qui fait foi.
+const brut = readFileSync(join(D, `${IDI}.journal.jsonl`), "utf8");
+const auJournal = brut.split("\n").filter((l) => l.includes('"tiers":')).length;
+verifie("le journal les porte tous", auJournal === gi.moves.length,
+  `${auJournal} lignes sur ${gi.moves.length} coups`);
+
+// Et l'instantane ne doit plus les recopier a chaque coup.
+const instantane = readFileSync(join(D, `${IDI}.json`), "utf8");
+verifie("l'instantane ne les recopie plus", !instantane.includes('"tiers":'),
+  `${(instantane.length / 1024).toFixed(1)} ko`);
+
+const avantArret: Record<number, string> = {};
+for (const m of gi.moves) avantArret[m.n] = signature(await gi.paliersDuCoup(m.n));
+verifie("chaque coup rend des paliers",
+  Object.values(avantArret).every((s) => s !== ""),
+  `${Object.keys(avantArret).length} coups relus`);
+
+// LE JUGE DE PAIX : apres un redemarrage, les adresses sont refaites a la
+// lecture du journal. Un octet de travers se verrait ici.
+await gi.stop();
+const relu = new Game(IDI, "pave1", cfgI);
+await relu.start();
+let ecarts = 0, premier = "";
+for (const m of relu.moves) {
+  const apres = signature(await relu.paliersDuCoup(m.n));
+  if (apres !== avantArret[m.n]) {
+    ecarts++;
+    if (premier === "") premier = `coup ${m.n}`;
+  }
+}
+verifie("apres un redemarrage, les memes paliers", ecarts === 0,
+  ecarts === 0 ? `${relu.moves.length} coups compares un a un` : premier);
+await relu.stop();
+netI();
 
 console.log(echecs === 0
   ? "\nOK : ce qui n'est plus enregistre se retrouve a l'identique\n"

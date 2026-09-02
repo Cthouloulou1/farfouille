@@ -3142,3 +3142,62 @@ moment :
   un sélecteur d'identifiant l'emportait sur `[hidden]`, qui n'est qu'un
   sélecteur d'attribut. Le cas caché se redit maintenant au même niveau de
   précision.
+
+---
+
+## 20. Les paliers restent au journal
+
+Sur une grille sans fin, chaque coup enregistre ses **paliers de sous-tops** :
+les refaire coûterait huit secondes au dix-millième coup, contre cinq
+millisecondes sur un plateau borné où on ne les enregistre pas (§10).
+
+Ils pèsent **86 % du journal** — 3 148 octets par coup, contre 415 sans eux.
+Sur `top-leger`, 22 782 coups font 68 Mo, dont 58 de paliers, et 2,3 millions de
+solutions.
+
+Le serveur les lisait, les gardait tous en mémoire, et les **recopiait dans
+l'instantané à chaque coup**. Or il n'en a besoin qu'à un seul moment : quand
+quelqu'un ouvre le rejeu sur un coup précis.
+
+### Ce qui change, et ce qui ne change pas
+
+**Le journal ne change pas.** Même fichier, même format, rien à convertir : il
+porte les paliers comme avant, et il fait toujours foi.
+
+Ce qui change tient en une idée : à la relecture, le serveur retient **l'octet où
+commence la ligne de chaque coup** et se défait de ce qu'elle portait. Quand le
+rejeu demande les sous-tops du coup 18 000, il relit cette ligne-là, et elle
+seule. Le journal ne se réécrit jamais : une adresse y est définitive.
+
+L'instantané, qui est une vue dérivée, cesse de les recopier.
+
+### Mesure, sur les 22 782 coups de `top-leger`
+
+| | avant | après |
+|---|---|---|
+| mémoire de la partie | 268 Mo | **52 Mo** |
+| instantané, réécrit à chaque coup | 928 ms · 67,7 Mo | **93 ms · 9,1 Mo** |
+| ouverture de la partie | 2,31 s | 2,37 s |
+| paliers d'un coup, en rejeu | 0,3 ms | 0,7 à 1,8 ms |
+
+**Le calcul du top ne change pas d'une milliseconde** : les paliers n'y entraient
+pas. Le solveur travaille sur sa propre grille et sur le GADDAG, et n'a jamais
+regardé ce qui était enregistré.
+
+Ce qui change, et que la table sentira, est ailleurs : l'instantané s'écrit sur
+le fil principal, en bloquant tout. Neuf cent vingt-huit millisecondes après
+chaque coup pendant lesquelles le serveur ne répondait à personne — ni chat, ni
+mot proposé, ni connexion. Une seconde de gel par coup sur une grille qui en joue
+un par seconde.
+
+L'ouverture, elle, ne gagne rien : la lecture du journal coûte le même prix, et
+l'essentiel du temps part à reposer 132 000 caramels sur la grille et sur celle
+du solveur.
+
+### Vérification
+
+`check_paliers.ts` joue une grille sans fin, vérifie qu'aucun palier ne reste en
+mémoire, que le journal les porte tous, que l'instantané ne les recopie plus —
+puis **arrête la partie, la rouvre, et compare les paliers de chaque coup un à
+un**. Les adresses sont refaites à la relecture : un octet de travers montrerait
+les sous-tops d'un autre coup, sans que rien ne le dise.

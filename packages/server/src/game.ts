@@ -20,7 +20,7 @@
  */
 import {
   mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, copyFileSync,
-  openSync, writeSync, fsyncSync, closeSync, unlinkSync,
+  openSync, writeSync, readSync, fsyncSync, closeSync, unlinkSync, statSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -287,6 +287,17 @@ export class Game {
   private battement: ReturnType<typeof setInterval> | null = null;
   /** Descripteur du journal, ouvert en ajout pour toute la duree de la partie. */
   private jfd: number | null = null;
+  /** Taille du journal en octets : c'est l'adresse ou la prochaine ligne ira. */
+  private tailleJournal = 0;
+  /**
+   * OU TROUVER LES PALIERS DE CHAQUE COUP, dans le journal.
+   *
+   * Ils ne sont PAS gardes en memoire. Ils pesent 86 % du journal -- deux cent
+   * quarante-quatre megaoctets pour vingt-deux mille coups -- et ne servent
+   * qu'au rejeu, sur un coup a la fois. On retient donc l'octet ou leur ligne
+   * commence, et on va la relire a la demande (SPEC.md §20).
+   */
+  private ouEstLeCoup = new Map<number, number>();
   seed = "";
 
   moves: PlayedMove[] = [];
@@ -553,26 +564,75 @@ export class Game {
    * coute une milliseconde ; c'est le prix pour qu'une coupure de courant
    * juste apres un coup ne le fasse pas disparaitre.
    */
-  private append(ev: Record<string, unknown>): void {
+  private append(ev: Record<string, unknown>): number {
     mkdirSync(DATA_DIR, { recursive: true });
-    if (this.jfd === null) this.jfd = openSync(this.journal, "a");
-    writeSync(this.jfd, JSON.stringify(ev) + "\n");
+    if (this.jfd === null) {
+      this.jfd = openSync(this.journal, "a");
+      if (this.tailleJournal === 0 && existsSync(this.journal)) {
+        this.tailleJournal = statSync(this.journal).size;
+      }
+    }
+    const ligne = JSON.stringify(ev) + "\n";
+    // L'octet ou cette ligne commence : de quoi la retrouver sans relire tout
+    // le journal. Le fichier ne se reecrit jamais, l'adresse est donc definitive.
+    const ou = this.tailleJournal;
+    writeSync(this.jfd, ligne);
     fsyncSync(this.jfd);
+    this.tailleJournal += Buffer.byteLength(ligne, "utf8");
+    return ou;
   }
 
   /** Relit le journal. Les lignes tronquees par une coupure sont ignorees. */
-  private readJournal(): Record<string, any>[] {
+  private readJournal(): { ev: Record<string, any>; ou: number }[] {
     if (!existsSync(this.journal)) return [];
-    const out: Record<string, any>[] = [];
-    let broken = 0;
-    for (const line of readFileSync(this.journal, "utf8").split("\n")) {
-      if (line.trim() === "") continue;
-      try { out.push(JSON.parse(line)); } catch { broken++; }
+    // LU EN OCTETS, PAS EN CARACTERES. On retient ou commence chaque ligne pour
+    // pouvoir y revenir plus tard (voir `paliersDuCoup`) ; un journal porte des
+    // accents, et l'indice d'un caractere n'y est pas celui d'un octet.
+    const brut = readFileSync(this.journal);
+    const out: { ev: Record<string, any>; ou: number }[] = [];
+    let broken = 0, debut = 0;
+    for (let i = 0; i <= brut.length; i++) {
+      if (i !== brut.length && brut[i] !== 10) continue;
+      const ligne = brut.toString("utf8", debut, i).trim();
+      const ou = debut;
+      debut = i + 1;
+      if (ligne === "") continue;
+      try { out.push({ ev: JSON.parse(ligne), ou }); } catch { broken++; }
     }
+    this.tailleJournal = brut.length;
     if (broken > 0) {
       console.warn(`[partie] ${broken} ligne(s) illisible(s) dans le journal, ignorees`);
     }
     return out;
+  }
+
+  /**
+   * Relit UNE ligne du journal, celle qui commence a cet octet.
+   *
+   * C'est ce qui permet de ne pas garder les paliers en memoire : ils restent
+   * la ou ils ont ete ecrits, et on va les chercher quand -- et seulement
+   * quand -- quelqu'un ouvre le rejeu sur ce coup-la.
+   */
+  private ligneDuJournal(ou: number): Record<string, any> | null {
+    let taille = 65536;
+    for (let essai = 0; essai < 8; essai++) {
+      let fd: number | null = null;
+      try {
+        fd = openSync(this.journal, "r");
+        const tampon = Buffer.allocUnsafe(taille);
+        const lus = readSync(fd, tampon, 0, taille, ou);
+        const fin = tampon.indexOf(10, 0);
+        // Pas de fin de ligne dans ce qu'on a lu : la ligne est plus longue --
+        // un coup a deux jokers en compte des dizaines de milliers. On elargit.
+        if (fin === -1 && lus === taille) { taille *= 4; continue; }
+        return JSON.parse(tampon.toString("utf8", 0, fin === -1 ? lus : fin));
+      } catch {
+        return null;
+      } finally {
+        if (fd !== null) closeSync(fd);
+      }
+    }
+    return null;
   }
 
   /**
@@ -672,7 +732,12 @@ export class Game {
       // Migration : une partie qui n'avait qu'un instantane se voit dotee d'un
       // journal complet, retroactivement.
       if (saved !== null) {
-        for (const m of saved.moves) this.append({ t: "coup", move: m });
+        for (const m of saved.moves) {
+          // Le journal neuf recoit les paliers que l'instantane portait, et
+          // retient ou il les a mis : la partie migree se relit ensuite comme
+          // toutes les autres.
+          this.ouEstLeCoup.set(m.n, this.append({ t: "coup", move: m }));
+        }
         for (const c of this.chat) this.append({ t: "chat", msg: c });
         console.log(`[partie] journal cree a partir de l'instantane`);
       }
@@ -791,14 +856,14 @@ export class Game {
    * Reconstruit la partie a partir des seuls evenements du journal. C'est le
    * chemin de recuperation : meme si l'instantane a disparu, tout est ici.
    */
-  private rebuild(events: Record<string, any>[]): Saved {
+  private rebuild(events: { ev: Record<string, any>; ou: number }[]): Saved {
     const out: Saved = {
       gameId: this.gameId, layout: this.layout, seed: this.gameId,
       createdAt: Date.now(), moves: [], players: {}, chat: [],
     };
     const byNumber = new Map<number, PlayedMove>();
     let servi: { n: number; at: number } | null = null;
-    for (const ev of events) {
+    for (const { ev, ou } of events) {
       if (ev["t"] === "servi") {
         servi = { n: ev["n"] as number, at: ev["at"] as number };
         continue;
@@ -809,6 +874,12 @@ export class Game {
         out.layout = ev["layout"] ?? out.layout;
       } else if (ev["t"] === "coup") {
         const m = ev["move"] as PlayedMove;
+        // LES PALIERS RESTENT AU JOURNAL, PAS EN MEMOIRE. On note l'octet ou la
+        // ligne commence, et on jette ce qu'elle portait : c'est ce qui divise
+        // par sept la memoire d'une grande partie, et par treize le prix de
+        // l'instantane, reecrit a chaque coup.
+        this.ouEstLeCoup.set(m.n, ou);
+        delete m.tiers;
         out.moves.push(m);
         byNumber.set(m.n, m);
       } else if (ev["t"] === "chat") {
@@ -1643,7 +1714,12 @@ export class Game {
     }
     // Le journal d'abord, force sur le disque : a partir d'ici le coup existe,
     // meme si la machine s'eteint dans la seconde.
-    this.append({ t: "coup", move });
+    // Le journal recoit le coup ENTIER, paliers compris : c'est lui qui fait foi
+    // et qui les conservera. La copie qu'on garde en memoire s'en defait
+    // aussitot -- elle n'en a pas l'usage, et on sait ou les retrouver.
+    const ou = this.append({ t: "coup", move });
+    this.ouEstLeCoup.set(move.n, ou);
+    delete move.tiers;
     this.save();
     for (const f of this.surCoup) f(move);
     // Ici le coup est joue : tout est devenu public, on peut l'ecrire.
@@ -1845,6 +1921,25 @@ export class Game {
     const m = this.moves.find((q) => q.n === n);
     if (m === undefined) return [];
     if (m.tiers !== undefined && m.tiers.length > 0) return m.tiers;
+    // LES PALIERS SONT AU JOURNAL : on relit la ligne de ce coup-la, et elle
+    // seule. Une lecture d'un millieme de seconde, contre les recalculer -- huit
+    // secondes sur une grande grille -- ou les tenir tous en memoire.
+    const ou = this.ouEstLeCoup.get(n);
+    if (ou !== undefined) {
+      const garde = this.paliersRefaits.get(n);
+      if (garde !== undefined) {
+        this.paliersRefaits.delete(n);
+        this.paliersRefaits.set(n, garde);
+        return garde;
+      }
+      const ligne = this.ligneDuJournal(ou);
+      const paliers = (ligne?.["move"]?.tiers ?? []) as Tier[];
+      if (paliers.length > 0) {
+        this.paliersRefaits.set(n, paliers);
+        this.oublierLesPlusVieux(n);
+        return paliers;
+      }
+    }
     // ON NE RECALCULE PAS DEUX FOIS LE MEME COUP.
     //
     // Sur un plateau borne, les paliers ne sont pas au journal -- on les refait
@@ -1874,17 +1969,23 @@ export class Game {
     });
     const paliers = (reply.tiers ?? []) as Tier[];
     this.paliersRefaits.set(n, paliers);
-    // On jette les plus anciennement consultes jusqu'a repasser sous le plafond.
-    // Jamais le dernier arrive : sans quoi un seul coup enorme viderait la
-    // memoire et ne s'y garderait meme pas.
+    this.oublierLesPlusVieux(n);
+    return paliers;
+  }
+
+  /**
+   * On jette les paliers les plus anciennement CONSULTES jusqu'a repasser sous
+   * le plafond. Jamais le dernier arrive : sans quoi un seul coup enorme
+   * viderait la memoire et ne s'y garderait meme pas.
+   */
+  private oublierLesPlusVieux(garder: number): void {
     let total = 0;
     for (const v of this.paliersRefaits.values()) for (const p of v) total += p.moves.length;
     for (const [cle, v] of this.paliersRefaits) {
-      if (total <= PALIERS_EN_MEMOIRE || cle === n) break;
+      if (total <= PALIERS_EN_MEMOIRE || cle === garder) break;
       for (const p of v) total -= p.moves.length;
       this.paliersRefaits.delete(cle);
     }
-    return paliers;
   }
 
   async reveal(): Promise<void> {
