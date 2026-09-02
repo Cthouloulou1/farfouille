@@ -27,7 +27,14 @@ import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import { DAWG_PATH } from "../../engine/src/paths.ts";
-import { Seau, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
+import { Seau, seauDeRafale, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
+import {
+  lireLesComptes, creerCompte, compte, motDePasseJuste, changerLeMotDePasse,
+  ecrireLeProfil, demanderLaVerification, trancherLaVerification, tousLesComptes,
+  emettreUnJeton, compteDuJeton, jetonDesEntetes, cookieDeSession, cookieEfface,
+  publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLAdmin, cleDuPseudo,
+  type Compte,
+} from "./comptes.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const WEB = join(here, "..", "..", "web");
@@ -42,6 +49,9 @@ const GAME_ID = arg("partie", "mondiale");
 const LAYOUT = arg("pavage", "pave1") as LayoutName;
 /** Bouton "reveler le top" : commodite de test, absente pour les joueurs. */
 const REVEAL = process.argv.includes("--reveler");
+/** Le compte qui tranche les demandes de verification. */
+const ADMIN = arg("admin", "admin");
+const ADMIN_MDP = arg("admin-mdp", process.env["FARFOUILLE_ADMIN_MDP"] ?? "");
 
 /**
  * Parties du disque a rouvrir DANS UN SALON, separees par des virgules.
@@ -176,8 +186,23 @@ const CFG_MONDIALE = (() => {
 // ---------------------------------------------------------------- transport
 
 /** Qui est connecte, sous quel pseudo, et dans quel salon. */
-interface Client { nom: string; salon: string }
+interface Client {
+  nom: string;
+  salon: string;
+  /**
+   * Le compte lu dans le cookie a l'ouverture de la liaison, s'il y en a un.
+   *
+   * C'est LUI qui nomme le joueur, pas le message `join` : un client peut
+   * ecrire ce qu'il veut dans son message, il ne peut pas fabriquer un cookie
+   * que nous avons signe.
+   */
+  compte: string | null;
+}
 const clients = new Map<WebSocket, Client>();
+
+/** Les pseudos verifies parmi les presents : le client y met une pastille. */
+const verifiesPresents = (salonId: string): string[] =>
+  occupants(salonId).filter((n) => compte(n)?.verifie === true);
 
 interface Debit { mots: Seau; tout: Seau; averti: number }
 const debits = new Map<WebSocket, Debit>();
@@ -263,6 +288,7 @@ function publicState(s: Salon) {
     likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),
+    verifies: verifiesPresents(s.id),
     createdAt: g.createdAt,
     demarreA: DEMARRE_A,
     now: Date.now(),
@@ -446,6 +472,42 @@ function json(res: ServerResponse, code: number, corps: unknown): void {
   res.end(s);
 }
 
+/**
+ * DERRIERE CLOUDFLARE, LE SERVEUR NE VOIT QUE DU http.
+ *
+ * C'est le tunnel qui termine le TLS et qui l'annonce dans `x-forwarded-proto`.
+ * Sans lire cet en-tete, le cookie ne porterait jamais `Secure` en ligne.
+ */
+function sousHttps(req: IncomingMessage): boolean {
+  const dit = String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]!.trim();
+  return dit === "https";
+}
+
+/** Le compte de celui qui parle, lu dans son cookie. */
+function quiParle(req: IncomingMessage): Compte | undefined {
+  return compteDuJeton(jetonDesEntetes(req.headers.cookie));
+}
+
+/**
+ * UN SEAU PAR ADRESSE POUR LES MOTS DE PASSE.
+ *
+ * Six essais d'affilee, puis un toutes les deux secondes. La rafale est pour
+ * l'humain qui retape son mot de passe deux ou trois fois ; la moyenne est
+ * contre le script, a qui elle ne laisse que dix-huit cents essais par heure --
+ * pour un hachage qui coute deja cent millisecondes au serveur, et un sel
+ * different par compte.
+ */
+const essais = new Map<string, Seau>();
+function tropDEssais(req: IncomingMessage): boolean {
+  const ip = String(req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "?");
+  let seau = essais.get(ip);
+  if (seau === undefined) { seau = seauDeRafale(0.5, 6); essais.set(ip, seau); }
+  // La table ne peut pas grossir sans fin : au-dela d'un millier d'adresses on
+  // la vide, les seaux se reconstituent d'eux-memes.
+  if (essais.size > 1000) essais.clear();
+  return !seau.prendre();
+}
+
 async function corpsJson(req: IncomingMessage): Promise<any> {
   const morceaux: Buffer[] = [];
   let taille = 0;
@@ -515,7 +577,9 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       });
       return;
     }
-    const par = String(req.headers["x-pseudo"] ?? "");
+    // Le cookie fait foi quand il y en a un ; l'en-tete ne sert plus qu'aux
+    // joueurs sans compte, pour qui il n'a jamais ete qu'un garde-fou.
+    const par = quiParle(req)?.pseudo ?? String(req.headers["x-pseudo"] ?? "");
     if (par !== s.proprietaire) {
       json(res, 403, { erreur: "seul le créateur du salon peut le supprimer" });
       return;
@@ -527,6 +591,106 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // c'est une 15x15 terminee, effacee sinon.
     console.log(`[salon] "${s.nom}" (${id}) supprime par ${par}`);
     await fermerSalon(id);
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // ------------------------------------------------------------- comptes
+
+  if (url === "/api/moi" && req.method === "GET") {
+    const c = quiParle(req);
+    json(res, 200, { compte: c === undefined ? null : priveDuCompte(c) });
+    return;
+  }
+
+  if ((url === "/api/inscription" || url === "/api/connexion") && req.method === "POST") {
+    if (tropDEssais(req)) {
+      json(res, 429, { erreur: "Trop d'essais, attendez un instant" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const pseudo = String(corps.pseudo ?? "").trim();
+    const mdp = String(corps.motDePasse ?? "");
+
+    if (url === "/api/inscription") {
+      const erreur = await creerCompte(pseudo, mdp);
+      if (erreur !== null) { json(res, 400, { erreur }); return; }
+    } else {
+      const c = compte(pseudo);
+      // UN SEUL MESSAGE POUR LES DEUX ECHECS : dire « ce pseudo n'existe pas »
+      // apprendrait a un curieux quels comptes existent.
+      if (c === undefined || !(await motDePasseJuste(c, mdp))) {
+        json(res, 401, { erreur: "Pseudo ou mot de passe incorrect" });
+        return;
+      }
+    }
+    const c = compte(pseudo)!;
+    res.setHeader("set-cookie", cookieDeSession(emettreUnJeton(c), sousHttps(req)));
+    json(res, 200, { compte: priveDuCompte(c) });
+    return;
+  }
+
+  if (url === "/api/deconnexion" && req.method === "POST") {
+    res.setHeader("set-cookie", cookieEfface(sousHttps(req)));
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  if (url === "/api/moi" && req.method === "POST") {
+    const c = quiParle(req);
+    if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    ecrireLeProfil(
+      c,
+      String(corps.nomReel ?? c.nomReel),
+      corps.nomPublic === true,
+      Number.isFinite(Number(corps.avatar)) ? Number(corps.avatar) : c.avatar,
+    );
+    json(res, 200, { compte: priveDuCompte(c) });
+    return;
+  }
+
+  if (url === "/api/verification" && req.method === "POST") {
+    const c = quiParle(req);
+    if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
+    const erreur = demanderLaVerification(c);
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    console.log(`[comptes] ${c.pseudo} demande la verification sous le nom "${c.nomReel}"`);
+    json(res, 200, { compte: priveDuCompte(c) });
+    return;
+  }
+
+  // ------------------------------------------------------- administration
+
+  if (url === "/api/admin/demandes" && req.method === "GET") {
+    const c = quiParle(req);
+    if (c === undefined || !c.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    json(res, 200, {
+      demandes: tousLesComptes()
+        .filter((v) => v.demande || v.verifie)
+        .sort((a, b) => Number(b.demande) - Number(a.demande) || a.demandeLe - b.demandeLe)
+        .map((v) => ({
+          pseudo: v.pseudo, nomReel: v.nomReel, nomPublic: v.nomPublic,
+          demande: v.demande, verifie: v.verifie, demandeLe: v.demandeLe, cree: v.cree,
+        })),
+    });
+    return;
+  }
+
+  if (url === "/api/admin/verdict" && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined || !moi.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const c = compte(String(corps.pseudo ?? ""));
+    if (c === undefined) { json(res, 404, { erreur: "compte introuvable" }); return; }
+    trancherLaVerification(c, corps.verifie === true, moi.pseudo);
+    console.log(`[comptes] ${moi.pseudo} ${corps.verifie === true ? "verifie" : "refuse"} ${c.pseudo}`);
     json(res, 200, { ok: true });
     return;
   }
@@ -594,8 +758,12 @@ http.on("error", surErreurReseau);
 const wss = new WebSocketServer({ server: http });
 wss.on("error", surErreurReseau);
 
-wss.on("connection", (ws) => {
-  clients.set(ws, { nom: "", salon: "" });
+wss.on("connection", (ws, req) => {
+  // LE COOKIE VOYAGE AVEC LA POIGNEE DE MAIN : meme origine, meme navigateur.
+  // On lit l'identite ICI, une fois, plutot que de la redemander a chaque
+  // message.
+  const identifie = compteDuJeton(jetonDesEntetes(req.headers.cookie));
+  clients.set(ws, { nom: "", salon: "", compte: identifie?.pseudo ?? null });
   debits.set(ws, {
     mots: new Seau(SOUMISSIONS_PAR_SECONDE),
     tout: new Seau(MESSAGES_PAR_SECONDE),
@@ -630,7 +798,20 @@ wss.on("connection", (ws) => {
     const s = salon(moi.salon);
 
     if (msg.t === "join") {
-      const nom = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
+      const inscrit = clients.get(ws)?.compte ?? null;
+      // Un compte s'impose au nom annonce : c'est tout l'interet d'en avoir un.
+      const demande = String(msg.name ?? "").trim().slice(0, 24) || "anonyme";
+      const nom = inscrit ?? demande;
+      // UN ANONYME NE PORTE PAS LE PSEUDO DE QUELQU'UN D'INSCRIT. Sans cette
+      // regle, creer un compte ne protegerait rien : n'importe qui pourrait
+      // encore se presenter sous ce nom-la et jouer a sa place.
+      if (inscrit === null && pseudoEnregistre(nom)) {
+        send(ws, {
+          t: "refus",
+          message: "Ce pseudo appartient à un compte : connectez-vous, ou prenez-en un autre",
+        });
+        return;
+      }
       const cible = salon(String(msg.salon ?? GAME_ID));
       if (cible === undefined) {
         send(ws, {
@@ -641,15 +822,15 @@ wss.on("connection", (ws) => {
         return;
       }
       // Deux joueurs du meme nom rendent le classement faux et les statistiques
-      // inexploitables : on ne saurait plus a qui attribuer un coup. Tant qu'il
-      // n'y a pas de comptes, l'unicite ne vaut que parmi les connectes ; elle
-      // s'etendra aux pseudos enregistres quand ils existeront.
+      // inexploitables : on ne saurait plus a qui attribuer un coup. L'unicite
+      // vaut parmi les connectes, ET parmi les pseudos inscrits -- un compte
+      // reserve son nom meme quand son porteur n'est pas la.
       const pris = [...clients.entries()].some(([c, v]) => c !== ws && v.nom === nom);
       if (pris) {
         send(ws, { t: "refus", message: "Ce nom d'utilisateur n'est pas disponible" });
         return;
       }
-      clients.set(ws, { nom, salon: cible.id });
+      clients.set(ws, { nom, salon: cible.id, compte: inscrit });
       // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
       // la. Le duplicate en a besoin pour savoir qui compter sur un coup.
       cible.partie.presents.add(nom);
@@ -945,6 +1126,9 @@ http.listen(PORT, () => {
   console.log(`  http://localhost:${PORT}`);
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');
+  lireLesComptes();
+  void assurerLAdmin(ADMIN, ADMIN_MDP);
+
   console.log(`
   preparation des parties...`);
   // On sert la page tout de suite ; les parties se preparent ensuite. Calculer

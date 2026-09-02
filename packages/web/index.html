@@ -588,6 +588,45 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
 .pseudo .renoncer { display: block; margin: 10px auto 0; }
 .records-boite { width: min(420px, 94vw); }
+.pseudo .onglets { margin: 14px 0 4px; }
+.pseudo .etiquette { display: block; margin: 14px 0 5px; font-size: 11.5px; color: var(--ink-faint); }
+.pseudo input + input { margin-top: 8px; }
+.perso { width: min(420px, 94vw); }
+.perso-tete { display: flex; align-items: center; gap: 12px; }
+.perso-tete h2 { margin: 0; }
+/* UN LISERE AUTOUR DE L'AVATAR. Les cases nues du pavage ont la couleur du
+   fond : sans cercle, l'avatar se dissolvait dans le panneau au lieu de se lire
+   comme un objet. */
+.avatar.grand { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; display: block; flex: none; box-shadow: inset 0 0 0 1px var(--rule); }
+.avatar.grand canvas { display: block; width: 100%; height: 100%; }
+/* La pastille de verification : discrete, mais elle se voit. C'est une
+   affirmation que le site fait sur quelqu'un, pas une decoration. */
+.pastille { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 2px 9px; border-radius: 20px; background: var(--accent-bg); color: var(--accent); font-size: 11px; font-weight: 500; }
+.pastille[hidden] { display: none; }
+/* La marque du classement : discrete au point de ne pas deranger la lecture
+   des chiffres, mais elle se voit contre le nom. */
+.prow .verifie { margin-left: 5px; font-weight: 600; font-size: .82em; color: var(--accent); }
+.pastille::before { content: "✓"; font-size: 10px; }
+.perso .bascule { margin-top: 8px; }
+.perso-verif { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.perso-verif p { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
+.perso-verif .attente { color: var(--mark); }
+.perso-pied { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.perso-pied .lien { flex: 1 1 auto; text-align: center; }
+.perso .join-error { margin-top: 10px; }
+.admin-boite { width: min(520px, 94vw); }
+.demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
+.demande b { font-size: 13px; font-weight: 500; }
+.demande .vrai { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-soft); }
+.demande .actions { margin-left: auto; display: flex; gap: 6px; }
+.demande .actions button { padding: 4px 9px; font-size: 11px; }
+.demande .oui:hover { color: var(--accent); border-color: var(--accent); }
+.demande .non:hover { color: var(--warn); border-color: var(--warn); }
+/* La pastille du bandeau est claire sur fond de nuit. */
+.moi .pastille { margin: 0; background: transparent; color: var(--nuit-accent); padding: 0; }
+.moi .avatar { overflow: hidden; padding: 0; box-shadow: inset 0 0 0 1px var(--nuit-rule); }
+.moi .avatar canvas { display: block; width: 100%; height: 100%; }
 .records-boite ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.6; }
 .records-boite b { font-weight: 500; color: var(--ink); }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
@@ -745,6 +784,67 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <li>la partie topée avec le <b>moins de secondes par coup</b></li>
       </ul>
       <button class="valider" id="records-close" type="button">Fermer</button>
+    </div>
+  </div>
+
+  <!-- CONNEXION ET INSCRIPTION. Le compte est OPTIONNEL (SPEC.md §8) : le pied
+       du panneau garde toujours la porte du jeu sans compte ouverte. -->
+  <div class="voile" id="voile-compte" hidden>
+    <form class="pseudo" id="form-compte" autocomplete="on">
+      <h2 id="compte-titre">Connexion</h2>
+      <div class="onglets" id="compte-onglets">
+        <button type="button" data-v="connexion" aria-pressed="true">J'ai un compte</button>
+        <button type="button" data-v="inscription" aria-pressed="false">Je m'inscris</button>
+      </div>
+      <p id="compte-quoi">Votre pseudo vous est réservé, et vos parties vous suivent.</p>
+      <input id="c-pseudo" maxlength="24" placeholder="Pseudo" autocomplete="username">
+      <input id="c-mdp" type="password" maxlength="128" placeholder="Mot de passe" autocomplete="current-password">
+      <div class="join-error" id="c-compte-error" hidden></div>
+      <button class="valider" id="c-valider" type="submit">Se connecter</button>
+      <button class="lien renoncer" id="c-sans-compte" type="button">Jouer sans compte</button>
+    </form>
+  </div>
+
+  <!-- L'ESPACE PERSONNEL. Le vrai nom y est prive par defaut : on peut etre
+       verifie sans que son nom paraisse. -->
+  <div class="voile" id="voile-perso" hidden>
+    <div class="pseudo perso">
+      <div class="perso-tete">
+        <span class="avatar grand" id="perso-avatar"></span>
+        <div>
+          <h2 id="perso-pseudo">—</h2>
+          <span class="pastille" id="perso-badge" hidden>joueur vérifié</span>
+        </div>
+      </div>
+
+      <label class="etiquette" for="perso-nom">Votre vrai nom</label>
+      <input id="perso-nom" maxlength="64" placeholder="Prénom et nom" autocomplete="name">
+      <button type="button" class="bascule" id="perso-public" aria-pressed="false">
+        <span class="voyant"></span>Afficher mon nom à côté de mon pseudo
+      </button>
+      <p class="apres">Sans cela, votre nom n'est lu que par la personne qui vérifie.</p>
+
+      <div class="perso-verif" id="perso-verif"></div>
+
+      <div class="perso-pied">
+        <button type="button" class="lien" id="perso-avatar-neuf">Changer d'avatar</button>
+        <button type="button" class="lien" id="perso-admin" hidden>Demandes</button>
+        <button type="button" class="lien" id="perso-sortir">Se déconnecter</button>
+      </div>
+      <div class="join-error" id="perso-error" hidden></div>
+      <button class="valider" id="perso-close" type="button">Fermer</button>
+    </div>
+  </div>
+
+  <!-- L'ADMINISTRATION : la liste des demandes, un verdict par ligne. -->
+  <div class="voile" id="voile-admin" hidden>
+    <div class="pseudo admin-boite">
+      <h2>Demandes de vérification</h2>
+      <p>La vérification se fait ailleurs — vous demandez au joueur, sur une
+      autre plateforme, si c'est bien lui. Ici, vous ne faites qu'inscrire le
+      verdict.</p>
+      <div class="demandes" id="admin-liste"></div>
+      <button class="valider" id="admin-close" type="button">Fermer</button>
     </div>
   </div>
 

@@ -30,9 +30,21 @@ export class Seau {
 
   // Champs poses a la main : Node execute le TypeScript en effacant les types,
   // sans rien engendrer, et ne connait donc pas les proprietes de constructeur.
-  constructor(debit: number, maintenant = Date.now()) {
+  private readonly capacite: number;
+
+  /**
+   * `capacite` separe la RAFALE de la MOYENNE, et vient EN DERNIER : le second
+   * argument est l'instant depuis toujours, et l'echanger aurait fausse en
+   * silence tous les seaux du jeu -- ainsi que leur test, qui ecrit
+   * `new Seau(5, 0)` pour partir de l'instant zero.
+   *
+   * Par defaut la capacite vaut le debit : le comportement d'origine, mot pour
+   * mot. Voir `seauDeRafale` pour l'autre usage.
+   */
+  constructor(debit: number, maintenant = Date.now(), capacite = debit) {
     this.debit = debit;
-    this.jetons = debit;
+    this.capacite = capacite;
+    this.jetons = capacite;
     this.vu = maintenant;
   }
 
@@ -42,10 +54,21 @@ export class Seau {
     // a zero toutes les secondes. Sinon deux rafales de part et d'autre d'une
     // frontiere de seconde passeraient ensemble, soit le double du debit.
     const ecoule = Math.max(0, maintenant - this.vu);
-    this.jetons = Math.min(this.debit, this.jetons + ecoule * this.debit / 1000);
+    this.jetons = Math.min(this.capacite, this.jetons + ecoule * this.debit / 1000);
     this.vu = maintenant;
     if (this.jetons < 1) return false;
     this.jetons--;
     return true;
   }
+}
+
+/**
+ * Un seau dont la rafale depasse la moyenne.
+ *
+ * Pour les mots de passe : quelques essais coup sur coup -- un humain qui
+ * retape -- puis un rythme lent, qui ne mene nulle part quand on essaie un
+ * dictionnaire.
+ */
+export function seauDeRafale(debit: number, capacite: number): Seau {
+  return new Seau(debit, Date.now(), capacite);
 }

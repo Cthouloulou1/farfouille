@@ -112,6 +112,14 @@ let players: Record<string, number> = {};
 /** "J'aime" recus par joueur sur toute la partie. */
 let likes: Record<string, number> = {};
 let online: string[] = [];
+/**
+ * Les pseudos verifies parmi les presents.
+ *
+ * UNE VERIFICATION QUE PERSONNE NE VOIT NE SERT A RIEN : elle dit aux autres
+ * joueurs que celui-la est bien qui il pretend etre. Elle se lit donc dans le
+ * classement, la ou l'on regarde les noms.
+ */
+let verifies = new Set<string>();
 let last: MoveInfo | null = null;
 let createdAt = Date.now();
 let servedAt = Date.now();
@@ -2036,8 +2044,9 @@ function paintSide() {
         `<span class="num">${points[name] ?? 0}</span>`
       : `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
+    const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom">${name}${coeurs}</span>` + droite;
+                    `<span class="nom">${name}${marque}${coeurs}</span>` + droite;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
 
@@ -2121,7 +2130,9 @@ function paintSide() {
     }
   }
 
-  $("online").textContent = online.length > 0 ? online.join(", ") : "—";
+  $("online").textContent = online.length > 0
+    ? online.map((n) => (verifies.has(n) ? `${n} ✓` : n)).join(", ")
+    : "—";
   majDesPoignees();
   $("reveal-wrap").hidden = !canReveal;
   ($("reveal") as HTMLButtonElement).disabled = solving;
@@ -3839,6 +3850,9 @@ addEventListener("keydown", (e) => {
   // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
   if (!$("join").hidden) {
     if (e.key !== "Escape") return;
+    if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
+    if (!$("voile-perso").hidden) { $("voile-perso").hidden = true; return; }
+    if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
     if (!$("voile-records").hidden) { $("voile-records").hidden = true; return; }
     if (!$("voile").hidden) { destination = null; $("voile").hidden = true; }
     return;
@@ -4295,7 +4309,8 @@ setInterval(() => {
 
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
-  players?: Record<string, number>; online?: string[]; last?: MoveInfo | null;
+  players?: Record<string, number>; online?: string[]; verifies?: string[];
+  last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   gerant?: string | null;
@@ -4357,6 +4372,7 @@ function applyState(s: {
   }
   finie = s.finie === true;
   online = s.online ?? [];
+  verifies = new Set(s.verifies ?? []);
   last = s.last ?? null;
   createdAt = s.createdAt;
   servedAt = s.servedAt;
@@ -4605,6 +4621,302 @@ let filtre: "tous" | "bornee" | "infinie" | "attente" = "tous";
 /** La derniere liste recue du serveur. Les filtres repeignent depuis elle. */
 let salonsRecus: ResumeSalon[] = [];
 
+// ---------------------------------------------------------------- le compte
+
+/**
+ * LE COMPTE EST OPTIONNEL (SPEC.md §8).
+ *
+ * Trois etats, et non deux : on peut n'etre personne, etre quelqu'un sous un
+ * pseudo local -- comme depuis toujours --, ou etre quelqu'un dont le serveur
+ * garantit le nom. Le troisieme n'enleve rien au deuxieme : le site reste
+ * ouvert a qui ne veut pas s'inscrire.
+ */
+interface MonCompte {
+  pseudo: string; verifie: boolean; avatar: number;
+  nomReel: string; nomPublic: boolean; demande: boolean; admin: boolean;
+}
+
+let moiCompte: MonCompte | null = null;
+
+/** Demande au serveur qui nous sommes. Le cookie parle a notre place. */
+async function lireLeCompte(): Promise<void> {
+  try {
+    const d = await (await fetch("/api/moi")).json();
+    moiCompte = d.compte ?? null;
+  } catch { moiCompte = null; }
+  if (moiCompte !== null) {
+    // Le pseudo du compte l'emporte sur celui qui trainait dans le navigateur :
+    // c'est sous ce nom-la que le serveur nous fera jouer, de toute facon.
+    ($("name") as HTMLInputElement).value = moiCompte.pseudo;
+    try { localStorage.setItem("pseudo", moiCompte.pseudo); } catch { /* navigation privee */ }
+  }
+}
+
+/**
+ * L'AVATAR EST UN PAVE DE LA GRILLE.
+ *
+ * Pas une initiale dans un rond, pas une image a televerser -- qu'il faudrait
+ * heberger et moderer : un carre de cinq cases pris dans le motif des primes,
+ * a un endroit qui n'appartient qu'a vous. C'est le meme dessin que le plateau,
+ * donc le site se reconnait dans ses avatars.
+ */
+function peindreAvatar(cible: HTMLElement, graine: number, cote: number): void {
+  const dpr = Math.min(3, devicePixelRatio || 1);
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(cote * dpr);
+  cv.height = Math.round(cote * dpr);
+  const g = cv.getContext("2d");
+  if (g === null) return;
+  g.scale(dpr, dpr);
+  const cases = 5;
+  const pas = cote / cases;
+  // La graine choisit l'endroit du pavage : deux octets, deux coordonnees.
+  const ox = (graine & 0xff) - 128;
+  const oy = ((graine >> 8) & 0xff) - 128;
+  const teintes: Record<string, string> = {
+    T: css("--mct"), D: css("--mcd"), "*": css("--mcd"),
+    t: css("--lct"), d: css("--lcd"), ".": css("--field"),
+  };
+  for (let y = 0; y < cases; y++) {
+    for (let x = 0; x < cases; x++) {
+      g.fillStyle = teintes[bonusChar(ox + x, oy + y)] ?? css("--field");
+      g.fillRect(x * pas, y * pas, pas + 0.5, pas + 0.5);
+    }
+  }
+  cible.replaceChildren(cv);
+}
+
+/** Ouvre le panneau de connexion, sur l'un ou l'autre de ses onglets. */
+let ongletCompte: "connexion" | "inscription" = "connexion";
+function ouvrirLeCompte(onglet: "connexion" | "inscription" = "connexion"): void {
+  ongletCompte = onglet;
+  peindreOngletsDuCompte();
+  $("c-compte-error").hidden = true;
+  ($("c-pseudo") as HTMLInputElement).value = pseudo();
+  ($("c-mdp") as HTMLInputElement).value = "";
+  $("voile-compte").hidden = false;
+  ($("c-pseudo") as HTMLInputElement).focus();
+}
+
+function peindreOngletsDuCompte(): void {
+  for (const b of $("compte-onglets").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === ongletCompte));
+  }
+  const inscrit = ongletCompte === "inscription";
+  $("compte-titre").textContent = inscrit ? "Inscription" : "Connexion";
+  $("compte-quoi").textContent = inscrit
+    ? "Votre pseudo vous est réservé, et personne d'autre ne pourra le porter."
+    : "Content de vous revoir.";
+  $("c-valider").textContent = inscrit ? "Créer mon compte" : "Se connecter";
+  ($("c-mdp") as HTMLInputElement).autocomplete = inscrit ? "new-password" : "current-password";
+}
+
+/** Ouvre l'espace personnel, garni de ce que le serveur sait de nous. */
+function ouvrirLEspace(): void {
+  if (moiCompte === null) { ouvrirLeCompte(); return; }
+  $("perso-pseudo").textContent = moiCompte.pseudo;
+  $("perso-badge").hidden = !moiCompte.verifie;
+  peindreAvatar($("perso-avatar"), moiCompte.avatar, 52);
+  ($("perso-nom") as HTMLInputElement).value = moiCompte.nomReel;
+  $("perso-public").setAttribute("aria-pressed", String(moiCompte.nomPublic));
+  $("perso-admin").hidden = !moiCompte.admin;
+  $("perso-error").hidden = true;
+  peindreLaVerification();
+  $("voile-perso").hidden = false;
+}
+
+/** Les trois etats de la verification, et ce qu'on peut en faire. */
+function peindreLaVerification(): void {
+  const boite = $("perso-verif");
+  boite.replaceChildren();
+  if (moiCompte === null) return;
+  const dit = el("p");
+  if (moiCompte.verifie) {
+    dit.textContent = "Votre identité a été vérifiée. La pastille suit votre pseudo.";
+    boite.appendChild(dit);
+    return;
+  }
+  if (moiCompte.demande) {
+    dit.className = "attente";
+    dit.textContent = "Demande déposée. Elle sera tranchée à la main — on vous contactera "
+      + "peut-être ailleurs pour s'assurer que c'est bien vous.";
+    boite.appendChild(dit);
+    return;
+  }
+  dit.textContent = "Joueur de haut niveau ? Donnez votre nom, demandez la vérification, "
+    + "et une pastille dira que vous êtes bien qui vous dites.";
+  boite.appendChild(dit);
+  const b = el("button", "appliquer", "Demander la vérification") as HTMLButtonElement;
+  b.type = "button";
+  b.addEventListener("click", () => { void demanderLaVerif(); });
+  boite.appendChild(b);
+}
+
+/** Enregistre le profil. Le nom part au serveur, le reste suit. */
+async function enregistrerLeProfil(): Promise<boolean> {
+  if (moiCompte === null) return false;
+  const r = await fetch("/api/moi", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      nomReel: ($("perso-nom") as HTMLInputElement).value,
+      nomPublic: $("perso-public").getAttribute("aria-pressed") === "true",
+      avatar: moiCompte.avatar,
+    }),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    $("perso-error").textContent = d.erreur ?? "enregistrement impossible";
+    $("perso-error").hidden = false;
+    return false;
+  }
+  moiCompte = d.compte;
+  return true;
+}
+
+async function demanderLaVerif(): Promise<void> {
+  // Le nom en cours de saisie part AVANT la demande : sans cela on demanderait
+  // la verification d'un nom que le serveur n'a pas encore recu.
+  if (!(await enregistrerLeProfil())) return;
+  const r = await fetch("/api/verification", { method: "POST" });
+  const d = await r.json();
+  if (!r.ok) {
+    $("perso-error").textContent = d.erreur ?? "demande impossible";
+    $("perso-error").hidden = false;
+    return;
+  }
+  moiCompte = d.compte;
+  $("perso-error").hidden = true;
+  peindreLaVerification();
+}
+
+/** La liste des demandes, pour qui a le droit de trancher. */
+async function ouvrirLAdministration(): Promise<void> {
+  const boite = $("admin-liste");
+  boite.replaceChildren(el("div", "none", "chargement…"));
+  $("voile-admin").hidden = false;
+  let d: { demandes: any[] };
+  try { d = await (await fetch("/api/admin/demandes")).json(); }
+  catch { boite.replaceChildren(el("div", "none", "serveur injoignable")); return; }
+  boite.replaceChildren();
+  if (!Array.isArray(d.demandes) || d.demandes.length === 0) {
+    boite.appendChild(el("div", "none", "aucune demande, aucun joueur vérifié"));
+    return;
+  }
+  for (const v of d.demandes) {
+    const ligne = el("div", "demande");
+    const qui = el("div");
+    qui.appendChild(el("b", "", v.pseudo));
+    qui.appendChild(document.createElement("br"));
+    qui.appendChild(el("span", "vrai", v.nomReel || "— sans nom —"));
+    ligne.appendChild(qui);
+    const actions = el("span", "actions");
+    if (v.verifie) {
+      actions.appendChild(el("span", "vrai", "vérifié"));
+      const non = el("button", "non", "Retirer") as HTMLButtonElement;
+      non.type = "button";
+      non.addEventListener("click", () => { void trancher(v.pseudo, false); });
+      actions.appendChild(non);
+    } else {
+      const oui = el("button", "oui", "Vérifier") as HTMLButtonElement;
+      oui.type = "button";
+      oui.addEventListener("click", () => { void trancher(v.pseudo, true); });
+      const non = el("button", "non", "Refuser") as HTMLButtonElement;
+      non.type = "button";
+      non.addEventListener("click", () => { void trancher(v.pseudo, false); });
+      actions.appendChild(oui);
+      actions.appendChild(non);
+    }
+    ligne.appendChild(actions);
+    boite.appendChild(ligne);
+  }
+}
+
+async function trancher(pseudoCible: string, verifie: boolean): Promise<void> {
+  await fetch("/api/admin/verdict", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pseudo: pseudoCible, verifie }),
+  });
+  await ouvrirLAdministration();
+}
+
+// Les onglets du panneau de connexion.
+for (const b of $("compte-onglets").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    ongletCompte = (b as HTMLElement).dataset["v"] === "inscription" ? "inscription" : "connexion";
+    peindreOngletsDuCompte();
+  });
+}
+
+$("form-compte").addEventListener("submit", (e) => {
+  e.preventDefault();
+  void envoyerLeCompte();
+});
+
+async function envoyerLeCompte(): Promise<void> {
+  const pseudoDonne = ($("c-pseudo") as HTMLInputElement).value.trim();
+  const mdp = ($("c-mdp") as HTMLInputElement).value;
+  const chemin = ongletCompte === "inscription" ? "/api/inscription" : "/api/connexion";
+  const r = await fetch(chemin, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pseudo: pseudoDonne, motDePasse: mdp }),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    $("c-compte-error").textContent = d.erreur ?? "impossible";
+    $("c-compte-error").hidden = false;
+    return;
+  }
+  moiCompte = d.compte;
+  ($("name") as HTMLInputElement).value = moiCompte!.pseudo;
+  try { localStorage.setItem("pseudo", moiCompte!.pseudo); } catch { /* navigation privee */ }
+  $("voile-compte").hidden = true;
+  ($("c-mdp") as HTMLInputElement).value = "";
+  // On repart ou l'on allait, exactement comme apres avoir donne un pseudo.
+  const ou = destination;
+  destination = null;
+  if (ou !== null) { void rejoindre(ou); return; }
+  peindreAccueil();
+}
+
+$("c-sans-compte").addEventListener("click", () => {
+  $("voile-compte").hidden = true;
+  demanderLePseudo(destination);
+});
+
+$("perso-close").addEventListener("click", () => {
+  void (async () => {
+    if (await enregistrerLeProfil()) { $("voile-perso").hidden = true; peindreAccueil(); }
+  })();
+});
+
+$("perso-public").addEventListener("click", () => {
+  const b = $("perso-public");
+  b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
+});
+
+$("perso-avatar-neuf").addEventListener("click", () => {
+  if (moiCompte === null) return;
+  moiCompte.avatar = Math.floor(Math.random() * 65536);
+  peindreAvatar($("perso-avatar"), moiCompte.avatar, 52);
+});
+
+$("perso-admin").addEventListener("click", () => { void ouvrirLAdministration(); });
+$("admin-close").addEventListener("click", () => { $("voile-admin").hidden = true; });
+
+$("perso-sortir").addEventListener("click", () => {
+  void (async () => {
+    await fetch("/api/deconnexion", { method: "POST" });
+    moiCompte = null;
+    // Le pseudo reste dans le champ : on continue a jouer sous le meme nom, en
+    // anonyme -- sauf s'il appartient a un compte, et le serveur le dira.
+    $("voile-perso").hidden = true;
+    peindreAccueil();
+  })();
+});
+
 /** Ou l'on voulait aller quand on nous a demande notre pseudo. */
 let destination: string | null = null;
 
@@ -4709,19 +5021,36 @@ function peindreCompte(): void {
   boite.appendChild(records);
 
   const moi = pseudo();
-  if (moi === "") {
-    const b = el("button", "entrer", "Choisir un pseudo") as HTMLButtonElement;
+
+  // Nomme, mais sans compte : on montre sous quel nom on joue, et la porte du
+  // compte reste ouverte a cote.
+  if (moiCompte === null && moi !== "") {
+    const b = el("button", "moi") as HTMLButtonElement;
     b.type = "button";
+    b.title = "Changer de pseudo";
+    b.appendChild(el("span", "avatar", moi.slice(0, 1).toUpperCase()));
+    b.appendChild(el("span", "", moi));
     b.addEventListener("click", () => demanderLePseudo(null));
+    boite.appendChild(b);
+  }
+
+  if (moiCompte === null) {
+    const b = el("button", "entrer", "Connexion / Inscription") as HTMLButtonElement;
+    b.type = "button";
+    b.addEventListener("click", () => ouvrirLeCompte());
     boite.appendChild(b);
     return;
   }
+
   const b = el("button", "moi") as HTMLButtonElement;
   b.type = "button";
-  b.title = "Changer de pseudo";
-  b.appendChild(el("span", "avatar", moi.slice(0, 1).toUpperCase()));
-  b.appendChild(el("span", "", moi));
-  b.addEventListener("click", () => demanderLePseudo(null));
+  b.title = "Votre espace";
+  const rond = el("span", "avatar");
+  peindreAvatar(rond, moiCompte.avatar, 24);
+  b.appendChild(rond);
+  b.appendChild(el("span", "", moiCompte.pseudo));
+  if (moiCompte.verifie) b.appendChild(el("span", "pastille", "vérifié"));
+  b.addEventListener("click", () => ouvrirLEspace());
   boite.appendChild(b);
 
   const roue = el("button", "icon roue") as HTMLButtonElement;
@@ -5493,6 +5822,7 @@ async function rejoindre(id: string): Promise<void> {
   chrono = null;
   duplicate = false;
   online = [];
+  verifies = new Set();
   servedAt = Date.now();
   createdAt = Date.now();
   $("sac").textContent = "";
@@ -5524,7 +5854,10 @@ try {
 } catch { /* navigation privee : sans importance */ }
 
 peindreAccueil();
-void peuplerSalons();
+// LE COMPTE AVANT LES SALONS : c'est lui qui decide de ce que le bandeau
+// affiche, et une seconde d'accueil peint en visiteur alors qu'on est connecte
+// se remarque.
+void lireLeCompte().then(() => { peindreAccueil(); return peuplerSalons(); });
 
 // UN LIEN QUI PORTE UN SALON MENE AU SALON. On s'y nomme sur place si l'on ne
 // s'est jamais nomme -- c'est le seul moment ou le pseudo est demande.
