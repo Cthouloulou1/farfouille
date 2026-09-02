@@ -4910,8 +4910,11 @@ $("perso-sortir").addEventListener("click", () => {
   void (async () => {
     await fetch("/api/deconnexion", { method: "POST" });
     moiCompte = null;
-    // Le pseudo reste dans le champ : on continue a jouer sous le meme nom, en
-    // anonyme -- sauf s'il appartient a un compte, et le serveur le dira.
+    // SE DECONNECTER, C'EST REDEVENIR UN VISITEUR. Garder le pseudo dans le
+    // champ menait droit dans un mur : il appartient a un compte, desormais, et
+    // la partie suivante aurait ete refusee sans qu'on comprenne pourquoi.
+    ($("name") as HTMLInputElement).value = "";
+    try { localStorage.removeItem("pseudo"); } catch { /* navigation privee */ }
     $("voile-perso").hidden = true;
     peindreAccueil();
   })();
