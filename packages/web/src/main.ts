@@ -1906,20 +1906,29 @@ function paintSide() {
   const monScore = points[me] ?? 0, monNegatif = negatif[me] ?? 0;
   $("rb-score-wrap").hidden = rejeu !== null || monScore === 0 && monNegatif === 0;
   $("rb-score").textContent = String(monScore);
-  // LE NEGATIF N'EXISTE QU'AU DUPLICATE, ET C'EST UNE QUESTION DE SENS, PAS DE
-  // VALEUR.
+  // LE NEGATIF SE MESURE CONTRE SOI, PAS CONTRE LES AUTRES.
   //
-  // Un negatif mesure ce qu'on a laisse au top SUR SA PROPRE FEUILLE : au
-  // duplicate chacun joue la sienne, marque a chaque coup, et l'ecart cumule
-  // est precisement ce qui departage la table.
+  // Un negatif dit ce qu'on a laisse au top sur SA PROPRE FEUILLE. Il a donc du
+  // sens partout ou l'on joue pour son compte :
   //
-  // Le topping ne se joue pas comme cela. La grille n'avance que parce que
-  // QUELQU'UN a trouve le top -- sur une grille permanente, c'est meme la seule
-  // facon d'avancer. Le travail y est commun : celui qui l'emporte le fait pour
-  // tout le monde, et ce que les autres avaient propose ne compte ni contre eux
-  // ni pour eux. Un ecart personnel n'y mesure donc rien du tout, et l'afficher
-  // invitait a lire une partie collective comme un classement individuel.
-  $("rb-neg-wrap").hidden = rejeu !== null || !duplicate
+  // - au **duplicate**, ou chacun tient la sienne et marque a chaque coup :
+  //   l'ecart cumule est precisement ce qui departage la table ;
+  // - au **topping en solitaire** -- une partie du jour, un entrainement --,
+  //   ou il est la seule mesure de ce qu'on a manque.
+  //
+  // Il n'en a plus des qu'on est PLUSIEURS EN TOPPING. La grille n'avance alors
+  // que parce que quelqu'un a trouve le top, et sur une grille permanente c'est
+  // la seule facon d'avancer : le travail est commun, celui qui l'emporte le
+  // fait pour tout le monde, et ce que les autres avaient propose ne compte ni
+  // contre eux ni pour eux. Un ecart personnel n'y mesure rien, et l'afficher
+  // invite a lire une partie collective comme un classement individuel.
+  //
+  // « Plusieurs » se compte sur la partie entiere, pas sur les connectes du
+  // moment : sur une grille permanente ouverte depuis des semaines, se retrouver
+  // seul devant a trois heures du matin n'en fait pas une partie solitaire.
+  const monde = new Set([...online, ...Object.keys(players), ...Object.keys(points)]);
+  const enGroupe = !duplicate && monde.size > 1;
+  $("rb-neg-wrap").hidden = rejeu !== null || enGroupe
     || (monScore === 0 && monNegatif === 0);
   $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
   paintCurrent();

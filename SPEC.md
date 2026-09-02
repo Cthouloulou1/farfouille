@@ -3032,18 +3032,28 @@ Un carré **Score** l'accompagne dans le bandeau, dans les deux modes : votre
 total, la somme de vos meilleures solutions.
 
 Un carré **Négatif** — votre écart cumulé au top, « Top » quand il est nul —
-n'existe **qu'au duplicate**, et c'est une question de sens, pas de valeur.
+apparaît partout où l'on joue **pour son propre compte** :
 
-Un négatif mesure ce qu'on a laissé au top *sur sa propre feuille* : au duplicate
-chacun joue la sienne, marque à chaque coup, et l'écart cumulé est précisément ce
-qui départage la table.
+| | |
+|---|---|
+| **duplicate** | chacun tient sa feuille et marque à chaque coup ; l'écart cumulé est précisément ce qui départage la table |
+| **topping en solitaire** | une partie du jour, un entraînement : c'est la seule mesure de ce qu'on a manqué |
+| **topping à plusieurs** | pas de négatif |
 
-Le topping ne se joue pas comme cela. La grille n'avance que parce que
-**quelqu'un** a trouvé le top — sur une grille permanente, c'est même la seule
-façon d'avancer. Le travail y est commun : celui qui l'emporte le fait pour tout
-le monde, et ce que les autres avaient proposé ne compte ni contre eux ni pour
-eux. Un écart personnel n'y mesure donc rien, et l'afficher invitait à lire une
-partie collective comme un classement individuel.
+La distinction n'est pas le mode, c'est **contre qui l'on se mesure**. À plusieurs
+en topping, la grille n'avance que parce que quelqu'un a trouvé le top — sur une
+grille permanente, c'est même la seule façon d'avancer. Le travail est commun :
+celui qui l'emporte le fait pour tout le monde, et ce que les autres avaient
+proposé ne compte ni contre eux ni pour eux. Un écart personnel n'y mesure rien,
+et l'afficher invite à lire une partie collective comme un classement individuel.
+
+« Plusieurs » se compte sur **la partie entière**, jamais sur les connectés du
+moment : sur une grille permanente ouverte depuis des semaines, se retrouver seul
+devant à trois heures du matin n'en fait pas une partie solitaire.
+
+> **À faire avec les équipes** : le négatif d'une équipe se mesure sur sa
+> meilleure solution — celle du membre qui a trouvé le mieux — et non sur la
+> somme des écarts de chacun. Une équipe joue une feuille, comme un joueur.
 
 > Le verdict du coup, lui, reste dans les deux modes : « vous étiez à 12 du top »
 > décrit le coup qu'on vient de jouer, ce n'est pas un compte qu'on traîne.
