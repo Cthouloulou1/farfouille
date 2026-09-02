@@ -3835,7 +3835,14 @@ cv.addEventListener("pointerup", (e) => {
 cv.addEventListener("pointercancel", () => { press = null; clearTimeout(holdTimer); cv.style.cursor = ""; });
 
 addEventListener("keydown", (e) => {
-  if (!$("join").hidden) return;
+  // SUR L'ACCUEIL, ECHAP REFERME CE QUI S'Y OUVRE, et rien d'autre ne passe :
+  // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
+  if (!$("join").hidden) {
+    if (e.key !== "Escape") return;
+    if (!$("voile-records").hidden) { $("voile-records").hidden = true; return; }
+    if (!$("voile").hidden) { destination = null; $("voile").hidden = true; }
+    return;
+  }
   // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
   // avale par le jeu et n'effacait rien dans les champs des reglages.
   const cible = document.activeElement;
@@ -4150,11 +4157,15 @@ for (const s of SECTIONS) {
 // ---------------------------------------------------------------- paramètres
 
 const ICONE_ROUE =
-  '<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">'
-  + '<circle cx="10" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>'
-  + '<path d="M10 1.6v2.2M10 16.2v2.2M1.6 10h2.2M16.2 10h2.2'
-  + 'M4.1 4.1l1.6 1.6M14.3 14.3l1.6 1.6M15.9 4.1l-1.6 1.6M5.7 14.3l-1.6 1.6"'
-  + ' fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  '<svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true">'
+  + '<path fill="currentColor" fill-rule="evenodd" d="'
+  + 'M10.09 1.17 L13.91 1.17 L13.48 4.75 L16.08 5.83 L18.31 2.99 L21.01 5.69'
+  + ' L18.17 7.92 L19.25 10.52 L22.83 10.09 L22.83 13.91 L19.25 13.48'
+  + ' L18.17 16.08 L21.01 18.31 L18.31 21.01 L16.08 18.17 L13.48 19.25'
+  + ' L13.91 22.83 L10.09 22.83 L10.52 19.25 L7.92 18.17 L5.69 21.01'
+  + ' L2.99 18.31 L5.83 16.08 L4.75 13.48 L1.17 13.91 L1.17 10.09'
+  + ' L4.75 10.52 L5.83 7.92 L2.99 5.69 L5.69 2.99 L7.92 5.83 L10.52 4.75 Z'
+  + ' M12 8.3 a3.7 3.7 0 1 0 0 7.4 a3.7 3.7 0 1 0 0-7.4 Z"/></svg>';
 
 $("prefs-open").innerHTML = ICONE_ROUE;
 
@@ -4223,10 +4234,13 @@ for (const b of $("p-reperes").querySelectorAll("button")) {
   });
 }
 
-$("prefs-open").addEventListener("click", () => {
+/** Ouvre les reglages, d'ou qu'on les demande : le jeu, ou le bandeau. */
+function ouvrirLesPreferences(): void {
   peuplerPreferences();
   $("prefs").hidden = false;
-});
+}
+
+$("prefs-open").addEventListener("click", ouvrirLesPreferences);
 $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 
 lirePreferences();
@@ -4570,7 +4584,7 @@ interface ResumeSalon {
   cumul?: number;
   config: {
     tirage: number; jouables: number; pioche: string; bornes: number | null;
-    joker?: boolean; chrono?: number | null;
+    joker?: boolean; chrono?: number | null; mode?: string;
   };
 }
 
@@ -4580,8 +4594,10 @@ interface ResumeSalon {
  * Elle ne vient pas du serveur : c'est la promesse du site, pas l'etat d'une
  * partie. Elle vit ici, en un seul endroit.
  */
-const ACCROCHE_STAR = "Grille infinie, sans limite de temps, sans fin. " +
-  "Jusqu'où pourrons-nous aller ?";
+const ACCROCHE_STAR = [
+  "Grille infinie, sans limite de temps, sans fin.",
+  "Jusqu'où pourrons-nous aller ?",
+];
 
 /** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
 let filtre: "tous" | "bornee" | "infinie" | "attente" = "tous";
@@ -4607,13 +4623,25 @@ function dureeDuChrono(c: number | null | undefined): string {
 }
 
 /**
+ * LE NOM DE LA VARIANTE.
+ *
+ * Sept lettres tirees, sept jouables : c'est la partie que tout le monde
+ * connait, et elle s'appelle « Normale ». Les autres se nomment par ce qui les
+ * en ecarte -- `7 sur 9` se lit tout seul, « Normale » ne se devine pas.
+ */
+function nomDeLaVariante(c: ResumeSalon["config"]): string {
+  return c.tirage === 7 && c.jouables === 7 ? "Normale" : `${c.jouables} sur ${c.tirage}`;
+}
+
+/**
  * CE QUI DISTINGUE DEUX SALONS, ET RIEN D'AUTRE.
  *
  * La pioche n'y figure pas : « probabilites ponderees » est illisible pour qui
  * arrive, et n'a jamais aide personne a choisir un salon.
  */
 function specDuSalon(c: ResumeSalon["config"]): string {
-  return [`${c.jouables} sur ${c.tirage}`, dureeDuChrono(c.chrono)]
+  return [nomDeLaVariante(c), dureeDuChrono(c.chrono)]
+    .concat(c.mode === "duplicate" ? ["duplicate"] : [])
     .concat(c.joker === true ? ["joker"] : [])
     .join(" · ");
 }
@@ -4665,10 +4693,21 @@ function demanderLePseudo(ou: string | null): void {
   ($("name") as HTMLInputElement).focus();
 }
 
-/** Le bandeau : le bouton d'acces au compte, ou l'avatar et le pseudo. */
+/**
+ * Le cote droit du bandeau : Records, le compte, et la roue des reglages.
+ *
+ * La roue n'apparait qu'une fois nomme : elle regle des choses qui n'ont de
+ * sens qu'en jouant, et le bandeau du visiteur ne porte qu'une seule porte.
+ */
 function peindreCompte(): void {
   const boite = $("compte");
   boite.replaceChildren();
+
+  const records = el("button", "records", "Records") as HTMLButtonElement;
+  records.type = "button";
+  records.addEventListener("click", () => { $("voile-records").hidden = false; });
+  boite.appendChild(records);
+
   const moi = pseudo();
   if (moi === "") {
     const b = el("button", "entrer", "Choisir un pseudo") as HTMLButtonElement;
@@ -4684,6 +4723,14 @@ function peindreCompte(): void {
   b.appendChild(el("span", "", moi));
   b.addEventListener("click", () => demanderLePseudo(null));
   boite.appendChild(b);
+
+  const roue = el("button", "icon roue") as HTMLButtonElement;
+  roue.type = "button";
+  roue.title = "Paramètres";
+  roue.setAttribute("aria-label", "Paramètres");
+  roue.innerHTML = ICONE_ROUE;
+  roue.addEventListener("click", () => ouvrirLesPreferences());
+  boite.appendChild(roue);
 }
 
 /**
@@ -4724,7 +4771,9 @@ function tuileStar(s: ResumeSalon): HTMLElement {
 
   t.appendChild(el("span", "surtitre", "Salon star"));
   t.appendChild(el("span", "titre", s.nom));
-  t.appendChild(el("span", "accroche", ACCROCHE_STAR));
+  const accroche = el("span", "accroche");
+  for (const ligne of ACCROCHE_STAR) accroche.appendChild(el("span", "", ligne));
+  t.appendChild(accroche);
 
   const action = el("span", "action");
   action.appendChild(el("span", "jouer", "Jouer"));
@@ -4810,19 +4859,29 @@ function peindreAccueil(): void {
   peindreCompte();
   peindreFiltres();
 
-  const mur = $("salons");
-  mur.replaceChildren();
-  // La grille permanente d'abord, toujours : c'est celle qu'on vient jouer, et
-  // elle se retrouvait au milieu des salons du moment, a une place qui changeait
-  // avec eux. Le reste garde l'ordre du serveur, du plus ancien au plus recent.
+  const vedette = $("vedette");
+  const rouleau = $("salons");
+  vedette.replaceChildren();
+  rouleau.replaceChildren();
+
+  // La grille permanente tient la colonne de gauche, a elle seule : c'est celle
+  // qu'on vient jouer, et elle se retrouvait au milieu des salons du moment, a
+  // une place qui changeait avec eux. Le reste garde l'ordre du serveur, du plus
+  // ancien au plus recent.
   const liste = [...salonsRecus].sort((a, b) => Number(b.mondiale) - Number(a.mondiale));
   const vus = liste.filter(retenu);
-  for (const s of vus) mur.appendChild(s.mondiale ? tuileStar(s) : carteSalon(s));
+  const star = vus.find((s) => s.mondiale);
+  if (star !== undefined) vedette.appendChild(tuileStar(star));
+  vedette.hidden = star === undefined;
+  $("mur").classList.toggle("sans-star", star === undefined);
+
+  const autres = vus.filter((s) => !s.mondiale);
+  for (const s of autres) rouleau.appendChild(carteSalon(s));
   if (vus.length === 0) {
-    mur.appendChild(el("div", "none",
+    rouleau.appendChild(el("div", "none",
       liste.length === 0 ? "aucun salon ouvert" : "aucun salon de cette sorte"));
   }
-  if (pseudo() !== "") mur.appendChild(tuileCreer());
+  if (pseudo() !== "") rouleau.appendChild(tuileCreer());
 
   // Un joueur ne compte qu'une fois : il n'est present que dans un salon.
   const total = salonsRecus.reduce((a, s) => a + s.connectes, 0);
@@ -5302,6 +5361,12 @@ $("quitter").addEventListener("click", quitterSalon);
 /** Le nom du site ramene a l'accueil, comme le titre du bandeau de jeu. */
 $("site-nom").addEventListener("click", () => {
   if ($("join").hidden) quitterSalon();
+});
+
+/** Le panneau des records se referme par son bouton comme par son voile. */
+$("records-close").addEventListener("click", () => { $("voile-records").hidden = true; });
+$("voile-records").addEventListener("click", (e) => {
+  if (e.target === $("voile-records")) $("voile-records").hidden = true;
 });
 
 /** On peut refermer le voile sans se nommer : le site reste ouvert. */

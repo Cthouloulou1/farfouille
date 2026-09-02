@@ -366,7 +366,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .chat-in input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chat-in button { flex: none; padding: 5px 9px; }
 
-.roadmap { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
+.roadmap { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
 .roadmap[hidden] { display: none; }
 /* Hauteur FIXE : filtrer la liste ne doit pas retracter la fenetre a chaque
    lettre tapee -- on croirait que quelque chose casse. */
@@ -448,7 +448,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rmrow .like { padding: 1px 5px; font-size: 10.5px; }
 
 .roadmap > div.prefs { width: min(560px, 94vw); font-size: 15.5px; }
-.roue { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }
+.roue { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; color: var(--ink-soft); }
 .roue:hover { color: var(--accent); }
 /* Un interrupteur, pas deux boutons : la question appelle oui ou non, et le
    voyant dit lequel sans qu'on ait a lire deux etiquettes pour comparer. */
@@ -472,6 +472,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .nom-du-site { padding: 0; background: none; border: 0; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 25px; line-height: 1.1; letter-spacing: -.005em; color: var(--nuit-ink); }
 .nom-du-site:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
 .bandeau-droite { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.records { padding: 0; background: none; border: 0; font-size: 12.5px; color: var(--nuit-faint); }
+.records:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
+/* La roue du bandeau est claire sur fond de nuit, et grande : on doit voir
+   d'un coup d'oeil ou se changent les reglages. */
+.bandeau .roue { color: var(--nuit-faint); }
+.bandeau .roue:hover { color: var(--nuit-accent); border-color: transparent; }
 .entrer { padding: 7px 15px; border: 0; border-radius: 4px; background: var(--nuit-accent); color: var(--nuit); font-size: 12.5px; font-weight: 500; }
 .entrer:hover:not(:disabled) { color: var(--nuit); border-color: transparent; filter: brightness(1.08); }
 .moi { display: flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; font-size: 12.5px; color: var(--nuit-ink); }
@@ -489,12 +495,27 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 /* LE MUR DE SALONS. Quatre colonnes, puis deux, puis une : la tuile du salon
    star garde ses deux colonnes tant qu'il en reste deux. */
-.mur { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; }
-.mur .none { grid-column: 1 / -1; padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
+.mur { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+/* La colonne de droite ne pousse pas la rangee : son contenu est detache,
+   et c'est la tuile star qui donne la hauteur. */
+.vedette { display: flex; }
+.vedette[hidden] { display: none; }
+.vedette > * { flex: 1; }
+/* Sans salon star -- filtre 15x15, ou grille mondiale absente -- les salons
+   reprennent toute la largeur plutot que de laisser un trou. */
+.mur.sans-star { grid-template-columns: 1fr; }
+.mur.sans-star .rouleau { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Sans tuile star, plus rien ne fixe la hauteur : le rouleau la rend a la page
+   plutot que de faire defiler quatre colonnes dans une lucarne. */
+.mur.sans-star .droite { position: static; min-height: 0; }
+.mur.sans-star .rouleau { position: static; overflow: visible; padding-right: 0; }
+.droite { position: relative; min-height: 366px; }
+.rouleau { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: min-content; gap: 14px; padding-right: 4px; }
+.rouleau .none { grid-column: 1 / -1; padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
 
 /* LA TUILE DU SALON STAR. Le motif se repete et sort du cadre de tous les
    cotes : c'est ce qui raconte la grille sans fin. Aucun mot pose dessus. */
-.star { position: relative; grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; justify-content: flex-end; min-height: 366px; padding: 24px; border: 0; border-radius: 6px; overflow: hidden; text-align: left; color: var(--nuit-ink);
+.star { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 366px; padding: 24px; border: 0; border-radius: 6px; overflow: hidden; text-align: left; color: var(--nuit-ink);
   background-image: linear-gradient(to top, rgba(14,20,18,.97) 24%, rgba(14,20,18,.74) 52%, rgba(14,20,18,.34) 100%), url(grille-infinie-sombre.svg);
   background-size: auto, 392px 392px; background-repeat: no-repeat, repeat; background-position: center, center; }
 .star:hover:not(:disabled) { color: var(--nuit-ink); border-color: transparent; }
@@ -502,13 +523,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .star .surtitre { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--nuit-accent); }
 .star .titre { margin-top: 5px; font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 1.02; color: #FFFFFF; }
 .star .accroche { margin-top: 9px; max-width: 44ch; font-size: 13.5px; line-height: 1.5; color: var(--nuit-soft); text-wrap: pretty; }
+.star .accroche span { display: block; }
 .star .action { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
 .star .jouer { padding: 11px 30px; border-radius: 4px; background: var(--nuit-accent); color: #0E1412; font-size: 14.5px; font-weight: 600; }
 .star .chiffres { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--nuit-faint); }
 .star:hover .jouer { filter: brightness(1.08); }
 .point { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-@media (max-width: 1080px) { .mur { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 620px) { .mur { grid-template-columns: 1fr; } .star { grid-column: span 1; grid-row: span 1; min-height: 300px; } }
+@media (max-width: 1080px) { .rouleau { grid-template-columns: 1fr; } }
+@media (max-width: 780px) {
+  .mur { grid-template-columns: 1fr; }
+  .star { min-height: 300px; }
+  /* Sur un ecran etroit, un rouleau dans la page est un piege : la liste
+     reprend sa hauteur et c'est la page qui defile. */
+  .droite { min-height: 0; }
+  .rouleau { position: static; overflow: visible; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-right: 0; }
+}
+@media (max-width: 560px) { .rouleau { grid-template-columns: 1fr; } }
 
 /* UNE CARTE DE SALON. La vignette dit d'abord de quelle grille il s'agit : le
    plateau 15x15 tient tout entier dans le cadre, avec ses bords ; la grille
@@ -557,6 +587,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pseudo .valider { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 4px; background: var(--accent); color: #FFFFFF; font-size: 13.5px; font-weight: 500; }
 .pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
 .pseudo .renoncer { display: block; margin: 10px auto 0; }
+.records-boite { width: min(420px, 94vw); }
+.records-boite ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.6; }
+.records-boite b { font-weight: 500; color: var(--ink); }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
 #panel-rejeu { flex: 1; max-height: none; display: flex; flex-direction: column; min-height: 0; }
 #panel-rejeu[hidden] { display: none; }
@@ -693,8 +726,26 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="corps">
     <div class="filtres" id="filtres"></div>
     <div class="join-error" id="c-error" hidden></div>
-    <div class="mur" id="salons"><div class="none">chargement…</div></div>
+    <div class="mur" id="mur">
+      <div class="vedette" id="vedette"></div>
+      <div class="droite"><div class="rouleau" id="salons"><div class="none">chargement…</div></div></div>
+    </div>
     <div class="pied"><span id="pied-total"></span></div>
+  </div>
+
+  <!-- LES RECORDS N'EXISTENT PAS ENCORE (SPEC.md §16, « en reserve »), mais le
+       bouton, lui, existe : il dit ce qui viendra, et la place est prise. -->
+  <div class="voile" id="voile-records" hidden>
+    <div class="pseudo records-boite">
+      <h2>Records</h2>
+      <p>Bientôt, le tableau d'honneur du site. Une partie <b>topée</b> est une
+      partie dont tous les coups ont été trouvés par des joueurs.</p>
+      <ul>
+        <li>les parties normales topées <b>le plus vite</b>, et les dix premières</li>
+        <li>la partie topée avec le <b>moins de secondes par coup</b></li>
+      </ul>
+      <button class="valider" id="records-close" type="button">Fermer</button>
+    </div>
   </div>
 
   <!-- Se nommer. Tant que les comptes n'existent pas (SPEC.md §8, « comptes
