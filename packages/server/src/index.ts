@@ -403,6 +403,9 @@ const MIME: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".bin": "application/octet-stream",
+  // Sans ce type-la, le navigateur REFUSE de peindre un SVG en fond de page :
+  // les vignettes de l'accueil restaient vides sans que rien ne le dise.
+  ".svg": "image/svg+xml; charset=utf-8",
 };
 
 /**

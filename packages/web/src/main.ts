@@ -4459,6 +4459,10 @@ function connect() {
       void fermerConnexion();
       $("join").hidden = false;
       void peuplerSalons();
+      // Le refus porte presque toujours sur le pseudo -- il faut donc rouvrir
+      // le voile qui le demande, sans quoi le message tomberait dans un
+      // element cache et l'on croirait a un clic sans effet.
+      demanderLePseudo(salonChoisi === "" ? null : salonChoisi);
       $("join-error").textContent = m.message;
       $("join-error").hidden = false;
       ($("name") as HTMLInputElement).select();
@@ -4562,106 +4566,293 @@ interface ResumeSalon {
   id: string; nom: string; proprietaire: string | null; mondiale: boolean;
   permanent?: boolean;
   coups: number; finie: boolean; connectes: number;
-  config: { tirage: number; jouables: number; pioche: string; bornes: number | null; joker?: boolean };
+  /** Le total des points. Absent tant que le serveur n'a pas ete relance. */
+  cumul?: number;
+  config: {
+    tirage: number; jouables: number; pioche: string; bornes: number | null;
+    joker?: boolean; chrono?: number | null;
+  };
 }
 
-function nomPioche(p: string): string {
-  return p === "sac102" ? "sac de 102" : p === "sac102boucle" ? "sac de 102 sans fin"
-    : "probabilités pondérées";
+/**
+ * L'ACCROCHE DU SALON STAR.
+ *
+ * Elle ne vient pas du serveur : c'est la promesse du site, pas l'etat d'une
+ * partie. Elle vit ici, en un seul endroit.
+ */
+const ACCROCHE_STAR = "Grille infinie, sans limite de temps, sans fin. " +
+  "Jusqu'où pourrons-nous aller ?";
+
+/** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
+let filtre: "tous" | "bornee" | "infinie" | "attente" = "tous";
+
+/** La derniere liste recue du serveur. Les filtres repeignent depuis elle. */
+let salonsRecus: ResumeSalon[] = [];
+
+/** Ou l'on voulait aller quand on nous a demande notre pseudo. */
+let destination: string | null = null;
+
+/** Le pseudo tel qu'il est saisi. Tant qu'il est vide, on est un visiteur. */
+const pseudo = (): string => ($("name") as HTMLInputElement).value.trim();
+
+/**
+ * LA DUREE SEULE, JAMAIS LE MOT « BLITZ ».
+ *
+ * Une minute s'ecrit `60 s` et non `1 min` : a cette echelle-la on compte
+ * encore en secondes, et deux salons voisins se comparent d'un coup d'oeil.
+ */
+function dureeDuChrono(c: number | null | undefined): string {
+  if (c === null || c === undefined) return "sans chrono";
+  return c < 120 || c % 60 !== 0 ? `${c} s` : `${c / 60} min`;
 }
 
-function decritJoker(j: boolean): string {
-  return j ? " · joker" : "";
+/**
+ * CE QUI DISTINGUE DEUX SALONS, ET RIEN D'AUTRE.
+ *
+ * La pioche n'y figure pas : « probabilites ponderees » est illisible pour qui
+ * arrive, et n'a jamais aide personne a choisir un salon.
+ */
+function specDuSalon(c: ResumeSalon["config"]): string {
+  return [`${c.jouables} sur ${c.tirage}`, dureeDuChrono(c.chrono)]
+    .concat(c.joker === true ? ["joker"] : [])
+    .join(" · ");
 }
 
-function decritVariante(c: ResumeSalon["config"]): string {
-  const grille = c.bornes === null ? "grille infinie" : `${c.bornes * 2 + 1}×${c.bornes * 2 + 1}`;
-  return `${grille} · ${c.jouables} sur ${c.tirage} · ${nomPioche(c.pioche)}${decritJoker(c.joker === true)}`;
+/** `15×15`, `21×21`… ou l'infini. */
+function courtDeLaGrille(bornes: number | null): string {
+  return bornes === null ? "∞" : `${bornes * 2 + 1}×${bornes * 2 + 1}`;
 }
 
-/** Deux icones : la grille sans bord, et le plateau ferme. */
-function icone(infinie: boolean): string {
-  return infinie
-    ? `<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2">
-         <path d="M1 5.5h14M1 10.5h14M5.5 1v14M10.5 1v14" stroke-dasharray="2 1.6"/>
-       </svg>`
-    : `<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2">
-         <rect x="1.6" y="1.6" width="12.8" height="12.8" rx="1"/>
-         <path d="M1.6 6h12.8M1.6 10h12.8M6 1.6v12.8M10 1.6v12.8"/>
-       </svg>`;
+/** Les chiffres se lisent par tranches de trois, comme partout ailleurs. */
+const chiffres = (n: number): string => n.toLocaleString("fr-FR");
+
+/** Le filtre s'applique a tous les salons, la grille mondiale comprise. */
+function retenu(s: ResumeSalon): boolean {
+  if (filtre === "bornee") return s.config.bornes !== null;
+  if (filtre === "infinie") return s.config.bornes === null;
+  if (filtre === "attente") return s.coups === 0;
+  return true;
 }
 
+/** Un element, sa classe, son texte : le DOM se construit a la main. */
+function el(tag: string, classe = "", texte = ""): HTMLElement {
+  const e = document.createElement(tag);
+  if (classe !== "") e.className = classe;
+  if (texte !== "") e.textContent = texte;
+  return e;
+}
+
+/**
+ * Aller dans un salon, en se nommant d'abord si l'on ne s'est pas nomme.
+ *
+ * LE PSEUDO EST DEMANDE AU DERNIER MOMENT, et l'on revient exactement la ou
+ * l'on voulait aller. Les comptes (SPEC.md §8) sont OPTIONNELS : rien ici ne
+ * barre le site a qui arrive.
+ */
+function allerA(id: string): void {
+  if (pseudo() === "") { demanderLePseudo(id); return; }
+  void rejoindre(id);
+}
+
+/** Ouvre le voile du pseudo. `ou` est la destination a reprendre ensuite. */
+function demanderLePseudo(ou: string | null): void {
+  destination = ou;
+  $("pseudo-quoi").textContent = ou === null
+    ? "Il vous suit d'un salon à l'autre."
+    : "Un nom, et vous entrez. Il vous suit d'un salon à l'autre.";
+  $("join-error").hidden = true;
+  $("voile").hidden = false;
+  ($("name") as HTMLInputElement).focus();
+}
+
+/** Le bandeau : le bouton d'acces au compte, ou l'avatar et le pseudo. */
+function peindreCompte(): void {
+  const boite = $("compte");
+  boite.replaceChildren();
+  const moi = pseudo();
+  if (moi === "") {
+    const b = el("button", "entrer", "Choisir un pseudo") as HTMLButtonElement;
+    b.type = "button";
+    b.addEventListener("click", () => demanderLePseudo(null));
+    boite.appendChild(b);
+    return;
+  }
+  const b = el("button", "moi") as HTMLButtonElement;
+  b.type = "button";
+  b.title = "Changer de pseudo";
+  b.appendChild(el("span", "avatar", moi.slice(0, 1).toUpperCase()));
+  b.appendChild(el("span", "", moi));
+  b.addEventListener("click", () => demanderLePseudo(null));
+  boite.appendChild(b);
+}
+
+/**
+ * La barre de filtres, et — SEULEMENT SI L'ON S'EST NOMME — « Créer un salon ».
+ *
+ * Le bouton n'est pas masque : il n'existe pas dans le DOM du visiteur.
+ */
+function peindreFiltres(): void {
+  const barre = $("filtres");
+  barre.replaceChildren();
+  const puces: [typeof filtre, string][] = [
+    ["tous", "Tous"], ["bornee", "15×15"], ["infinie", "Infinie"],
+    ["attente", "En attente"],
+  ];
+  for (const [cle, texte] of puces) {
+    const b = el("button", "puce", texte) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(filtre === cle));
+    b.addEventListener("click", () => { filtre = cle; peindreAccueil(); });
+    barre.appendChild(b);
+  }
+  if (pseudo() === "") return;
+  const creer = el("button", "creer-bar", "Créer un salon") as HTMLButtonElement;
+  creer.type = "button";
+  creer.addEventListener("click", () => { void creerSalon(); });
+  barre.appendChild(creer);
+}
+
+/** La tuile du salon star : la grille mondiale, deux colonnes sur deux rangees. */
+function tuileStar(s: ResumeSalon): HTMLElement {
+  const t = el("button", "star") as HTMLButtonElement;
+  t.type = "button";
+
+  const pastille = el("span", "enligne");
+  pastille.appendChild(el("span", "point"));
+  pastille.appendChild(el("span", "", `${s.connectes} en ligne`));
+  t.appendChild(pastille);
+
+  t.appendChild(el("span", "surtitre", "Salon star"));
+  t.appendChild(el("span", "titre", s.nom));
+  t.appendChild(el("span", "accroche", ACCROCHE_STAR));
+
+  const action = el("span", "action");
+  action.appendChild(el("span", "jouer", "Jouer"));
+  // Le cumul manque tant que le serveur tourne une version anterieure : on
+  // affiche alors le coup seul plutot qu'un « undefined points ».
+  const compte = s.cumul === undefined
+    ? `Coup ${chiffres(s.coups)}`
+    : `Coup ${chiffres(s.coups)} · ${chiffres(s.cumul)} points`;
+  action.appendChild(el("span", "chiffres", compte));
+  t.appendChild(action);
+
+  t.addEventListener("click", () => allerA(s.id));
+  return t;
+}
+
+/** Une carte de salon : sa vraie grille, son nom, sa variante, son etat. */
+function carteSalon(s: ResumeSalon): HTMLElement {
+  const c = el("button", "carte") as HTMLButtonElement;
+  c.type = "button";
+
+  const vue = el("span", "vue");
+  const infinie = s.config.bornes === null;
+  vue.appendChild(el("span", `vignette ${infinie ? "infinie" : "bornee"}`));
+  vue.appendChild(el("span", "badge", courtDeLaGrille(s.config.bornes)));
+
+  // Le createur peut retirer son salon -- sauf s'il est permanent : des
+  // milliers de coups joues a plusieurs ne tiennent pas a un clic.
+  const moi = pseudo();
+  if (s.permanent !== true && moi !== "" && s.proprietaire === moi) {
+    const jeter = el("button", "jeter", "Supprimer") as HTMLButtonElement;
+    jeter.type = "button";
+    // Le bouton dit ce qu'il fait VRAIMENT : seule une 15x15 terminee survit a
+    // la disparition de son salon.
+    jeter.title = !infinie && s.finie
+      ? "Retire le salon. La partie terminée est conservée."
+      : "Retire le salon ET efface la partie. Sans retour.";
+    jeter.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void supprimerSalon(s.id, moi);
+    });
+    vue.appendChild(jeter);
+  }
+  c.appendChild(vue);
+
+  const dedans = el("span", "dedans");
+  dedans.appendChild(el("b", "nom", s.nom));
+  dedans.appendChild(el("span", "quoi", specDuSalon(s.config)));
+
+  const etat = el("span", "etat");
+  // Le point dit d'un regard si l'on joue : vert quand la partie court, ambre
+  // quand le salon attend encore son premier coup.
+  const vif = s.finie ? "close" : s.coups === 0 ? "attente" : "encours";
+  etat.appendChild(el("span", `point ${vif}`));
+  etat.appendChild(el("span", "", s.mondiale
+    ? "permanent"
+    : `${s.connectes} joueur${s.connectes > 1 ? "s" : ""}`));
+  etat.appendChild(el("span", "ou", s.finie
+    ? "terminée"
+    : s.coups === 0 ? "en attente" : `coup ${chiffres(s.coups)}`));
+  dedans.appendChild(etat);
+  c.appendChild(dedans);
+
+  c.addEventListener("click", () => allerA(s.id));
+  return c;
+}
+
+/** La tuile pointillee, en fin de mur — seulement si l'on s'est nomme. */
+function tuileCreer(): HTMLElement {
+  const t = el("button", "tuile-creer", "Créer un salon") as HTMLButtonElement;
+  t.type = "button";
+  t.appendChild(el("em", "", "un nom, c'est tout"));
+  t.addEventListener("click", () => { void creerSalon(); });
+  return t;
+}
+
+/**
+ * Repeint l'accueil depuis la liste deja recue.
+ *
+ * Filtrer ou changer de pseudo ne redemande RIEN au serveur : c'est cette
+ * fonction qu'on rappelle, et l'ecran suit sans attendre.
+ */
+function peindreAccueil(): void {
+  peindreCompte();
+  peindreFiltres();
+
+  const mur = $("salons");
+  mur.replaceChildren();
+  // La grille permanente d'abord, toujours : c'est celle qu'on vient jouer, et
+  // elle se retrouvait au milieu des salons du moment, a une place qui changeait
+  // avec eux. Le reste garde l'ordre du serveur, du plus ancien au plus recent.
+  const liste = [...salonsRecus].sort((a, b) => Number(b.mondiale) - Number(a.mondiale));
+  const vus = liste.filter(retenu);
+  for (const s of vus) mur.appendChild(s.mondiale ? tuileStar(s) : carteSalon(s));
+  if (vus.length === 0) {
+    mur.appendChild(el("div", "none",
+      liste.length === 0 ? "aucun salon ouvert" : "aucun salon de cette sorte"));
+  }
+  if (pseudo() !== "") mur.appendChild(tuileCreer());
+
+  // Un joueur ne compte qu'une fois : il n'est present que dans un salon.
+  const total = salonsRecus.reduce((a, s) => a + s.connectes, 0);
+  $("pied-total").textContent = `${chiffres(total)} joueur${total > 1 ? "s" : ""} en ligne`;
+}
+
+/** Demande la liste des salons au serveur, puis repeint. */
 async function peuplerSalons(): Promise<void> {
-  const box = $("salons");
   let data: { salons: ResumeSalon[] };
   try {
     data = await (await fetch("/api/salons")).json();
   } catch {
-    box.replaceChildren();
-    const e = document.createElement("div");
-    e.className = "none"; e.textContent = "serveur injoignable";
-    box.appendChild(e);
+    $("salons").replaceChildren(el("div", "none", "serveur injoignable"));
     return;
   }
-  box.replaceChildren();
-  const moi = ($("name") as HTMLInputElement).value.trim();
-  // La grille permanente d'abord, toujours : c'est celle qu'on vient jouer, et
-  // elle se retrouvait au milieu des salons du moment, a une place qui changeait
-  // avec eux. Le reste garde l'ordre du serveur, du plus ancien au plus recent.
-  const liste = [...data.salons].sort((a, b) => Number(b.mondiale) - Number(a.mondiale));
-  for (const s of liste) {
-    const b = document.createElement("div");
-    b.className = "salon";
-    b.setAttribute("role", "button");
-    b.tabIndex = 0;
-    const qui = s.mondiale ? '<span class="mondiale">permanent</span>' : `par ${s.proprietaire}`;
-    // La permanence se lit sur la ligne, sinon rien n'expliquerait l'absence du
-    // bouton Supprimer -- on croirait a un oubli.
-    const etat = (s.finie ? "terminée" : `${s.coups} coup${s.coups > 1 ? "s" : ""}`)
-      + (s.permanent && !s.mondiale ? " · permanente" : "");
-    b.innerHTML =
-      `<span class="icone">${icone(s.config.bornes === null)}</span>` +
-      `<span class="nom">${s.nom}</span>` +
-      `<span class="qui">${qui}<br>${s.connectes} connecté${s.connectes > 1 ? "s" : ""}</span>` +
-      `<span class="quoi">${decritVariante(s.config)} · ${etat}</span>`;
-    b.addEventListener("click", () => rejoindre(s.id));
-    b.addEventListener("keydown", (e) => {
-      if ((e as KeyboardEvent).key === "Enter") rejoindre(s.id);
-    });
-    // Le createur peut retirer son salon -- sauf s'il est permanent : des
-    // milliers de coups joues a plusieurs ne tiennent pas a un clic.
-    if (s.permanent !== true && s.proprietaire === moi && moi !== "") {
-      const jeter = document.createElement("button");
-      jeter.type = "button";
-      jeter.className = "jeter";
-      jeter.textContent = "Supprimer";
-      // Le bouton dit ce qu'il fait VRAIMENT. Il promettait que la partie
-      // restait sur le disque, ce qui n'est plus vrai depuis qu'une partie
-      // suit son salon : seule une 15x15 terminee lui survit.
-      jeter.title = s.config.bornes !== null && s.finie
-        ? "Retire le salon. La partie terminée est conservée."
-        : "Retire le salon ET efface la partie. Sans retour.";
-      jeter.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const r = await fetch(`/api/salon/${encodeURIComponent(s.id)}`, {
-          method: "DELETE", headers: { "x-pseudo": moi },
-        });
-        if (!r.ok) {
-          const d = await r.json();
-          $("join-error").textContent = d.erreur ?? "suppression impossible";
-          $("join-error").hidden = false;
-        }
-        void peuplerSalons();
-      });
-      b.appendChild(jeter);
-    }
-    box.appendChild(b);
+  salonsRecus = data.salons;
+  peindreAccueil();
+}
+
+/** Retire un salon, et dit pourquoi quand le serveur refuse. */
+async function supprimerSalon(id: string, moi: string): Promise<void> {
+  const r = await fetch(`/api/salon/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { "x-pseudo": moi },
+  });
+  if (!r.ok) {
+    const d = await r.json();
+    $("c-error").textContent = d.erreur ?? "suppression impossible";
+    $("c-error").hidden = false;
   }
-  if (data.salons.length === 0) {
-    const e = document.createElement("div");
-    e.className = "none"; e.textContent = "aucun salon ouvert";
-    box.appendChild(e);
-  }
+  void peuplerSalons();
 }
 
 /** Les reglages en cours d'edition dans le salon. */
@@ -5108,11 +5299,16 @@ function quitterSalon(): void {
 
 $("quitter").addEventListener("click", quitterSalon);
 
-$("creer-open").addEventListener("click", () => { void creerSalon(); });
+/** Le nom du site ramene a l'accueil, comme le titre du bandeau de jeu. */
+$("site-nom").addEventListener("click", () => {
+  if ($("join").hidden) quitterSalon();
+});
 
-// Le pseudo commande l'affichage des boutons Supprimer : on rafraichit la liste
-// des qu'il change, sinon le createur ne verrait pas ses propres salons.
-$("name").addEventListener("input", () => void peuplerSalons());
+/** On peut refermer le voile sans se nommer : le site reste ouvert. */
+$("renoncer").addEventListener("click", () => {
+  destination = null;
+  $("voile").hidden = true;
+});
 
 /**
  * Cree un salon et y entre, sans rien demander.
@@ -5122,18 +5318,13 @@ $("name").addEventListener("input", () => void peuplerSalons());
  * partie ne commence qu'une fois qu'on les a valides.
  */
 async function creerSalon(): Promise<void> {
-  const pseudo = ($("name") as HTMLInputElement).value.trim();
-  if (pseudo === "") {
-    $("c-error").textContent = "Entrez d'abord votre pseudo";
-    $("c-error").hidden = false;
-    ($("name") as HTMLInputElement).focus();
-    return;
-  }
+  const moi = pseudo();
+  if (moi === "") { demanderLePseudo(null); return; }
   $("c-error").hidden = true;
   const r = await fetch("/api/salons", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ proprietaire: pseudo }),
+    body: JSON.stringify({ proprietaire: moi }),
   });
   const s = await r.json();
   if (!r.ok) {
@@ -5146,7 +5337,22 @@ async function creerSalon(): Promise<void> {
 
 $("joinform").addEventListener("submit", (e) => {
   e.preventDefault();
-  rejoindre(salonChoisi || "");
+  const moi = pseudo();
+  if (moi === "") {
+    $("join-error").textContent = "Entrez un pseudo pour continuer";
+    $("join-error").hidden = false;
+    return;
+  }
+  // Le pseudo tient d'une visite a l'autre, meme sans compte : c'est tout ce
+  // qu'un joueur a a retenir tant que les comptes n'existent pas.
+  try { localStorage.setItem("pseudo", moi); } catch { /* navigation privee */ }
+  $("join-error").hidden = true;
+  $("voile").hidden = true;
+  const ou = destination;
+  destination = null;
+  // On revient sur la destination demandee, pas sur l'accueil.
+  if (ou !== null) { void rejoindre(ou); return; }
+  peindreAccueil();
 });
 
 $("journal-tete").addEventListener("click", () => {
@@ -5163,14 +5369,9 @@ $("accueil").addEventListener("click", () => {
 
 /** Quitte l'accueil et entre dans un salon. */
 async function rejoindre(id: string): Promise<void> {
-  const pseudo = ($("name") as HTMLInputElement).value.trim();
-  if (pseudo === "") {
-    $("join-error").textContent = "Entrez votre pseudo pour rejoindre";
-    $("join-error").hidden = false;
-    ($("name") as HTMLInputElement).focus();
-    return;
-  }
-  me = pseudo;
+  const moi = pseudo();
+  if (moi === "") { demanderLePseudo(id); return; }
+  me = moi;
   salonChoisi = id;
   try { localStorage.setItem("pseudo", me); } catch { /* navigation privee */ }
   $("join-error").hidden = true;
@@ -5252,11 +5453,16 @@ async function rejoindre(id: string): Promise<void> {
   connect();
 }
 
-void peuplerSalons();
-
 try {
   const saved = localStorage.getItem("pseudo");
   if (saved) ($("name") as HTMLInputElement).value = saved;
 } catch { /* navigation privee : sans importance */ }
+
+peindreAccueil();
+void peuplerSalons();
+
+// UN LIEN QUI PORTE UN SALON MENE AU SALON. On s'y nomme sur place si l'on ne
+// s'est jamais nomme -- c'est le seul moment ou le pseudo est demande.
+if (salonChoisi !== "") allerA(salonChoisi);
 
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw());

@@ -137,6 +137,9 @@ export function resume(s: Salon, connectes: number, permanent = false) {
      */
     permanent: s.proprietaire === null || permanent,
     coups: s.partie.moveNumber,
+    // Le total des points de la partie : la tuile du salon star l'affiche a
+    // cote du numero du coup, et l'accueil n'a pas d'autre moyen de l'obtenir.
+    cumul: s.partie.cumul,
     finie: s.partie.finie,
     connectes,
     config: serialiser(s.partie.cfg),

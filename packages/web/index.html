@@ -6,7 +6,7 @@
 <title>Topping infini</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
 <style>
 :root {
   --ground:     #F3F5F4;
@@ -39,6 +39,24 @@
   --shadow:     rgba(18,25,22,.13);
   /* La monospace du systeme : celle des tableaux que le lecteur connait deja. */
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* LES JETONS DE NUIT NE SUIVENT PAS LE THEME. Le bandeau de l'accueil et la
+     tuile du salon star sont sombres dans les deux themes : c'est l'identite du
+     site, pas une surface de lecture. Les valeurs sont celles du theme sombre,
+     ecrites ici une seule fois pour qu'elles ne basculent pas. */
+  --nuit:        #121916;
+  --nuit-rule:   #23312B;
+  --nuit-ink:    #E6EDE9;
+  --nuit-faint:  #90A099;
+  --nuit-accent: #44B27A;
+  /* L'accroche du salon star, et le compteur du pied de page : deux gris qui
+     n'existaient dans aucun jeton. */
+  --nuit-soft:   #B4C2BB;
+  --pied-ink:    #A8B0AC;
+  /* Les vignettes changent de jeu de couleurs avec le theme : une grille claire
+     posee sur une carte sombre eblouit. */
+  --vignette-15:      url(grille-15.svg);
+  --vignette-infinie: url(grille-infinie.svg);
 }
 /* LE MODE SOMBRE S'OBTIENT DE DEUX FACONS : le navigateur le demande, ou le
    joueur l'a choisi dans les paramètres. Les deux blocs portent les MEMES
@@ -57,6 +75,7 @@
     /* Le vert reste CLAIR en mode sombre : c'est un caramel pose sur la
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
+    --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -70,6 +89,7 @@
     /* Le vert reste CLAIR en mode sombre : c'est un caramel pose sur la
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
+    --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
   }
 }
 * { box-sizing: border-box; }
@@ -440,26 +460,103 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bascule[aria-pressed="true"] .voyant::after { transform: translateX(13px); }
 
 
-.join { position: fixed; inset: 0; display: grid; place-items: center; background: var(--ground); z-index: 30; }
+.join { position: fixed; inset: 0; overflow: auto; background: var(--ground); z-index: 30; }
 /* Un selecteur de classe bat l'attribut hidden : sans cette regle, masquer
    l'ecran d'accueil ne fait rien et il reste par-dessus le jeu. */
 .join[hidden] { display: none; }
 .join-error { color: var(--warn); background: var(--warn-bg); border-radius: 3px; padding: 6px 10px; font-size: 12.5px; }
 .join-error[hidden] { display: none; }
-.join { overflow: auto; place-items: start center; padding: 28px 16px; }
-.lobby { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 24px 26px 22px; width: min(900px, 94vw); box-shadow: 0 8px 30px var(--shadow); }
-.lobby h2 { font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 20px 0 8px; }
-.salons { display: flex; flex-direction: column; gap: 6px; }
-.salon { display: grid; grid-template-columns: 26px 1fr auto auto; gap: 2px 12px; align-items: center; width: 100%; text-align: left; padding: 10px 13px; background: var(--ground); border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); cursor: pointer; }
-.salon:hover { border-color: var(--accent); background: var(--hover); }
-.salon .icone { grid-row: 1 / 3; color: var(--ink-faint); display: flex; align-items: center; }
-.salon:hover .icone { color: var(--accent); }
-.salon .nom { font-weight: 500; font-size: 13.5px; }
-.salon .quoi { grid-column: 2; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-faint); }
-.salon .qui { grid-column: 3; grid-row: 1 / 3; text-align: right; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
-.salon .mondiale { color: var(--accent); }
-.salon .jeter { grid-column: 4; grid-row: 1 / 3; padding: 4px 8px; font-size: 11px; color: var(--ink-faint); background: none; }
-.salon .jeter:hover { color: var(--warn); border-color: var(--warn); }
+
+/* LE BANDEAU. Sombre dans les deux themes, cf. les jetons `--nuit-*`. */
+.bandeau { display: flex; align-items: center; gap: 16px; padding: 11px 24px; background: var(--nuit); border-bottom: 1px solid var(--nuit-rule); }
+.nom-du-site { padding: 0; background: none; border: 0; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 25px; line-height: 1.1; letter-spacing: -.005em; color: var(--nuit-ink); }
+.nom-du-site:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
+.bandeau-droite { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.entrer { padding: 7px 15px; border: 0; border-radius: 4px; background: var(--nuit-accent); color: var(--nuit); font-size: 12.5px; font-weight: 500; }
+.entrer:hover:not(:disabled) { color: var(--nuit); border-color: transparent; filter: brightness(1.08); }
+.moi { display: flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; font-size: 12.5px; color: var(--nuit-ink); }
+.moi:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
+.moi .avatar { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--nuit-rule); color: var(--nuit-faint); font-size: 11px; font-weight: 600; line-height: 24px; text-align: center; }
+
+.corps { padding: 18px 24px 20px; }
+.filtres { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.puce { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 20px; background: var(--panel); color: var(--ink-soft); font-size: 11.5px; }
+.puce[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.puce[aria-pressed="true"]:hover { color: var(--ground); border-color: var(--ink); }
+.creer-bar { margin-left: auto; padding: 8px 15px; border: 0; border-radius: 4px; background: var(--accent); color: #FFFFFF; font-size: 12.5px; font-weight: 500; }
+.creer-bar:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.corps .join-error { margin-bottom: 12px; }
+
+/* LE MUR DE SALONS. Quatre colonnes, puis deux, puis une : la tuile du salon
+   star garde ses deux colonnes tant qu'il en reste deux. */
+.mur { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; }
+.mur .none { grid-column: 1 / -1; padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
+
+/* LA TUILE DU SALON STAR. Le motif se repete et sort du cadre de tous les
+   cotes : c'est ce qui raconte la grille sans fin. Aucun mot pose dessus. */
+.star { position: relative; grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; justify-content: flex-end; min-height: 366px; padding: 24px; border: 0; border-radius: 6px; overflow: hidden; text-align: left; color: var(--nuit-ink);
+  background-image: linear-gradient(to top, rgba(14,20,18,.97) 24%, rgba(14,20,18,.74) 52%, rgba(14,20,18,.34) 100%), url(grille-infinie-sombre.svg);
+  background-size: auto, 392px 392px; background-repeat: no-repeat, repeat; background-position: center, center; }
+.star:hover:not(:disabled) { color: var(--nuit-ink); border-color: transparent; }
+.star .enligne { position: absolute; right: 16px; top: 16px; display: flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 20px; background: rgba(14,20,18,.66); color: var(--nuit-accent); font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+.star .surtitre { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--nuit-accent); }
+.star .titre { margin-top: 5px; font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 1.02; color: #FFFFFF; }
+.star .accroche { margin-top: 9px; max-width: 44ch; font-size: 13.5px; line-height: 1.5; color: var(--nuit-soft); text-wrap: pretty; }
+.star .action { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+.star .jouer { padding: 11px 30px; border-radius: 4px; background: var(--nuit-accent); color: #0E1412; font-size: 14.5px; font-weight: 600; }
+.star .chiffres { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--nuit-faint); }
+.star:hover .jouer { filter: brightness(1.08); }
+.point { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+@media (max-width: 1080px) { .mur { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .mur { grid-template-columns: 1fr; } .star { grid-column: span 1; grid-row: span 1; min-height: 300px; } }
+
+/* UNE CARTE DE SALON. La vignette dit d'abord de quelle grille il s'agit : le
+   plateau 15x15 tient tout entier dans le cadre, avec ses bords ; la grille
+   infinie remplit la vignette bord a bord, sans bord visible. */
+.carte { display: flex; flex-direction: column; padding: 0; overflow: hidden; text-align: left; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); }
+.carte:hover:not(:disabled) { border-color: var(--accent); background: var(--hover); color: var(--ink); }
+.carte .vue { position: relative; display: block; }
+.carte .vignette { display: block; height: 112px; border-bottom: 1px solid var(--rule); background-color: var(--field); }
+.carte .vignette.bornee { background-image: var(--vignette-15); background-size: auto 96px; background-position: center; background-repeat: no-repeat; }
+.carte .vignette.infinie { background-image: var(--vignette-infinie); background-size: 196px 196px; background-position: center; background-repeat: repeat; }
+.carte .badge { position: absolute; right: 7px; bottom: 6px; padding: 1px 5px; border-radius: 3px; background: color-mix(in srgb, var(--ground) 86%, transparent); font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--ink-soft); }
+.carte .dedans { display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 12px; }
+.carte .nom { font-size: 13.5px; font-weight: 500; }
+.carte .quoi { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
+.carte .etat { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-soft); }
+.carte .etat .ou { margin-left: auto; color: var(--ink-faint); }
+.carte .encours { color: var(--accent); }
+.carte .attente { color: var(--mark); }
+.carte .close { color: var(--ink-faint); }
+/* Supprimer son salon ne figure pas dans la maquette, mais la fonction existe :
+   elle se retire dans un coin de la vignette, et ne parait qu'au survol. */
+.carte .jeter { position: absolute; right: 7px; top: 7px; padding: 2px 7px; font-size: 10.5px; color: var(--ink-soft); background: color-mix(in srgb, var(--panel) 88%, transparent); opacity: 0; }
+.carte:hover .jeter, .carte .jeter:focus-visible { opacity: 1; }
+.carte .jeter:hover { color: var(--warn); border-color: var(--warn); }
+
+.tuile-creer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 180px; border: 1px dashed var(--tile-edge); border-radius: 6px; background: var(--hover); color: var(--accent); font-size: 13.5px; font-weight: 500; }
+.tuile-creer:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tuile-creer em { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
+
+/* LE SEUL ENDROIT OU FIGURE LE NOMBRE TOTAL DE JOUEURS. Il etait a cote du nom
+   du site : sur un site qui demarre, un compteur bas place en evidence
+   decourage. Discret en pied de page, il informe sans peser. */
+.pied { display: flex; margin-top: 16px; padding-top: 11px; border-top: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--pied-ink); }
+.pied span { margin-left: auto; }
+
+/* SE NOMMER. Le voile ne barre pas le site : il demande le pseudo au moment ou
+   il devient necessaire, et rend la main a la destination demandee. */
+.voile { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(14,20,18,.45); z-index: 31; }
+.voile[hidden] { display: none; }
+.pseudo { width: min(360px, 94vw); padding: 22px 24px 20px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 8px 30px var(--shadow); }
+.pseudo h2 { font-family: "Instrument Serif", Georgia, serif; font-size: 24px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.pseudo p { margin: 6px 0 16px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.pseudo input { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); }
+.pseudo input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pseudo .join-error { margin-top: 10px; }
+.pseudo .valider { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 4px; background: var(--accent); color: #FFFFFF; font-size: 13.5px; font-weight: 500; }
+.pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.pseudo .renoncer { display: block; margin: 10px auto 0; }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
 #panel-rejeu { flex: 1; max-height: none; display: flex; flex-direction: column; min-height: 0; }
 #panel-rejeu[hidden] { display: none; }
@@ -551,8 +648,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .lien { padding: 3px 9px; font-size: 11.5px; color: var(--ink-soft); background: none; }
 .lien:hover { color: var(--accent); border-color: var(--accent); }
 .lien[hidden] { display: none; }
-.salons .none { padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
-.creer-open { width: 100%; margin-top: 12px; padding: 8px; font-size: 13px; }
 .creer { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--rule); }
 .creer[hidden] { display: none; }
 .creer label { display: block; font-size: 11.5px; color: var(--ink-faint); margin: 12px 0 5px; }
@@ -581,13 +676,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .choix button em { display: block; font-style: normal; font-size: .74em; color: var(--ink-faint); }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
 .choix[hidden] { display: none; }
-.join form { background: none; border: 0; padding: 0; width: auto; box-shadow: none; }
-.join h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 30px; margin: 0 0 6px; }
-.join h1 em { font-style: italic; color: var(--accent); }
-.join p { margin: 0 0 18px; color: var(--ink-soft); font-size: 13.5px; }
-.join input { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); margin-bottom: 12px; }
-.join input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.join button { width: 100%; padding: 9px; font-size: 14px; border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 900px) { .side { display: none; } }
 </style>
@@ -595,19 +683,33 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <body>
 
 <div class="join" id="join">
-  <div class="lobby">
-    <h1>Topping <em>infini</em></h1>
+  <!-- LE BANDEAU RESTE SOMBRE DANS LES DEUX THEMES : c'est l'identite du site,
+       pas une surface de lecture. Ses couleurs sont les jetons `--nuit-*`. -->
+  <div class="bandeau">
+    <button class="nom-du-site" id="site-nom" type="button" title="Revenir à l'accueil">Farfouille</button>
+    <span class="bandeau-droite" id="compte"></span>
+  </div>
 
-    <form id="joinform" autocomplete="off">
-      <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off" autofocus>
-      <div class="join-error" id="join-error" hidden></div>
-    </form>
-
-    <h2>Salons</h2>
-    <div class="salons" id="salons"><div class="none">chargement…</div></div>
-
-    <button class="creer-open" id="creer-open" type="button">Créer un salon</button>
+  <div class="corps">
+    <div class="filtres" id="filtres"></div>
     <div class="join-error" id="c-error" hidden></div>
+    <div class="mur" id="salons"><div class="none">chargement…</div></div>
+    <div class="pied"><span id="pied-total"></span></div>
+  </div>
+
+  <!-- Se nommer. Tant que les comptes n'existent pas (SPEC.md §8, « comptes
+       OPTIONNELS »), un pseudo suffit a jouer : ce voile ne barre donc rien, il
+       demande le nom au moment ou il devient necessaire, et rend la main a la
+       destination demandee. -->
+  <div class="voile" id="voile" hidden>
+    <form class="pseudo" id="joinform" autocomplete="off">
+      <h2>Votre pseudo</h2>
+      <p id="pseudo-quoi">Il vous suit d'un salon à l'autre.</p>
+      <input id="name" maxlength="24" placeholder="Votre pseudo" autocomplete="off">
+      <div class="join-error" id="join-error" hidden></div>
+      <button class="valider" type="submit">Continuer</button>
+      <button class="lien renoncer" id="renoncer" type="button">Plus tard</button>
+    </form>
   </div>
 </div>
 
