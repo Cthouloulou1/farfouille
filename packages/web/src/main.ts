@@ -69,6 +69,8 @@ let endormi = false;
 let duplicate = false;
 let points: Record<string, number> = {};
 let negatif: Record<string, number> = {};
+/** Combien de tops chacun a trouves, dans les deux modes. */
+let tops: Record<string, number> = {};
 /** Coups que personne n'a trouves. */
 let nonTrouves = 0;
 /** Fin du decompte d'avant-coup, 0 s'il n'y en a pas. */
@@ -184,6 +186,9 @@ function resize() {
   cv.width = Math.round(W * dpr);
   cv.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // La rangee de caramels suit la grille : sa taille comme son centre se
+  // deduisent de la place que le canevas occupe.
+  calerLeChevalet();
   cadrer();
   draw();
 }
@@ -628,7 +633,7 @@ function draw() {
    */
   const caramels = (
     g: CanvasRenderingContext2D, lot: readonly Tile[], face: string, edge: string,
-    orgX: number, orgY: number,
+    ink: string, trait: number, orgX: number, orgY: number,
   ): void => {
     if (lot.length === 0) return;
     const X = (x: number) => auPixelEcran(orgX + x * cell);
@@ -649,7 +654,9 @@ function draw() {
       }
     }
     g.fillStyle = face; g.fill();
-    g.lineWidth = 1; g.strokeStyle = edge; g.stroke();
+    // Le trait du dernier top est plus epais : trace a l'INTERIEUR du chemin,
+    // il ne mord pas sur les cases voisines et ne cree donc pas de couture.
+    g.lineWidth = trait; g.strokeStyle = edge; g.stroke();
 
     // La lettre est dessinee A TOUTE ECHELLE. Meme reduite a une tache, elle
     // fait la difference entre une grille de jeu et un damier de couleurs :
@@ -666,7 +673,7 @@ function draw() {
     for (const q of lot) {
       const px = X(q.x) + gap, py = Y(q.y) + gap;
       const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
-      g.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      g.fillStyle = ink;
       g.fillText(q.l, px + w / 2, py + h * (serre ? .5 : .53));
     }
     // La valeur du caramel, seulement quand elle tient : sous dix-huit pixels
@@ -677,7 +684,7 @@ function draw() {
     for (const q of lot) {
       const px = X(q.x) + gap, py = Y(q.y) + gap;
       const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
-      g.fillStyle = q.b === 1 ? C.jedge : C.ink;
+      g.fillStyle = ink;
       g.globalAlpha = q.b === 1 ? .8 : .6;
       g.fillText(String(q.b === 1 ? 0 : valueOf(q.l)), px + w - w * .1, py + h * .84);
     }
@@ -691,10 +698,19 @@ function draw() {
   // infinie ou le rejeu, lui, ne l'est pas.
   const jusqua = exportJusqua ?? (rejeu === null ? Infinity : rejeu.n - 1);
   // Le dernier coup joue reste souligne sur la grille.
-  const hl = new Set(
-    rejeu !== null || last === null
-      ? [] : tiles.filter((t) => t.n === last!.n).map((t) => `${t.x},${t.y}`),
-  );
+  // LE DERNIER TOP SE VOIT, ET C'EST LE MOT ENTIER QU'ON MONTRE.
+  //
+  // On ne soulignait que les caramels POSES : un mot de huit lettres accroche a
+  // trois lettres deja la n'en montrait que cinq, eparpillees, et la table ne
+  // voyait pas ou le coup avait ete joue. Ce qu'on cherche des yeux, c'est le
+  // MOT -- il se lit d'un bloc ou pas du tout.
+  const hl = new Set<string>();
+  if (rejeu === null && last !== null) {
+    const { dx, dy } = step(last.dir);
+    for (let i = 0; i < last.word.length; i++) {
+      hl.add(`${last.x + dx * i},${last.y + dy * i}`);
+    }
+  }
   // Les caramels poses, groupes par couleur.
   //
   // Un caramel dessine seul coute deux chemins, un remplissage, un contour et
@@ -731,21 +747,27 @@ function draw() {
     // Le fond se peint meme sans un seul caramel dans la bande.
 
     const y0 = Math.floor((ry - orgY) / cell) - 1, y1 = Math.ceil((ry + rh - orgY) / cell);
-    const groupes = new Map<string, { face: string; edge: string; t: Tile[] }>();
+    const groupes = new Map<string, { face: string; edge: string; ink: string; trait: number; t: Tile[] }>();
     for (const q of tiles) {
       if (q.n > jusqua) continue;
       if (q.x < x0 || q.x > x1 || q.y < y0 || q.y > y1) continue;
       const face = q.b === 1 ? C.jface : C.face;
-      const edge = hl.has(`${q.x},${q.y}`) ? C.accent : q.b === 1 ? C.jedge : C.edge;
-      const k = `${face}|${edge}`;
+      // Le dernier top porte la couleur d'accent PARTOUT : contour, lettre et
+      // valeur. Un simple lisere ne suffisait pas a le distinguer sur une
+      // grille dense ; c'est l'encre qui se lit de loin.
+      const marque = hl.has(`${q.x},${q.y}`);
+      const edge = marque ? C.accent : q.b === 1 ? C.jedge : C.edge;
+      const ink = marque ? C.accent : q.b === 1 ? C.jedge : C.ink;
+      const trait = marque ? 2 : 1;
+      const k = `${face}|${edge}|${ink}|${trait}`;
       const l = groupes.get(k);
-      if (l === undefined) groupes.set(k, { face, edge, t: [q] }); else l.t.push(q);
+      if (l === undefined) groupes.set(k, { face, edge, ink, trait, t: [q] }); else l.t.push(q);
     }
     g.save();
     g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
     if (effacer) g.clearRect(rx, ry, rw, rh);
     peindreLeFond(g, orgX, orgY, rx, ry, rw, rh);
-    for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, orgX, orgY);
+    for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, l.ink, l.trait, orgX, orgY);
     g.restore();
   };
 
@@ -1522,22 +1544,79 @@ function paintRack() {
   peindreCaramels(selonLeChevalet(remaining()));
 }
 
+/** Ce qu'un caramel ne depassera jamais, et ce en dessous de quoi il ne descend pas. */
+const CARAMEL_MAX = 64, CARAMEL_MIN = 30, CARAMEL_ECART = 5;
+
 /**
- * Les caramels prennent la place qu'ils ont.
+ * LA TAILLE D'UN CARAMEL NE DEPEND QUE DE LA VARIANTE, JAMAIS DE CE QU'IL RESTE
+ * EN MAIN.
  *
- * Sept lettres tiennent largement dans la barre, quinze non : une taille fixe
- * obligerait a choisir entre des caramels minuscules pour tout le monde et une
- * rangee qui deborde sur les compteurs. Elle se decide donc au nombre de
- * lettres, et le tirage ordinaire y gagne.
+ * Elle se decidait au nombre de lettres AFFICHEES. Taper un mot en retirait du
+ * chevalet, les autres grossissaient, la barre grandissait -- et la grille
+ * descendait d'autant, en plein milieu d'une recherche. Poser ses sept lettres
+ * vidait la rangee et faisait tout remonter. C'est ce sursaut que la table
+ * voyait depuis des semaines.
+ *
+ * La rangee peut aller jusqu'a la largeur de la grille : c'est la limite que
+ * l'oeil accepte -- des caramels plus larges que le plateau qu'ils servent
+ * n'auraient plus l'air d'un chevalet.
  */
-function tailleDuCaramel(n: number): number {
-  return n <= 9 ? 54 : n <= 12 ? 46 : 38;
+function tailleDuCaramel(dispo: number): number {
+  const n = Math.max(1, cfg.tirage);
+  const tient = Math.floor((dispo - (n - 1) * CARAMEL_ECART) / n);
+  return Math.max(CARAMEL_MIN, Math.min(CARAMEL_MAX, tient));
+}
+
+/**
+ * Cale la barre du chevalet une fois pour toutes.
+ *
+ * La hauteur est celle d'un caramel, POSEE MEME QUAND LA RANGEE EST VIDE :
+ * sinon la barre se retracte a la hauteur des compteurs des qu'on a tout pose,
+ * et la grille remonte. C'est le second sursaut.
+ *
+ * LES CARAMELS SE CENTRENT SUR LA GRILLE, pas sur la barre. La barre porte des
+ * compteurs de largeurs inegales de chaque cote ; centrer la rangee dans ce qui
+ * reste la posait a cote du plateau qu'elle sert. On la centre donc sur le
+ * canevas lui-meme.
+ */
+function calerLeChevalet(): void {
+  const box = $("rb-tiles");
+  // La place disponible ne depend PAS des caramels : la rangee est un `flex: 1`
+  // entre les compteurs, elle prend ce qui reste quoi qu'elle contienne. On
+  // peut donc la mesurer avant de decider de leur taille.
+  const dispo = box.clientWidth;
+  if (dispo === 0) return;
+  const taille = tailleDuCaramel(dispo);
+  box.style.setProperty("--t", `${taille}px`);
+  // Le decalage qui amene la rangee au-dessus du MILIEU DE LA GRILLE. Il est
+  // borne par la place libre de chaque cote : une rangee de quinze caramels
+  // remplit deja la barre, et la pousser plus loin la ferait passer sous les
+  // compteurs.
+  const rangee = cfg.tirage * taille + (cfg.tirage - 1) * CARAMEL_ECART;
+  const cv = $("cv").getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  const jeu = Math.max(0, (dispo - rangee) / 2);
+  const vise = (cv.left + cv.width / 2) - (b.left + b.width / 2);
+  box.style.setProperty("--decalage", `${Math.round(Math.max(-jeu, Math.min(jeu, vise)))}px`);
 }
 
 function peindreCaramels(lettres: readonly string[]): void {
   const box = $("rb-tiles");
-  box.style.setProperty("--t", `${tailleDuCaramel(lettres.length)}px`);
+  calerLeChevalet();
   box.replaceChildren();
+  // LA PARTIE CLOSE LE DIT LA OU L'ON REGARDE. La place du chevalet reste vide
+  // -- il n'y a plus de lettres -- et c'est le premier endroit ou l'oeil va
+  // chercher ce qu'il faut jouer. Autant y mettre la reponse.
+  if (finie && rejeu === null && lettres.length === 0) {
+    const fin = document.createElement("div");
+    fin.className = "chevalet-fin";
+    fin.innerHTML = `<b>Partie terminée</b><span>Feuille de route</span>`;
+    fin.addEventListener("click", () => {
+      ouvrirLaRoute();
+    });
+    box.appendChild(fin);
+    return;
+  }
   for (const ch of lettres) {
     const el = document.createElement("div");
     const joker = ch === BLANK;
@@ -1727,9 +1806,49 @@ function paintCurrent() {
     meta.textContent = `${noteCoup(best.dir, best.x, best.y, cfg.bornes)} · votre meilleure solution`;
     return;
   }
+
+  // LE VERDICT DU COUP QUI VIENT DE TOMBER.
+  //
+  // Entre deux coups, cette zone montrait un tiret -- et c'est precisement le
+  // moment ou l'on veut savoir ce qu'on vient de faire. On y lit donc « TOP »
+  // si on l'a trouve, sinon l'ecart, avec le mot qu'on avait propose. Cela
+  // s'efface a la premiere lettre tapee : la zone redevient celle du mot en
+  // cours.
+  const verdict = monVerdict();
+  if (verdict !== null) {
+    if (verdict.top) {
+      w.className = "word trouve";
+      w.innerHTML = `<span class="topmot">TOP</span><span class="pts">${verdict.score}</span>`;
+      meta.textContent = `${verdict.mot} · vous avez trouvé le top`;
+      return;
+    }
+    w.className = "word";
+    w.innerHTML = `<span>${verdict.mot}</span><span class="pts rate">−${verdict.ecart}</span>`;
+    meta.textContent = `${verdict.score} pts · ${verdict.ecart} de moins que le top`;
+    return;
+  }
+
   w.className = "word none";
   w.textContent = "—";
   meta.textContent = "";
+}
+
+/**
+ * Ce que VOUS avez fait du dernier coup joue : le top, ou de combien vous
+ * l'avez manque.
+ *
+ * Rend `null` quand vous n'avez rien propose sur ce coup -- il n'y a alors
+ * rien a dire, et surtout rien a reprocher.
+ */
+function monVerdict(): { top: boolean; mot: string; score: number; ecart: number } | null {
+  if (rejeu !== null || last === null || me === "") return null;
+  const gagne = duplicate ? (last.trouveurs ?? []).includes(me) : last.player === me;
+  const sien = last.propositions?.[me];
+  if (gagne) {
+    return { top: true, mot: sien?.word ?? last.word, score: last.score, ecart: 0 };
+  }
+  if (sien === undefined) return null;
+  return { top: false, mot: sien.word, score: sien.score, ecart: last.score - sien.score };
 }
 
 function paintSide() {
@@ -1765,8 +1884,23 @@ function paintSide() {
     : history.reduce((s, m) => m.n <= ici.n ? s + m.score : s, 0)).toLocaleString("fr");
   // Au duplicate, chacun a son propre total : on le montre a cote du cumul de
   // la grille, pour qu'il se compare d'un coup d'oeil.
-  $("rb-score-wrap").hidden = !duplicate;
-  if (duplicate) $("rb-score").textContent = String(points[me] ?? 0);
+  // VOTRE TOTAL, ET CE QUE VOUS AVEZ LAISSE EN CHEMIN.
+  //
+  // Les deux se lisent ensemble : le score dit ce qu'on a pris, le negatif ce
+  // qu'on aurait pu prendre. Ils valent dans les deux modes -- le topping n'a
+  // pas de classement aux points, mais un joueur veut savoir de combien il
+  // rate les tops qu'il ne remporte pas.
+  const monScore = points[me] ?? 0, monNegatif = negatif[me] ?? 0;
+  $("rb-score-wrap").hidden = rejeu !== null || monScore === 0 && monNegatif === 0;
+  $("rb-score").textContent = String(monScore);
+  // AU TOP, LE CARRE DISPARAIT PLUTOT QUE D'ANNONCER ZERO. Sur la grille
+  // permanente, ou il faut litteralement trouver le top pour que la partie
+  // avance, un negatif nul est la regle et non l'exploit : un carre qui dit
+  // « 0 » a longueur de partie n'apprend rien. Au duplicate, ou l'on marque a
+  // chaque coup sans forcement trouver, il vaut la peine de le dire.
+  $("rb-neg-wrap").hidden = rejeu !== null || (monNegatif === 0 && !duplicate)
+    || (monScore === 0 && monNegatif === 0);
+  $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
   paintCurrent();
 
   const lw = $("last-word"), lm = $("last-meta"), ll = $("last-like");
@@ -1818,6 +1952,22 @@ function paintSide() {
     rank.appendChild(s);
   }
 
+  // LE TOP CONCOURT, EN TETE ET HORS CLASSEMENT.
+  //
+  // Un score de duplicate ne dit rien tout seul : 1 240 points, est-ce bien ?
+  // La reponse est dans le total des tops, qu'il fallait aller chercher dans le
+  // cumul de la grille, a l'autre bout de l'ecran. On le pose ici, sur la meme
+  // ligne de lecture que les joueurs, et la comparaison se fait sans bouger les
+  // yeux. Son negatif, lui, n'a pas de case : il est nul par construction.
+  if (duplicate && moveNumber > 0) {
+    const tete = document.createElement("div");
+    tete.className = "prow lehaut";
+    tete.innerHTML = `<span class="tri"></span><span class="nom">Top</span>` +
+      `<span class="tops">${moveNumber}</span><span class="likes"></span>` +
+      `<span class="num">${cumul}</span>`;
+    rank.appendChild(tete);
+  }
+
   for (const [name, n] of rows) {
     if (name === PERSONNE) {
       // Pas un bouton : il n'y a aucune liste de coups a deplier derriere.
@@ -1825,6 +1975,7 @@ function paintSide() {
       perdu.className = "prow perdu";
       perdu.innerHTML = `<span class="tri"></span>` +
         `<span class="nom">Non trouvé${n > 1 ? "s" : ""}</span>` +
+        (duplicate ? `<span class="tops"></span>` : "") +
         `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
       rank.appendChild(perdu);
@@ -1841,7 +1992,8 @@ function paintSide() {
     // comme un second nombre de points.
     const coeurs = got > 0 ? `<b class="coeurs">♥ ${got}</b>` : "";
     const droite = duplicate
-      ? `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
+      ? `<span class="tops">${tops[name] ?? 0}</span>` +
+        `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
         `<span class="num">${points[name] ?? 0}</span>`
       : `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
@@ -1853,6 +2005,10 @@ function paintSide() {
     if (openPlayer === name) {
       const list = document.createElement("div");
       list.className = "plist";
+      // AU DIX-MILLIEME COUP, LE NUMERO NE TIENT PLUS DANS SA COLONNE. Elle
+      // etait figee a trois chiffres : au-dela, le numero debordait sur le mot
+      // et la ligne se repliait en deux. La colonne suit donc la partie.
+      list.style.setProperty("--w-pn", largeurDesNumeros(6.6, 24));
       // Au duplicate, chacun marque sur TOUS les coups auxquels il a participe,
       // pas seulement sur ceux qu'il a remportes.
       const mine = (duplicate
@@ -2091,6 +2247,12 @@ function montrerQui(m: MoveInfo, titre: string, noms: string[]): void {
   const box = $("rj-qui");
   box.replaceChildren();
   if (noms.length === 0) { box.hidden = true; return; }
+  // DU MEILLEUR AU MOINS BON. C'est un tableau de resultats : range par ordre
+  // alphabetique, il fallait lire les scores un a un pour savoir qui avait
+  // trouve quoi. A egalite, le nom departage, pour que l'ordre soit stable.
+  noms = [...noms].sort((a, b) =>
+    (m.propositions?.[b]?.score ?? 0) - (m.propositions?.[a]?.score ?? 0)
+    || a.localeCompare(b));
   if (titre !== "") {
     const h = document.createElement("h4");
     h.textContent = titre;
@@ -2774,6 +2936,24 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   // de l'echeance et n'apprendrait rien.
   const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
                            : m.player !== null || m.demiPoint !== undefined;
+  // CE QUE VOUS AVEZ JOUE, comme sur une feuille de tournoi.
+  //
+  // Seulement quand cela differe du top affiche : sur un coup remporte avec le
+  // mot montre, la colonne repeterait la precedente. Elle apparait donc dans
+  // les deux cas ou elle apprend quelque chose -- un coup manque, et un isotop
+  // joue a une autre place que celle que le logiciel a retenue.
+  let sien = "";
+  if (duplicate) {
+    const p = m.propositions?.[me];
+    const pareil = p !== undefined && p.word === m.word && p.dir === m.dir
+      && p.x === m.x && p.y === m.y;
+    sien = p === undefined || pareil
+      ? `<span class="mw"></span><span class="mp"></span><span class="ms"></span>`
+      : `<span class="mw">${echapper(p.word)}</span>` +
+        `<span class="mp">${noteCoup(p.dir, p.x, p.y, cfg.bornes)}</span>` +
+        `<span class="ms">${p.score}</span>`;
+  }
+
   let queue: string;
   if (duplicate) {
     const mien = m.scores?.[me];
@@ -2784,7 +2964,9 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     queue =
       `<span class="d${ecart === 0 ? " top" : ""}">` +
       `${ecart === null ? "—" : ecart === 0 ? "top" : ecart}</span>` +
-      `<span class="sur">${presents === 0 ? "" : `${trouveurs.length}/${presents}`}</span>`;
+      // TROUVEURS SUR PRESENTS. A cinq, « 3/5 » dit la difficulte du coup ; seul,
+      // il ne peut dire que 0/1 ou 1/1, ce que la colonne d'a cote dit deja.
+      `<span class="sur">${presents < 2 ? "" : `${trouveurs.length}/${presents}`}</span>`;
   } else {
     queue =
       `<span class="t${trouve ? "" : " non"}">${trouve ? fmtTime(m.ms) : "×"}</span>` +
@@ -2822,7 +3004,7 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     image + rejouer +
     `<span class="w">${echapper(m.word)}</span>` +
     `<span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-    `<span class="s">${m.score}</span>` +
+    `<span class="s">${m.score}</span>` + sien +
     `<span class="who">${echapper(quiLaTrouve(m))}</span>` + queue + like + `</div>`;
 }
 const ICONE_ENREGISTRER =
@@ -2934,13 +3116,24 @@ ${lignes}
   flash(`feuille enregistrée · ${routeVues.length} coup${routeVues.length > 1 ? "s" : ""}`, "ok");
 }
 
-$("rm-open").addEventListener("click", () => {
-  // On decouvre AVANT de peindre : le nombre de lignes a poser se deduit de la
-  // hauteur du tableau, et un tableau cache n'en a pas. On n'en posait que cinq,
-  // et les autres n'arrivaient qu'au premier defilement.
+/**
+ * Ouvre la feuille de route, LE CURSEUR DANS LA RECHERCHE.
+ *
+ * On decouvre AVANT de peindre : le nombre de lignes a poser se deduit de la
+ * hauteur du tableau, et un tableau cache n'en a pas. On n'en posait que cinq,
+ * et les autres n'arrivaient qu'au premier defilement.
+ *
+ * Le champ prend la main tout de suite : on ouvre cette feuille pour y chercher
+ * un mot neuf fois sur dix, et cliquer dans un champ avant de pouvoir taper est
+ * un geste de trop.
+ */
+function ouvrirLaRoute(): void {
   $("roadmap").hidden = false;
   paintRoadmap();
-});
+  ($("rm-q") as HTMLInputElement).focus();
+}
+
+$("rm-open").addEventListener("click", ouvrirLaRoute);
 
 ($("rm-q") as HTMLInputElement).addEventListener("input", () => {
   filtrerLaRoute();
@@ -3135,7 +3328,7 @@ interface Preferences {
   /** La camera vole-t-elle vers un coup, ou s'y pose-t-elle d'un coup ? */
   vols: boolean;
   /** Hauteur choisie pour chaque section du panneau, `null` = celle d'origine. */
-  hauteurs: { live: number | null; journal: number | null };
+  hauteurs: { live: number | null; journal: number | null; rank: number | null };
   /** Les images de grille sont-elles tirees en haute definition ? */
   imageHD: boolean;
   /** De quel cote du plateau se lisent les lettres : « fr » ou « en ». */
@@ -3155,7 +3348,7 @@ const prefs: Preferences = {
   // Le navigateur sait deja que son proprietaire n'aime pas ce qui bouge :
   // c'est notre valeur de depart, et le panneau permet d'en changer.
   vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
-  hauteurs: { live: null, journal: null },
+  hauteurs: { live: null, journal: null, rank: null },
   imageHD: false,
   reperes: "fr",
   quatre: false,
@@ -3175,7 +3368,7 @@ function lirePreferences(): void {
     if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
-      for (const cle of ["live", "journal"] as const) {
+      for (const cle of ["live", "journal", "rank"] as const) {
         const n = h[cle];
         if (n === null || (typeof n === "number" && Number.isFinite(n) && n >= 0)) {
           prefs.hauteurs[cle] = n;
@@ -3520,7 +3713,7 @@ addEventListener("keydown", (e) => {
   // une zone de saisie -- celles-ci ont rendu la main plus haut.
   if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
     e.preventDefault();
-    if ($("roadmap").hidden) { $("roadmap").hidden = false; paintRoadmap(); }
+    if ($("roadmap").hidden) ouvrirLaRoute();
     else fermerLaRoute();
     return;
   }
@@ -3698,6 +3891,9 @@ $("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
 const SECTIONS = [
   { poignee: "poignee-haut", section: "panel-live", cle: "live" },
   { poignee: "poignee-bas", section: "journal-bloc", cle: "journal" },
+  // Le classement se tire DANS son bloc : c'est lui qui grandit avec le nombre
+  // de joueurs, et lui seul qu'on veut pouvoir contenir.
+  { poignee: "poignee-rank", section: "rank", cle: "rank" },
 ] as const;
 
 /** Ce qu'on laisse au chat, quoi qu'on tire : sans quoi il disparait pour de bon. */
@@ -3729,6 +3925,7 @@ function majDesPoignees(): void {
   const journal = !$("journal-bloc").hidden;
   $("poignee-haut").hidden = $("panel-live").hidden || !journal;
   $("poignee-bas").hidden = !journal;
+  $("poignee-rank").hidden = $("panel-live").hidden;
 }
 
 for (const s of SECTIONS) {
@@ -3911,6 +4108,7 @@ function applyState(s: {
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
+  tops?: Record<string, number>;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   rack = s.rack ?? "";
@@ -3954,6 +4152,7 @@ function applyState(s: {
   rejeuOuvert = s.rejeuOuvert === true;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
+  tops = s.tops ?? {};
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
   // Sinon les reglages partent dans le vide et on croit a un bug du jeu.
   // Un serveur qui ne dit rien est forcement anterieur a ce controle : c'est
@@ -4326,6 +4525,7 @@ for (const b of $("r-duree").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
     cDureeMax = v === "sansfin" ? null : Number(v);
     peuplerDuree();
+    avertirSiExplosif();
   });
 }
 
@@ -4338,6 +4538,7 @@ for (const b of $("r-duree").querySelectorAll("button")) {
   if (!Number.isFinite(v) || v <= 0) return;
   cDureeMax = enSecondes(v);
   for (const b of $("r-duree").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+  avertirSiExplosif();
 });
 
 for (const b of $("r-borne-onglets").querySelectorAll("button")) {
@@ -4346,6 +4547,7 @@ for (const b of $("r-borne-onglets").querySelectorAll("button")) {
     // Les deux termes s'excluent : choisir l'un efface l'autre.
     if (cBorne === "coups") cDureeMax = null; else cCoupsMax = null;
     peuplerCoups();
+    avertirSiExplosif();
   });
 }
 
@@ -4389,6 +4591,7 @@ for (const b of $("r-coups").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
     cCoupsMax = v === "sansfin" ? null : Number(v);
     peuplerCoups();
+    avertirSiExplosif();
   });
 }
 
@@ -4402,6 +4605,7 @@ for (const b of $("r-coups").querySelectorAll("button")) {
   if (!Number.isFinite(v) || v < 1) return;
   cCoupsMax = Math.min(9999, v);
   for (const b of $("r-coups").querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
+  avertirSiExplosif();
 });
 
 function peuplerMode(): void {
@@ -4429,9 +4633,22 @@ for (const b of $("r-mode").querySelectorAll("button")) {
  * 15, un tirage a deux jokers demande pres de trois minutes de calcul, contre
  * une demi-seconde sur un plateau borne, ou la grille cesse de grandir.
  */
+/**
+ * Ce qu'on tient pour une partie assez courte pour que le cout n'ait pas le
+ * temps de devenir genant. Le top se paie a peu pres une seconde au millier de
+ * coups joues : cinq cents coups, ou deux heures, se jouent sans y penser.
+ */
+const COUPS_TRANQUILLES = 500, DUREE_TRANQUILLE = 2 * 3600;
+
 function avertirSiExplosif(): void {
   const boite = $("r-alerte");
-  if (cBornes !== null || cTirage < 10) { boite.hidden = true; return; }
+  // LA GRILLE INFINIE N'EST DANGEREUSE QUE SI ELLE DURE. Le cout croit avec le
+  // nombre de coups joues : une partie qui s'arrete a cent coups ne l'atteint
+  // jamais, meme a quinze lettres. L'avertissement ne vaut donc que pour une
+  // partie sans terme -- ou dont le terme est assez lointain pour en etre une.
+  const borneCourte = (cCoupsMax !== null && cCoupsMax <= COUPS_TRANQUILLES)
+    || (cDureeMax !== null && cDureeMax <= DUREE_TRANQUILLE);
+  if (cBornes !== null || cTirage < 10 || borneCourte) { boite.hidden = true; return; }
   boite.innerHTML =
     `<b>Attention : tirage de ${cTirage} lettres sur une grille infinie.</b><br>` +
     `Le temps de calcul du top grandit avec la grille et le tirage. ` +
@@ -4454,7 +4671,10 @@ for (const b of $("r-grille").querySelectorAll("button")) {
     // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
     // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
     if (cBornes === null && cPioche === "sac102") cPioche = "probabilites";
-    if (cBornes !== null && cPioche !== "sac102") cPioche = "sac102";
+    // Le plateau borne veut un vrai sac -- des probabilites ponderees n'y
+    // finissent jamais de remplir la grille. Le sac SANS FIN, lui, y a
+    // desormais sa place et n'est plus chasse.
+    if (cBornes !== null && cPioche === "probabilites") cPioche = "sac102";
     peuplerPioche();
     // APRES le tirage : l'affichage des bornes depend des deux, et le tirage
     // vient de changer sous nos pieds.
@@ -4569,10 +4789,20 @@ function peuplerNombres(): void {
       // On ne peut pas poser plus de caramels qu'on n'en pioche.
       if (id === "r-jouables") (b as HTMLButtonElement).disabled = n > cTirage;
       b.addEventListener("click", () => {
+        const avant = `${cTirage}/${cJouables}`;
         if (id === "r-tirage") {
           cTirage = n;
           if (cJouables > n) cJouables = n;
         } else cJouables = n;
+        // CHANGER DE FORMAT REMET LES PRIMES D'USAGE.
+        //
+        // Une prime se lit « tant de points pour tant de caramels poses », et
+        // ce qu'elle vaut depend entierement du format : trois points pour deux
+        // caramels a du sens en 2 sur 2, aucun en 7 sur 7, ou poser deux
+        // lettres est le contraire d'un exploit. Les garder d'un format a
+        // l'autre, c'est emporter un bareme qui ne veut plus rien dire -- et
+        // sans rien dire, puisque la section est repliee.
+        if (`${cTirage}/${cJouables}` !== avant) cPrimes = primesHabituelles();
         peuplerNombres();
         avertirSiExplosif();
         if (!$("r-primes").hidden) peuplerPrimes();
@@ -4591,17 +4821,21 @@ for (const b of $("r-pioche").querySelectorAll("button")) {
 }
 
 /**
- * Les trois tirages possibles. Le sac sans fin n'a de sens que sur une grille
- * infinie : sur un plateau ferme la partie s'arrete avant qu'il ne se recharge.
+ * Les trois tirages possibles, sur les deux grilles.
+ *
+ * LE SAC SANS FIN EST DESORMAIS JOUABLE SUR UN PLATEAU BORNE. Il y etait
+ * interdit parce qu'un sac qui ne s'epuise pas ne termine pas la partie -- et
+ * qu'a l'epoque rien d'autre ne la terminait. Ce n'est plus vrai : un plateau
+ * de quinze cases finit par se remplir, et la regle des tirages injouables
+ * (SPEC.md §16) clot la partie quand plus rien ne se pose. La grille se remplit
+ * donc jusqu'au bout, ce qui est une variante en soi.
  */
 function peuplerPioche(): void {
   for (const b of $("r-pioche").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
     b.setAttribute("aria-pressed", String(v === cPioche));
-    const interdit = v === "sac102boucle" && cBornes !== null;
-    (b as HTMLButtonElement).disabled = interdit;
-    (b as HTMLButtonElement).title = interdit
-      ? "réservé aux grilles infinies" : "";
+    (b as HTMLButtonElement).disabled = false;
+    (b as HTMLButtonElement).title = "";
   }
 }
 
@@ -4774,6 +5008,7 @@ async function rejoindre(id: string): Promise<void> {
   likes = {};
   points = {};
   negatif = {};
+  tops = {};
   nonTrouves = 0;
   gerant = null;
   salonPermanent = false;

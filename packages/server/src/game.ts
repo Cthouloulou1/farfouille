@@ -43,6 +43,13 @@ import { noteCoup, type Dir } from "../../engine/src/coords.ts";
 import { DAWG_PATH } from "../../engine/src/paths.ts";
 import type { Move } from "../../engine/src/score.ts";
 
+/** Ce que chacun a marque, rate, et trouve. Voir `bilanDesJoueurs`. */
+export interface Bilan {
+  points: Record<string, number>;
+  negatif: Record<string, number>;
+  tops: Record<string, number>;
+}
+
 /** Un palier de score : un score, et TOUS les coups qui l'atteignent. */
 export interface Tier {
   score: number;
@@ -867,23 +874,45 @@ export class Game {
     return this.moves.filter((m) => m.player === null).length;
   }
 
+  /** Le bilan, refait seulement quand un coup s'ajoute. */
+  private bilanFait = -1;
+  private bilanGarde: Bilan = { points: {}, negatif: {}, tops: {} };
+
   /**
-   * DUPLICATE : points et negatif de chacun, sur toute la partie.
+   * POINTS, NEGATIF ET TOPS DE CHACUN, dans les deux modes.
    *
-   * Le negatif est l'ecart cumule au top. Un joueur qui a trouve tous les tops
-   * a un negatif nul -- c'est le « TOP » du tableau.
+   * Le negatif est l'ecart cumule au top : un joueur qui a trouve tous les tops
+   * l'a nul. Il ne compte QUE LES COUPS OU L'ON A PROPOSE quelque chose --
+   * compter les coups regardes sans rien tenter donnerait un negatif qui mesure
+   * l'absence, pas le jeu.
+   *
+   * Le duplicate tient ses scores dans `scores`, ou tout le monde marque a
+   * chaque coup. Le topping n'en a pas : on lit alors les propositions, qui y
+   * sont enregistrees de la meme facon. Les deux modes ont donc le meme bilan,
+   * ce qui permet d'afficher un negatif la ou il n'y en avait pas.
+   *
+   * Le calcul parcourt toute la partie -- dix-sept mille coups sur la grille
+   * permanente. Il ne se refait qu'a l'arrivee d'un coup.
    */
-  classementDuplicate(): { points: Record<string, number>; negatif: Record<string, number> } {
+  bilanDesJoueurs(): Bilan {
+    if (this.bilanFait === this.moves.length) return this.bilanGarde;
     const points: Record<string, number> = {};
     const negatif: Record<string, number> = {};
+    const tops: Record<string, number> = {};
     for (const m of this.moves) {
-      if (m.scores === undefined) continue;
-      for (const [nom, sc] of Object.entries(m.scores)) {
+      const solutions: Record<string, number> = m.scores ?? Object.fromEntries(
+        Object.entries(m.propositions ?? {}).map(([nom, p]) => [nom, p.score]),
+      );
+      for (const [nom, sc] of Object.entries(solutions)) {
         points[nom] = (points[nom] ?? 0) + sc;
         negatif[nom] = (negatif[nom] ?? 0) + (m.score - sc);
       }
+      const trouve = m.trouveurs ?? (m.player !== null ? [m.player] : []);
+      for (const nom of trouve) tops[nom] = (tops[nom] ?? 0) + 1;
     }
-    return { points, negatif };
+    this.bilanFait = this.moves.length;
+    this.bilanGarde = { points, negatif, tops };
+    return this.bilanGarde;
   }
 
   /** Nombre de "j'aime" recus par un joueur sur l'ensemble de la partie. */

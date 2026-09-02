@@ -252,9 +252,14 @@ function publicState(s: Salon) {
     mode: g.cfg.mode,
     players: g.players,
     nonTrouves: g.nonTrouves,
-    // Au duplicate le classement se lit en points et en negatif, pas en coups
-    // remportes : personne ne « remporte » un coup, tout le monde en marque.
-    ...(g.cfg.mode === "duplicate" ? g.classementDuplicate() : {}),
+    // POINTS, NEGATIF ET TOPS PARTENT DANS LES DEUX MODES.
+    //
+    // Au duplicate le classement se lit en points et en negatif -- personne ne
+    // « remporte » un coup, tout le monde en marque. Au topping il se lit en
+    // coups remportes, mais le joueur veut quand meme savoir ce qu'il a laisse
+    // au passage : son ecart cumule au top. C'est la meme mesure, et elle se
+    // calcule de la meme facon.
+    ...g.bilanDesJoueurs(),
     likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),

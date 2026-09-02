@@ -2978,3 +2978,112 @@ pourquoi ses mots ne partent plus ; au-delà, le silence.
 ```bash
 node packages/server/test/check_debit.ts
 ```
+
+---
+
+## 19. Ce que la table a demandé
+
+Une session à plusieurs, et la liste de ce qui manquait.
+
+### La barre du chevalet ne bouge plus
+
+**C'était le décalage de la grille**, cherché depuis des semaines et trouvé par
+la table : la taille d'un caramel se décidait au nombre de lettres **affichées**.
+
+Taper un mot en retirait du chevalet, les autres grossissaient, la barre
+grandissait — et la grille descendait d'autant, en pleine recherche. Poser ses
+sept lettres vidait la rangée, la barre se rétractait à la hauteur des
+compteurs, et tout remontait d'un coup.
+
+Trois règles désormais :
+
+- **La taille ne dépend que de la variante**, jamais de ce qui reste en main.
+  Elle se calcule une fois, sur `cfg.tirage`, et ne bouge plus de la partie.
+- **La rangée occupe une place fixe**, même vide. C'est ce qui empêche le second
+  sursaut.
+- **Elle se centre sur la grille**, pas sur la barre. La barre porte des
+  compteurs de largeurs inégales de chaque côté ; centrer la rangée dans ce qui
+  reste la posait à cent pixels du plateau qu'elle sert.
+
+La rangée peut aller jusqu'à la largeur disponible, plafonnée à 64 pixels par
+caramel — les sept lettres ordinaires y gagnent, les quinze aussi.
+
+Mesuré : le haut de la grille reste à la même position au pixel près, tirage
+complet, mot à moitié tapé, chevalet vide.
+
+### Le dernier top se voit
+
+Il ne portait qu'un liséré, et seulement sur les caramels **posés** : un mot de
+huit lettres accroché à trois lettres déjà là n'en montrait que cinq,
+éparpillées. La table ne voyait pas où le coup avait été joué.
+
+Le **mot entier** porte maintenant la couleur d'accent — contour épaissi, lettre
+et valeur comprises. Un mot se lit d'un bloc ou pas du tout. Il redevient
+ordinaire au coup suivant.
+
+### Le verdict du coup
+
+Entre deux coups, la zone au-dessus du top montrait un tiret — au moment précis
+où l'on veut savoir ce qu'on vient de faire. Elle affiche désormais **TOP** si
+vous l'avez trouvé, sinon **votre mot et votre écart**. Tout s'efface à la
+première lettre tapée : la zone redevient celle du mot en cours.
+
+Deux compteurs l'accompagnent dans le bandeau, dans **les deux modes** :
+
+| carré | ce qu'il dit |
+|---|---|
+| **Score** | votre total, la somme de vos meilleures solutions |
+| **Négatif** | votre écart cumulé au top |
+
+Au duplicate, un négatif nul s'écrit « Top ». Au topping le carré **disparaît** :
+sur une grille où il faut littéralement trouver le top pour que la partie avance,
+un zéro affiché en permanence n'apprend rien.
+
+Le classement gagne une ligne **Top** en tête — le total des tops et leur nombre,
+sur la même ligne de lecture que les joueurs — et une colonne comptant les tops
+trouvés par chacun. Un score de duplicate ne dit rien tout seul : 1 240 points,
+est-ce bien ? La réponse était à l'autre bout de l'écran.
+
+### La feuille de route en duplicate
+
+Trois colonnes de plus : **le mot que vous avez joué**, sa place et ses points,
+comme sur une feuille de tournoi. Elles restent vides quand votre coup EST le top
+affiché — la colonne répéterait la précédente.
+
+Le **`0/1`** compte les trouveurs sur les joueurs présents au tirage. À cinq,
+« 3/5 » dit la difficulté du coup ; seul, il ne peut dire que 0/1 ou 1/1. Il
+n'apparaît donc qu'à partir de deux présents.
+
+Au-delà du millier de coups, le numéro débordait sur le mot dans la liste dépliée
+d'un joueur, et la ligne se repliait en deux : la colonne suit maintenant le
+nombre de chiffres.
+
+La recherche prend la main à l'ouverture : on ouvre cette feuille pour y chercher
+un mot neuf fois sur dix.
+
+### Les réglages
+
+**Le sac sans fin est jouable sur un plateau borné.** Il y était interdit parce
+qu'un sac qui ne s'épuise pas ne termine pas la partie — et qu'à l'époque rien
+d'autre ne la terminait. La règle des tirages injouables (§16) s'en charge
+désormais : la grille se remplit jusqu'au bout, ce qui est une variante en soi.
+
+**Changer de format remet les primes d'usage.** Une prime se lit « tant de points
+pour tant de caramels posés », et ce qu'elle vaut dépend entièrement du format :
+trois points pour deux caramels a du sens en 2 sur 2, aucun en 7 sur 7. Les
+garder d'un format à l'autre, c'est emporter un barème qui ne veut plus rien dire
+— et sans rien dire, puisque la section est repliée.
+
+**L'avertissement du gros tirage ne vaut que pour une partie sans terme.** Le
+coût croît avec le nombre de coups joués : une partie qui s'arrête à cent coups
+ne l'atteint jamais, même à quinze lettres. Le seuil est à 500 coups ou deux
+heures.
+
+### Le reste
+
+Le classement **se replie à la main**, comme les autres sections : vingt joueurs
+ne doivent pas chasser le chat de l'écran. Le panneau de droite passe de 360 à
+430 pixels, polices comprises. Le tableau des joueurs, en rejeu, se range **du
+meilleur au moins bon** — c'est un tableau de résultats. « Revoir la partie » se
+lit au milieu de sa section. Et une partie close le dit là où l'on regarde : à la
+place des lettres, **Partie terminée** puis **Feuille de route**, qui l'ouvre.

@@ -86,7 +86,7 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity: .45; cursor: default; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-h2 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); font-weight: 500; }
+h2 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); font-weight: 500; }
 .none { color: var(--ink-faint); font-size: 12.5px; }
 
 /* LE BANDEAU DU HAUT NE PORTE PLUS QUE L'IDENTITE. Les deux chronos sont
@@ -107,14 +107,20 @@ h2 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .1em
 .perime { flex: none; padding: 7px 16px; background: var(--warn-bg); color: var(--warn); font-size: 12.5px; border-bottom: 1px solid var(--rule); }
 .perime[hidden] { display: none; }
 .perime code { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
-.rackbar { flex: none; display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); }
+.rackbar { position: relative; flex: none; display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); }
 .stat { flex: none; min-width: 72px; text-align: center; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 10px 4px; }
 .stat span { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); }
 .stat b { display: block; font-family: "IBM Plex Mono", monospace; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .rackbar .image { flex: none; padding: 7px 9px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
 .rackbar .image:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .rackbar .image:disabled { opacity: .45; cursor: default; }
-.tiles { flex: 1; display: flex; justify-content: center; gap: 5px; min-width: 0; user-select: none; -webkit-user-select: none; }
+/* LA RANGEE NE TOUCHE PAS A LA HAUTEUR DE LA BARRE, ET SE CENTRE SUR LA GRILLE.
+   Elle occupe une place fixe -- celle d'un caramel -- meme vide : sans cela,
+   poser toutes ses lettres retractait la barre et la grille remontait d'un
+   coup, en plein milieu d'une partie. Et elle se centre sur le canevas, pas
+   sur ce qui reste entre les compteurs, qui ne sont pas de meme largeur des
+   deux cotes. */
+.tiles { flex: 1; height: var(--t, 54px); display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; transform: translateX(var(--decalage, 0px)); user-select: none; -webkit-user-select: none; }
 /* UN CARAMEL EST UN OBJET, PAS DU TEXTE. On le prend, on le deplace, on ne le
    selectionne pas : un double-clic dessus surlignait la lettre en bleu, ce qui
    n'arrive a aucun jeu de lettres en bois. `touch-action` rend le glissement au
@@ -188,15 +194,25 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .like:disabled { opacity: .35; cursor: default; }
 .like .n { font-variant-numeric: tabular-nums; }
 .prow .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
+.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
 /* Les « j'aime » se lisent contre le pseudo. A l'autre bout de la ligne, ils
    se confondaient avec le nombre de points. */
 .prow .coeurs { margin-left: 8px; color: var(--accent); font-size: 11px; font-weight: 400; }
+/* Le nombre de tops trouves, entre le pseudo et le negatif : c'est la premiere
+   chose qu'on compare, avant meme les points. */
+.prow .tops { flex: none; min-width: 2.4em; text-align: right; font-family: "IBM Plex Mono", monospace; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+/* La ligne du top : elle n'est pas un joueur, elle est la mesure. */
+.prow.lehaut { color: var(--accent); cursor: default; }
+.prow.lehaut .nom { letter-spacing: .1em; text-transform: uppercase; font-size: .88em; }
+.prow.lehaut .num, .prow.lehaut .tops { color: var(--accent); }
+/* Le mot « TOP » a la place du mot joue, quand on l'a trouve. */
+.word .topmot { color: var(--accent); letter-spacing: .16em; font-weight: 600; }
+.word .pts.rate { color: var(--warn); }
 .banner { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; background: var(--accent-bg); color: var(--accent); border-radius: 4px; font-size: 12.5px; box-shadow: 0 4px 18px var(--shadow); }
 .banner[hidden] { display: none; }
 .banner button { padding: 3px 9px; font-size: 11.5px; background: var(--panel); }
 
-.side { flex: none; width: 360px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.side { flex: none; width: 430px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .panel { flex: none; overflow-y: auto; max-height: 62%; }
 /* LES SEPARATIONS DU PANNEAU S'ATTRAPENT. Chacun ne suit pas la partie de la
    meme facon : l'un veut voir tous les coups joues, l'autre le chat, un
@@ -216,7 +232,7 @@ body.redimensionne { cursor: row-resize; user-select: none; }
 .block { padding: 11px 15px; border-bottom: 1px solid var(--rule); }
 /* Vingt pseudos ne doivent pas chasser le classement hors de l'ecran : la liste
    defile dans sa boite plutot que de pousser tout ce qui suit. */
-#online { max-height: 64px; overflow-y: auto; }
+#online { max-height: 74px; overflow-y: auto; }
 .block[hidden] { display: none; }
 .head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .head h2 { flex: 1; }
@@ -224,31 +240,48 @@ body.redimensionne { cursor: row-resize; user-select: none; }
 .icon:hover { color: var(--accent); border-color: var(--rule); }
 .icon[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
 
-.word { font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
-.word .pts { margin-left: auto; font-size: 17px; color: var(--accent); font-weight: 500; }
-.word.none { color: var(--ink-faint); font-size: 13px; letter-spacing: 0; }
+.word { font-family: "IBM Plex Mono", monospace; font-size: 17.5px; font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
+.word .pts { margin-left: auto; font-size: 18.5px; color: var(--accent); font-weight: 500; }
+.word.none { color: var(--ink-faint); font-size: 14px; letter-spacing: 0; }
 /* Un top que personne n'a trouve : le mot reste lisible -- c'est lui qu'on veut
    voir -- mais ses points passent au rouge, et un jeton le dit en toutes lettres. */
 .word .rate { padding: 1px 6px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-family: Archivo, system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
 .word.rate .pts { color: var(--warn); }
 button.word { cursor: pointer; }
 button.word:hover { color: var(--accent); border-color: transparent; }
-.sub { font-size: 11.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
-.bad { margin-top: 5px; font-size: 11.5px; color: var(--warn); font-family: "IBM Plex Mono", monospace; }
+.sub { font-size: 12.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
+.bad { margin-top: 5px; font-size: 12.5px; color: var(--warn); font-family: "IBM Plex Mono", monospace; }
 .bad[hidden] { display: none; }
 
-.rank { display: flex; flex-direction: column; gap: 1px; }
-.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+/* VINGT JOUEURS NE DOIVENT PAS CHASSER LE RESTE DE L'ECRAN. Le classement se
+   tire comme les autres sections : il defile dans sa boite plutot que de
+   pousser les coups joues et le chat hors de vue. */
+.rank { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
+/* Une poignee POSEE DANS UN BLOC, et non entre deux : elle se colle au bas du
+   classement, juste au-dessus de la ligne qui le ferme. */
+.poignee.dans-bloc { height: 9px; margin: 4px -15px -12px; }
+.poignee.dans-bloc::after { top: 4px; }
+.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
 .prow:hover { background: var(--hover); border-color: transparent; color: var(--ink); }
 .prow.me { color: var(--accent); font-weight: 500; }
 .prow.perdu { color: var(--ink-faint); cursor: default; font-style: italic; }
 .prow.perdu:hover { background: transparent; }
-.prow .tri { color: var(--ink-faint); font-size: 10px; }
+.prow .tri { color: var(--ink-faint); font-size: 11px; }
 .prow .num { color: var(--ink-faint); }
 .plist { padding: 2px 0 6px 14px; display: flex; flex-direction: column; gap: 1px; }
+/* UN COUP TIENT SUR UNE LIGNE, quel que soit son numero. Au-dela de mille
+   coups le numero debordait sur le mot, et la ligne se repliait en deux. */
+.pmove > * { overflow: hidden; text-overflow: ellipsis; }
+/* Le chevalet d'une partie close : deux lignes a la place des lettres. */
+.chevalet-fin { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.25; cursor: pointer; }
+.chevalet-fin b { font-size: 15px; font-weight: 500; color: var(--ink-soft); letter-spacing: .02em; }
+.chevalet-fin span { font-size: 12.5px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.chevalet-fin:hover span { color: var(--accent); }
+/* « Revoir la partie » se lit au milieu de sa section, pas contre son bord. */
+#rejeu-wrap { display: flex; justify-content: center; }
 /* Cinq colonnes, largeurs fixes sauf le mot : numero, mot, score, temps, coeur.
    Le temps a de quoi tenir sur une ligne ("12 min 05" au plus large). */
-.pmove { display: grid; grid-template-columns: 24px minmax(0, 1fr) 62px 26px 54px auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.pmove { white-space: nowrap; display: grid; grid-template-columns: var(--w-pn, 24px) minmax(0, 1fr) 62px 26px 54px auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .pmove:hover { background: var(--hover); border-color: transparent; color: var(--ink-soft); }
 .pmove .n { color: var(--ink-faint); }
 .pmove .w { color: var(--ink); letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
@@ -344,7 +377,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* En duplicate, le temps ne dit rien -- le coup dure toujours le chrono
    entier -- et deux autres colonnes le remplacent : l'ecart au top du lecteur,
    et combien de joueurs l'ont trouve sur combien de presents. */
-#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 46px 44px auto; }
+/* En duplicate, trois colonnes de plus : LE MOT QUE VOUS AVEZ JOUE, sa place et
+   ses points -- comme sur une feuille de tournoi, ou l'on note son coup a cote
+   du tirage. Elles restent vides quand votre coup EST le top affiche. */
+#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px 100px 96px 36px minmax(0, 1fr) 46px 44px auto; }
+.rmrow .mw { color: var(--ink-soft); font-weight: 500; letter-spacing: .04em; }
+.rmrow .mp { color: var(--ink-faint); }
+.rmrow .ms { text-align: right; color: var(--ink-soft); }
 .rmrow .cum { text-align: right; color: var(--ink-faint); white-space: nowrap; }
 .rmrow .d { text-align: right; color: var(--ink-faint); }
 .rmrow .d.top { color: var(--accent); }
@@ -566,6 +605,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="stat"><span>Coup</span><b id="rb-move">—</b></div>
   <div class="tiles" id="rb-tiles"></div>
   <div class="stat" id="rb-reste-wrap" hidden><span>Reste</span><b id="rb-reste">—</b></div>
+  <div class="stat" id="rb-neg-wrap" hidden><span>Négatif</span><b id="rb-neg">0</b></div>
   <div class="stat" id="rb-score-wrap" hidden><span>Score</span><b id="rb-score">0</b></div>
   <div class="stat chrono">
     <div><span>Coup</span><b id="elapsed">—</b></div>
@@ -619,6 +659,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           </button>
         </div>
         <div class="rank" id="rank"></div>
+        <div class="poignee dans-bloc" id="poignee-rank"
+             title="Tirer pour redimensionner — double-clic pour rétablir"></div>
       </div>
       <div class="block">
         <h2>Joueurs connectés</h2>
