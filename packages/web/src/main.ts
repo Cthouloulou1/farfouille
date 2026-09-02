@@ -1901,19 +1901,25 @@ function paintSide() {
   // la grille, pour qu'il se compare d'un coup d'oeil.
   // VOTRE TOTAL, ET CE QUE VOUS AVEZ LAISSE EN CHEMIN.
   //
-  // Les deux se lisent ensemble : le score dit ce qu'on a pris, le negatif ce
-  // qu'on aurait pu prendre. Ils valent dans les deux modes -- le topping n'a
-  // pas de classement aux points, mais un joueur veut savoir de combien il
-  // rate les tops qu'il ne remporte pas.
+  // Le score dit ce qu'on a pris ; il vaut dans les deux modes, comme mesure de
+  // ce qu'on a su trouver.
   const monScore = points[me] ?? 0, monNegatif = negatif[me] ?? 0;
   $("rb-score-wrap").hidden = rejeu !== null || monScore === 0 && monNegatif === 0;
   $("rb-score").textContent = String(monScore);
-  // AU TOP, LE CARRE DISPARAIT PLUTOT QUE D'ANNONCER ZERO. Sur la grille
-  // permanente, ou il faut litteralement trouver le top pour que la partie
-  // avance, un negatif nul est la regle et non l'exploit : un carre qui dit
-  // « 0 » a longueur de partie n'apprend rien. Au duplicate, ou l'on marque a
-  // chaque coup sans forcement trouver, il vaut la peine de le dire.
-  $("rb-neg-wrap").hidden = rejeu !== null || (monNegatif === 0 && !duplicate)
+  // LE NEGATIF N'EXISTE QU'AU DUPLICATE, ET C'EST UNE QUESTION DE SENS, PAS DE
+  // VALEUR.
+  //
+  // Un negatif mesure ce qu'on a laisse au top SUR SA PROPRE FEUILLE : au
+  // duplicate chacun joue la sienne, marque a chaque coup, et l'ecart cumule
+  // est precisement ce qui departage la table.
+  //
+  // Le topping ne se joue pas comme cela. La grille n'avance que parce que
+  // QUELQU'UN a trouve le top -- sur une grille permanente, c'est meme la seule
+  // facon d'avancer. Le travail y est commun : celui qui l'emporte le fait pour
+  // tout le monde, et ce que les autres avaient propose ne compte ni contre eux
+  // ni pour eux. Un ecart personnel n'y mesure donc rien du tout, et l'afficher
+  // invitait a lire une partie collective comme un classement individuel.
+  $("rb-neg-wrap").hidden = rejeu !== null || !duplicate
     || (monScore === 0 && monNegatif === 0);
   $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
   paintCurrent();
