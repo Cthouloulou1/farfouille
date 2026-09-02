@@ -3194,6 +3194,39 @@ L'ouverture, elle, ne gagne rien : la lecture du journal coûte le même prix, e
 l'essentiel du temps part à reposer 132 000 caramels sur la grille et sur celle
 du solveur.
 
+### Le rejeu garde ce qu'il a reçu
+
+Le client redemandait les paliers **à chaque visite**. On navigue pourtant dans
+le rejeu : coup 40, coup 41, retour au 40 — et le retour coûtait un aller-retour
+au serveur pour un résultat identique au caramel près, puisque la position
+d'avant le coup et le tirage ne changent plus.
+
+Deux choses, donc. Le client **garde** les soixante derniers coups consultés :
+revenir sur un coup vu est immédiat, sans réseau. Et pendant qu'on lit un coup,
+il **prépare les voisins** — n±1, puis n±2, puis n±3 — parce que c'est presque
+toujours là qu'on va ensuite.
+
+Un seul à la fois : le fil du solveur sert aussi les parties en cours, et lui
+envoyer six demandes d'un coup ferait attendre une vraie table pour un confort de
+lecture.
+
+### On peut reculer jusqu'à voir toute l'emprise
+
+Le plancher du dézoom était d'un pixel et demi par case. Passé sept cents cases
+de côté — ce que la grille permanente atteint vers le vingt-deuxième mille —,
+la faire tenir à l'écran en demande **moins**, et le dézoom s'arrêtait avant d'y
+arriver.
+
+| emprise | canevas | case nécessaire | plancher d'alors |
+|---|---|---|---|
+| 709 × 751 | 1200 × 800 | 1,02 px | 1,5 px |
+| | 900 × 700 | 0,89 px | 1,5 px |
+| | 1600 × 1000 | 1,29 px | 1,5 px |
+
+Sur aucune taille d'écran on ne pouvait voir l'ensemble de ce qu'on construit.
+Le plancher ne sert plus qu'à se garder d'une division par zéro : il faudrait
+quatre mille cases de côté pour l'atteindre.
+
 ### Vérification
 
 `check_paliers.ts` joue une grille sans fin, vérifie qu'aucun palier ne reste en

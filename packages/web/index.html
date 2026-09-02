@@ -365,7 +365,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap > div.large { width: min(1120px, 96vw); max-height: 78vh; font-size: 16.5px; }
 /* SOUS LE RELIQUAT, PAS PLUS HAUT -- la valeur exacte est MESUREE a l'ouverture,
    voir `ouvrirReglages` ; celle-ci n'est qu'un point de depart raisonnable. */
-.roadmap.enHaut { align-items: flex-start; padding-top: 260px; }
+/* LA FENETRE DES REGLAGES SE POSE SOUS LE RELIQUAT. On regle une partie en
+   regardant ce qu'il reste dans le sac ; la fenetre ne doit donc pas monter
+   par-dessus. Sa hauteur maximale suit ce qui reste sous elle -- sans quoi,
+   descendue d'autant, elle sortirait par le bas. */
+.roadmap.enHaut { align-items: flex-start; padding-top: 320px; }
+.roadmap.enHaut > div { max-height: max(300px, calc(100vh - 344px)); }
 .roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
@@ -653,7 +658,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="panel" id="panel-live">
       <div class="block fin" id="fin" hidden>Partie terminée</div>
       <div class="block" id="rejouer-wrap" hidden>
-        <button id="rejouer">Rejouer la même partie</button>
+        <button id="rejouer">Rejouer</button>
       </div>
       <div class="block" id="rejeu-wrap" hidden>
         <button id="rejeu-open">Revoir la partie</button>

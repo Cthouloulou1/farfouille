@@ -1380,7 +1380,16 @@ function cellMinimal(): number {
   // mais jusque-la il en occupe une, et c'est ce qui fait l'image d'ensemble.
   const REGLES = 28;
   const largeur = e.x1 - e.x0 + 5, hauteur = e.y1 - e.y0 + 5;
-  return Math.max(1.5, Math.min(12, Math.min((W - REGLES) / largeur, (H - REGLES) / hauteur)));
+  // ON DOIT TOUJOURS POUVOIR RECULER JUSQU'A VOIR TOUTE L'EMPRISE. Le plancher
+  // etait a un pixel et demi par case : passe sept cents cases de haut -- ce
+  // que la grille permanente atteint vers le vingt-deuxieme mille --, la faire
+  // tenir en demandait moins, et le dezoom s'arretait avant d'y arriver. On ne
+  // voyait plus l'ensemble de la chose que l'on construit.
+  //
+  // Le plancher absolu ne sert plus qu'a se garder d'une division par zero : il
+  // faudrait quatre mille cases de cote pour l'atteindre.
+  const tient = Math.min((W - REGLES) / largeur, (H - REGLES) / hauteur);
+  return Math.max(.25, Math.min(12, tient));
 }
 
 function alreadyVisible(word: string, dir: Dir, x: number, y: number) {
@@ -2191,11 +2200,14 @@ function voirLeCoup(n: number): void {
   const piste = $("rj-piste");
   piste.style.height = "";
   piste.replaceChildren();
-  const attente = document.createElement("div");
-  attente.className = "none";
-  attente.style.padding = "10px 15px";
-  attente.textContent = "chargement des solutions…";
-  piste.appendChild(attente);
+  const deja = paliersRecus.get(borne);
+  if (deja === undefined) {
+    const attente = document.createElement("div");
+    attente.className = "none";
+    attente.style.padding = "10px 15px";
+    attente.textContent = "chargement des solutions…";
+    piste.appendChild(attente);
+  }
   $("rj-sols").scrollTop = 0;
   $("rj-qui").hidden = true;
   ghost = m === undefined ? null
@@ -2204,7 +2216,12 @@ function voirLeCoup(n: number): void {
   // Le bandeau reprend le tirage de CE coup : on revoit le coup avec ce qu'on
   // avait en main pour le chercher.
   paintSide();
-  envoyer({ t: "tiers", n: borne });
+  // Deja vu : on l'affiche sans repasser par le serveur. Sinon on le demande,
+  // et on prepare ses voisins des qu'il est la.
+  const enMemoire = paliersRecus.get(borne);
+  if (enMemoire !== undefined) montrerPaliers(borne, enMemoire);
+  else envoyer({ t: "tiers", n: borne });
+  flairerLesVoisins();
   draw();
 }
 
@@ -2412,7 +2429,54 @@ const echapper = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Affiche les paliers recus : le top et ses isotops, puis les sous-tops. */
+/**
+ * LES PALIERS DEJA RECUS NE SE REDEMANDENT PAS.
+ *
+ * On navigue dans le rejeu : coup 40, coup 41, retour au 40. Sans memoire, le
+ * retour coutait un aller-retour au serveur et, sur un plateau borne, un calcul
+ * complet -- pour un resultat identique au caramel pres, puisque la position
+ * d'avant le coup et le tirage ne changent plus.
+ *
+ * Le serveur a deja sa propre memoire (`paliersRefaits`) ; celle-ci evite en
+ * plus le voyage, qui est l'essentiel de l'attente sur une grosse position.
+ */
+const paliersRecus = new Map<number, Palier[]>();
+/** Ce qu'on garde : de quoi couvrir un aller-retour dans la partie, pas plus. */
+const PALIERS_GARDES = 60;
+
+/** Les coups voisins qu'on prepare pendant que le joueur regarde celui-ci. */
+let flairEnCours = 0;
+
+/**
+ * Prepare les coups d'a cote, du plus proche au plus lointain.
+ *
+ * Pendant qu'on lit un coup, le serveur ne fait rien : autant qu'il prepare ce
+ * qu'on va demander ensuite, qui est presque toujours le coup suivant ou le
+ * precedent. UN SEUL A LA FOIS -- le fil du solveur sert aussi les parties en
+ * cours, et lui envoyer six demandes d'un coup ferait attendre une vraie table.
+ */
+function flairerLesVoisins(): void {
+  const ici = rejeu;
+  if (ici === null || flairEnCours !== 0) return;
+  for (let d = 1; d <= 3; d++) {
+    for (const n of [ici.n + d, ici.n - d]) {
+      if (n < 1 || n > history.length || paliersRecus.has(n)) continue;
+      flairEnCours = n;
+      envoyer({ t: "tiers", n });
+      return;
+    }
+  }
+}
+
 function montrerPaliers(n: number, paliers: Palier[] | null, refus?: string): void {
+  // Une reponse a une demande de flair : on la range, et on enchaine.
+  if (paliers !== null && paliers.length > 0) {
+    paliersRecus.set(n, paliers);
+    while (paliersRecus.size > PALIERS_GARDES) {
+      paliersRecus.delete(paliersRecus.keys().next().value as number);
+    }
+  }
+  if (flairEnCours === n) { flairEnCours = 0; flairerLesVoisins(); }
   if (rejeu === null || rejeu.n !== n) return;
   rejeu.paliers = paliers;
   const joue = history.find((q) => q.n === n);
@@ -5140,6 +5204,9 @@ async function rejoindre(id: string): Promise<void> {
   points = {};
   negatif = {};
   tops = {};
+  // La memoire du rejeu appartient a la partie qu'on quitte.
+  paliersRecus.clear();
+  flairEnCours = 0;
   nonTrouves = 0;
   gerant = null;
   salonPermanent = false;

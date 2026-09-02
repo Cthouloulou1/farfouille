@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap"><style>body{margin:0;background:#E8EAE9;font-family:Archivo,system-ui,sans-serif}a{color:#1E7A4D}a:hover{color:#125C39}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 Archivo,system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 Archivo,system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#F3F5F4;border:1px solid rgba(0,0,0,.10);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#1E7A4D;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 Archivo,system-ui,sans-serif;color:rgba(0,0,0,.5)}</style></helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Le mur de grilles (<a class="dv-oid" href="#1c">1c</a>) — vraies grilles, deux états de compte</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Visiteur non connecté — aucun bouton « créer »</div>
+<div class="dv-card" style="width:1280px">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:11px 24px;background:#121916;border-bottom:1px solid #23312B">
+    <a href="#2a" style="font-family:'Baloo 2',Archivo,sans-serif;font-weight:600;font-size:25px;line-height:1.1;letter-spacing:-.005em;color:#E6EDE9;text-decoration:none">{{ siteName }}</a>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:16px">
+      <a href="#2a" style="font-size:12.5px;color:#90A099;text-decoration:none">Records</a>
+      <a href="#2a" style="padding:7px 15px;font-size:12.5px;font-weight:500;color:#121916;background:#44B27A;border-radius:4px;text-decoration:none">Connexion / Inscription</a>
+    </span>
+  </div>
+
+  <div style="padding:18px 24px 20px;background:#F3F5F4">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="padding:5px 12px;border-radius:20px;background:#121916;color:#FFFFFF;font-size:11.5px">Tous</span>
+      <a href="#2a" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">15×15</a>
+      <a href="#2a" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">Infinie</a>
+      <a href="#2a" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">En attente</a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <a href="#2a" style="grid-column:span 2;grid-row:span 2;position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:366px;padding:24px;border-radius:6px;text-decoration:none;color:#E6EDE9;background-image:linear-gradient(to top,rgba(14,20,18,.97) 24%,rgba(14,20,18,.74) 52%,rgba(14,20,18,.34) 100%),url(grille-infinie-sombre.svg);background-size:auto,392px 392px;background-repeat:no-repeat,repeat;background-position:center,center;overflow:hidden">
+        <span style="position:absolute;right:16px;top:16px;display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:20px;background:rgba(14,20,18,.66);color:#44B27A;font-family:'IBM Plex Mono',monospace;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:#44B27A"></span>12 en ligne</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:#44B27A">Salon star</span>
+        <span style="margin-top:5px;font-family:'Instrument Serif',Georgia,serif;font-size:40px;line-height:1.02;color:#FFFFFF">Topping infini</span>
+        <span style="margin-top:9px;max-width:44ch;font-size:13.5px;line-height:1.5;color:#B4C2BB;text-wrap:pretty">Grille infinie, sans limite de temps, sans fin. Jusqu'où pourrons-nous aller ?</span>
+        <span style="display:flex;align-items:center;gap:16px;margin-top:20px">
+          <span style="padding:11px 30px;border-radius:4px;background:#44B27A;color:#0E1412;font-size:14.5px;font-weight:600">Jouer</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;color:#90A099">Coup 5 302 · 441 647 points</span>
+        </span>
+      </a>
+
+      <sc-for list="{{ salons }}" as="s" hint-placeholder-count="6">
+        <a href="#2a" style="display:flex;flex-direction:column;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:6px;text-decoration:none;color:#121916;overflow:hidden">
+          <span style="position:relative;display:block">
+            <sc-if value="{{ s.est15 }}" hint-placeholder-val="{{ true }}">
+              <span style="display:block;height:112px;border-bottom:1px solid #DEE4E1;background-color:#E3E8E5;background-image:url(grille-15.svg);background-size:auto 96px;background-position:center;background-repeat:no-repeat"></span>
+            </sc-if>
+            <sc-if value="{{ s.estInfini }}" hint-placeholder-val="{{ false }}">
+              <span style="display:block;height:112px;border-bottom:1px solid #DEE4E1;background-color:#E3E8E5;background-image:url(grille-infinie.svg);background-size:196px 196px;background-position:center;background-repeat:repeat"></span>
+            </sc-if>
+            <span style="position:absolute;right:7px;bottom:6px;padding:1px 5px;border-radius:3px;background:rgba(243,245,244,.86);font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56615C">{{ s.court }}</span>
+          </span>
+          <span style="display:flex;flex-direction:column;gap:6px;padding:11px 13px 12px">
+            <b style="font-size:13.5px;font-weight:500">{{ s.nom }}</b>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8B948F">{{ s.spec }}</span>
+            <span style="display:flex;align-items:center;gap:6px;margin-top:2px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#56615C">
+              <sc-if value="{{ s.enCours }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#1E7A4D"></span></sc-if>
+              <sc-if value="{{ s.enAttente }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:#B5762A"></span></sc-if>
+              <span>{{ s.qui }}</span>
+              <span style="margin-left:auto;color:#8B948F">{{ s.etat }}</span>
+            </span>
+          </span>
+        </a>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;margin-top:16px;padding-top:11px;border-top:1px solid #DEE4E1;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#A8B0AC">
+      <span style="margin-left:auto">31 joueurs en ligne</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="2b">
+<div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Connecté — « Créer un salon » apparaît</div>
+<div class="dv-card" style="width:1280px">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:11px 24px;background:#121916;border-bottom:1px solid #23312B">
+    <a href="#2b" style="font-family:'Baloo 2',Archivo,sans-serif;font-weight:600;font-size:25px;line-height:1.1;letter-spacing:-.005em;color:#E6EDE9;text-decoration:none">{{ siteName }}</a>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:16px">
+      <a href="#2b" style="font-size:12.5px;color:#90A099;text-decoration:none">Records</a>
+      <a href="#2b" style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#E6EDE9;text-decoration:none">
+        <span style="width:24px;height:24px;border-radius:50%;background:#23312B;color:#90A099;font-size:11px;font-weight:600;line-height:24px;text-align:center">M</span>Margot
+      </a>
+    </span>
+  </div>
+
+  <div style="padding:18px 24px 20px;background:#F3F5F4">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="padding:5px 12px;border-radius:20px;background:#121916;color:#FFFFFF;font-size:11.5px">Tous</span>
+      <a href="#2b" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">15×15</a>
+      <a href="#2b" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">Infinie</a>
+      <a href="#2b" style="padding:5px 12px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">En attente</a>
+      <a href="#2b" style="margin-left:auto;padding:8px 15px;font-size:12.5px;font-weight:500;color:#FFFFFF;background:#1E7A4D;border-radius:4px;text-decoration:none">Créer un salon</a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <a href="#2b" style="grid-column:span 2;grid-row:span 2;position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:366px;padding:24px;border-radius:6px;text-decoration:none;color:#E6EDE9;background-image:linear-gradient(to top,rgba(14,20,18,.97) 24%,rgba(14,20,18,.74) 52%,rgba(14,20,18,.34) 100%),url(grille-infinie-sombre.svg);background-size:auto,392px 392px;background-repeat:no-repeat,repeat;background-position:center,center;overflow:hidden">
+        <span style="position:absolute;right:16px;top:16px;display:flex;align-items:center;gap:6px;padding:4px 11px;border-radius:20px;background:rgba(14,20,18,.66);color:#44B27A;font-family:'IBM Plex Mono',monospace;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:#44B27A"></span>12 en ligne</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:#44B27A">Salon star</span>
+        <span style="margin-top:5px;font-family:'Instrument Serif',Georgia,serif;font-size:40px;line-height:1.02;color:#FFFFFF">Topping infini</span>
+        <span style="margin-top:9px;max-width:44ch;font-size:13.5px;line-height:1.5;color:#B4C2BB;text-wrap:pretty">Grille infinie, sans limite de temps, sans fin. Jusqu'où pourrons-nous aller ?</span>
+        <span style="display:flex;align-items:center;gap:16px;margin-top:20px">
+          <span style="padding:11px 30px;border-radius:4px;background:#44B27A;color:#0E1412;font-size:14.5px;font-weight:600">Jouer</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;color:#90A099">Coup 5 302 · 441 647 points</span>
+        </span>
+      </a>
+
+      <sc-for list="{{ salons }}" as="s" hint-placeholder-count="6">
+        <a href="#2b" style="display:flex;flex-direction:column;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:6px;text-decoration:none;color:#121916;overflow:hidden">
+          <span style="position:relative;display:block">
+            <sc-if value="{{ s.est15 }}" hint-placeholder-val="{{ true }}">
+              <span style="display:block;height:112px;border-bottom:1px solid #DEE4E1;background-color:#E3E8E5;background-image:url(grille-15.svg);background-size:auto 96px;background-position:center;background-repeat:no-repeat"></span>
+            </sc-if>
+            <sc-if value="{{ s.estInfini }}" hint-placeholder-val="{{ false }}">
+              <span style="display:block;height:112px;border-bottom:1px solid #DEE4E1;background-color:#E3E8E5;background-image:url(grille-infinie.svg);background-size:196px 196px;background-position:center;background-repeat:repeat"></span>
+            </sc-if>
+            <span style="position:absolute;right:7px;bottom:6px;padding:1px 5px;border-radius:3px;background:rgba(243,245,244,.86);font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56615C">{{ s.court }}</span>
+          </span>
+          <span style="display:flex;flex-direction:column;gap:6px;padding:11px 13px 12px">
+            <b style="font-size:13.5px;font-weight:500">{{ s.nom }}</b>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8B948F">{{ s.spec }}</span>
+            <span style="display:flex;align-items:center;gap:6px;margin-top:2px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#56615C">
+              <sc-if value="{{ s.enCours }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#1E7A4D"></span></sc-if>
+              <sc-if value="{{ s.enAttente }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:#B5762A"></span></sc-if>
+              <span>{{ s.qui }}</span>
+              <span style="margin-left:auto;color:#8B948F">{{ s.etat }}</span>
+            </span>
+          </span>
+        </a>
+      </sc-for>
+
+      <a href="#2b" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:180px;border:1px dashed #B6AC98;border-radius:6px;background:#ECF1EE;text-decoration:none">
+        <span style="font-size:13.5px;font-weight:500;color:#1E7A4D">Créer un salon</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8B948F">un nom, c'est tout</span>
+      </a>
+    </div>
+
+    <div style="display:flex;margin-top:16px;padding-top:11px;border-top:1px solid #DEE4E1;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#A8B0AC">
+      <span style="margin-left:auto">31 joueurs en ligne</span>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Essayez : « le pavé de la grille star plus zoomé » · « une autre police pour <a class="dv-oid" href="#2a">2a</a> » · « dessine l'écran connexion / inscription »</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Page d'accueil — trois directions</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Le comptoir — dense, tout se lit d'un coup d'œil</div>
+<div class="dv-card" style="width:1280px">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:9px 22px;background:#FFFFFF;border-bottom:1px solid #DEE4E1">
+    <a href="#1a" style="display:flex;align-items:center;gap:9px;text-decoration:none;color:#121916">
+      <span style="position:relative;width:26px;height:26px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:15px;line-height:24px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">{{ initiale }}</span>
+      <span style="font-family:'Instrument Serif',Georgia,serif;font-size:23px;line-height:1">{{ siteName }}</span>
+    </a>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <a href="#1a" style="padding:5px 11px;font-size:12px;color:#56615C;text-decoration:none">Records</a>
+      <a href="#1a" style="padding:5px 11px;font-size:12px;color:#56615C;text-decoration:none">Se connecter</a>
+      <a href="#1a" style="padding:5px 12px;font-size:12px;color:#1E7A4D;text-decoration:none;border:1px solid #1E7A4D;border-radius:4px">Créer un compte</a>
+    </span>
+  </div>
+
+  <div style="padding:22px 22px 26px">
+    <div style="display:grid;grid-template-columns:1fr 336px;gap:26px;align-items:start;padding:20px 22px;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:6px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+          <span style="width:7px;height:7px;border-radius:50%;background:#1E7A4D"></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#1E7A4D">Grille mondiale · permanente</span>
+        </div>
+        <div style="font-family:'Instrument Serif',Georgia,serif;font-size:40px;line-height:1.05;letter-spacing:-.01em">Une grille sans bord,<br><em style="color:#1E7A4D">sans fin</em>, pour tout le monde.</div>
+        <p style="margin:11px 0 0;max-width:52ch;font-size:13.5px;line-height:1.55;color:#56615C;text-wrap:pretty">Le même tirage pour tous. Le premier qui trouve le top le pose pour tous, et on enchaîne. On ne gagne pas la partie : on construit la grille.</p>
+
+        <div style="display:flex;align-items:flex-end;gap:7px;margin:18px 0 0">
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">A<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">C<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">3</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">E<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">I<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">R<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07)">Z<i style="position:absolute;right:4px;bottom:2px;font-style:normal;font-size:10px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">10</i></span>
+          <span style="position:relative;width:48px;height:48px;border:1px solid #5E7F9B;border-radius:2px;background:#E4EDF5;color:#5E7F9B;font-weight:700;font-size:26px;line-height:46px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.05)">?</span>
+          <span style="margin-left:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#8B948F">tirage<br>du coup</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;margin-top:20px">
+          <a href="#1a" style="padding:11px 20px;font-size:14px;font-weight:500;color:#FFFFFF;background:#1E7A4D;border-radius:4px;text-decoration:none">Entrer dans la grille</a>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#8B948F">12 joueurs cherchent en ce moment</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="position:relative;height:190px;border:1px solid #D2D9D5;border-radius:4px;background-image:repeating-linear-gradient(#D2D9D5 0 1px,transparent 1px 19px),repeating-linear-gradient(90deg,#D2D9D5 0 1px,transparent 1px 19px);background-color:#E3E8E5;overflow:hidden">
+          <span style="position:absolute;left:39px;top:39px;width:18px;height:18px;background:#C2493D;opacity:.75"></span>
+          <span style="position:absolute;left:172px;top:20px;width:18px;height:18px;background:#3B7DA4;opacity:.7"></span>
+          <span style="position:absolute;left:96px;top:134px;width:18px;height:18px;background:#E08D7E;opacity:.75"></span>
+          <span style="position:absolute;left:248px;top:96px;width:18px;height:18px;background:#90BCD4;opacity:.8"></span>
+          <span style="position:absolute;left:210px;top:153px;width:18px;height:18px;background:#C2493D;opacity:.6"></span>
+          <span style="position:absolute;left:57px;top:57px;display:flex">
+            <b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">R</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">U</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">I</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">L</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">E</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">R</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:11px;font-weight:700;line-height:17px;text-align:center">A</b>
+          </span>
+          <span style="position:absolute;left:171px;top:76px;display:flex;flex-direction:column">
+            <b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">V</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">O</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">I</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">N</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">E</b><b style="box-sizing:border-box;width:19px;height:19px;border:1px solid #1E7A4D;background:#DBEFE4;color:#1E7A4D;font-size:11px;font-weight:700;line-height:17px;text-align:center">S</b>
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 0;margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums">
+          <span style="color:#8B948F">coup</span><b style="text-align:right;font-weight:500">5 302</b>
+          <span style="color:#8B948F">points posés</span><b style="text-align:right;font-weight:500">441 647</b>
+          <span style="color:#8B948F">emprise</span><b style="text-align:right;font-weight:500">113 × 135</b>
+          <span style="color:#8B948F">dernier top</span><b style="text-align:right;font-weight:500;color:#1E7A4D">ENDEVIEZ 212</b>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:baseline;gap:10px;margin:26px 0 8px">
+      <h2 style="margin:0;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#8B948F">Salons ouverts</h2>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">{{ nSalons }}</span>
+      <a href="#1a" style="margin-left:auto;font-size:11.5px;color:#56615C;text-decoration:none">15×15</a>
+      <a href="#1a" style="font-size:11.5px;color:#56615C;text-decoration:none">Infinie</a>
+      <a href="#1a" style="font-size:11.5px;color:#56615C;text-decoration:none">Blitz</a>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <sc-for list="{{ salons }}" as="s" hint-placeholder-count="6">
+        <a href="#1a" style="display:grid;grid-template-columns:44px minmax(0,1fr) 168px 92px 78px 14px;gap:0 14px;align-items:center;padding:9px 14px;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:4px;text-decoration:none;color:#121916">
+          <span style="grid-row:1/3;font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;color:#8B948F;border:1px solid #DEE4E1;border-radius:3px;padding:5px 0">{{ s.court }}</span>
+          <span style="font-size:13.5px;font-weight:500">{{ s.nom }}</span>
+          <span style="grid-column:2;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">{{ s.variante }}</span>
+          <sc-if value="{{ previews }}" hint-placeholder-val="{{ true }}">
+            <span style="grid-column:3;grid-row:1/3;display:flex;gap:2px">
+              <sc-for list="{{ s.tirage }}" as="c" hint-placeholder-count="7">
+                <b style="width:21px;height:21px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-size:11.5px;font-weight:700;line-height:19px;text-align:center;box-shadow:inset 0 -1px 0 rgba(0,0,0,.07)">{{ c }}</b>
+              </sc-for>
+            </span>
+          </sc-if>
+          <span style="grid-column:4;grid-row:1/3;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#56615C">{{ s.qui }}</span>
+          <span style="grid-column:5;grid-row:1/3;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;color:#8B948F">{{ s.etat }}</span>
+          <span style="grid-column:6;grid-row:1/3;text-align:right;color:#8B948F;font-size:13px">→</span>
+        </a>
+      </sc-for>
+      <a href="#1a" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:1px dashed #B6AC98;border-radius:4px;text-decoration:none;color:#1E7A4D;font-size:13px;font-weight:500">+ Créer un salon<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;color:#8B948F">15×15, 7 sur 7 — tout se règle ensuite</span></a>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Le plateau — le nom posé en caramels, la grille comme décor</div>
+<div class="dv-card" style="width:1280px">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:9px 26px;background:#FFFFFF;border-bottom:1px solid #DEE4E1">
+    <a href="#1b" style="font-family:'Instrument Serif',Georgia,serif;font-size:23px;line-height:1;color:#121916;text-decoration:none">{{ siteName }}</a>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <a href="#1b" style="font-size:12px;color:#56615C;text-decoration:none">Records</a>
+      <a href="#1b" style="font-size:12px;color:#56615C;text-decoration:none">Se connecter</a>
+      <a href="#1b" style="padding:6px 13px;font-size:12px;font-weight:500;color:#FFFFFF;background:#1E7A4D;border-radius:4px;text-decoration:none">Créer un compte</a>
+    </span>
+  </div>
+
+  <div style="position:relative;padding:44px 26px 78px;background-image:repeating-linear-gradient(#D9DFDB 0 1px,transparent 1px 34px),repeating-linear-gradient(90deg,#D9DFDB 0 1px,transparent 1px 34px);background-color:#E3E8E5;overflow:hidden">
+    <span style="position:absolute;left:102px;top:68px;width:33px;height:33px;background:#C2493D;opacity:.22"></span>
+    <span style="position:absolute;left:1020px;top:34px;width:33px;height:33px;background:#3B7DA4;opacity:.22"></span>
+    <span style="position:absolute;left:1156px;top:170px;width:33px;height:33px;background:#E08D7E;opacity:.25"></span>
+    <span style="position:absolute;left:34px;top:204px;width:33px;height:33px;background:#90BCD4;opacity:.3"></span>
+
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:18px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#56615C">Topping collectif · duplicate · grille infinie</span>
+      <div style="display:flex;gap:6px">
+        <sc-for list="{{ nameLetters }}" as="c" hint-placeholder-count="10">
+          <span style="width:58px;height:58px;border:1px solid #B6AC98;border-radius:3px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:31px;line-height:55px;text-align:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.07),0 2px 6px rgba(18,25,22,.10)">{{ c }}</span>
+        </sc-for>
+      </div>
+      <p style="margin:0;max-width:46ch;text-align:center;font-family:'Instrument Serif',Georgia,serif;font-size:22px;line-height:1.35;color:#121916">Le premier qui trouve le top le pose pour tout le monde. <em style="color:#1E7A4D">Ce n'est pas une partie qu'on gagne, c'est une grille qu'on construit.</em></p>
+    </div>
+  </div>
+
+  <div style="padding:0 26px 30px;margin-top:-52px">
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:0;align-items:stretch;background:#FFFFFF;border:1px solid #1E7A4D;border-radius:6px;box-shadow:0 6px 24px rgba(18,25,22,.13);overflow:hidden">
+      <div style="padding:22px 24px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
+          <span style="padding:2px 8px;border-radius:3px;background:#DBEFE4;color:#1E7A4D;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase">Le salon star</span>
+          <span style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F"><span style="width:7px;height:7px;border-radius:50%;background:#1E7A4D"></span>12 en ligne</span>
+        </div>
+        <div style="font-family:'Instrument Serif',Georgia,serif;font-size:32px;line-height:1.1">La grille mondiale</div>
+        <p style="margin:8px 0 0;max-width:58ch;font-size:13px;line-height:1.55;color:#56615C;text-wrap:pretty">Infinie dans les quatre directions, sans chrono, ouverte en permanence. Un coup dure jusqu'à ce que quelqu'un trouve le top — trois secondes ou trois jours.</p>
+        <div style="display:flex;align-items:flex-end;gap:22px;margin-top:18px">
+          <div style="display:flex;gap:5px">
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">A<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">C<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">3</i></span>
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">E<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">I<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">R<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">1</i></span>
+            <span style="position:relative;width:40px;height:40px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-weight:700;font-size:22px;line-height:38px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">Z<i style="position:absolute;right:3px;bottom:1px;font-style:normal;font-size:9px;font-weight:500;opacity:.6;font-family:'IBM Plex Mono',monospace">10</i></span>
+            <span style="width:40px;height:40px;border:1px solid #5E7F9B;border-radius:2px;background:#E4EDF5;color:#5E7F9B;font-weight:700;font-size:22px;line-height:38px;text-align:center">?</span>
+          </div>
+          <div style="display:flex;gap:20px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;color:#8B948F">
+            <span>coup<br><b style="font-size:15px;font-weight:500;color:#121916">5 302</b></span>
+            <span>points<br><b style="font-size:15px;font-weight:500;color:#121916">441 647</b></span>
+            <span>dernier top<br><b style="font-size:15px;font-weight:500;color:#1E7A4D">ENDEVIEZ</b></span>
+          </div>
+        </div>
+      </div>
+      <a href="#1b" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#1E7A4D;color:#FFFFFF;text-decoration:none;text-align:center">
+        <span style="font-size:16px;font-weight:600">Entrer dans la grille</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.8">aucune partie à attendre</span>
+      </a>
+    </div>
+
+    <div style="display:flex;align-items:baseline;gap:10px;margin:30px 0 10px">
+      <h2 style="margin:0;font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#8B948F">Les autres salons</h2>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">{{ nSalons }}</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <sc-for list="{{ salons }}" as="s" hint-placeholder-count="6">
+        <a href="#1b" style="display:flex;flex-direction:column;gap:11px;padding:14px 15px 13px;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:5px;text-decoration:none;color:#121916">
+          <span style="display:flex;align-items:baseline;gap:8px">
+            <b style="font-size:14px;font-weight:500">{{ s.nom }}</b>
+            <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">{{ s.court }}</span>
+          </span>
+          <sc-if value="{{ previews }}" hint-placeholder-val="{{ true }}">
+            <span style="display:flex;gap:3px">
+              <sc-for list="{{ s.tirage }}" as="c" hint-placeholder-count="7">
+                <b style="flex:1;height:30px;border:1px solid #B6AC98;border-radius:2px;background:#FCFAF5;color:#1C221F;font-size:15px;font-weight:700;line-height:28px;text-align:center;box-shadow:inset 0 -2px 0 rgba(0,0,0,.07)">{{ c }}</b>
+              </sc-for>
+            </span>
+          </sc-if>
+          <span style="display:flex;align-items:baseline;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">
+            <span>{{ s.variante }}</span>
+            <span style="margin-left:auto;color:#56615C">{{ s.qui }}</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:7px;padding-top:9px;border-top:1px solid #ECF1EE;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F">
+            <sc-if value="{{ s.enCours }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#1E7A4D"></span></sc-if>
+            <sc-if value="{{ s.enAttente }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:#B5762A"></span></sc-if>
+            <span>{{ s.etat }}</span>
+            <span style="margin-left:auto;color:#1E7A4D">Rejoindre →</span>
+          </span>
+        </a>
+      </sc-for>
+      <a href="#1b" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;border:1px dashed #B6AC98;border-radius:5px;text-decoration:none;background:#ECF1EE">
+        <span style="font-family:'Instrument Serif',Georgia,serif;font-size:26px;color:#1E7A4D">Créer un salon</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8B948F;text-align:center;max-width:26ch">Un nom suffit. 15×15, 7 sur 7 — tout se règle ensuite, dedans.</span>
+      </a>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Le mur de grilles — chaque salon montre son plateau</div>
+<div class="dv-card" style="width:1280px">
+
+  <div style="display:flex;align-items:center;gap:16px;padding:9px 24px;background:#121916;border-bottom:1px solid #23312B">
+    <a href="#1c" style="display:flex;align-items:center;text-decoration:none;color:#E6EDE9">
+      <span style="font-family:'Instrument Serif',Georgia,serif;font-size:21px;line-height:1">{{ siteName }}</span>
+    </a>
+    <span style="display:flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid #23312B;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#90A099"><span style="width:6px;height:6px;border-radius:50%;background:#44B27A"></span>31 joueurs en ligne</span>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <a href="#1c" style="font-size:12px;color:#90A099;text-decoration:none">Records</a>
+      <a href="#1c" style="font-size:12px;color:#E6EDE9;text-decoration:none">Se connecter</a>
+      <a href="#1c" style="padding:6px 13px;font-size:12px;font-weight:500;color:#121916;background:#44B27A;border-radius:4px;text-decoration:none">Créer un compte</a>
+    </span>
+  </div>
+
+  <div style="padding:18px 24px 26px;background:#F3F5F4">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="padding:5px 11px;border-radius:20px;background:#121916;color:#FFFFFF;font-size:11.5px">Tous</span>
+      <a href="#1c" style="padding:5px 11px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">15×15</a>
+      <a href="#1c" style="padding:5px 11px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">Infinie</a>
+      <a href="#1c" style="padding:5px 11px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">Blitz</a>
+      <a href="#1c" style="padding:5px 11px;border-radius:20px;background:#FFFFFF;border:1px solid #DEE4E1;color:#56615C;font-size:11.5px;text-decoration:none">En attente</a>
+      <a href="#1c" style="margin-left:auto;padding:7px 14px;font-size:12.5px;font-weight:500;color:#1E7A4D;background:#FFFFFF;border:1px solid #1E7A4D;border-radius:4px;text-decoration:none">+ Créer un salon</a>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <a href="#1c" style="grid-column:span 2;grid-row:span 2;position:relative;display:flex;flex-direction:column;justify-content:flex-end;padding:20px;border-radius:6px;text-decoration:none;color:#E6EDE9;background-image:repeating-linear-gradient(rgba(255,255,255,.06) 0 1px,transparent 1px 26px),repeating-linear-gradient(90deg,rgba(255,255,255,.06) 0 1px,transparent 1px 26px);background-color:#12211A;overflow:hidden">
+        <span style="position:absolute;left:26px;top:26px;width:25px;height:25px;background:#99392F;opacity:.55"></span>
+        <span style="position:absolute;left:182px;top:78px;width:25px;height:25px;background:#2E5D7C;opacity:.5"></span>
+        <span style="position:absolute;left:390px;top:52px;width:25px;height:25px;background:#B2665A;opacity:.45"></span>
+        <span style="position:absolute;left:312px;top:156px;width:25px;height:25px;background:#4C84A2;opacity:.4"></span>
+        <span style="position:absolute;left:104px;top:26px;display:flex">
+          <b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">E</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">N</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">D</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">E</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">V</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">I</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">E</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #6A6455;background:#EFEDE4;color:#1C221F;font-size:14px;font-weight:700;line-height:24px;text-align:center">Z</b>
+        </span>
+        <span style="position:absolute;left:286px;top:52px;display:flex;flex-direction:column">
+          <b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #44B27A;background:#1E7A4D;color:#EFEDE4;font-size:14px;font-weight:700;line-height:24px;text-align:center">O</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #44B27A;background:#1E7A4D;color:#EFEDE4;font-size:14px;font-weight:700;line-height:24px;text-align:center">N</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #44B27A;background:#1E7A4D;color:#EFEDE4;font-size:14px;font-weight:700;line-height:24px;text-align:center">E</b><b style="box-sizing:border-box;width:26px;height:26px;border:1px solid #44B27A;background:#1E7A4D;color:#EFEDE4;font-size:14px;font-weight:700;line-height:24px;text-align:center">R</b>
+        </span>
+        <span style="position:absolute;right:18px;top:18px;display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:rgba(68,178,122,.16);color:#44B27A;font-family:'IBM Plex Mono',monospace;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:#44B27A"></span>12 en ligne · permanent</span>
+        <span style="position:relative;margin-top:150px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#44B27A">Le salon star</span>
+          <span style="display:block;margin-top:4px;font-family:'Instrument Serif',Georgia,serif;font-size:36px;line-height:1.05;color:#FFFFFF">La grille mondiale</span>
+          <span style="display:block;margin-top:6px;max-width:44ch;font-size:13px;line-height:1.5;color:#90A099">Sans bord, sans chrono, sans fin. Le top trouvé par un joueur se pose pour tout le monde.</span>
+          <span style="display:flex;align-items:center;gap:14px;margin-top:16px">
+            <span style="padding:10px 18px;border-radius:4px;background:#44B27A;color:#0E1412;font-size:14px;font-weight:600">Entrer dans la grille</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#90A099">coup 5 302 · 441 647 pts · 113 × 135</span>
+          </span>
+        </span>
+      </a>
+
+      <sc-for list="{{ salons }}" as="s" hint-placeholder-count="6">
+        <a href="#1c" style="display:flex;flex-direction:column;background:#FFFFFF;border:1px solid #DEE4E1;border-radius:6px;text-decoration:none;color:#121916;overflow:hidden">
+          <sc-if value="{{ previews }}" hint-placeholder-val="{{ true }}">
+            <span style="position:relative;display:block;height:104px;background-image:repeating-linear-gradient(#D2D9D5 0 1px,transparent 1px 15px),repeating-linear-gradient(90deg,#D2D9D5 0 1px,transparent 1px 15px);background-color:#E3E8E5;border-bottom:1px solid #DEE4E1;overflow:hidden">
+              <span style="position:absolute;left:15px;top:30px;width:14px;height:14px;background:#C2493D;opacity:.6"></span>
+              <span style="position:absolute;left:180px;top:15px;width:14px;height:14px;background:#3B7DA4;opacity:.55"></span>
+              <span style="position:absolute;left:255px;bottom:15px;width:14px;height:14px;background:#90BCD4;opacity:.6"></span>
+              <span style="position:absolute;left:45px;top:45px;display:flex">
+                <sc-for list="{{ s.mot }}" as="c" hint-placeholder-count="6">
+                  <b style="box-sizing:border-box;width:15px;height:15px;border:1px solid #B6AC98;background:#FCFAF5;color:#1C221F;font-size:9px;font-weight:700;line-height:13px;text-align:center">{{ c }}</b>
+                </sc-for>
+              </span>
+              <span style="position:absolute;right:8px;bottom:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#56615C">{{ s.court }}</span>
+            </span>
+          </sc-if>
+          <span style="display:flex;flex-direction:column;gap:6px;padding:11px 13px 12px">
+            <b style="font-size:13.5px;font-weight:500">{{ s.nom }}</b>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8B948F">{{ s.variante }}</span>
+            <span style="display:flex;align-items:center;gap:6px;margin-top:2px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#56615C">
+              <sc-if value="{{ s.enCours }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#1E7A4D"></span></sc-if>
+              <sc-if value="{{ s.enAttente }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:#B5762A"></span></sc-if>
+              <span>{{ s.qui }}</span>
+              <span style="margin-left:auto;color:#8B948F">{{ s.etat }}</span>
+            </span>
+          </span>
+        </a>
+      </sc-for>
+
+      <a href="#1c" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:180px;border:1px dashed #B6AC98;border-radius:6px;background:#ECF1EE;text-decoration:none">
+        <span style="width:34px;height:34px;border:1px solid #1E7A4D;border-radius:3px;color:#1E7A4D;font-size:20px;font-weight:500;line-height:32px;text-align:center">+</span>
+        <span style="font-size:13px;font-weight:500;color:#1E7A4D">Créer un salon</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8B948F">un nom, c'est tout</span>
+      </a>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Essayez : « garde <a class="dv-oid" href="#1a">1a</a> mais avec le hero de <a class="dv-oid" href="#1c">1c</a> » · « <a class="dv-oid" href="#1b">1b</a> en version sombre » · « montre l'écran de connexion »</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;siteName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Farfouille&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Contenu&quot;},&quot;salonCount&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:6,&quot;min&quot;:1,&quot;max&quot;:8,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Contenu&quot;},&quot;showPreviews&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Contenu&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const mk = (nom, court, variante, qui, etat, mot, tirage) => ({
+      nom, court, variante, qui, etat, enCours: etat !== 'en attente', enAttente: etat === 'en attente',
+      mot: mot.split(''), tirage: tirage.split(''),
+    });
+    const all = [
+      mk('Le dimanche soir', '15×15', '7 sur 7 · sac de 102 · blitz 60 s', '4 joueurs', 'coup 12', 'ARBOUSE', 'AEILRST'),
+      mk('Battle 30 secondes', '∞', '7 sur 7 · probabilités · 30 s', '9 joueurs', 'coup 143', 'SOURCE', 'BBNOORS'),
+      mk('Duplicate du club', '15×15', '7 sur 8 · sac de 102 · 2 min', '6 joueurs', 'coup 8', 'QUINTE', 'ACEIORZ'),
+      mk('Grille vérifiée', '∞', '7 sur 7 · comptes vérifiés', 'permanent', 'coup 1 908', 'ENDEVIEZ', 'AEIMNRT'),
+      mk('Partie joker', '15×15', 'joker · sac sans fin · sans chrono', '2 joueurs', 'coup 3', 'TOPAZE', 'ADEFMSZ'),
+      mk('Huit sur huit', '∞', '8 sur 8 · probabilités · blitz 60 s', '3 joueurs', 'coup 27', 'SEXTUPLE', 'EELPSTU'),
+      mk('Essai à quinze', '15×15', '15 sur 15 · sans chrono', 'Camille', 'en attente', 'AZOTE', 'ABEILOR'),
+      mk('Les lève-tôt', '15×15', '7 sur 7 · sac de 102 · 2 min', '5 joueurs', 'coup 61', 'MATINAL', 'AILMNOT'),
+    ];
+    // tour 2 : ni pioche ni "blitz" dans les specs, et le visuel suit la grille
+    const specs = {
+      'Le dimanche soir': '7 sur 7 · 60 s', 'Battle 30 secondes': '7 sur 7 · 30 s',
+      'Duplicate du club': '7 sur 8 · 2 min', 'Grille vérifiée': '7 sur 7 · comptes vérifiés',
+      'Partie joker': 'joker · sans chrono', 'Huit sur huit': '8 sur 8 · 60 s',
+      'Essai à quinze': '15 sur 15 · sans chrono', 'Les lève-tôt': '7 sur 7 · 2 min',
+    };
+    all.forEach(s => { s.spec = specs[s.nom]; s.est15 = s.court === '15×15'; s.estInfini = !s.est15; });
+    const nom = (this.props.siteName ?? 'Farfouille').trim() || 'Farfouille';
+    const n = Math.max(1, Math.min(all.length, this.props.salonCount ?? 6));
+    return {
+      siteName: nom,
+      initiale: nom.slice(0, 1).toUpperCase(),
+      nameLetters: nom.toUpperCase().slice(0, 12).split(''),
+      previews: this.props.showPreviews ?? true,
+      salons: all.slice(0, n),
+      nSalons: String(n),
+    };
+  }
+}
+</script>
+</body>
+</html>
