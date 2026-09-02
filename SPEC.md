@@ -3079,6 +3079,20 @@ coût croît avec le nombre de coups joués : une partie qui s'arrête à cent c
 ne l'atteint jamais, même à quinze lettres. Le seuil est à 500 coups ou deux
 heures.
 
+### La taille du texte
+
+Deux boutons `A−` / `A+`, dans la feuille de route et dans le panneau de droite,
+chacun avec son propre facteur — on ne lit pas ces deux endroits de la même
+façon. Le panneau se suit du coin de l'œil pendant qu'on cherche ; la feuille se
+lit après coup, penché dessus.
+
+La difficulté est ailleurs que dans la police. La feuille de route est
+**virtualisée** : seules les lignes visibles existent, posées à la main à leur
+hauteur. Grossir le texte sans grossir ce pas les ferait se chevaucher, et
+grossir la police sans élargir les colonnes couperait les mots. Tout suit donc un
+seul facteur — hauteur de ligne, largeurs de colonnes, police — et rien ne se
+replie sur deux lignes.
+
 ### Le reste
 
 Le classement **se replie à la main**, comme les autres sections : vingt joueurs
@@ -3086,4 +3100,26 @@ ne doivent pas chasser le chat de l'écran. Le panneau de droite passe de 360 à
 430 pixels, polices comprises. Le tableau des joueurs, en rejeu, se range **du
 meilleur au moins bon** — c'est un tableau de résultats. « Revoir la partie » se
 lit au milieu de sa section. Et une partie close le dit là où l'on regarde : à la
-place des lettres, **Partie terminée** puis **Feuille de route**, qui l'ouvre.
+place des lettres, un rectangle qui s'allume — **Partie terminée**, puis
+**Feuille de route (Ctrl+R)**, qui l'ouvre. Le raccourci s'y lit pour qu'on
+l'apprenne.
+
+Le maître des réglages y trouve aussi un bouton **Rejouer la même partie** :
+rouvrir les réglages pour tout retrouver à l'identique et ne rien changer était
+un détour, alors que neuf fois sur dix une table qui vient de finir veut
+recommencer telle quelle.
+
+Trois bogues de cette série, tous de la même famille — un état lu au mauvais
+moment :
+
+- **Ctrl+A faisait sauter le chevalet.** Le décalage qui centre la rangée sur la
+  grille se recalculait à partir de sa position *lue à l'écran*, laquelle
+  comprenait déjà le décalage posé : le calcul trouvait la rangée bien placée,
+  remettait zéro, et elle sautait. Un aller-retour à chaque répétition.
+- **Ctrl+R rechargeait la page en mode rejeu.** Le rejeu prenait la main sur les
+  flèches et rendait tout le reste au navigateur. Les raccourcis du jeu passent
+  désormais avant lui.
+- **« Revoir la partie » s'affichait pendant la partie.** Centrer le bouton avec
+  un sélecteur d'identifiant l'emportait sur `[hidden]`, qui n'est qu'un
+  sélecteur d'attribut. Le cas caché se redit maintenant au même niveau de
+  précision.

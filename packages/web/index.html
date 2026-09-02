@@ -86,7 +86,7 @@ button {
 button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity: .45; cursor: default; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-h2 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); font-weight: 500; }
+h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); font-weight: 500; }
 .none { color: var(--ink-faint); font-size: 12.5px; }
 
 /* LE BANDEAU DU HAUT NE PORTE PLUS QUE L'IDENTITE. Les deux chronos sont
@@ -194,7 +194,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .like:disabled { opacity: .35; cursor: default; }
 .like .n { font-variant-numeric: tabular-nums; }
 .prow .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
+.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: calc(12.5px * var(--z, 1)); white-space: nowrap; }
 /* Les « j'aime » se lisent contre le pseudo. A l'autre bout de la ligne, ils
    se confondaient avec le nombre de points. */
 .prow .coeurs { margin-left: 8px; color: var(--accent); font-size: 11px; font-weight: 400; }
@@ -212,7 +212,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .banner[hidden] { display: none; }
 .banner button { padding: 3px 9px; font-size: 11.5px; background: var(--panel); }
 
-.side { flex: none; width: 430px; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.side { flex: none; width: 572px; --z: 1; border-left: 1px solid var(--rule); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
 .panel { flex: none; overflow-y: auto; max-height: 62%; }
 /* LES SEPARATIONS DU PANNEAU S'ATTRAPENT. Chacun ne suit pas la partie de la
    meme facon : l'un veut voir tous les coups joues, l'autre le chat, un
@@ -238,19 +238,25 @@ body.redimensionne { cursor: row-resize; user-select: none; }
 .head h2 { flex: 1; }
 .icon { padding: 3px 6px; line-height: 1; color: var(--ink-faint); background: transparent; border-color: transparent; font-family: "IBM Plex Mono", monospace; }
 .icon:hover { color: var(--accent); border-color: var(--rule); }
+/* A- et A+ : deux boutons pour grossir le texte. Petits, groupes, discrets --
+   on les cherche une fois puis on les oublie. */
+.zoom { flex: none; display: flex; gap: 3px; }
+.zoom button { padding: 2px 6px; min-width: 26px; font-family: Archivo, system-ui, sans-serif; font-size: 11.5px; line-height: 1.35; color: var(--ink-faint); background: var(--ground); border: 1px solid var(--rule); border-radius: 3px; }
+.zoom button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.zoom button:disabled { opacity: .35; cursor: default; }
 .icon[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
 
-.word { font-family: "IBM Plex Mono", monospace; font-size: 17.5px; font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
-.word .pts { margin-left: auto; font-size: 18.5px; color: var(--accent); font-weight: 500; }
-.word.none { color: var(--ink-faint); font-size: 14px; letter-spacing: 0; }
+.word { font-family: "IBM Plex Mono", monospace; font-size: calc(17.5px * var(--z, 1)); font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
+.word .pts { margin-left: auto; font-size: calc(18.5px * var(--z, 1)); color: var(--accent); font-weight: 500; }
+.word.none { color: var(--ink-faint); font-size: calc(14px * var(--z, 1)); letter-spacing: 0; }
 /* Un top que personne n'a trouve : le mot reste lisible -- c'est lui qu'on veut
    voir -- mais ses points passent au rouge, et un jeton le dit en toutes lettres. */
 .word .rate { padding: 1px 6px; border-radius: 3px; background: var(--warn-bg); color: var(--warn); font-family: Archivo, system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
 .word.rate .pts { color: var(--warn); }
 button.word { cursor: pointer; }
 button.word:hover { color: var(--accent); border-color: transparent; }
-.sub { font-size: 12.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
-.bad { margin-top: 5px; font-size: 12.5px; color: var(--warn); font-family: "IBM Plex Mono", monospace; }
+.sub { font-size: calc(12.5px * var(--z, 1)); color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
+.bad { margin-top: 5px; font-size: calc(12.5px * var(--z, 1)); color: var(--warn); font-family: "IBM Plex Mono", monospace; }
 .bad[hidden] { display: none; }
 
 /* VINGT JOUEURS NE DOIVENT PAS CHASSER LE RESTE DE L'ECRAN. Le classement se
@@ -261,7 +267,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    classement, juste au-dessus de la ligne qui le ferme. */
 .poignee.dans-bloc { height: 9px; margin: 4px -15px -12px; }
 .poignee.dans-bloc::after { top: 4px; }
-.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(13px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
 .prow:hover { background: var(--hover); border-color: transparent; color: var(--ink); }
 .prow.me { color: var(--accent); font-weight: 500; }
 .prow.perdu { color: var(--ink-faint); cursor: default; font-style: italic; }
@@ -273,15 +279,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    coups le numero debordait sur le mot, et la ligne se repliait en deux. */
 .pmove > * { overflow: hidden; text-overflow: ellipsis; }
 /* Le chevalet d'une partie close : deux lignes a la place des lettres. */
-.chevalet-fin { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1.25; cursor: pointer; }
-.chevalet-fin b { font-size: 15px; font-weight: 500; color: var(--ink-soft); letter-spacing: .02em; }
-.chevalet-fin span { font-size: 12.5px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.chevalet-fin:hover span { color: var(--accent); }
+/* LA FIN DE PARTIE EST UNE PORTE, PAS UN PANNEAU. Deux lignes posees a la place
+   des lettres n'invitaient a rien : c'est un rectangle qui s'allume, et qui
+   ouvre la feuille de route. Le raccourci s'y lit, pour qu'on l'apprenne. */
+.chevalet-fin { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 100%; padding: 6px 26px; line-height: 1.2; background: transparent; border: 1px solid var(--rule); border-radius: 5px; cursor: pointer; transition: background .12s, border-color .12s; }
+.chevalet-fin:hover { background: var(--accent-bg); border-color: var(--accent); }
+.chevalet-fin b { font-size: 21px; font-weight: 500; color: var(--ink-soft); letter-spacing: .02em; }
+.chevalet-fin span { font-size: 16px; color: var(--accent); }
+.chevalet-fin i { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: .78em; color: var(--ink-faint); }
 /* « Revoir la partie » se lit au milieu de sa section, pas contre son bord. */
-#rejeu-wrap { display: flex; justify-content: center; }
+/* UN SELECTEUR D'IDENTIFIANT L'EMPORTE SUR `[hidden]`. Poser `display: flex`
+   ici rendait la section visible EN PERMANENCE, y compris pendant la partie :
+   « Revoir la partie » s'affichait sur une partie en cours. Le cas cache se
+   redit donc au meme niveau de precision. */
+#rejeu-wrap, #rejouer-wrap { display: flex; justify-content: center; }
+#rejeu-wrap[hidden], #rejouer-wrap[hidden] { display: none; }
+#rejouer { color: var(--accent); border-color: var(--accent); }
 /* Cinq colonnes, largeurs fixes sauf le mot : numero, mot, score, temps, coeur.
    Le temps a de quoi tenir sur une ligne ("12 min 05" au plus large). */
-.pmove { white-space: nowrap; display: grid; grid-template-columns: var(--w-pn, 24px) minmax(0, 1fr) 62px 26px 54px auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+.pmove { white-space: nowrap; display: grid; grid-template-columns: var(--w-pn, 24px) minmax(0, 1fr) calc(62px * var(--z, 1)) 26px calc(54px * var(--z, 1)) auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(11.5px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .pmove:hover { background: var(--hover); border-color: transparent; color: var(--ink-soft); }
 .pmove .n { color: var(--ink-faint); }
 .pmove .w { color: var(--ink); letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
@@ -349,7 +365,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap > div.large { width: min(1120px, 96vw); max-height: 78vh; font-size: 16.5px; }
 /* SOUS LE RELIQUAT, PAS PLUS HAUT -- la valeur exacte est MESUREE a l'ouverture,
    voir `ouvrirReglages` ; celle-ci n'est qu'un point de depart raisonnable. */
-.roadmap.enHaut { align-items: flex-start; padding-top: 200px; }
+.roadmap.enHaut { align-items: flex-start; padding-top: 260px; }
 .roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
@@ -362,7 +378,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    Windows, SF Mono sur Mac : celle que le lecteur voit tous les jours dans ses
    tableaux, et qu'il n'a pas a telecharger pour ouvrir la feuille. */
 .rm-tete-ligne { flex: none; display: flex; align-items: center; gap: 10px; padding: 7px 18px 8px; border-bottom: 1px solid var(--rule); }
-.rm-tete { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-tete { flex: 1; min-width: 0; font-family: var(--mono); font-size: calc(11.5px * var(--zr, 1)); font-variant-numeric: tabular-nums; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rm-vide { padding: 16px 18px; font-size: 12px; color: var(--ink-faint); }
 .roadmap header #rm-tri { flex: none; padding: 5px 7px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink-soft); }
 .rm-tete b { color: var(--ink-soft); font-weight: 500; }
@@ -372,7 +388,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    suivante, et la lecture du tableau se cassait la ou la grille est la plus
    interessante. Aucune cellule ne se replie, la ligne ne depasse pas sa
    hauteur, et ce qui ne tient pas se termine en points de suspension. */
-.rmrow { position: absolute; left: 0; right: 0; height: 26px; overflow: hidden; display: grid; grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px minmax(0, 1fr) 56px 58px auto; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 0 18px; background: transparent; border: 0; border-radius: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+/* LE TABLEAU GROSSIT D'UN BLOC. Agrandir la police sans agrandir les colonnes
+   couperait les mots ; les elargir sans la police laisserait des trous. Tout
+   suit donc un seul facteur, `--zr`, que les boutons A- et A+ commandent --
+   hauteur de ligne comprise, sans quoi les lignes se chevaucheraient. */
+.rmrow { position: absolute; left: 0; right: 0; height: calc(26px * var(--zr, 1)); overflow: hidden; display: grid; grid-template-columns: var(--w-rn, 38px) calc(112px * var(--zr, 1)) 22px 24px calc(116px * var(--zr, 1)) calc(104px * var(--zr, 1)) calc(42px * var(--zr, 1)) minmax(0, 1fr) calc(56px * var(--zr, 1)) calc(58px * var(--zr, 1)) auto; gap: 8px; align-items: center; width: 100%; text-align: left; padding: 0 18px; background: transparent; border: 0; border-radius: 0; font-family: var(--mono); font-size: calc(11.5px * var(--zr, 1)); font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .rmrow > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* En duplicate, le temps ne dit rien -- le coup dure toujours le chrono
    entier -- et deux autres colonnes le remplacent : l'ecart au top du lecteur,
@@ -380,7 +400,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* En duplicate, trois colonnes de plus : LE MOT QUE VOUS AVEZ JOUE, sa place et
    ses points -- comme sur une feuille de tournoi, ou l'on note son coup a cote
    du tirage. Elles restent vides quand votre coup EST le top affiche. */
-#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) 112px 22px 24px 116px 104px 42px 100px 96px 36px minmax(0, 1fr) 46px 44px auto; }
+#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) calc(112px * var(--zr, 1)) 22px 24px calc(116px * var(--zr, 1)) calc(104px * var(--zr, 1)) calc(42px * var(--zr, 1)) calc(100px * var(--zr, 1)) calc(96px * var(--zr, 1)) calc(36px * var(--zr, 1)) minmax(0, 1fr) calc(46px * var(--zr, 1)) calc(44px * var(--zr, 1)) auto; }
 .rmrow .mw { color: var(--ink-soft); font-weight: 500; letter-spacing: .04em; }
 .rmrow .mp { color: var(--ink-faint); }
 .rmrow .ms { text-align: right; color: var(--ink-soft); }
@@ -632,6 +652,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="side">
     <div class="panel" id="panel-live">
       <div class="block fin" id="fin" hidden>Partie terminée</div>
+      <div class="block" id="rejouer-wrap" hidden>
+        <button id="rejouer">Rejouer la même partie</button>
+      </div>
       <div class="block" id="rejeu-wrap" hidden>
         <button id="rejeu-open">Revoir la partie</button>
       </div>
@@ -651,6 +674,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <div class="block">
         <div class="head">
           <h2>Classement</h2>
+          <span class="zoom" id="cote-zoom">
+            <button type="button" data-z="-1" title="réduire le texte du panneau" aria-label="réduire le texte du panneau">A−</button>
+            <button type="button" data-z="1" title="agrandir le texte du panneau" aria-label="agrandir le texte du panneau">A+</button>
+          </span>
           <button id="rm-open" class="icon" title="Feuille de route" aria-label="Feuille de route">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
               <path d="M2.5 2.5h11v11h-11z" fill="none" stroke="currentColor" stroke-width="1.2"/>
@@ -893,19 +920,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="feuille">
     <header>
       <h3>Feuille de route</h3>
-      <input id="rm-q" type="search" placeholder="chercher un mot, une place…"
+      <input id="rm-q" type="search" placeholder="rechercher"
              autocomplete="off" spellcheck="false">
       <button type="button" class="motentier" id="rm-motEntier"></button>
       <span id="rm-compte"></span>
       <select id="rm-tri" title="Ordre des coups">
-        <option value="partie">ordre de la partie</option>
-        <option value="pts-">points, du plus cher</option>
-        <option value="pts+">points, du moins cher</option>
-        <option value="len-">longueur, du plus long</option>
-        <option value="len+">longueur, du plus court</option>
-        <option value="ms+">temps, du plus rapide</option>
-        <option value="ms-">temps, du plus lent</option>
+        <option value="partie">Partie</option>
+        <option value="pts-">Par score, du plus cher</option>
+        <option value="pts+">Par score, du moins cher</option>
+        <option value="len-">Par longueur, du plus long</option>
+        <option value="ms+">Par temps, du plus rapide</option>
+        <option value="ms-">Par temps, du moins rapide</option>
       </select>
+      <span class="zoom" id="rm-zoom">
+        <button type="button" data-z="-1" title="réduire le texte" aria-label="réduire le texte">A−</button>
+        <button type="button" data-z="1" title="agrandir le texte" aria-label="agrandir le texte">A+</button>
+      </span>
       <button id="rm-close">Fermer</button>
     </header>
     <div class="rm-tete-ligne">

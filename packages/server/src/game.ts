@@ -211,6 +211,8 @@ interface CoupPret {
   bestScore: number;
   isotops: number;
   tiers: Tier[];
+  /** Ce que sa recherche a coute, pour que le terminal puisse encore le dire. */
+  ms: number;
   /** Ce qui restera en main apres le top -- le point de depart du tirage suivant. */
   reliquatApres: string[];
   /**
@@ -410,6 +412,8 @@ export class Game {
   private posePrise = false;
   /** Combien de coups ont ete servis SANS ATTENTE, parce qu'ils etaient prets. */
   coupsPrets = 0;
+  /** Ce que la recherche du top courant a coute. Dit au terminal, jamais aux clients. */
+  private msDuTop = 0;
   /**
    * Combien de coups ont du etre cherches en direct, la file vide et aucun pas
    * de calcul en cours. C'est le compte des occasions manquees.
@@ -1011,12 +1015,13 @@ export class Game {
       this.tiers = pret.tiers;
       this.posePrise = true;
       this.pretCourant = pret;
+      this.msDuTop = pret.ms;
       // « Pret » veut dire servi SANS LA MOINDRE ATTENTE. Un coup qu'il a fallu
       // attendre -- parce que le pas de calcul courait encore -- compte comme
       // un coup calcule en direct : c'est bien ce que les joueurs ont vu.
       if (sansAttendre) this.coupsPrets++;
       this.ouvrirLeDecompte();
-      this.servir(0);
+      this.servir(pret.ms, true);
       return;
     }
     if (pret !== undefined) {
@@ -1084,7 +1089,8 @@ export class Game {
     this.bestScore = reply.result.bestScore;
     this.isotops = reply.result.isotops;
     this.tiers = reply.result.tiers;
-    this.servir(reply.ms);
+    this.msDuTop = reply.ms;
+    this.servir(reply.ms, false);
   }
 
   /**
@@ -1093,7 +1099,7 @@ export class Game {
    * `msCalcul` vaut zero pour un coup pris dans la file d'avance : il n'a rien
    * coute a ce moment-la, il etait deja pret.
    */
-  private servir(msCalcul: number): void {
+  private servir(msCalcul: number, avance: boolean): void {
     // Le top est connu : on peut de nouveau departager, donc valider.
     this.solving = false;
     // Ce qui reste du decompte, s'il court encore. Le tirage n'apparait qu'a
@@ -1109,16 +1115,16 @@ export class Game {
       // deja passe.
       const attendu = this.moveNumber;
       setTimeout(() => {
-        if (this.moveNumber === attendu) this.ouvrirLeCoup(msCalcul);
+        if (this.moveNumber === attendu) this.ouvrirLeCoup(msCalcul, avance);
       }, reste);
       this.emit();
       return;
     }
-    this.ouvrirLeCoup(msCalcul);
+    this.ouvrirLeCoup(msCalcul, avance);
   }
 
   /** Le tirage devient public, le chrono part, le coup commence. */
-  private ouvrirLeCoup(msCalcul: number): void {
+  private ouvrirLeCoup(msCalcul: number, avance: boolean): void {
     this.decompteJusqua = 0;
     // Le chrono du coup ne part qu'ICI : le temps de calcul du serveur ne doit
     // jamais etre compte dans le temps de recherche des joueurs (SPEC.md §2).
@@ -1142,9 +1148,15 @@ export class Game {
     // Le journal ne dit RIEN du top tant qu'il n'est pas joue : ni son score, ni
     // son mot, ni le nombre d'isotops. Ces valeurs ne partent deja jamais aux
     // clients, mais quelqu'un qui regarde le terminal de l'hote les lirait.
+    // LE TEMPS DE CALCUL SE DIT TOUJOURS, meme quand le coup etait pret.
+    //
+    // « pret d'avance » disait quand le calcul avait eu lieu, pas ce qu'il avait
+    // coute -- et c'est le cout qui interesse : c'est lui qui dit si la machine
+    // suit. On garde donc les deux : le prix, et le fait qu'il ait ete paye
+    // avant que quiconque attende.
     console.log(
       `[partie] coup ${n} · tirage ${this.rackNotation} · ` +
-      (msCalcul > 0 ? `calcule en ${msCalcul.toFixed(0)} ms` : `pret d'avance`),
+      `calcule en ${msCalcul.toFixed(0)} ms` + (avance ? " (d'avance)" : ""),
     );
     this.emit();
     // Et on prend de l'avance sur ce qui vient.
@@ -1243,7 +1255,8 @@ export class Game {
     this.pretCourant = {
       n: this.moveNumber + 1, rack: this.rack, notation: this.rackNotation, top,
       bestScore: this.bestScore, isotops: this.isotops, tiers: this.tiers,
-      reliquatApres, jokersSortis: jokers.sorties, jokersRestes: jokers.restes,
+      ms: this.msDuTop, reliquatApres,
+      jokersSortis: jokers.sorties, jokersRestes: jokers.restes,
     };
     this.worker.postMessage({ t: "place", placements: top.placements });
     this.posesSolveur++;
@@ -1336,6 +1349,7 @@ export class Game {
         bestScore: reply.result.bestScore,
         isotops: reply.result.isotops,
         tiers: reply.result.tiers,
+        ms: reply.ms,
         reliquatApres,
         jokersSortis: jokers.sorties,
         jokersRestes: jokers.restes,

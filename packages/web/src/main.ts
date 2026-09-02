@@ -594,7 +594,12 @@ function draw() {
   const dprGrille = Math.min(devicePixelRatio || 1, 2);
   const auPixelEcran = (v: number) => Math.round(v * dprGrille) / dprGrille;
 
-  const gap = cell >= 22 ? 1 : 0;
+  // LE CARAMEL COUVRE SA CASE ENTIEREMENT. Un pixel de jeu laissait passer la
+  // couleur de la prime tout autour de chaque lettre : sur une grille dense,
+  // cela faisait un lisere rouge ou bleu autour de chaque mot, qu'on prenait
+  // pour une decoration. Ce qui est sous un caramel n'a plus a se voir -- le
+  // rejeu sait deja retirer un mot pour montrer ce qu'il y avait dessous.
+  const gap = 0;
   const rad = Math.max(.8, cell * .05);
   /** Au-dela, l'arrondi se voit et vaut son prix. */
   const arrondi = cell >= 22;
@@ -1596,7 +1601,14 @@ function calerLeChevalet(): void {
   const cv = $("cv").getBoundingClientRect();
   const b = box.getBoundingClientRect();
   const jeu = Math.max(0, (dispo - rangee) / 2);
-  const vise = (cv.left + cv.width / 2) - (b.left + b.width / 2);
+  // ON MESURE LA RANGEE COMME SI ELLE N'AVAIT PAS BOUGE. Sa position lue a
+  // l'ecran comprend deja le decalage qu'on lui a pose : recalculer sans le
+  // retrancher trouvait la rangee bien placee, remettait donc zero, et la
+  // rangee sautait a sa place d'origine. C'est ce qu'on voyait a chaque Ctrl+A,
+  // qui repeint le chevalet -- et une fois sur deux seulement, puisque les deux
+  // etats alternaient.
+  const pose = parseFloat(box.style.getPropertyValue("--decalage")) || 0;
+  const vise = (cv.left + cv.width / 2) - (b.left + b.width / 2 - pose);
   box.style.setProperty("--decalage", `${Math.round(Math.max(-jeu, Math.min(jeu, vise)))}px`);
 }
 
@@ -1608,12 +1620,12 @@ function peindreCaramels(lettres: readonly string[]): void {
   // -- il n'y a plus de lettres -- et c'est le premier endroit ou l'oeil va
   // chercher ce qu'il faut jouer. Autant y mettre la reponse.
   if (finie && rejeu === null && lettres.length === 0) {
-    const fin = document.createElement("div");
+    const fin = document.createElement("button");
+    fin.type = "button";
     fin.className = "chevalet-fin";
-    fin.innerHTML = `<b>Partie terminée</b><span>Feuille de route</span>`;
-    fin.addEventListener("click", () => {
-      ouvrirLaRoute();
-    });
+    fin.innerHTML = `<b>Partie terminée</b>` +
+      `<span>Feuille de route <i>(Ctrl+R)</i></span>`;
+    fin.addEventListener("click", ouvrirLaRoute);
     box.appendChild(fin);
     return;
   }
@@ -1872,6 +1884,9 @@ function paintSide() {
   // Une partie bornee dans le TEMPS montre ce qu'il lui reste a vivre.
   $("rb-reste-wrap").hidden = rejeu !== null || dureeMax === null || !demarree || finie;
   $("fin").hidden = !finie;
+  // Le bouton ne s'affiche qu'a qui peut s'en servir : le gerant du salon, et
+  // seulement sur une partie close qui n'est pas une grille permanente.
+  $("rejouer-wrap").hidden = !finie || gerant !== me || permanent;
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
@@ -2763,7 +2778,7 @@ function filtrerLaRoute(): void {
     || String(m.n) === q);
   routeVues = trierLaRoute(routeVues);
   const piste = document.getElementById("rm-piste");
-  if (piste !== null) piste.style.height = `${routeVues.length * H_RMROW}px`;
+  if (piste !== null) piste.style.height = `${routeVues.length * hauteurDeLigne()}px`;
   const compte = document.getElementById("rm-compte");
   if (compte !== null) {
     compte.textContent = q === "" ? "" : `${routeVues.length} sur ${history.length}`;
@@ -2852,12 +2867,12 @@ function peindreLaRouteVisible(): void {
     piste.innerHTML = `<div class="rm-vide">aucun coup ne correspond</div>`;
     return;
   }
-  const haut = Math.max(0, Math.floor(body.scrollTop / H_RMROW) - 5);
-  const bas = Math.min(n, Math.ceil((body.scrollTop + body.clientHeight) / H_RMROW) + 5);
+  const haut = Math.max(0, Math.floor(body.scrollTop / hauteurDeLigne()) - 5);
+  const bas = Math.min(n, Math.ceil((body.scrollTop + body.clientHeight) / hauteurDeLigne()) + 5);
   let html = "";
   for (let i = haut; i < bas; i++) {
     const m = routeVues[i];
-    if (m !== undefined) html += ligneDeRoute(m, i * H_RMROW);
+    if (m !== undefined) html += ligneDeRoute(m, i * hauteurDeLigne());
   }
   piste.innerHTML = html;
 }
@@ -2908,14 +2923,25 @@ function ajouterALaRoute(m: MoveInfo): void {
   // decalage -- sauf en haut de liste, ou l'on veut justement voir arriver le
   // coup.
   if (cfg.bornes === null && body.scrollTop > 0) {
-    body.scrollTop += (routeVues.length - avant) * H_RMROW;
+    body.scrollTop += (routeVues.length - avant) * hauteurDeLigne();
   }
   peindreLaRouteVisible();
 }
 
 /** Une ligne de la feuille de route. */
 /** Hauteur d'une ligne de feuille de route, fixee dans la feuille de style. */
-const H_RMROW = 26;
+const H_RMROW_BASE = 26;
+/**
+ * La hauteur d'une ligne de la feuille de route.
+ *
+ * Le tableau est VIRTUALISE : seules les lignes visibles existent, posees a la
+ * main a leur hauteur. Grossir la police sans grossir ce pas les ferait se
+ * chevaucher -- c'est la seule chose qui rende le reglage de taille delicat, et
+ * elle tient en une multiplication.
+ */
+function hauteurDeLigne(): number {
+  return Math.round(H_RMROW_BASE * prefs.zoomRoute);
+}
 
 const ICONE_IMAGE =
   '<svg viewBox="0 0 18 16" width="13" height="11" aria-hidden="true">'
@@ -3342,6 +3368,17 @@ interface Preferences {
    * compter les cases en arriere pour trouver ou commencer (SPEC.md §18).
    */
   quatre: boolean;
+  /**
+   * De combien le texte est grossi, dans la feuille de route et dans le
+   * panneau de droite.
+   *
+   * Deux reglages plutot qu'un : on ne lit pas ces deux endroits de la meme
+   * facon. Le panneau se suit du coin de l'oeil pendant qu'on cherche, la
+   * feuille se lit apres coup, penche dessus. Ils n'appellent pas la meme
+   * taille, et un facteur commun aurait force a choisir.
+   */
+  zoomRoute: number;
+  zoomCote: number;
 }
 const prefs: Preferences = {
   theme: "auto", sons: true,
@@ -3352,8 +3389,45 @@ const prefs: Preferences = {
   imageHD: false,
   reperes: "fr",
   quatre: false,
+  zoomRoute: 1,
+  zoomCote: 1,
 };
 const CLE_PREFS = "farfouille.preferences";
+
+/** Les bornes du grossissement, et le pas d'un clic. */
+const ZOOM_MIN = 0.8, ZOOM_MAX = 1.6, ZOOM_PAS = 0.1;
+
+/** Pose les deux facteurs de taille la ou le style les attend. */
+function appliquerLesTailles(): void {
+  (document.querySelector(".side") as HTMLElement)
+    .style.setProperty("--z", String(prefs.zoomCote));
+  $("roadmap").style.setProperty("--zr", String(prefs.zoomRoute));
+  for (const [id, cle] of [["rm-zoom", "zoomRoute"], ["cote-zoom", "zoomCote"]] as const) {
+    for (const b of $(id).querySelectorAll("button")) {
+      const pas = Number((b as HTMLElement).dataset["z"]);
+      const apres = +(prefs[cle] + pas * ZOOM_PAS).toFixed(2);
+      (b as HTMLButtonElement).disabled = apres < ZOOM_MIN || apres > ZOOM_MAX;
+    }
+  }
+}
+
+for (const [id, cle] of [["rm-zoom", "zoomRoute"], ["cote-zoom", "zoomCote"]] as const) {
+  $(id).addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (b === null) return;
+    const pas = Number(b.dataset["z"]);
+    prefs[cle] = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX,
+      +(prefs[cle] + pas * ZOOM_PAS).toFixed(2)));
+    appliquerLesTailles();
+    garderPreferences();
+    // La feuille de route est virtualisee : ses lignes se reposent a la main,
+    // et leur pas vient de changer.
+    if (!$("roadmap").hidden) paintRoadmap();
+    // La barre du chevalet se recale : le panneau a change de largeur, donc le
+    // milieu de la grille aussi.
+    calerLeChevalet();
+  });
+}
 
 function lirePreferences(): void {
   try {
@@ -3366,6 +3440,10 @@ function lirePreferences(): void {
     if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
     if (v.reperes === "fr" || v.reperes === "en") prefs.reperes = v.reperes;
     if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
+    for (const cle of ["zoomRoute", "zoomCote"] as const) {
+      const z = v[cle];
+      if (typeof z === "number" && z >= ZOOM_MIN && z <= ZOOM_MAX) prefs[cle] = z;
+    }
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
       for (const cle of ["live", "journal", "rank"] as const) {
@@ -3692,6 +3770,18 @@ addEventListener("keydown", (e) => {
     }
     return;
   }
+  // LES RACCOURCIS DU JEU PASSENT AVANT TOUT LE RESTE, LE REJEU COMPRIS.
+  //
+  // Le rejeu prenait la main sur les fleches et rendait tout le reste au
+  // navigateur : Ctrl+R y RECHARGEAIT donc la page, ce qui ramenait au salon et
+  // faisait perdre le coup qu'on examinait. La feuille de route s'ouvre depuis
+  // le rejeu comme d'ailleurs.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
+    e.preventDefault();
+    if ($("roadmap").hidden) ouvrirLaRoute();
+    else fermerLaRoute();
+    return;
+  }
   if (!$("panel-rejeu").hidden) {
     if (e.key === "Escape") { fermerLeRejeu(); return; }
     if (e.key === "ArrowUp") { deplacerDansLaListe(-1); e.preventDefault(); return; }
@@ -3704,19 +3794,9 @@ addEventListener("keydown", (e) => {
   if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
-  // LES RACCOURCIS DU JEU PASSENT AVANT CEUX DU NAVIGATEUR.
-  //
-  // Ctrl+R rechargerait la page -- au milieu d'une partie, c'est perdre son
-  // tirage en cours et se reconnecter pour rien. Ctrl+D poserait un signet. Ni
-  // l'un ni l'autre n'a de sens ici, et tous deux se trouvent sous les doigts
-  // quand on joue. On les prend, et on les rend a leur usage des qu'on est dans
-  // une zone de saisie -- celles-ci ont rendu la main plus haut.
-  if ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R")) {
-    e.preventDefault();
-    if ($("roadmap").hidden) ouvrirLaRoute();
-    else fermerLaRoute();
-    return;
-  }
+  // Ctrl+D poserait un signet, ce qui n'a aucun sens ici. On le prend, et on le
+  // rend a son usage des qu'on est dans une zone de saisie -- celles-ci ont
+  // rendu la main plus haut.
   if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
     e.preventDefault();
     if (!$("reglages-open").hidden) ouvrirReglages();
@@ -3868,6 +3948,27 @@ function submit() {
 }
 
 $("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
+
+/**
+ * REJOUER LA MEME PARTIE, une fois celle-ci finie.
+ *
+ * Rouvrir les reglages pour tout retrouver a l'identique et ne rien changer est
+ * un detour : neuf fois sur dix, une table qui vient de finir veut recommencer
+ * telle quelle. Le bouton se pose sous « Partie terminee », la ou l'on regarde
+ * deja, et il n'apparait qu'a celui qui tient les manettes -- lui seul peut
+ * relancer.
+ *
+ * Il renvoie la variante EN COURS, pas celle du panneau de reglages : celui-ci
+ * a pu etre ouvert et tripote sans etre valide.
+ */
+$("rejouer").addEventListener("click", () => {
+  envoyer({
+    t: "relancer", tirage: cfg.tirage, jouables: cfg.jouables, pioche: cfg.pioche,
+    joker: cfg.joker, primes: cfg.primes, chrono: cfg.chrono, bornes: cfg.bornes,
+    mode: cfg.mode, coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
+    decompte: cfg.decompte,
+  });
+});
 
 // ------------------------------------------------- sections du panneau
 
@@ -4051,6 +4152,7 @@ $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 
 lirePreferences();
 setReperes(prefs.reperes);
+appliquerLesTailles();
 appliquerLeTheme();
 appliquerLesHauteurs();
 
@@ -4642,6 +4744,19 @@ const COUPS_TRANQUILLES = 500, DUREE_TRANQUILLE = 2 * 3600;
 
 function avertirSiExplosif(): void {
   const boite = $("r-alerte");
+
+  // LE SAC SANS FIN SUR UN PLATEAU BORNE se joue, mais il faut savoir a quoi on
+  // s'engage : rien n'arrete la partie tant qu'un coup reste jouable, et une
+  // grille de quinze cases met longtemps a se boucher pour de bon.
+  if (cBornes !== null && cPioche === "sac102boucle") {
+    boite.innerHTML =
+      `<b>Attention : sac sans fin sur une grille ${cBornes * 2 + 1}×${cBornes * 2 + 1}.</b><br>` +
+      `Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque plus ` +
+      `aucun coup n'est jouable, et elle sera très longue.`;
+    boite.hidden = false;
+    return;
+  }
+
   // LA GRILLE INFINIE N'EST DANGEREUSE QUE SI ELLE DURE. Le cout croit avec le
   // nombre de coups joues : une partie qui s'arrete a cent coups ne l'atteint
   // jamais, meme a quinze lettres. L'avertissement ne vaut donc que pour une
@@ -4817,6 +4932,7 @@ for (const b of $("r-pioche").querySelectorAll("button")) {
     cPioche = (b as HTMLElement).dataset["v"] ?? "probabilites";
     peuplerPioche();
     peuplerCoups();
+    avertirSiExplosif();
   });
 }
 
