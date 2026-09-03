@@ -149,10 +149,12 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 .perime code { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 .rackbar { position: relative; flex: none; display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); }
 /* LES CASES DE CHIFFRES NE GRANDISSENT PLUS AVEC LEUR CONTENU.
-   A 72 px, « Cumul 441 647 » debordait et poussait la case a 83 px : le
-   chevalet, centre dans la place qui reste, glissait de six pixels -- et de dix
-   au million. 96 px tiennent sept chiffres, soit dix millions de points ; d'ici
-   la, un seul nombre a changer. */
+   A 72 px, la case debordait a SIX chiffres -- mesure : 83 px pour un cumul de
+   441 647 -- et le chevalet, centre dans la place qui reste, glissait de six
+   pixels ; de dix au million. La grille mondiale n'y est pas encore : elle en
+   est a cinq chiffres, donc ce foyer-la n'a jamais decale personne. Celui du
+   chrono, lui, se declenche a chaque coup qui passe la minute.
+   96 px tiennent sept chiffres, soit dix millions de points. */
 .stat { flex: none; min-width: 96px; text-align: center; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 10px 4px; }
 .stat span { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); }
 .stat b { display: block; font-family: "IBM Plex Mono", monospace; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.25; }
