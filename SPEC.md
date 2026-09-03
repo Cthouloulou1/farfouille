@@ -368,20 +368,70 @@ besoin d'aucune touche spéciale.
 
 ## 7. Le dictionnaire
 
-Source : `dictionnaire.txt` à la racine — **ODS9** (2024).
+Deux lexiques, décrits dans `packages/engine/src/dictionnaires.ts` :
 
-```
-407 128 mots · ASCII A-Z pur · trié · zéro doublon · longueurs 2 à 15
-```
+| id | source | mots | langue |
+|---|---|---|---|
+| `ods9` | `dictionnaire.txt` | 407 128 | français — **ODS9** (2024) |
+| `eel22` | `dictionnaire-eel22.txt` | 68 135 | anglais — **EEL 22**, mots courants |
 
-Aucun nettoyage nécessaire. 81 mots de deux lettres, 62 341 contenant K/W/Y/Z.
+Les deux sont en ASCII A-Z pur, triés, sans doublon, longueurs 2 à 15. Aucun
+nettoyage nécessaire.
+
+**Un dictionnaire n'est pas qu'une liste de mots.** Il emmène avec lui la valeur
+de chaque lettre, la composition du sac du commerce et les poids de la pioche
+pondérée : le W anglais vaut 4 points et il en existe deux, le W français en
+vaut 10 et il est seul. Les trois tables voyagent donc avec le lexique, dans une
+seule entrée, et `avecDictionnaire()` les change ensemble.
+
+La configuration d'une partie porte l'identifiant de son lexique
+(`ConfigPartie.dictionnaire`). Le serveur, le fil de calcul et le navigateur
+chargent chacun le fichier qu'elle nomme : deux salons voisins jouent l'un en
+français, l'autre en anglais.
+
+**Les poids de la pioche pondérée se calibrent, ils ne se devinent pas.** La
+compensation anti-sécheresse (§4) réévalue une lettre tant qu'elle n'est pas
+sortie : une table de poids égale aux fréquences du lexique sort trop de K et
+pas assez de E. `packages/engine/tools/calibrer_poids.ts` tire des centaines de
+milliers de chevalets et corrige `poids ← poids × cible / sortie` jusqu'à ce que
+la sortie mesurée colle à la fréquence du lexique — à un centième de point près
+pour l'anglais. Deux corrections sont voulues et ne viennent pas de la mesure :
+le S est ramené à 79 % (il doit sa place au pluriel plus qu'aux mots), et le
+joker vise 2 %, la proportion du jeu classique.
 
 ### Deux structures, deux usages
 
-| | où | rôle | taille |
-|---|---|---|---|
-| **DAWG** | client | validation d'un mot, calcul de score | **0,45 Mo** |
-| **GADDAG** | serveur | génération exhaustive des coups, top, isotops | **4,04 Mo** |
+| | où | rôle | ODS9 | EEL 22 |
+|---|---|---|---|---|
+| **DAWG** | client | validation d'un mot, calcul de score | **0,45 Mo** | **0,23 Mo** |
+| **GADDAG** | serveur | génération exhaustive des coups, top, isotops | **4,04 Mo** | **1,47 Mo** |
+
+Compilation d'un lexique — les `.bin` ne sont pas dans le dépôt :
+
+```
+python packages/engine/tools/build_dawg.py   <source> packages/engine/data/<dawg>
+python packages/engine/tools/build_gaddag.py <source> packages/engine/data/<gaddag>
+```
+
+### Ce que coûte un second dictionnaire
+
+Chaque salon tient son fil de calcul, qui charge SES deux structures : 4,5 Mo
+pour un salon français, 1,7 Mo pour un salon anglais. Rien de nouveau — c'était
+déjà le cas quand il n'y avait qu'un lexique — et l'anglais est 2,6 fois plus
+léger.
+
+Le temps de résolution, lui, dépend de la taille du plateau bien plus que de
+celle du lexique :
+
+| | ODS9 | EEL 22 |
+|---|---|---|
+| 15x15, 40 coups joués | 4,8 ms par top | 5,0 ms |
+| grille infinie, 300 coups joués | 220 ms par top | 97 ms |
+
+Sur un plateau borné le coût est dicté par les ancrages, pas par le nombre de
+mots : les deux lexiques se valent. Sur grille infinie l'écart se creuse — le
+GADDAG anglais a 2,7 fois moins d'arêtes à parcourir — et un salon anglais coûte
+environ deux fois moins qu'un salon français à position comparable.
 
 Le **GADDAG** (Gordon, 1994) stocke chaque mot dans toutes ses rotations autour
 de chaque lettre pivot, ce qui permet de partir d'une case d'ancrage et
@@ -871,6 +921,46 @@ grille en plus, sur toute la largeur de l'écran.
 Les soumissions sont **illimitées** — le principe du topping est de taper
 beaucoup de mots jusqu'à trouver le top. Le joueur ne voit que son meilleur mot
 du coup.
+
+### La langue du site
+
+Français et anglais. `packages/web/src/langue.ts` décide, dans cet ordre :
+
+1. `?lang=fr` / `?lang=en` dans l'adresse — un lien peut imposer sa langue ;
+2. le choix enregistré dans `localStorage`, s'il y en a un. **Un choix explicite
+   gagne toujours** : qui met le site en français depuis un navigateur anglais
+   ne veut pas le retrouver en anglais à la visite suivante ;
+3. `navigator.languages`, la liste ordonnée des langues réglées dans le
+   navigateur ou le système. Un visiteur anglophone arrive donc en anglais sans
+   rien avoir à faire.
+
+**La clé d'un texte est le texte français lui-même**, dans
+`packages/web/src/textes-en.ts`. Pas de `btn_join_label` : on écrit
+`t("Rejoindre")`. Trois conséquences :
+
+- le code reste lisible — une clé inventée oblige à ouvrir la table pour savoir
+  ce qui s'affiche ;
+- un texte non traduit s'affiche **en français** plutôt qu'en identifiant : une
+  traduction qui manque est un désagrément, pas une panne ;
+- la liste à traduire, c'est exactement la liste des textes français.
+
+Le prix : deux textes français identiques se traduisent pareil, et corriger une
+faute de frappe côté français casse la traduction.
+
+**Le balisage n'a rien à déclarer.** `traduireLeDocument()` parcourt la page au
+démarrage et remplace ce qu'il reconnaît — textes, `placeholder`, `title`,
+`aria-label`. Aucun attribut à semer dans le HTML. Ce que le CODE écrit, lui,
+demande un `t(...)` explicite : on ne devine pas qu'un littéral est un texte lu
+plutôt qu'un nom de classe.
+
+`node tools/extraire-textes.mjs` relève ce qui manque à la table.
+
+Changer de langue **recharge la page**. Retraduire à chaud demanderait que
+chaque texte déjà peint sache se repeindre ; on ne change pas de langue vingt
+fois par partie.
+
+Le lexique suit la langue : un salon ouvert depuis la version anglaise naît en
+EEL 22 (`DICO_PAR_LANGUE`), et le réglage du salon permet d'en changer.
 
 ---
 
