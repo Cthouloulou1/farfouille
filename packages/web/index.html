@@ -129,7 +129,16 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 /* Les deux durees partagent UN rectangle : elles se lisent ensemble -- le coup
    en cours s'ajoute au temps total, et le total n'est que la somme des coups. */
 .stat.chrono { display: flex; gap: 18px; padding: 3px 12px 4px; text-align: center; }
-.stat.chrono div { display: flex; flex-direction: column; min-width: 58px; }
+/* LA BOITE DU CHRONO NE CHANGE PLUS DE LARGEUR.
+   A 58 px elle grandissait avec son contenu : « 59 s » tenait, « 1 min 00 »
+   non, et la boite passait de 160 a 188 px au moment ou le coup franchissait la
+   minute. Le chevalet, CENTRE dans la place qui reste, glissait alors de
+   quatorze pixels -- puis revenait au coup suivant, quand le compteur
+   redevenait court. C'est le decalage que les joueurs sentaient sans pouvoir le
+   cerner : il ne venait pas des lettres, mais de leur voisine.
+   82 px tiennent « 59 min 59 » et « 12 j 03 h », les plus longs que le format
+   produise en pratique. */
+.stat.chrono div { display: flex; flex-direction: column; min-width: 82px; }
 .stat.chrono b { font-size: 15px; }
 .who { margin-left: auto; display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ink-soft); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
@@ -139,7 +148,12 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 .perime[hidden] { display: none; }
 .perime code { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 .rackbar { position: relative; flex: none; display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); }
-.stat { flex: none; min-width: 72px; text-align: center; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 10px 4px; }
+/* LES CASES DE CHIFFRES NE GRANDISSENT PLUS AVEC LEUR CONTENU.
+   A 72 px, « Cumul 441 647 » debordait et poussait la case a 83 px : le
+   chevalet, centre dans la place qui reste, glissait de six pixels -- et de dix
+   au million. 96 px tiennent sept chiffres, soit dix millions de points ; d'ici
+   la, un seul nombre a changer. */
+.stat { flex: none; min-width: 96px; text-align: center; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 10px 4px; }
 .stat span { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); }
 .stat b { display: block; font-family: "IBM Plex Mono", monospace; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.25; }
 .rackbar .image { flex: none; padding: 7px 9px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
@@ -341,7 +355,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 #rejouer { color: var(--accent); border-color: var(--accent); }
 /* Cinq colonnes, largeurs fixes sauf le mot : numero, mot, score, temps, coeur.
    Le temps a de quoi tenir sur une ligne ("12 min 05" au plus large). */
-.pmove { white-space: nowrap; display: grid; grid-template-columns: var(--w-pn, 24px) minmax(0, 1fr) calc(62px * var(--z, 1)) 26px calc(54px * var(--z, 1)) auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(11.5px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
+/* LA COLONNE DU TEMPS TIENT SON PLUS LONG CONTENU. A cinquante-quatre
+   pixels, « 2 min 03 » et « 1 j 21 h » se faisaient couper par des points
+   de suspension -- et un coup qui a dure un jour, sur la grille mondiale,
+   n'a rien d'exceptionnel. */
+.pmove { white-space: nowrap; display: grid; grid-template-columns: var(--w-pn, 24px) minmax(0, 1fr) calc(62px * var(--z, 1)) 26px calc(64px * var(--z, 1)) auto; gap: 4px; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(11.5px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .pmove:hover { background: var(--hover); border-color: transparent; color: var(--ink-soft); }
 .pmove .n { color: var(--ink-faint); }
 .pmove .w { color: var(--ink); letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
@@ -650,9 +668,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .msg .who.fiche-ouvrable:hover, #online span.fiche-ouvrable:hover { text-decoration: underline; }
 /* Le profil s'ouvre depuis la ligne meme, apres le nom et ses coeurs. Discret
    au repos pour ne pas encombrer un classement qu'on lit en jouant. */
-.prow .voir-profil { margin-left: 7px; padding: 0 5px; font-size: 10.5px; line-height: 1.5; color: var(--ink-faint); background: none; border-color: transparent; opacity: .55; }
-.prow:hover .voir-profil, .prow .voir-profil:focus-visible { opacity: 1; }
-.prow .voir-profil:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
+/* Le profil s'ouvre depuis la ligne deroulee, apres le nom et ses coeurs. */
+.prow .voir-profil { margin-left: 7px; padding: 0 5px; font-size: 10.5px; line-height: 1.5; color: var(--ink-faint); background: none; border-color: transparent; }
+.prow .voir-profil:hover { color: var(--accent); border-color: var(--accent); }
 .profil { max-width: 760px; margin: 0 auto; }
 .profil-tete { display: flex; align-items: center; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
 .profil-tete .lien { margin-left: auto; font-size: 13px; padding: 6px 12px; }

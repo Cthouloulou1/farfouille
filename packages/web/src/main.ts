@@ -1864,7 +1864,7 @@ function paintCurrent() {
     }
     w.className = "word";
     w.innerHTML = `<span>${verdict.mot}</span><span class="pts rate">−${verdict.ecart}</span>`;
-    meta.textContent = `${verdict.score} pts · ${verdict.ecart} de moins que le top`;
+    meta.textContent = `${verdict.score} pts · −${verdict.ecart}`;
     return;
   }
 
@@ -2061,9 +2061,10 @@ function paintSide() {
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     const vrai = nomsPublics[name];
     const infobulle = vrai === undefined ? "" : ` title="${vrai.replace(/"/g, "&quot;")}"`;
-    // Le bouton vient APRES les coeurs : ils appartiennent au nom, il ne s'en
-    // separe pas.
-    const profil = inscrits.has(name)
+    // LE BOUTON NE PARAIT QU'UNE FOIS LA LIGNE DEROULEE. Sur chaque ligne, il
+    // encombrait un classement qu'on lit en jouant ; deroule, on regarde deja
+    // ce joueur-la.
+    const profil = inscrits.has(name) && openPlayer === name
       ? '<button type="button" class="voir-profil" title="Voir le profil">profil</button>' : "";
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
                     `<span class="nom"${infobulle}>${name}${marque}${coeurs}${profil}</span>` + droite;
@@ -3973,6 +3974,16 @@ addEventListener("keydown", (e) => {
       deplacerDansLaListe(e.key === "ArrowUp" ? -1 : 1);
       e.preventDefault();
     }
+    // ECHAP EFFACE LA RECHERCHE, PUIS FERME CE QU'ELLE CHERCHAIT.
+    //
+    // Le navigateur vide un champ de recherche sur Echap, et c'est ce qu'on
+    // veut tant qu'il y a du texte. Mais sur un champ deja vide il ne se
+    // passait plus rien : le panneau restait ouvert, et la touche paraissait
+    // morte. Vide, Echap ferme donc le panneau, comme partout ailleurs.
+    if (e.key === "Escape" && cible.value === "") {
+      if (cible.id === "rm-q" && !$("roadmap").hidden) { fermerLaRoute(); e.preventDefault(); }
+      else if (cible.id === "rj-q" && !$("panel-rejeu").hidden) { fermerLeRejeu(); e.preventDefault(); }
+    }
     return;
   }
   // LES RACCOURCIS DU JEU PASSENT AVANT TOUT LE RESTE, LE REJEU COMPRIS.
@@ -4972,8 +4983,7 @@ function peindreLaVerification(): void {
   }
   if (moiCompte.demande) {
     dit.className = "attente";
-    dit.textContent = "Demande déposée. Elle sera tranchée à la main — on vous contactera "
-      + "peut-être ailleurs pour s'assurer que c'est bien vous.";
+    dit.textContent = "Demande déposée.";
     boite.appendChild(dit);
     return;
   }
