@@ -225,7 +225,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .like:disabled { opacity: .35; cursor: default; }
 .like .n { font-variant-numeric: tabular-nums; }
 .prow .nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: calc(12.5px * var(--z, 1)); white-space: nowrap; }
+.prow .likes { color: var(--accent); font-variant-numeric: tabular-nums; font-size: calc(12.5px * var(--z, 1)); white-space: nowrap; text-align: right; }
 /* Les « j'aime » se lisent contre le pseudo. A l'autre bout de la ligne, ils
    se confondaient avec le nombre de points. */
 .prow .coeurs { margin-left: 8px; color: var(--accent); font-size: 11px; font-weight: 400; }
@@ -305,13 +305,19 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    classement, juste au-dessus de la ligne qui le ferme. */
 .poignee.dans-bloc { height: 9px; margin: 4px -15px -12px; }
 .poignee.dans-bloc::after { top: 4px; }
-.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(13px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+/* CHAQUE LIGNE EST SA PROPRE GRILLE : des colonnes `auto` s'y dimensionnent
+   ligne par ligne, donc rien ne s'alignait d'une ligne a l'autre. La ligne du
+   TOP, dont la case de negatif est vide, decalait ainsi son nombre de tops par
+   rapport a celui des joueurs. Les colonnes de chiffres ont desormais une
+   largeur FIXE, en cadratins d'une police a chasse fixe. */
+.prow { display: grid; grid-template-columns: 14px minmax(0, 1fr) 4.4em 5.6em; gap: 6px; align-items: baseline; width: 100%; text-align: left; padding: 3px 4px; background: transparent; border: 0; border-radius: 3px; font-family: "IBM Plex Mono", monospace; font-size: calc(13px * var(--z, 1)); font-variant-numeric: tabular-nums; color: var(--ink); cursor: pointer; }
+.rank.duplicate .prow { grid-template-columns: 14px minmax(0, 1fr) 2.8em 4.4em 5.6em; }
 .prow:hover { background: var(--hover); border-color: transparent; color: var(--ink); }
 .prow.me { color: var(--accent); font-weight: 500; }
 .prow.perdu { color: var(--ink-faint); cursor: default; font-style: italic; }
 .prow.perdu:hover { background: transparent; }
 .prow .tri { color: var(--ink-faint); font-size: 11px; }
-.prow .num { color: var(--ink-faint); }
+.prow .num { color: var(--ink-faint); text-align: right; }
 .plist { padding: 2px 0 6px 14px; display: flex; flex-direction: column; gap: 1px; }
 /* UN COUP TIENT SUR UNE LIGNE, quel que soit son numero. Au-dela de mille
    coups le numero debordait sur le mot, et la ligne se repliait en deux. */
@@ -642,8 +648,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    changer de couleur -- le vert est deja pris par l'auteur d'un message. */
 .msg .who.fiche-ouvrable, #online span.fiche-ouvrable { cursor: pointer; }
 .msg .who.fiche-ouvrable:hover, #online span.fiche-ouvrable:hover { text-decoration: underline; }
-.plist .voir-profil { align-self: flex-start; margin: 2px 0 4px; padding: 3px 9px; font-size: 11px; color: var(--ink-faint); background: none; }
-.plist .voir-profil:hover { color: var(--accent); border-color: var(--accent); }
+/* Le profil s'ouvre depuis la ligne meme, apres le nom et ses coeurs. Discret
+   au repos pour ne pas encombrer un classement qu'on lit en jouant. */
+.prow .voir-profil { margin-left: 7px; padding: 0 5px; font-size: 10.5px; line-height: 1.5; color: var(--ink-faint); background: none; border-color: transparent; opacity: .55; }
+.prow:hover .voir-profil, .prow .voir-profil:focus-visible { opacity: 1; }
+.prow .voir-profil:hover { color: var(--accent); border-color: var(--accent); opacity: 1; }
 .profil { max-width: 760px; margin: 0 auto; }
 .profil-tete { display: flex; align-items: center; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
 .profil-tete .lien { margin-left: auto; font-size: 13px; padding: 6px 12px; }
@@ -689,6 +698,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 #perso-verif .appliquer, .profil-bloc .appliquer { width: auto; padding: 11px 22px; font-size: 14.5px; margin: 14px 0 0; }
 .profil-bloc .join-error { margin-top: 12px; font-size: 14px; }
 .profil-bloc .apres.fait { color: var(--accent); }
+.etat-mail { margin-top: 12px; font-size: 13.5px; color: var(--ink-soft); }
+.etat-mail .verifiee { color: var(--accent); }
+.etat-mail .attente { color: var(--mark); }
+.etat-mail button { margin-left: 10px; padding: 4px 10px; font-size: 12.5px; }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
@@ -880,6 +893,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <h2>Adresse mail</h2>
         <input id="perso-email" type="email" maxlength="254" placeholder="Email" autocomplete="email">
         <p class="apres">L'email restera privé.</p>
+        <div class="etat-mail" id="etat-mail"></div>
       </section>
 
       <section class="profil-bloc">

@@ -77,6 +77,17 @@ export interface Compte {
    * l'administration, personne d'autre.
    */
   email: string;
+  /**
+   * L'adresse a-t-elle ete confirmee par son porteur ?
+   *
+   * Present DES LE DEPART, a faux, comme SPEC.md §8 le demande -- pour que la
+   * confirmation par courriel s'allume un jour sans migration douloureuse.
+   *
+   * Tant que rien ne part, il reste faux pour tout le monde, et c'est la verite :
+   * on n'a jamais verifie que ces adresses existent. Une adresse mal tapee rend
+   * le compte irrecuperable ; le drapeau dit lesquelles sont sures.
+   */
+  emailVerifie: boolean;
   admin: boolean;
   /**
    * LE NOM EN DEUX CHAMPS, ET NON UN SEUL.
@@ -179,7 +190,7 @@ export function lireLesComptes(): void {
         pseudo: String(e["pseudo"]), hash: String(e["hash"]), sel: String(e["sel"]),
         cree: Number(e["cree"] ?? Date.now()), mdpChangeLe: Number(e["cree"] ?? 0),
         admin: e["admin"] === true,
-        email: String(e["email"] ?? ""),
+        email: String(e["email"] ?? ""), emailVerifie: false,
         prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0, verifie: false,
         avatar: Number(e["avatar"] ?? 0), avatarSombre: e["avatarSombre"] === true,
       });
@@ -197,11 +208,18 @@ export function lireLesComptes(): void {
       if (e["prenom"] !== undefined) c.prenom = String(e["prenom"]);
       if (e["nom"] !== undefined) c.nom = String(e["nom"]);
       c.nomPublic = e["nomPublic"] === true;
-      if (e["email"] !== undefined) c.email = String(e["email"]);
+      if (e["email"] !== undefined && e["email"] !== c.email) {
+        // CHANGER D'ADRESSE ANNULE SA CONFIRMATION : la nouvelle n'a jamais ete
+        // verifiee, et la garder pour acquise serait pire que ne rien savoir.
+        c.email = String(e["email"]);
+        c.emailVerifie = false;
+      }
       if (e["avatar"] !== undefined) c.avatar = Number(e["avatar"]);
       if (e["avatarSombre"] !== undefined) c.avatarSombre = e["avatarSombre"] === true;
     } else if (e["t"] === "demande") {
       c.demande = true; c.demandeLe = Number(e["quand"] ?? Date.now());
+    } else if (e["t"] === "mailok") {
+      c.emailVerifie = true;
     } else if (e["t"] === "admin") {
       c.admin = e["admin"] === true;
     } else if (e["t"] === "verdict") {
@@ -261,7 +279,7 @@ export async function creerCompte(
   inscrire(ev);
   comptes.set(cleDuPseudo(nom), {
     pseudo: nom, hash, sel: sel.toString("base64"), cree, mdpChangeLe: cree,
-    email: mail,
+    email: mail, emailVerifie: false,
     admin, prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0,
     verifie: false, avatar, avatarSombre: sombre,
   });
@@ -307,6 +325,7 @@ export function ecrireLeProfil(c: Compte, p: {
     if (!adressePlausible(mail)) return "Cette adresse ne ressemble pas à une adresse";
     if (mailPris(mail)) return "Un compte existe déjà avec cette adresse";
     c.email = mail;
+    c.emailVerifie = false;
   }
   c.prenom = p.prenom.trim().slice(0, 40);
   c.nom = p.nom.trim().slice(0, 40);
@@ -396,6 +415,70 @@ export function compteDuJeton(jeton: string | undefined): Compte | undefined {
   return c;
 }
 
+/**
+ * LE LIEN DE CONFIRMATION, ET CE QU'IL N'EST PAS.
+ *
+ * Le jeton est signe comme celui de session, mais il porte AUSSI l'adresse :
+ * changer d'adresse invalide donc les liens deja envoyes, ce qui evite qu'un
+ * vieux courriel confirme une adresse qui n'est plus celle du compte. Il vit
+ * deux jours -- le temps de relever sa boite, pas davantage.
+ *
+ * IL NE CONNECTE PERSONNE. Ouvrir un lien de confirmation n'ouvre pas de
+ * session : sinon un courriel qui traine deviendrait une cle du compte.
+ */
+const DUREE_LIEN_MAIL = 2 * 24 * 3600 * 1000;
+
+export function jetonDeMail(c: Compte): string {
+  const corps = `m.${Buffer.from(c.pseudo, "utf8").toString("base64url")}`
+    + `.${Buffer.from(c.email, "utf8").toString("base64url")}.${Date.now()}`;
+  return `${corps}.${signature(corps)}`;
+}
+
+/** Confirme une adresse a partir de son jeton. Rend l'erreur, ou null. */
+export function confirmerLAdresse(jeton: string): string | null {
+  const bouts = jeton.split(".");
+  if (bouts.length !== 5 || bouts[0] !== "m") return "Ce lien n'est pas valable.";
+  const corps = bouts.slice(0, 4).join(".");
+  const attendue = Buffer.from(signature(corps), "utf8");
+  const recue = Buffer.from(bouts[4]!, "utf8");
+  if (attendue.length !== recue.length || !timingSafeEqual(attendue, recue)) {
+    return "Ce lien n'est pas valable.";
+  }
+  const emis = Number(bouts[3]);
+  if (!Number.isFinite(emis) || Date.now() - emis > DUREE_LIEN_MAIL) {
+    return "Ce lien a expiré. Demandez-en un nouveau depuis votre espace.";
+  }
+  const c = compte(Buffer.from(bouts[1]!, "base64url").toString("utf8"));
+  const adresse = Buffer.from(bouts[2]!, "base64url").toString("utf8");
+  if (c === undefined) return "Ce lien n'est pas valable.";
+  // L'adresse a change depuis l'envoi : ce lien ne confirme plus rien.
+  if (c.email !== adresse) return "Cette adresse n'est plus celle du compte.";
+  if (c.emailVerifie) return null;
+  c.emailVerifie = true;
+  inscrire({ t: "mailok", pseudo: c.pseudo, email: c.email, quand: Date.now() });
+  return null;
+}
+
+/**
+ * ENVOYER LE LIEN -- LA SEULE PIECE QUI MANQUE.
+ *
+ * Tout le reste existe : le jeton, sa signature, sa peremption, la porte qui le
+ * consomme, le drapeau au journal et l'ecran qui l'affiche. Il ne manque que le
+ * courrier lui-meme, faute d'un service pour le porter.
+ *
+ * En attendant, le lien s'ecrit dans la console de l'hote : la chaine entiere
+ * s'eprouve, et le jour ou l'envoi existe, c'est CETTE fonction qu'on remplit --
+ * rien d'autre ne bouge.
+ */
+export function envoyerLeLienDeVerification(c: Compte, base: string): void {
+  const lien = `${base}/api/email/confirmer?j=${encodeURIComponent(jetonDeMail(c))}`;
+  console.log(`
+  [mail] AUCUN COURRIEL N'EST ENVOYE -- il n'y a pas encore de quoi.
+  Pour "${c.pseudo}" <${c.email}>, le lien de confirmation est :
+  ${lien}
+`);
+}
+
 export const NOM_DU_COOKIE = "farfouille";
 
 /** Lit notre cookie parmi les autres. */
@@ -449,6 +532,7 @@ export function priveDuCompte(c: Compte): Record<string, unknown> {
   return {
     ...publicDuCompte(c),
     email: c.email,
+    emailVerifie: c.emailVerifie,
     prenom: c.prenom,
     nom: c.nom,
     nomPublic: c.nomPublic,

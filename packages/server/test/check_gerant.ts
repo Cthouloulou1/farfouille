@@ -57,8 +57,10 @@ console.log("\nQui regle le salon\n");
   confierLesReglages(s, ["Ana", "Bo"]);
   const neuf = confierLesReglages(s, ["Zulu", "Ana", "Bo"]);
   verifie("le createur qui revient les reprend", s.gerant === "Zulu", s.gerant ?? "—");
-  // Rien a annoncer : son bouton reparait, il n'a rien a apprendre.
-  verifie("son retour ne s'annonce pas", neuf === null);
+  // SON RETOUR S'ANNONCE, comme tout changement d'hote. Il ne s'annoncait pas,
+  // et les presents pouvaient continuer a croire que quelqu'un d'autre tenait
+  // les manettes. Une seule phrase, dans les deux sens.
+  verifie("son retour s'annonce aussi", neuf === "Zulu", neuf ?? "—");
 }
 
 // --- 4. Le gerant s'en va a son tour --------------------------------------

@@ -19,7 +19,7 @@ import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
-  confierLesReglages, MAX_SALONS, type Salon,
+  confierLesReglages, comptedesInfinies, MAX_SALONS, MAX_INFINIES, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
@@ -33,7 +33,7 @@ import {
   ecrireLeProfil, demanderLaVerification, trancherLaVerification, tousLesComptes,
   emettreUnJeton, compteDuJeton, jetonDesEntetes, cookieDeSession, cookieEfface,
   publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLesAdmins, cleDuPseudo,
-  nomComplet, type Compte,
+  nomComplet, envoyerLeLienDeVerification, confirmerLAdresse, type Compte,
 } from "./comptes.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -59,6 +59,9 @@ const REVEAL = process.argv.includes("--reveler");
  */
 const ADMINS = arg("admin", "admin").split(",").map((n) => n.trim()).filter((n) => n !== "");
 const ADMIN_MDP = arg("admin-mdp", process.env["FARFOUILLE_ADMIN_MDP"] ?? "");
+
+/** Le temps par coup le plus court qu'un joueur puisse demander, en secondes. */
+const CHRONO_MINIMUM = 15;
 
 /**
  * Parties du disque a rouvrir DANS UN SALON, separees par des virgules.
@@ -726,6 +729,31 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // Demander un lien de confirmation. Rien ne part pour l'instant : le lien
+  // s'ecrit dans la console de l'hote (voir `envoyerLeLienDeVerification`).
+  if (url === "/api/email/envoyer" && req.method === "POST") {
+    const c = quiParle(req);
+    if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
+    if (c.emailVerifie) { json(res, 400, { erreur: "Cette adresse est déjà vérifiée" }); return; }
+    if (c.email === "") { json(res, 400, { erreur: "Renseignez d'abord une adresse" }); return; }
+    if (tropDEssais(req)) { json(res, 429, { erreur: "Trop d'essais, attendez un instant" }); return; }
+    const hote = String(req.headers["host"] ?? `localhost:${PORT}`);
+    envoyerLeLienDeVerification(c, `${sousHttps(req) ? "https" : "http"}://${hote}`);
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // La porte que le lien ouvre. Elle ne connecte personne : elle confirme.
+  if (url === "/api/email/confirmer" && req.method === "GET") {
+    const jeton = new URLSearchParams((req.url ?? "").split("?")[1] ?? "").get("j") ?? "";
+    const erreur = confirmerLAdresse(jeton);
+    res.writeHead(302, {
+      location: erreur === null ? "/?email=ok" : `/?email=${encodeURIComponent(erreur)}`,
+    });
+    res.end();
+    return;
+  }
+
   if (url === "/api/verification" && req.method === "POST") {
     const c = quiParle(req);
     if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
@@ -879,15 +907,18 @@ wss.on("connection", (ws, req) => {
       // encore se presenter sous ce nom-la et jouer a sa place.
       if (inscrit === null && pseudoEnregistre(nom)) {
         send(ws, {
-          t: "refus",
+          t: "refus", quoi: "pseudo",
           message: "Ce pseudo appartient à un compte : connectez-vous, ou prenez-en un autre",
         });
         return;
       }
       const cible = salon(String(msg.salon ?? GAME_ID));
       if (cible === undefined) {
+        // LE MOTIF VOYAGE AVEC LE REFUS. Sans lui, le client ouvrait le voile
+        // du pseudo pour n'importe quel refus -- et cliquer un salon disparu
+        // demandait de se renommer, ce qui n'a aucun rapport.
         send(ws, {
-          t: "refus",
+          t: "refus", quoi: "salon",
           message: pret ? "Ce salon n'existe plus"
             : "Le serveur prépare les parties, réessayez dans un instant",
         });
@@ -899,7 +930,7 @@ wss.on("connection", (ws, req) => {
       // reserve son nom meme quand son porteur n'est pas la.
       const pris = [...clients.entries()].some(([c, v]) => c !== ws && v.nom === nom);
       if (pris) {
-        send(ws, { t: "refus", message: "Ce nom d'utilisateur n'est pas disponible" });
+        send(ws, { t: "refus", quoi: "pseudo", message: "Ce nom d'utilisateur n'est pas disponible" });
         return;
       }
       clients.set(ws, { nom, salon: cible.id, compte: inscrit });
@@ -1050,6 +1081,18 @@ wss.on("connection", (ws, req) => {
         : Math.max(10, Math.min(86400, Math.round(Number(msg.dureeMax))));
       let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
+      // UN CHRONO TRES COURT COUTE CHER AU SERVEUR, PAS AU JOUEUR : chaque coup
+      // demande un calcul de top complet, et quinze secondes par coup, c'est
+      // deja quatre calculs par minute et par salon. L'administration garde la
+      // main pour ses essais.
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      if (!estAdmin && chrono !== null && chrono < CHRONO_MINIMUM) {
+        send(ws, {
+          t: "result", ok: false,
+          message: `Le temps par coup ne descend pas sous ${CHRONO_MINIMUM} secondes`,
+        });
+        return;
+      }
       // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
       // l'echeance qui le clot, pas la decouverte du top.
       if (mode === "duplicate" && chrono === null) chrono = 60;
@@ -1061,6 +1104,15 @@ wss.on("connection", (ws, req) => {
       const bornes = msg.bornes === undefined ? base.bornes
         : msg.bornes === null ? null
         : Math.max(3, Math.min(60, Math.round(Number(msg.bornes))));
+      // Une grille de plus sans bord ? Seulement s'il reste de la place.
+      if (bornes === null && base.bornes !== null
+          && comptedesInfinies(s.id) >= MAX_INFINIES) {
+        send(ws, {
+          t: "result", ok: false,
+          message: `Trop de grilles infinies ouvertes (${MAX_INFINIES}). Réessayez plus tard.`,
+        });
+        return;
+      }
       const pavage = bornes === null ? LAYOUTS[s.layout] : LAYOUTS.classique15;
       const pavageNom = bornes === null ? s.layout : "classique15" as const;
       // Le sac sans fin ne vaut que sur une grille infinie.

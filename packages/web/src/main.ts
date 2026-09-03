@@ -1986,6 +1986,9 @@ function paintSide() {
   }
 
   const rank = $("rank");
+  // Les colonnes du duplicate ne sont pas celles du topping : la classe le dit
+  // a la feuille de style, qui fixe les largeurs en consequence.
+  rank.classList.toggle("duplicate", duplicate);
   rank.replaceChildren();
   // CEUX QUI SONT LA Y FIGURENT, meme a zero. Disparaitre du tableau parce
   // qu'on n'a rien marque, c'est ne pas savoir si l'on joue.
@@ -2058,27 +2061,23 @@ function paintSide() {
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     const vrai = nomsPublics[name];
     const infobulle = vrai === undefined ? "" : ` title="${vrai.replace(/"/g, "&quot;")}"`;
+    // Le bouton vient APRES les coeurs : ils appartiennent au nom, il ne s'en
+    // separe pas.
+    const profil = inscrits.has(name)
+      ? '<button type="button" class="voir-profil" title="Voir le profil">profil</button>' : "";
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom"${infobulle}>${name}${marque}${coeurs}</span>` + droite;
+                    `<span class="nom"${infobulle}>${name}${marque}${coeurs}${profil}</span>` + droite;
+    row.querySelector(".voir-profil")?.addEventListener("click", (e) => {
+      // Le clic sur la ligne DEROULE les coups : celui-ci ne doit pas y monter.
+      e.stopPropagation();
+      void ouvrirLaFiche(name);
+    });
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
 
     if (openPlayer === name) {
       const list = document.createElement("div");
       list.className = "plist";
-      // LE CLIC SUR LE NOM DEROULE SES COUPS : on ne le lui reprend pas. La
-      // fiche s'ouvre d'ici, une fois deroule.
-      if (inscrits.has(name)) {
-        const voir = document.createElement("button");
-        voir.type = "button";
-        voir.className = "voir-profil";
-        voir.textContent = "Voir le profil";
-        voir.addEventListener("click", (e) => {
-          e.stopPropagation();
-          void ouvrirLaFiche(name);
-        });
-        list.appendChild(voir);
-      }
       // AU DIX-MILLIEME COUP, LE NUMERO NE TIENT PLUS DANS SA COLONNE. Elle
       // etait figee a trois chiffres : au-dela, le numero debordait sur le mot
       // et la ligne se repliait en deux. La colonne suit donc la partie.
@@ -4661,13 +4660,19 @@ function connect() {
       void fermerConnexion();
       $("join").hidden = false;
       void peuplerSalons();
-      // Le refus porte presque toujours sur le pseudo -- il faut donc rouvrir
-      // le voile qui le demande, sans quoi le message tomberait dans un
-      // element cache et l'on croirait a un clic sans effet.
-      demanderLePseudo(salonChoisi === "" ? null : salonChoisi);
-      $("join-error").textContent = m.message;
-      $("join-error").hidden = false;
-      ($("name") as HTMLInputElement).select();
+      // UN REFUS NE PARLE PAS TOUJOURS DU PSEUDO. Cliquer un salon disparu
+      // ouvrait le voile qui demande un nom -- ce qui n'avait aucun rapport, et
+      // donnait a croire qu'il fallait se reconnecter. Seul un refus qui porte
+      // sur le nom rouvre ce voile ; les autres se disent sur l'accueil.
+      if (m.quoi === "pseudo") {
+        demanderLePseudo(salonChoisi === "" ? null : salonChoisi);
+        $("join-error").textContent = m.message;
+        $("join-error").hidden = false;
+        ($("name") as HTMLInputElement).select();
+      } else {
+        $("c-error").textContent = m.message;
+        $("c-error").hidden = false;
+      }
       return;
     }
     if (m.t === "relance") {
@@ -4806,6 +4811,8 @@ let salonsRecus: ResumeSalon[] = [];
  */
 interface MonCompte {
   pseudo: string; verifie: boolean;
+  /** L'adresse a-t-elle ete confirmee par son porteur ? */
+  emailVerifie: boolean;
   avatar: number;
   /** L'avatar garde les couleurs du jour ou on l'a tire : il ne suit pas le theme. */
   avatarSombre: boolean;
@@ -4928,6 +4935,7 @@ function ouvrirLeProfil(pousser = true): void {
   $("perso-public").setAttribute("aria-pressed", String(moiCompte.nomPublic));
   peindreLeNomPublic();
   $("perso-admin").hidden = !moiCompte.admin;
+  peindreLEtatDuMail();
   $("perso-error").hidden = true;
   peindreLaVerification();
   $("corps-salons").hidden = true;
@@ -5218,6 +5226,40 @@ async function changerMonMotDePasse(): Promise<void> {
 
 $("perso-nom").addEventListener("input", peindreLeNomPublic);
 $("perso-prenom").addEventListener("input", peindreLeNomPublic);
+
+/**
+ * L'etat de l'adresse : confirmee, ou pas encore.
+ *
+ * Rien ne part encore -- le lien s'ecrit dans la console de l'hote. L'ecran
+ * dit donc la verite : l'adresse n'a jamais ete verifiee.
+ */
+function peindreLEtatDuMail(): void {
+  const boite = $("etat-mail");
+  boite.replaceChildren();
+  if (moiCompte === null || moiCompte.email === "") return;
+  if (moiCompte.emailVerifie) {
+    boite.appendChild(el("span", "verifiee", "Adresse vérifiée."));
+    return;
+  }
+  boite.appendChild(el("span", "attente", "Adresse non vérifiée."));
+  const b = el("button", "", "Envoyer le lien") as HTMLButtonElement;
+  b.type = "button";
+  b.addEventListener("click", () => { void demanderLeLienDeMail(b); });
+  boite.appendChild(b);
+}
+
+async function demanderLeLienDeMail(b: HTMLButtonElement): Promise<void> {
+  b.disabled = true;
+  const r = await fetch("/api/email/envoyer", { method: "POST" });
+  const d = await r.json();
+  b.disabled = false;
+  if (!r.ok) {
+    $("mdp-error").textContent = d.erreur ?? "envoi impossible";
+    $("mdp-error").hidden = false;
+    return;
+  }
+  b.replaceWith(el("span", "", " Lien demandé."));
+}
 
 /**
  * Le nom sous le pseudo : c'est CE QUE LES AUTRES VERRONT.
@@ -5519,7 +5561,6 @@ function carteSalon(s: ResumeSalon): HTMLElement {
 function tuileCreer(): HTMLElement {
   const t = el("button", "tuile-creer", "Créer un salon") as HTMLButtonElement;
   t.type = "button";
-  t.appendChild(el("em", "", "un nom, c'est tout"));
   t.addEventListener("click", () => { void creerSalon(); });
   return t;
 }
@@ -6211,6 +6252,15 @@ void lireLeCompte().then(() => {
   // Une adresse qui demande le profil l'ouvre, des que l'on sait qui l'on est.
   if (new URLSearchParams(location.search).get("page") === "compte" && moiCompte !== null) {
     ouvrirLeProfil(false);
+  }
+  // Retour du lien de confirmation : on le dit, et on nettoie l'adresse pour
+  // qu'un rafraichissement ne rejoue pas le message.
+  const retourMail = new URLSearchParams(location.search).get("email");
+  if (retourMail !== null) {
+    $("c-error").textContent = retourMail === "ok"
+      ? "Votre adresse est confirmée." : retourMail;
+    $("c-error").hidden = false;
+    window.history.replaceState({}, "", location.pathname);
   }
   return peuplerSalons();
 });

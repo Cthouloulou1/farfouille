@@ -21,7 +21,23 @@ const DATA_DIR = join(here, "..", "data");
 const REGISTRE = join(DATA_DIR, "salons.journal.jsonl");
 
 /** Plafond de salons actifs : chaque partie tient un fil de calcul (SPEC.md §16). */
-export const MAX_SALONS = 12;
+export const MAX_SALONS = 50;
+
+/**
+ * Plafond de grilles INFINIES ouvertes en meme temps.
+ *
+ * Ce sont les seules vraiment couteuses : une grille bornee se ferme quand le
+ * sac se vide, tandis qu'une grille sans bord grandit sans fin, et le temps de
+ * calcul d'un top grandit avec elle. Dix suffisent largement, et laissent la
+ * machine a la grille mondiale, qui en est une.
+ */
+export const MAX_INFINIES = 10;
+
+/** Combien de grilles sans bord tournent en ce moment. */
+export function comptedesInfinies(saufId = ""): number {
+  return [...salons.values()]
+    .filter((s) => s.id !== saufId && s.partie.cfg.bornes === null).length;
+}
 
 export interface Salon {
   id: string;
