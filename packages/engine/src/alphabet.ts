@@ -5,6 +5,20 @@ export const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /** Le joker, dans un tirage. Ne sort jamais du sac comme une lettre normale. */
 export const BLANK = "?";
 
+/**
+ * Range un tirage : les lettres dans l'ordre, LES JOKERS A LA FIN.
+ *
+ * C'est la convention partout ailleurs -- sur une feuille de match comme dans
+ * les logiciels. Un tri brut mettait le joker EN TETE, parce que `?` precede
+ * `A` dans la table des caracteres : une raison de machine, que personne ne
+ * lit comme telle en regardant son chevalet.
+ */
+export function rangerLeTirage(lettres: Iterable<string>): string {
+  const tout = [...lettres];
+  const jokers = tout.filter((c) => c === BLANK);
+  return tout.filter((c) => c !== BLANK).sort().join("") + jokers.join("");
+}
+
 /** Separateur GADDAG. Code 27, hors A-Z. */
 export const SEP = "#";
 

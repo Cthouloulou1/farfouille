@@ -3359,16 +3359,71 @@ $("journal").addEventListener("click", (e) => {
   if (m !== undefined) focusMove(m);
 });
 
+/** Le jour d'un message, tel qu'on le compare : « 2026-09-03 ». */
+function jourDe(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/**
+ * La date en toutes lettres, avec « aujourd'hui » et « hier ».
+ *
+ * L'annee ne parait que si ce n'est pas la nôtre : la porter partout ferait
+ * lire un numero de plus a chaque separation, pour un renseignement qu'on a
+ * dans quatre-vingt-dix-neuf cas sur cent.
+ */
+function dateEnToutesLettres(at: number): string {
+  const d = new Date(at);
+  const aujourdhui = new Date();
+  const hier = new Date(aujourdhui.getTime() - 86_400_000);
+  if (jourDe(at) === jourDe(aujourdhui.getTime())) return "aujourd'hui";
+  if (jourDe(at) === jourDe(hier.getTime())) return "hier";
+  return d.toLocaleDateString("fr", {
+    weekday: "long", day: "numeric", month: "long",
+    ...(d.getFullYear() === aujourdhui.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function separateurDeJour(at: number): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "jour";
+  el.textContent = dateEnToutesLettres(at);
+  return el;
+}
+
+/**
+ * LA DATE NE PARAIT QUE QUAND ELLE DISTINGUE QUELQUE CHOSE.
+ *
+ * Tant que tout le chat tient dans une journee, l'heure suffit : une date
+ * repetee au-dessus de chaque message n'apprendrait rien. Des qu'un deuxieme
+ * jour commence, les deux se separent -- le PREMIER compris, sans quoi on ne
+ * saurait pas de quand datent les messages du haut.
+ */
 function paintChat(msgs: Chat[]) {
   const log = $("chat-log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.replaceChildren();
-  for (const m of msgs) log.appendChild(ligneDeChat(m));
+  const jours = new Set(msgs.map((m) => jourDe(m.at)));
+  let courant = "";
+  for (const m of msgs) {
+    const j = jourDe(m.at);
+    if (jours.size > 1 && j !== courant) log.appendChild(separateurDeJour(m.at));
+    courant = j;
+    log.appendChild(ligneDeChat(m));
+  }
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
 /** Ajoute un seul message, en gardant le defilement s'il etait en bas. */
 function ajouterAuChat(m: Chat): void {
+  // Un message qui ouvre un jour nouveau fait apparaitre TOUTES les dates, y
+  // compris celle du premier jour, tout en haut : on repeint plutot que de
+  // recoudre l'historique par le bas. Cela n'arrive qu'une fois par jour.
+  const avant = chat.length >= 2 ? chat[chat.length - 2] : undefined;
+  if (avant !== undefined && jourDe(avant.at) !== jourDe(m.at)) {
+    paintChat(chat);
+    return;
+  }
   const log = $("chat-log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.appendChild(ligneDeChat(m));
@@ -3445,6 +3500,8 @@ interface Preferences {
   vols: boolean;
   /** Hauteur choisie pour chaque section du panneau, `null` = celle d'origine. */
   hauteurs: { live: number | null; journal: number | null; rank: number | null };
+  /** Largeur choisie pour le panneau de droite, `null` = celle d'origine. */
+  largeurCote: number | null;
   /** Les images de grille sont-elles tirees en haute definition ? */
   imageHD: boolean;
   /** De quel cote du plateau se lisent les lettres : « fr » ou « en ». */
@@ -3476,6 +3533,7 @@ const prefs: Preferences = {
   // c'est notre valeur de depart, et le panneau permet d'en changer.
   vols: !matchMedia("(prefers-reduced-motion: reduce)").matches,
   hauteurs: { live: null, journal: null, rank: null },
+  largeurCote: null,
   imageHD: false,
   reperes: "fr",
   quatre: false,
@@ -3533,6 +3591,10 @@ function lirePreferences(): void {
     for (const cle of ["zoomRoute", "zoomCote"] as const) {
       const z = v[cle];
       if (typeof z === "number" && z >= ZOOM_MIN && z <= ZOOM_MAX) prefs[cle] = z;
+    }
+    const l = v.largeurCote;
+    if (l === null || (typeof l === "number" && Number.isFinite(l))) {
+      prefs.largeurCote = l === null ? null : borneLaLargeur(l);
     }
     const h = v.hauteurs;
     if (h !== undefined && h !== null) {
@@ -4100,6 +4162,25 @@ const SECTIONS = [
 /** Ce qu'on laisse au chat, quoi qu'on tire : sans quoi il disparait pour de bon. */
 const RESTE_AU_CHAT = 90;
 
+/**
+ * LES BORNES DU PANNEAU DE DROITE.
+ *
+ * Le maximum est sa largeur d'origine : on le retrecit pour rendre de la place
+ * a la grille, on ne l'elargit pas -- au-dela, le classement et le chat
+ * gagneraient du vide, la grille perdrait des cases.
+ *
+ * Le minimum tient a ce qu'on y lit. En dessous de 360 px, la ligne du
+ * classement -- nom, coeurs, points -- se replie en deux, et le journal ne
+ * tient plus un coup par ligne. C'est la que le panneau cesse de servir.
+ */
+const COTE_MAX = 572, COTE_MIN = 360;
+const borneLaLargeur = (l: number): number => Math.max(COTE_MIN, Math.min(COTE_MAX, Math.round(l)));
+
+function reglerLaLargeur(l: number | null): void {
+  const cote = document.querySelector(".side") as HTMLElement;
+  cote.style.width = l === null ? "" : `${borneLaLargeur(l)}px`;
+}
+
 function reglerHauteur(section: HTMLElement, h: number | null): void {
   if (h === null) {
     section.style.height = "";
@@ -4118,7 +4199,45 @@ function reglerHauteur(section: HTMLElement, h: number | null): void {
 
 function appliquerLesHauteurs(): void {
   for (const s of SECTIONS) reglerHauteur($(s.section), prefs.hauteurs[s.cle]);
+  reglerLaLargeur(prefs.largeurCote);
   peindreLeJournalVisible();
+}
+
+{
+  // TIRER VERS LA GAUCHE ELARGIT : la poignee est au bord gauche du panneau, et
+  // c'est le bord qu'on deplace, pas le panneau.
+  const poignee = $("poignee-cote");
+  const cote = document.querySelector(".side") as HTMLElement;
+  poignee.addEventListener("pointerdown", (e) => {
+    const ev = e as PointerEvent;
+    ev.preventDefault();
+    poignee.setPointerCapture(ev.pointerId);
+    poignee.classList.add("tire");
+    document.body.classList.add("redimensionne", "colonne");
+    const depart = ev.clientX;
+    const l0 = cote.getBoundingClientRect().width;
+    const bouger = (m: PointerEvent) => {
+      const l = borneLaLargeur(l0 + depart - m.clientX);
+      prefs.largeurCote = l;
+      reglerLaLargeur(l);
+    };
+    const lacher = () => {
+      poignee.removeEventListener("pointermove", bouger);
+      poignee.removeEventListener("pointerup", lacher);
+      poignee.removeEventListener("pointercancel", lacher);
+      poignee.classList.remove("tire");
+      document.body.classList.remove("redimensionne", "colonne");
+      garderPreferences();
+    };
+    poignee.addEventListener("pointermove", bouger);
+    poignee.addEventListener("pointerup", lacher);
+    poignee.addEventListener("pointercancel", lacher);
+  });
+  poignee.addEventListener("dblclick", () => {
+    prefs.largeurCote = null;
+    reglerLaLargeur(null);
+    garderPreferences();
+  });
 }
 
 /** Une poignee n'a de sens qu'entre deux sections visibles. */
@@ -4613,6 +4732,7 @@ interface ResumeSalon {
 const ACCROCHE_STAR = [
   "Grille infinie, sans limite de temps, sans fin.",
   "Jusqu'où pourrons-nous aller ?",
+  "Rejoignez la plus grande partie de duplicate jamais créée.",
 ];
 
 /** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
@@ -4633,6 +4753,8 @@ let salonsRecus: ResumeSalon[] = [];
  */
 interface MonCompte {
   pseudo: string; verifie: boolean; avatar: number;
+  /** Jamais lue par les autres joueurs : elle ne sert qu'a nous retrouver. */
+  email: string;
   nomReel: string; nomPublic: boolean; demande: boolean; admin: boolean;
 }
 
@@ -4703,6 +4825,8 @@ function peindreOngletsDuCompte(): void {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === ongletCompte));
   }
   const inscrit = ongletCompte === "inscription";
+  $("c-email").hidden = !inscrit;
+  $("c-pourquoi").hidden = !inscrit;
   $("compte-titre").textContent = inscrit ? "Inscription" : "Connexion";
   $("compte-quoi").textContent = inscrit
     ? "Votre pseudo vous est réservé, et personne d'autre ne pourra le porter."
@@ -4718,7 +4842,9 @@ function ouvrirLEspace(): void {
   $("perso-badge").hidden = !moiCompte.verifie;
   peindreAvatar($("perso-avatar"), moiCompte.avatar, 52);
   ($("perso-nom") as HTMLInputElement).value = moiCompte.nomReel;
+  ($("perso-email") as HTMLInputElement).value = moiCompte.email;
   $("perso-public").setAttribute("aria-pressed", String(moiCompte.nomPublic));
+  peindreLeNomPublic();
   $("perso-admin").hidden = !moiCompte.admin;
   $("perso-error").hidden = true;
   peindreLaVerification();
@@ -4761,6 +4887,7 @@ async function enregistrerLeProfil(): Promise<boolean> {
     body: JSON.stringify({
       nomReel: ($("perso-nom") as HTMLInputElement).value,
       nomPublic: $("perso-public").getAttribute("aria-pressed") === "true",
+      email: ($("perso-email") as HTMLInputElement).value,
       avatar: moiCompte.avatar,
     }),
   });
@@ -4809,6 +4936,7 @@ async function ouvrirLAdministration(): Promise<void> {
     qui.appendChild(el("b", "", v.pseudo));
     qui.appendChild(document.createElement("br"));
     qui.appendChild(el("span", "vrai", v.nomReel || "— sans nom —"));
+    if (v.email) qui.appendChild(el("span", "mail", v.email));
     ligne.appendChild(qui);
     const actions = el("span", "actions");
     if (v.verifie) {
@@ -4857,11 +4985,12 @@ $("form-compte").addEventListener("submit", (e) => {
 async function envoyerLeCompte(): Promise<void> {
   const pseudoDonne = ($("c-pseudo") as HTMLInputElement).value.trim();
   const mdp = ($("c-mdp") as HTMLInputElement).value;
+  const email = ($("c-email") as HTMLInputElement).value.trim();
   const chemin = ongletCompte === "inscription" ? "/api/inscription" : "/api/connexion";
   const r = await fetch(chemin, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pseudo: pseudoDonne, motDePasse: mdp }),
+    body: JSON.stringify({ pseudo: pseudoDonne, motDePasse: mdp, email }),
   });
   const d = await r.json();
   if (!r.ok) {
@@ -4895,7 +5024,24 @@ $("perso-close").addEventListener("click", () => {
 $("perso-public").addEventListener("click", () => {
   const b = $("perso-public");
   b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
+  peindreLeNomPublic();
 });
+
+$("perso-nom").addEventListener("input", peindreLeNomPublic);
+
+/**
+ * Le nom sous le pseudo : c'est CE QUE LES AUTRES VERRONT.
+ *
+ * L'interrupteur seul demandait de se fier a une promesse. Montrer le nom a sa
+ * place, sur son propre profil, dit exactement ce qu'on rend public -- et le
+ * fait disparaitre quand on rend l'interrupteur.
+ */
+function peindreLeNomPublic(): void {
+  const nom = ($("perso-nom") as HTMLInputElement).value.trim();
+  const ouvert = $("perso-public").getAttribute("aria-pressed") === "true";
+  $("perso-nom-public").textContent = nom;
+  $("perso-nom-public").hidden = !ouvert || nom === "";
+}
 
 $("perso-avatar-neuf").addEventListener("click", () => {
   if (moiCompte === null) return;

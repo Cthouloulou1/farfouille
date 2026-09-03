@@ -235,7 +235,14 @@ const occupants = (salonId: string): string[] =>
 function majDuGerant(s: Salon): void {
   const neuf = confierLesReglages(s, occupants(s.id));
   if (neuf === null) return;
-  s.partie.say("", `${neuf} règle le salon en l'absence de ${s.proprietaire}.`);
+  // UNE SEULE PHRASE, DANS LES DEUX SENS. « X regle le salon en l'absence de
+  // Y » ne valait que dans un sens, ne disait rien au retour de Y, et nommait
+  // un absent dont personne n'avait besoin. Qui tient les manettes MAINTENANT :
+  // c'est tout ce que la ligne doit apprendre.
+  //
+  // Un salon permanent ne l'annonce pas : ses reglages ne changent pas de
+  // mains, et la ligne n'y serait qu'un bruit de plus dans un chat qui dure.
+  if (!estPermanent(s)) s.partie.say("", `${neuf} devient l'hôte.`);
   console.log(`[salon] "${s.nom}" : les reglages passent a ${neuf}`);
 }
 
@@ -615,7 +622,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const mdp = String(corps.motDePasse ?? "");
 
     if (url === "/api/inscription") {
-      const erreur = await creerCompte(pseudo, mdp);
+      const erreur = await creerCompte(pseudo, mdp, String(corps.email ?? ""));
       if (erreur !== null) { json(res, 400, { erreur }); return; }
     } else {
       const c = compte(pseudo);
@@ -644,12 +651,14 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let corps: any;
     try { corps = await corpsJson(req); }
     catch { json(res, 400, { erreur: "requête illisible" }); return; }
-    ecrireLeProfil(
+    const erreur = ecrireLeProfil(
       c,
       String(corps.nomReel ?? c.nomReel),
       corps.nomPublic === true,
       Number.isFinite(Number(corps.avatar)) ? Number(corps.avatar) : c.avatar,
+      String(corps.email ?? c.email),
     );
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
     json(res, 200, { compte: priveDuCompte(c) });
     return;
   }
@@ -674,7 +683,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         .filter((v) => v.demande || v.verifie)
         .sort((a, b) => Number(b.demande) - Number(a.demande) || a.demandeLe - b.demandeLe)
         .map((v) => ({
-          pseudo: v.pseudo, nomReel: v.nomReel, nomPublic: v.nomPublic,
+          pseudo: v.pseudo, nomReel: v.nomReel, nomPublic: v.nomPublic, email: v.email,
           demande: v.demande, verifie: v.verifie, demandeLe: v.demandeLe, cree: v.cree,
         })),
     });

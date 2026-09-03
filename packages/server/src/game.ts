@@ -30,7 +30,7 @@ import type { Dict } from "../../engine/src/dictionary.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import { Bag, DEFAULT_BAG } from "../../engine/src/bag.ts";
-import { BLANK } from "../../engine/src/alphabet.ts";
+import { BLANK, rangerLeTirage } from "../../engine/src/alphabet.ts";
 import { SacFini, SAC_FRANCAIS, type Pioche } from "../../engine/src/sac.ts";
 import {
   configParDefaut, serialiser, deserialiser,
@@ -1037,7 +1037,7 @@ export class Game {
     this.propositions.clear();
     this.participants = new Set(this.presents);
     const draw = this.bag.draw(reliquatSansJoker);
-    this.rack = gardeJoker ? [...draw.rack, BLANK].sort().join("") : draw.rack;
+    this.rack = rangerLeTirage(gardeJoker ? [...draw.rack, BLANK] : draw.rack);
     this.rackNotation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
     this.bestScore = -1;
     this.canonicalTop = null;
@@ -1371,7 +1371,7 @@ export class Game {
         ? this.reliquatAvance.filter((c) => c !== BLANK)
         : this.reliquatAvance;
       const draw = sac.draw(sansJoker);
-      const rack = gardeJoker ? [...draw.rack, BLANK].sort().join("") : draw.rack;
+      const rack = rangerLeTirage(gardeJoker ? [...draw.rack, BLANK] : draw.rack);
       const notation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
       const id = this.nextId++;
       const reply: any = await new Promise((res) => {

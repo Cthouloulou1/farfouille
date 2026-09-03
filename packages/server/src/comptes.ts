@@ -64,6 +64,19 @@ export interface Compte {
    * moment-la, ce qui deconnecte partout des qu'on change son mot de passe.
    */
   mdpChangeLe: number;
+  /**
+   * L'ADRESSE, ET RIEN QU'ELLE.
+   *
+   * Tant qu'on ne sait pas envoyer de courriel, elle ne sert a rien
+   * automatiquement : elle sert a RETROUVER quelqu'un. Un compte dont le mot de
+   * passe est oublie et dont on ne connait pas le porteur est un compte perdu,
+   * et son pseudo avec lui. C'est pour cela qu'elle est demandee des
+   * maintenant, avant meme qu'il y ait de quoi s'en servir.
+   *
+   * Elle ne sort jamais vers les autres joueurs : son porteur et
+   * l'administration, personne d'autre.
+   */
+  email: string;
   admin: boolean;
   /**
    * Le vrai nom, pour la verification. PRIVE PAR DEFAUT.
@@ -84,6 +97,30 @@ export interface Compte {
 
 /** L'index en memoire, par cle de pseudo. Le journal reste la verite. */
 const comptes = new Map<string, Compte>();
+
+/** Une adresse par compte : sans cela, depanner un oubli devient un devinette. */
+const cleDuMail = (email: string): string => email.trim().toLowerCase();
+
+/**
+ * Une adresse plausible, sans plus.
+ *
+ * On ne cherche pas a valider une adresse par sa forme -- la vraie regle est
+ * illisible, et une adresse valide peut tres bien n'exister nulle part. On
+ * ecarte seulement ce qui ne peut PAS en etre une : la vraie verification
+ * viendra du courriel de confirmation, le jour ou l'on saura en envoyer.
+ */
+function adressePlausible(email: string): boolean {
+  const e = email.trim();
+  if (e.length < 6 || e.length > 254 || /\s/.test(e)) return false;
+  const at = e.indexOf("@");
+  return at > 0 && at === e.lastIndexOf("@") && e.indexOf(".", at) > at + 1
+    && !e.endsWith(".");
+}
+
+export function mailPris(email: string): boolean {
+  const cle = cleDuMail(email);
+  return cle !== "" && [...comptes.values()].some((c) => cleDuMail(c.email) === cle);
+}
 
 /**
  * LA CLE D'UNICITE IGNORE LA CASSE ET LES ACCENTS.
@@ -123,6 +160,7 @@ export function lireLesComptes(): void {
         pseudo: String(e["pseudo"]), hash: String(e["hash"]), sel: String(e["sel"]),
         cree: Number(e["cree"] ?? Date.now()), mdpChangeLe: Number(e["cree"] ?? 0),
         admin: e["admin"] === true,
+        email: String(e["email"] ?? ""),
         nomReel: "", nomPublic: false, demande: false, demandeLe: 0, verifie: false,
         avatar: Number(e["avatar"] ?? 0),
       });
@@ -136,6 +174,7 @@ export function lireLesComptes(): void {
     } else if (e["t"] === "profil") {
       c.nomReel = String(e["nomReel"] ?? "");
       c.nomPublic = e["nomPublic"] === true;
+      if (e["email"] !== undefined) c.email = String(e["email"]);
       if (e["avatar"] !== undefined) c.avatar = Number(e["avatar"]);
     } else if (e["t"] === "demande") {
       c.demande = true; c.demandeLe = Number(e["quand"] ?? Date.now());
@@ -170,24 +209,33 @@ async function hacher(mdp: string, sel: Buffer): Promise<string> {
  * tape. Seule sa CLE est normalisee, pour l'unicite.
  */
 export async function creerCompte(
-  pseudo: string, mdp: string, admin = false,
+  pseudo: string, mdp: string, email: string, admin = false,
 ): Promise<string | null> {
   const nom = pseudo.trim();
+  const mail = email.trim();
   if (nom.length < 2 || nom.length > 24) return "Le pseudo fait entre 2 et 24 caractères";
   if (cleDuPseudo(nom) === "") return "Ce pseudo ne contient rien de lisible";
   if (comptes.has(cleDuPseudo(nom))) return "Ce pseudo est déjà pris";
   if (mdp.length < MDP_MINIMUM) return `Le mot de passe fait au moins ${MDP_MINIMUM} caractères`;
+  // Le compte d'administration est cree par la console, pas par un formulaire :
+  // il n'a personne a qui ecrire.
+  if (!admin) {
+    if (!adressePlausible(mail)) return "Cette adresse ne ressemble pas à une adresse";
+    if (mailPris(mail)) return "Un compte existe déjà avec cette adresse";
+  }
   const sel = randomBytes(16);
   const hash = await hacher(mdp, sel);
   const cree = Date.now();
   const avatar = randomBytes(2).readUInt16BE(0);
   const ev = {
     t: "cree", pseudo: nom, hash, sel: sel.toString("base64"), cree, avatar,
+    email: mail,
     ...(admin ? { admin: true } : {}),
   };
   inscrire(ev);
   comptes.set(cleDuPseudo(nom), {
     pseudo: nom, hash, sel: sel.toString("base64"), cree, mdpChangeLe: cree,
+    email: mail,
     admin, nomReel: "", nomPublic: false, demande: false, demandeLe: 0,
     verifie: false, avatar,
   });
@@ -218,11 +266,29 @@ export async function changerLeMotDePasse(c: Compte, mdp: string): Promise<strin
   return null;
 }
 
-export function ecrireLeProfil(c: Compte, nomReel: string, nomPublic: boolean, avatar: number): void {
+/**
+ * Enregistre le profil. Rend l'erreur a montrer, ou null.
+ *
+ * L'adresse se corrige : une faute de frappe le jour de l'inscription ne doit
+ * pas condamner le compte, puisque c'est justement elle qui le rattrapera.
+ */
+export function ecrireLeProfil(
+  c: Compte, nomReel: string, nomPublic: boolean, avatar: number, email: string,
+): string | null {
+  const mail = email.trim();
+  if (mail !== c.email) {
+    if (!adressePlausible(mail)) return "Cette adresse ne ressemble pas à une adresse";
+    if (mailPris(mail)) return "Un compte existe déjà avec cette adresse";
+    c.email = mail;
+  }
   c.nomReel = nomReel.trim().slice(0, 64);
   c.nomPublic = nomPublic;
   c.avatar = avatar & 0xffff;
-  inscrire({ t: "profil", pseudo: c.pseudo, nomReel: c.nomReel, nomPublic: c.nomPublic, avatar: c.avatar });
+  inscrire({
+    t: "profil", pseudo: c.pseudo, nomReel: c.nomReel, nomPublic: c.nomPublic,
+    email: c.email, avatar: c.avatar,
+  });
+  return null;
 }
 
 export function demanderLaVerification(c: Compte): string | null {
@@ -349,6 +415,7 @@ export function publicDuCompte(c: Compte): Record<string, unknown> {
 export function priveDuCompte(c: Compte): Record<string, unknown> {
   return {
     ...publicDuCompte(c),
+    email: c.email,
     nomReel: c.nomReel,
     nomPublic: c.nomPublic,
     demande: c.demande,
@@ -366,9 +433,26 @@ export function priveDuCompte(c: Compte): Record<string, unknown> {
  * code serait le meme chez tout le monde.
  */
 export async function assurerLAdmin(pseudo: string, mdpDemande: string): Promise<void> {
-  if (comptes.has(cleDuPseudo(pseudo))) return;
+  const deja = comptes.get(cleDuPseudo(pseudo));
+  if (deja !== undefined) {
+    // DONNER `--admin-mdp` A UN COMPTE QUI EXISTE LE REMET A CE MOT DE PASSE.
+    //
+    // Sans cela, un mot de passe tire au hasard et manque au demarrage
+    // enfermait dehors pour de bon : le compte existait, donc on ne le recreait
+    // pas, et rien ne permettait d'y rentrer. Qui peut lancer le serveur tient
+    // deja la machine et le journal : il ne gagne aucun pouvoir ici.
+    if (mdpDemande !== "") {
+      const erreur = await changerLeMotDePasse(deja, mdpDemande);
+      console.log(erreur === null
+        ? `
+  ADMINISTRATION -- mot de passe de "${deja.pseudo}" remis a celui du demarrage.
+`
+        : `  [comptes] mot de passe d'administration refuse : ${erreur}`);
+    }
+    return;
+  }
   const mdp = mdpDemande !== "" ? mdpDemande : randomBytes(12).toString("base64url");
-  const erreur = await creerCompte(pseudo, mdp, true);
+  const erreur = await creerCompte(pseudo, mdp, "", true);
   if (erreur !== null) {
     console.log(`  [comptes] compte d'administration impossible : ${erreur}`);
     return;

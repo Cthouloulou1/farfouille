@@ -242,7 +242,12 @@ export function confierLesReglages(s: Salon, presents: string[]): string | null 
   else if (presents.length === 0) s.gerant = null;
   else s.gerant = presents[Math.floor(Math.random() * presents.length)]!;
   if (s.gerant === avant || s.gerant === null) return null;
-  return s.gerant === s.proprietaire ? null : s.gerant;
+  // LE RETOUR DU PROPRIETAIRE S'ANNONCE AUSSI. Il ne s'annoncait pas, et l'on
+  // pouvait continuer a croire que quelqu'un d'autre tenait les manettes.
+  // Seule la toute premiere attribution reste muette : ouvrir son salon et
+  // s'entendre dire qu'on en devient l'hote n'apprend rien a personne.
+  if (avant === null && s.gerant === s.proprietaire) return null;
+  return s.gerant;
 }
 
 /**
