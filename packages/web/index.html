@@ -57,6 +57,15 @@
      posee sur une carte sombre eblouit. */
   --vignette-15:      url(grille-15.svg);
   --vignette-infinie: url(grille-infinie.svg);
+  /* LE BORD DES CARTES A SON PROPRE JETON. Sur fond sombre, `--rule` est
+     presque le fond lui-meme : les cartes s'y dissolvaient, on ne voyait plus
+     ou l'une finissait et ou l'autre commencait. Un liseré clair les detache,
+     et il passe au vert sous le curseur. */
+  --carte-rule: #CFD8D3;
+  /* Le fond des vignettes, distinct de celui du plateau qu'elles montrent :
+     sans cette difference, un plateau 15x15 se fondait dans son cadre et l'on
+     ne voyait plus que des carres de couleur flottant dans le vide. */
+  --vignette-fond: #EDF1EF;
 }
 /* LE MODE SOMBRE S'OBTIENT DE DEUX FACONS : le navigateur le demande, ou le
    joueur l'a choisi dans les paramètres. Les deux blocs portent les MEMES
@@ -76,6 +85,7 @@
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
     --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
+    --carte-rule: rgba(230,237,233,.30); --vignette-fond: #101917;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -90,7 +100,8 @@
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
     --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
-  }
+    --carte-rule: rgba(230,237,233,.30); --vignette-fond: #101917;
+}
 }
 * { box-sizing: border-box; }
 body {
@@ -405,7 +416,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .roadmap > div.feuille { width: min(980px, 96vw); height: 88vh; max-height: 94vh; }
 .roadmap > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; width: min(820px, 92vw); max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px var(--shadow); }
 .roadmap header { display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-bottom: 1px solid var(--rule); }
-.roadmap header h3 { margin: 0; flex: 1; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: 19px; }
+.roadmap header h3 { margin: 0; flex: 1; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 20px; }
 #rm-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 10px; }
 .roadmap header #rm-q { flex: none; width: 220px; padding: 5px 9px; font-family: inherit; font-size: 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); }
 .roadmap header #rm-q:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -483,30 +494,32 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .nom-du-site { padding: 0; background: none; border: 0; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 25px; line-height: 1.1; letter-spacing: -.005em; color: var(--nuit-ink); }
 .nom-du-site:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
 .bandeau-droite { margin-left: auto; display: flex; align-items: center; gap: 16px; }
-.records { padding: 0; background: none; border: 0; font-size: 12.5px; color: var(--nuit-faint); }
+.records { padding: 8px 14px; background: none; border: 1px solid transparent; border-radius: 5px; font-size: 14.5px; color: var(--nuit-faint); }
+.records:hover { border-color: var(--nuit-rule); }
 .records:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
 /* La roue du bandeau est claire sur fond de nuit, et grande : on doit voir
    d'un coup d'oeil ou se changent les reglages. */
-.bandeau .roue { color: var(--nuit-faint); }
+.bandeau .roue { width: 34px; height: 34px; color: var(--nuit-faint); }
 .bandeau .roue:hover { color: var(--nuit-accent); border-color: transparent; }
-.entrer { padding: 7px 15px; border: 0; border-radius: 4px; background: var(--nuit-accent); color: var(--nuit); font-size: 12.5px; font-weight: 500; }
+.entrer { padding: 10px 20px; border: 0; border-radius: 5px; background: var(--nuit-accent); color: var(--nuit); font-size: 14.5px; font-weight: 600; }
 .entrer:hover:not(:disabled) { color: var(--nuit); border-color: transparent; filter: brightness(1.08); }
-.moi { display: flex; align-items: center; gap: 8px; padding: 0; background: none; border: 0; font-size: 12.5px; color: var(--nuit-ink); }
+.moi { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px; background: none; border: 1px solid transparent; border-radius: 20px; font-size: 14.5px; color: var(--nuit-ink); }
+.moi:hover { border-color: var(--nuit-rule); }
 .moi:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
-.moi .avatar { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--nuit-rule); color: var(--nuit-faint); font-size: 11px; font-weight: 600; line-height: 24px; text-align: center; }
+.moi .avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--nuit-rule); color: var(--nuit-faint); font-size: 13px; font-weight: 600; line-height: 30px; text-align: center; }
 
 .corps { padding: 18px 24px 20px; }
 .filtres { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.puce { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 20px; background: var(--panel); color: var(--ink-soft); font-size: 11.5px; }
+.puce { padding: 7px 16px; border: 1px solid var(--carte-rule); border-radius: 20px; background: var(--panel); color: var(--ink-soft); font-size: 13.5px; }
 .puce[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
 .puce[aria-pressed="true"]:hover { color: var(--ground); border-color: var(--ink); }
-.creer-bar { margin-left: auto; padding: 8px 15px; border: 0; border-radius: 4px; background: var(--accent); color: #FFFFFF; font-size: 12.5px; font-weight: 500; }
+.creer-bar { margin-left: auto; padding: 10px 20px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 14.5px; font-weight: 500; }
 .creer-bar:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
 .corps .join-error { margin-bottom: 12px; }
 
 /* LE MUR DE SALONS. Quatre colonnes, puis deux, puis une : la tuile du salon
    star garde ses deux colonnes tant qu'il en reste deux. */
-.mur { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.mur { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 /* La colonne de droite ne pousse pas la rangee : son contenu est detache,
    et c'est la tuile star qui donne la hauteur. */
 .vedette { display: flex; }
@@ -516,12 +529,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    reprennent toute la largeur plutot que de laisser un trou. */
 .mur.sans-star { grid-template-columns: 1fr; }
 .mur.sans-star .rouleau { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-/* Sans tuile star, plus rien ne fixe la hauteur : le rouleau la rend a la page
-   plutot que de faire defiler quatre colonnes dans une lucarne. */
-.mur.sans-star .droite { position: static; min-height: 0; }
-.mur.sans-star .rouleau { position: static; overflow: visible; padding-right: 0; }
-.droite { position: relative; min-height: 366px; }
-.rouleau { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: min-content; gap: 14px; padding-right: 4px; }
+.mur.sans-star .droite { min-height: 0; }
+/* LA COLONNE DE DROITE N'EST PAS BORNEE PAR LA TUILE STAR. Elle descend
+   aussi loin qu'il y a des salons, et c'est la PAGE qui defile -- une lucarne
+   qui defile toute seule cache ce qu'elle contient. */
+.droite { min-height: 366px; }
+.rouleau { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: min-content; gap: 14px; }
 .rouleau .none { grid-column: 1 / -1; padding: 10px 2px; color: var(--ink-faint); font-size: 12.5px; }
 
 /* LA TUILE DU SALON STAR. Le motif se repete et sort du cadre de tous les
@@ -529,7 +542,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .star { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 366px; padding: 24px; border: 0; border-radius: 6px; overflow: hidden; text-align: left; color: var(--nuit-ink);
   background-image: linear-gradient(to top, rgba(14,20,18,.97) 24%, rgba(14,20,18,.74) 52%, rgba(14,20,18,.34) 100%), url(grille-infinie-sombre.svg);
   background-size: auto, 392px 392px; background-repeat: no-repeat, repeat; background-position: center, center; }
-.star:hover:not(:disabled) { color: var(--nuit-ink); border-color: transparent; }
+.star { border: 1px solid var(--carte-rule); }
+.star:hover:not(:disabled) { color: var(--nuit-ink); border-color: var(--accent); }
 .star .enligne { position: absolute; right: 16px; top: 16px; display: flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 20px; background: rgba(14,20,18,.66); color: var(--nuit-accent); font-family: "IBM Plex Mono", monospace; font-size: 11px; }
 .star .surtitre { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--nuit-accent); }
 .star .titre { margin-top: 5px; font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 1.02; color: #FFFFFF; }
@@ -540,27 +554,36 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .star .chiffres { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--nuit-faint); }
 .star:hover .jouer { filter: brightness(1.08); }
 .point { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-@media (max-width: 1080px) { .rouleau { grid-template-columns: 1fr; } }
+/* La colonne de droite est etroite entre 780 et 1080 : une seule carte par
+   rangee. En dessous, le mur s'empile et la largeur revient : deux cartes. */
+@media (max-width: 1080px) and (min-width: 781px) { .rouleau { grid-template-columns: 1fr; } }
 @media (max-width: 780px) {
   .mur { grid-template-columns: 1fr; }
   .star { min-height: 300px; }
   /* Sur un ecran etroit, un rouleau dans la page est un piege : la liste
      reprend sa hauteur et c'est la page qui defile. */
   .droite { min-height: 0; }
-  .rouleau { position: static; overflow: visible; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-right: 0; }
 }
-@media (max-width: 560px) { .rouleau { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .rouleau { grid-template-columns: 1fr; } }
 
 /* UNE CARTE DE SALON. La vignette dit d'abord de quelle grille il s'agit : le
    plateau 15x15 tient tout entier dans le cadre, avec ses bords ; la grille
    infinie remplit la vignette bord a bord, sans bord visible. */
-.carte { display: flex; flex-direction: column; padding: 0; overflow: hidden; text-align: left; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); }
+.carte { display: flex; flex-direction: column; padding: 0; overflow: hidden; text-align: left; background: var(--panel); border: 1px solid var(--carte-rule); border-radius: 6px; color: var(--ink); transition: border-color .12s, background .12s; }
 .carte:hover:not(:disabled) { border-color: var(--accent); background: var(--hover); color: var(--ink); }
 .carte .vue { position: relative; display: block; }
-.carte .vignette { display: block; height: 112px; border-bottom: 1px solid var(--rule); background-color: var(--field); }
-.carte .vignette.bornee { background-image: var(--vignette-15); background-size: auto 96px; background-position: center; background-repeat: no-repeat; }
-.carte .vignette.infinie { background-image: var(--vignette-infinie); background-size: 196px 196px; background-position: center; background-repeat: repeat; }
-.carte .badge { position: absolute; right: 7px; bottom: 6px; padding: 1px 5px; border-radius: 3px; background: color-mix(in srgb, var(--ground) 86%, transparent); font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--ink-soft); }
+.carte .vignette { display: block; height: 124px; border-bottom: 1px solid var(--carte-rule); background-color: var(--vignette-fond); }
+/* Le plateau prend TOUTE LA LARGEUR et se laisse couper en haut et en bas.
+   Centre a sa taille, il flottait au milieu d'un bandeau trop large,
+   minuscule. Ainsi cadre, on le voit de pres -- ses bords gauche et droit
+   restent visibles, donc on lit toujours qu'il est FINI, et la vignette est
+   pleine. La grille infinie, elle, n'a aucun bord a montrer : c'est tout ce
+   qui les distingue, et c'est plus net qu'avant. */
+.carte .vignette.bornee { background-image: var(--vignette-15); background-size: 100% auto; background-position: center; background-repeat: no-repeat; }
+.carte .vignette.infinie { background-image: var(--vignette-infinie); background-size: 210px 210px; background-position: center; background-repeat: repeat; }
+/* LE TYPE DE GRILLE SE LIT DE LOIN. C'est le premier renseignement qu'on
+   cherche sur une carte, et il etait ecrit en dix pixels dans un coin. */
+.carte .badge { position: absolute; right: 8px; bottom: 8px; padding: 3px 10px; border-radius: 4px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--carte-rule); font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 500; line-height: 1.2; color: var(--ink); }
 .carte .dedans { display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 12px; }
 .carte .nom { font-size: 13.5px; font-weight: 500; }
 .carte .quoi { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
@@ -576,7 +599,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .carte .jeter:hover { color: var(--warn); border-color: var(--warn); }
 
 .tuile-creer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 180px; border: 1px dashed var(--tile-edge); border-radius: 6px; background: var(--hover); color: var(--accent); font-size: 13.5px; font-weight: 500; }
-.tuile-creer:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tuile-creer:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .tuile-creer em { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
 
 /* LE SEUL ENDROIT OU FIGURE LE NOMBRE TOTAL DE JOUEURS. Il etait a cote du nom
@@ -589,46 +612,65 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    il devient necessaire, et rend la main a la destination demandee. */
 .voile { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(14,20,18,.45); z-index: 31; }
 .voile[hidden] { display: none; }
-.pseudo { width: min(360px, 94vw); padding: 22px 24px 20px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 8px 30px var(--shadow); }
-.pseudo h2 { font-family: "Instrument Serif", Georgia, serif; font-size: 24px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink); }
-.pseudo p { margin: 6px 0 16px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
-.pseudo input { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); }
+.pseudo { width: min(460px, 94vw); padding: 30px 32px 26px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 30px var(--shadow); font-size: 14.5px; }
+.pseudo h2 { font-family: "Baloo 2", Archivo, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -.005em; text-transform: none; color: var(--ink); }
+.pseudo p { margin: 8px 0 18px; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+.pseudo input { width: 100%; font: inherit; font-size: 15px; padding: 11px 13px; border: 1px solid var(--rule); border-radius: 5px; background: var(--ground); color: var(--ink); }
 .pseudo input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pseudo .join-error { margin-top: 10px; }
-.pseudo .valider { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 4px; background: var(--accent); color: #FFFFFF; font-size: 13.5px; font-weight: 500; }
+.pseudo .valider { width: 100%; margin-top: 16px; padding: 13px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 15px; font-weight: 500; }
 .pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
-.pseudo .renoncer { display: block; margin: 10px auto 0; }
-.records-boite { width: min(420px, 94vw); }
-.pseudo .onglets { margin: 14px 0 4px; }
-.pseudo .etiquette { display: block; margin: 14px 0 5px; font-size: 11.5px; color: var(--ink-faint); }
+.pseudo .renoncer { display: block; margin: 14px auto 0; font-size: 13px; padding: 5px 11px; }
+.records-boite { width: min(480px, 94vw); }
+/* Deux boutons plutot que deux onglets : on voit d'un coup ce qu'on peut
+   faire, sans avoir a lire une phrase pour comprendre lequel est actif. */
+.bascules { display: flex; gap: 8px; margin: 18px 0 18px; }
+.bascules button { flex: 1; padding: 10px; font-size: 14px; border-radius: 5px; }
+.bascules button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 500; }
+.pseudo .etiquette { display: block; margin: 18px 0 7px; font-size: 13px; color: var(--ink-faint); }
 .pseudo input + input { margin-top: 8px; }
-.perso { width: min(420px, 94vw); }
-.perso-tete { display: flex; align-items: center; gap: 12px; }
-.perso-tete h2 { margin: 0; }
+.profil { max-width: 760px; margin: 0 auto; }
+.profil-tete { display: flex; align-items: center; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
+.profil-tete .lien { margin-left: auto; font-size: 13px; padding: 6px 12px; }
+.profil-qui h1 { margin: 0; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 30px; line-height: 1.15; }
+.profil-corps { display: flex; flex-direction: column; gap: 26px; padding: 24px 0 4px; }
+.profil-bloc h2 { margin: 0 0 12px; font-size: 12px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); }
+.profil-bloc .etiquette { display: block; margin: 0 0 8px; font-size: 14px; color: var(--ink-soft); }
+.profil-bloc input { width: 100%; font: inherit; font-size: 15px; padding: 11px 13px; border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); color: var(--ink); }
+.profil-bloc input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Prenom et nom cote a cote : un nom compose ne se coupe pas a la premiere
+   espace, et personne ne sait dire ou finit le prenom d'un trait continu. */
+.deux-champs { display: flex; gap: 10px; }
+.deux-champs input { flex: 1 1 0; min-width: 0; }
+.profil-bloc .bascule { width: auto; margin-top: 14px; font-size: 14px; padding: 9px 13px; border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); }
+.profil-bloc .apres { margin: 10px 0 0; font-size: 13px; color: var(--ink-faint); }
+.profil-pied { display: flex; align-items: center; gap: 10px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.profil-pied .lien { font-size: 13px; padding: 7px 13px; }
+.profil-pied .valider { margin-left: auto; width: auto; padding: 11px 26px; font-size: 15px; font-weight: 500; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; }
+.profil-pied .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.profil .join-error { margin-top: 18px; font-size: 14px; }
+@media (max-width: 620px) { .deux-champs { flex-direction: column; } }
 /* UN LISERE AUTOUR DE L'AVATAR. Les cases nues du pavage ont la couleur du
    fond : sans cercle, l'avatar se dissolvait dans le panneau au lieu de se lire
    comme un objet. */
-.avatar.grand { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; display: block; flex: none; box-shadow: inset 0 0 0 1px var(--rule); }
+.avatar.grand { width: 84px; height: 84px; border-radius: 50%; overflow: hidden; display: block; flex: none; box-shadow: inset 0 0 0 1px var(--rule); }
 .avatar.grand canvas { display: block; width: 100%; height: 100%; }
 /* La pastille de verification : discrete, mais elle se voit. C'est une
    affirmation que le site fait sur quelqu'un, pas une decoration. */
 .pastille { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 2px 9px; border-radius: 20px; background: var(--accent-bg); color: var(--accent); font-size: 11px; font-weight: 500; }
 .pastille[hidden] { display: none; }
 /* Le nom tel que les AUTRES le liront, quand son porteur l'a voulu. */
-.nom-public { display: block; margin-top: 2px; font-size: 12.5px; color: var(--ink-soft); }
+.nom-public { display: block; margin-top: 3px; font-size: 15px; color: var(--ink-soft); }
 .nom-public[hidden] { display: none; }
 /* La marque du classement : discrete au point de ne pas deranger la lecture
    des chiffres, mais elle se voit contre le nom. */
 .prow .verifie { margin-left: 5px; font-weight: 600; font-size: .82em; color: var(--accent); }
 .pastille::before { content: "✓"; font-size: 10px; }
-.perso .bascule { margin-top: 8px; }
-.perso-verif { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
-.perso-verif p { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
-.perso-verif .attente { color: var(--mark); }
-.perso-pied { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--rule); }
-.perso-pied .lien { flex: 1 1 auto; text-align: center; }
-.perso .join-error { margin-top: 10px; }
-.admin-boite { width: min(520px, 94vw); }
+#perso-verif p { margin: 0 0 12px; font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
+#perso-verif p.apres-bouton { margin: 12px 0 0; font-size: 13px; color: var(--ink-faint); }
+#perso-verif .attente { color: var(--mark); }
+#perso-verif .appliquer { width: auto; padding: 11px 22px; font-size: 14.5px; margin: 0; }
+.admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
 .demande b { font-size: 13px; font-weight: 500; }
@@ -642,7 +684,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .moi .pastille { margin: 0; background: transparent; color: var(--nuit-accent); padding: 0; }
 .moi .avatar { overflow: hidden; padding: 0; box-shadow: inset 0 0 0 1px var(--nuit-rule); }
 .moi .avatar canvas { display: block; width: 100%; height: 100%; }
-.records-boite .soon { margin: 14px 0 20px; font-family: "Instrument Serif", Georgia, serif; font-size: 30px; color: var(--ink-soft); text-align: center; }
+.records-boite .soon { margin: 18px 0 24px; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 34px; color: var(--ink-soft); text-align: center; }
 .records-boite .soon sup { font-size: .42em; vertical-align: super; }
 .records-boite b { font-weight: 500; color: var(--ink); }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
@@ -778,7 +820,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <span class="bandeau-droite" id="compte"></span>
   </div>
 
-  <div class="corps">
+  <div class="corps" id="corps-salons">
     <div class="filtres" id="filtres"></div>
     <div class="join-error" id="c-error" hidden></div>
     <div class="mur" id="mur">
@@ -786,6 +828,49 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <div class="droite"><div class="rouleau" id="salons"><div class="none">chargement…</div></div></div>
     </div>
     <div class="pied"><span id="pied-total"></span></div>
+  </div>
+
+  <!-- LE PROFIL EST UNE PAGE, pas une fenetre : il partage le bandeau de
+       l'accueil et prend toute la largeur. Le nom y est prive par defaut. -->
+  <div class="corps profil" id="corps-profil" hidden>
+    <div class="profil-tete">
+      <span class="avatar grand" id="perso-avatar"></span>
+      <div class="profil-qui">
+        <h1 id="perso-pseudo">—</h1>
+        <span class="nom-public" id="perso-nom-public" hidden></span>
+        <span class="pastille" id="perso-badge" hidden>joueur vérifié</span>
+      </div>
+      <button type="button" class="lien" id="perso-avatar-neuf">Changer d'avatar</button>
+    </div>
+
+    <div class="profil-corps">
+      <section class="profil-bloc">
+        <h2>Nom</h2>
+        <label class="etiquette" for="perso-prenom">Renseignez votre nom si vous voulez</label>
+        <div class="deux-champs">
+          <input id="perso-prenom" maxlength="40" placeholder="Prénom" autocomplete="given-name">
+          <input id="perso-nom" maxlength="40" placeholder="Nom" autocomplete="family-name">
+        </div>
+        <button type="button" class="bascule" id="perso-public" aria-pressed="false">
+          <span class="voyant"></span>Afficher mon nom publiquement
+        </button>
+      </section>
+
+      <section class="profil-bloc">
+        <h2>Adresse mail</h2>
+        <input id="perso-email" type="email" maxlength="254" placeholder="Email" autocomplete="email">
+        <p class="apres">L'email restera privé.</p>
+      </section>
+
+      <section class="profil-bloc" id="perso-verif"></section>
+    </div>
+
+    <div class="join-error" id="perso-error" hidden></div>
+    <div class="profil-pied">
+      <button type="button" class="lien" id="perso-admin" hidden>Demandes de vérification</button>
+      <button type="button" class="lien" id="perso-sortir">Se déconnecter</button>
+      <button type="button" class="valider" id="perso-close">Enregistrer</button>
+    </div>
   </div>
 
   <!-- LES RECORDS N'EXISTENT PAS ENCORE (SPEC.md §16, « en reserve »), mais le
@@ -803,58 +888,19 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="voile" id="voile-compte" hidden>
     <form class="pseudo" id="form-compte" autocomplete="on">
       <h2 id="compte-titre">Connexion</h2>
-      <div class="onglets" id="compte-onglets">
-        <button type="button" data-v="connexion" aria-pressed="true">J'ai un compte</button>
-        <button type="button" data-v="inscription" aria-pressed="false">Je m'inscris</button>
+      <div class="bascules" id="compte-onglets">
+        <button type="button" data-v="connexion" aria-pressed="true">Connexion</button>
+        <button type="button" data-v="inscription" aria-pressed="false">Inscription</button>
       </div>
-      <p id="compte-quoi">Votre pseudo vous est réservé, et vos parties vous suivent.</p>
       <input id="c-pseudo" maxlength="24" placeholder="Pseudo" autocomplete="username">
-      <input id="c-email" type="email" maxlength="254" placeholder="Adresse e-mail" autocomplete="email" hidden>
+      <input id="c-email" type="email" maxlength="254" placeholder="Email" autocomplete="email" hidden>
       <input id="c-mdp" type="password" maxlength="128" placeholder="Mot de passe" autocomplete="current-password">
-      <p class="apres" id="c-pourquoi" hidden>Aucun courriel ne part pour l'instant :
-      l'adresse ne sert qu'à vous retrouver si vous oubliez votre mot de passe.</p>
       <div class="join-error" id="c-compte-error" hidden></div>
       <button class="valider" id="c-valider" type="submit">Se connecter</button>
       <button class="lien renoncer" id="c-sans-compte" type="button">Jouer sans compte</button>
     </form>
   </div>
 
-  <!-- L'ESPACE PERSONNEL. Le vrai nom y est prive par defaut : on peut etre
-       verifie sans que son nom paraisse. -->
-  <div class="voile" id="voile-perso" hidden>
-    <div class="pseudo perso">
-      <div class="perso-tete">
-        <span class="avatar grand" id="perso-avatar"></span>
-        <div>
-          <h2 id="perso-pseudo">—</h2>
-          <span class="nom-public" id="perso-nom-public" hidden></span>
-          <span class="pastille" id="perso-badge" hidden>joueur vérifié</span>
-        </div>
-      </div>
-
-      <label class="etiquette" for="perso-nom">Votre vrai nom</label>
-      <input id="perso-nom" maxlength="64" placeholder="Prénom et nom" autocomplete="name">
-      <button type="button" class="bascule" id="perso-public" aria-pressed="false">
-        <span class="voyant"></span>Afficher mon nom à côté de mon pseudo
-      </button>
-      <p class="apres">Sans cela, votre nom n'est lu que par la personne qui vérifie.</p>
-
-      <label class="etiquette" for="perso-email">Votre adresse</label>
-      <input id="perso-email" type="email" maxlength="254" placeholder="Adresse e-mail" autocomplete="email">
-      <p class="apres">Elle n'est lue que par vous et par l'administration, jamais
-      par les autres joueurs.</p>
-
-      <div class="perso-verif" id="perso-verif"></div>
-
-      <div class="perso-pied">
-        <button type="button" class="lien" id="perso-avatar-neuf">Changer d'avatar</button>
-        <button type="button" class="lien" id="perso-admin" hidden>Demandes</button>
-        <button type="button" class="lien" id="perso-sortir">Se déconnecter</button>
-      </div>
-      <div class="join-error" id="perso-error" hidden></div>
-      <button class="valider" id="perso-close" type="button">Fermer</button>
-    </div>
-  </div>
 
   <!-- L'ADMINISTRATION : la liste des demandes, un verdict par ligne. -->
   <div class="voile" id="voile-admin" hidden>

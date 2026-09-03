@@ -33,7 +33,7 @@ import {
   ecrireLeProfil, demanderLaVerification, trancherLaVerification, tousLesComptes,
   emettreUnJeton, compteDuJeton, jetonDesEntetes, cookieDeSession, cookieEfface,
   publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLAdmin, cleDuPseudo,
-  type Compte,
+  nomComplet, type Compte,
 } from "./comptes.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,6 +204,22 @@ const clients = new Map<WebSocket, Client>();
 const verifiesPresents = (salonId: string): string[] =>
   occupants(salonId).filter((n) => compte(n)?.verifie === true);
 
+/**
+ * Les vrais noms des presents QUI ONT VOULU LES MONTRER.
+ *
+ * Le client les pose en infobulle sur les pseudos. Un nom que son porteur n'a
+ * pas rendu public ne sort pas d'ici : c'est le seul endroit du transport ou la
+ * question se pose, et la reponse tient dans `publicDuCompte`.
+ */
+function nomsPublics(salonId: string): Record<string, string> {
+  const noms: Record<string, string> = {};
+  for (const n of occupants(salonId)) {
+    const c = compte(n);
+    if (c !== undefined && c.nomPublic && nomComplet(c) !== "") noms[n] = nomComplet(c);
+  }
+  return noms;
+}
+
 interface Debit { mots: Seau; tout: Seau; averti: number }
 const debits = new Map<WebSocket, Debit>();
 
@@ -296,6 +312,7 @@ function publicState(s: Salon) {
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),
     verifies: verifiesPresents(s.id),
+    noms: nomsPublics(s.id),
     createdAt: g.createdAt,
     demarreA: DEMARRE_A,
     now: Date.now(),
@@ -622,7 +639,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const mdp = String(corps.motDePasse ?? "");
 
     if (url === "/api/inscription") {
-      const erreur = await creerCompte(pseudo, mdp, String(corps.email ?? ""));
+      const erreur = await creerCompte(
+        pseudo, mdp, String(corps.email ?? ""), corps.avatarSombre === true);
       if (erreur !== null) { json(res, 400, { erreur }); return; }
     } else {
       const c = compte(pseudo);
@@ -651,13 +669,14 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let corps: any;
     try { corps = await corpsJson(req); }
     catch { json(res, 400, { erreur: "requête illisible" }); return; }
-    const erreur = ecrireLeProfil(
-      c,
-      String(corps.nomReel ?? c.nomReel),
-      corps.nomPublic === true,
-      Number.isFinite(Number(corps.avatar)) ? Number(corps.avatar) : c.avatar,
-      String(corps.email ?? c.email),
-    );
+    const erreur = ecrireLeProfil(c, {
+      prenom: String(corps.prenom ?? c.prenom),
+      nom: String(corps.nom ?? c.nom),
+      nomPublic: corps.nomPublic === true,
+      email: String(corps.email ?? c.email),
+      avatar: Number.isFinite(Number(corps.avatar)) ? Number(corps.avatar) : c.avatar,
+      avatarSombre: corps.avatarSombre === true,
+    });
     if (erreur !== null) { json(res, 400, { erreur }); return; }
     json(res, 200, { compte: priveDuCompte(c) });
     return;
@@ -668,7 +687,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
     const erreur = demanderLaVerification(c);
     if (erreur !== null) { json(res, 400, { erreur }); return; }
-    console.log(`[comptes] ${c.pseudo} demande la verification sous le nom "${c.nomReel}"`);
+    console.log(`[comptes] ${c.pseudo} demande la verification sous le nom "${nomComplet(c)}"`);
     json(res, 200, { compte: priveDuCompte(c) });
     return;
   }
@@ -683,7 +702,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         .filter((v) => v.demande || v.verifie)
         .sort((a, b) => Number(b.demande) - Number(a.demande) || a.demandeLe - b.demandeLe)
         .map((v) => ({
-          pseudo: v.pseudo, nomReel: v.nomReel, nomPublic: v.nomPublic, email: v.email,
+          pseudo: v.pseudo, nomReel: nomComplet(v), nomPublic: v.nomPublic, email: v.email,
           demande: v.demande, verifie: v.verifie, demandeLe: v.demandeLe, cree: v.cree,
         })),
     });

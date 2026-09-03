@@ -120,6 +120,15 @@ let online: string[] = [];
  * classement, la ou l'on regarde les noms.
  */
 let verifies = new Set<string>();
+/**
+ * Le vrai nom des presents QUI ONT VOULU LE MONTRER.
+ *
+ * Il ne s'affiche pas d'office : il se pose en infobulle sur le pseudo, dans le
+ * classement comme dans le chat. Le navigateur attend un instant avant de la
+ * montrer, ce qui est exactement le bon rythme -- on ne le lit que si on l'a
+ * cherche, et il n'encombre jamais la lecture des chiffres.
+ */
+let nomsPublics: Record<string, string> = {};
 let last: MoveInfo | null = null;
 let createdAt = Date.now();
 let servedAt = Date.now();
@@ -2045,8 +2054,10 @@ function paintSide() {
       : `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
+    const vrai = nomsPublics[name];
+    const infobulle = vrai === undefined ? "" : ` title="${vrai.replace(/"/g, "&quot;")}"`;
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom">${name}${marque}${coeurs}</span>` + droite;
+                    `<span class="nom"${infobulle}>${name}${marque}${coeurs}</span>` + droite;
     row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
     rank.appendChild(row);
 
@@ -2130,9 +2141,17 @@ function paintSide() {
     }
   }
 
-  $("online").textContent = online.length > 0
-    ? online.map((n) => (verifies.has(n) ? `${n} ✓` : n)).join(", ")
-    : "—";
+  const boiteEnLigne = $("online");
+  boiteEnLigne.replaceChildren();
+  if (online.length === 0) boiteEnLigne.textContent = "—";
+  for (const [i, n] of online.entries()) {
+    const e = document.createElement("span");
+    e.textContent = verifies.has(n) ? `${n} ✓` : n;
+    const vrai = nomsPublics[n];
+    if (vrai !== undefined) e.title = vrai;
+    boiteEnLigne.appendChild(e);
+    if (i < online.length - 1) boiteEnLigne.appendChild(document.createTextNode(", "));
+  }
   majDesPoignees();
   $("reveal-wrap").hidden = !canReveal;
   ($("reveal") as HTMLButtonElement).disabled = solving;
@@ -3435,6 +3454,8 @@ function ligneDeChat(m: Chat): HTMLElement {
   el.className = "msg";
   const who = document.createElement("span");
   who.className = "who"; who.textContent = m.who;
+  const vrai = nomsPublics[m.who];
+  if (vrai !== undefined) who.title = vrai;
   el.appendChild(who);
   if (m.text) el.appendChild(document.createTextNode(m.text));
   if (m.cell) {
@@ -3913,7 +3934,6 @@ addEventListener("keydown", (e) => {
   if (!$("join").hidden) {
     if (e.key !== "Escape") return;
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
-    if (!$("voile-perso").hidden) { $("voile-perso").hidden = true; return; }
     if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
     if (!$("voile-records").hidden) { $("voile-records").hidden = true; return; }
     if (!$("voile").hidden) { destination = null; $("voile").hidden = true; }
@@ -4429,6 +4449,7 @@ setInterval(() => {
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; verifies?: string[];
+  noms?: Record<string, string>;
   last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
@@ -4492,6 +4513,7 @@ function applyState(s: {
   finie = s.finie === true;
   online = s.online ?? [];
   verifies = new Set(s.verifies ?? []);
+  nomsPublics = s.noms ?? {};
   last = s.last ?? null;
   createdAt = s.createdAt;
   servedAt = s.servedAt;
@@ -4732,7 +4754,7 @@ interface ResumeSalon {
 const ACCROCHE_STAR = [
   "Grille infinie, sans limite de temps, sans fin.",
   "Jusqu'où pourrons-nous aller ?",
-  "Rejoignez la plus grande partie de duplicate jamais créée.",
+  "Rejoignez la plus grande partie de topping jamais créée.",
 ];
 
 /** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
@@ -4752,10 +4774,22 @@ let salonsRecus: ResumeSalon[] = [];
  * ouvert a qui ne veut pas s'inscrire.
  */
 interface MonCompte {
-  pseudo: string; verifie: boolean; avatar: number;
+  pseudo: string; verifie: boolean;
+  avatar: number;
+  /** L'avatar garde les couleurs du jour ou on l'a tire : il ne suit pas le theme. */
+  avatarSombre: boolean;
   /** Jamais lue par les autres joueurs : elle ne sert qu'a nous retrouver. */
   email: string;
-  nomReel: string; nomPublic: boolean; demande: boolean; admin: boolean;
+  prenom: string; nom: string; nomPublic: boolean;
+  demande: boolean; admin: boolean;
+}
+
+/** Le theme en cours, tel que la feuille de style le voit. */
+function themeSombre(): boolean {
+  const pose = document.documentElement.dataset["theme"];
+  if (pose === "dark") return true;
+  if (pose === "light") return false;
+  return matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 let moiCompte: MonCompte | null = null;
@@ -4782,7 +4816,20 @@ async function lireLeCompte(): Promise<void> {
  * a un endroit qui n'appartient qu'a vous. C'est le meme dessin que le plateau,
  * donc le site se reconnait dans ses avatars.
  */
-function peindreAvatar(cible: HTMLElement, graine: number, cote: number): void {
+/**
+ * LES COULEURS DE L'AVATAR SONT ECRITES ICI, PAS LUES DANS LE THEME.
+ *
+ * Elles repetent les jetons du plateau, a dessein : un avatar ne doit PAS
+ * changer de couleurs parce que son porteur a bascule son ecran en sombre. Il
+ * changeait a chaque ouverture de profil, comme s'il ne lui appartenait pas.
+ * C'est une image qu'on s'est choisie ; elle ne bouge que si on la redemande.
+ */
+const TEINTES_AVATAR = {
+  clair: { T: "#C2493D", D: "#E08D7E", "*": "#E08D7E", t: "#3B7DA4", d: "#90BCD4", ".": "#E3E8E5" },
+  sombre: { T: "#99392F", D: "#B2665A", "*": "#B2665A", t: "#2E5D7C", d: "#4C84A2", ".": "#17211D" },
+} as const;
+
+function peindreAvatar(cible: HTMLElement, graine: number, cote: number, sombre: boolean): void {
   const dpr = Math.min(3, devicePixelRatio || 1);
   const cv = document.createElement("canvas");
   cv.width = Math.round(cote * dpr);
@@ -4795,13 +4842,10 @@ function peindreAvatar(cible: HTMLElement, graine: number, cote: number): void {
   // La graine choisit l'endroit du pavage : deux octets, deux coordonnees.
   const ox = (graine & 0xff) - 128;
   const oy = ((graine >> 8) & 0xff) - 128;
-  const teintes: Record<string, string> = {
-    T: css("--mct"), D: css("--mcd"), "*": css("--mcd"),
-    t: css("--lct"), d: css("--lcd"), ".": css("--field"),
-  };
+  const teintes: Record<string, string> = sombre ? TEINTES_AVATAR.sombre : TEINTES_AVATAR.clair;
   for (let y = 0; y < cases; y++) {
     for (let x = 0; x < cases; x++) {
-      g.fillStyle = teintes[bonusChar(ox + x, oy + y)] ?? css("--field");
+      g.fillStyle = teintes[bonusChar(ox + x, oy + y)] ?? teintes["."]!;
       g.fillRect(x * pas, y * pas, pas + 0.5, pas + 0.5);
     }
   }
@@ -4826,36 +4870,57 @@ function peindreOngletsDuCompte(): void {
   }
   const inscrit = ongletCompte === "inscription";
   $("c-email").hidden = !inscrit;
-  $("c-pourquoi").hidden = !inscrit;
   $("compte-titre").textContent = inscrit ? "Inscription" : "Connexion";
-  $("compte-quoi").textContent = inscrit
-    ? "Votre pseudo vous est réservé, et personne d'autre ne pourra le porter."
-    : "Content de vous revoir.";
   $("c-valider").textContent = inscrit ? "Créer mon compte" : "Se connecter";
   ($("c-mdp") as HTMLInputElement).autocomplete = inscrit ? "new-password" : "current-password";
 }
 
-/** Ouvre l'espace personnel, garni de ce que le serveur sait de nous. */
-function ouvrirLEspace(): void {
+/**
+ * LE PROFIL EST UNE PAGE, pas une fenetre.
+ *
+ * Il prend la place du mur de salons sous le meme bandeau, et porte son adresse
+ * -- `?page=profil` -- pour qu'on puisse y revenir, la garder en signet, et
+ * ressortir par le bouton « precedent » du navigateur.
+ */
+function ouvrirLeProfil(pousser = true): void {
   if (moiCompte === null) { ouvrirLeCompte(); return; }
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
-  peindreAvatar($("perso-avatar"), moiCompte.avatar, 52);
-  ($("perso-nom") as HTMLInputElement).value = moiCompte.nomReel;
+  peindreAvatar($("perso-avatar"), moiCompte.avatar, 84, moiCompte.avatarSombre);
+  ($("perso-prenom") as HTMLInputElement).value = moiCompte.prenom;
+  ($("perso-nom") as HTMLInputElement).value = moiCompte.nom;
   ($("perso-email") as HTMLInputElement).value = moiCompte.email;
   $("perso-public").setAttribute("aria-pressed", String(moiCompte.nomPublic));
   peindreLeNomPublic();
   $("perso-admin").hidden = !moiCompte.admin;
   $("perso-error").hidden = true;
   peindreLaVerification();
-  $("voile-perso").hidden = false;
+  $("corps-salons").hidden = true;
+  $("corps-profil").hidden = false;
+  $("join").hidden = false;
+  if (pousser) window.history.pushState({ page: "profil" }, "", "?page=profil");
 }
+
+/** Referme le profil et rend la place au mur de salons. */
+function fermerLeProfil(pousser = true): void {
+  $("corps-profil").hidden = true;
+  $("corps-salons").hidden = false;
+  if (pousser) window.history.pushState({ page: "salons" }, "", location.pathname);
+}
+
+// Le bouton « precedent » du navigateur suit la page, comme partout ailleurs.
+addEventListener("popstate", () => {
+  const veutLeProfil = new URLSearchParams(location.search).get("page") === "profil";
+  if (veutLeProfil && moiCompte !== null) ouvrirLeProfil(false);
+  else fermerLeProfil(false);
+});
 
 /** Les trois etats de la verification, et ce qu'on peut en faire. */
 function peindreLaVerification(): void {
   const boite = $("perso-verif");
   boite.replaceChildren();
   if (moiCompte === null) return;
+  boite.appendChild(el("h2", "", "Vérification"));
   const dit = el("p");
   if (moiCompte.verifie) {
     dit.textContent = "Votre identité a été vérifiée. La pastille suit votre pseudo.";
@@ -4869,13 +4934,17 @@ function peindreLaVerification(): void {
     boite.appendChild(dit);
     return;
   }
-  dit.textContent = "Joueur de haut niveau ? Donnez votre nom, demandez la vérification, "
-    + "et une pastille dira que vous êtes bien qui vous dites.";
+  dit.textContent = "Demandez à être un joueur vérifié (les joueurs vérifiés n'auront "
+    + "leur nom affiché que s'ils le veulent).";
   boite.appendChild(dit);
   const b = el("button", "appliquer", "Demander la vérification") as HTMLButtonElement;
   b.type = "button";
   b.addEventListener("click", () => { void demanderLaVerif(); });
   boite.appendChild(b);
+  const apres = el("p", "apres-bouton",
+    "Joueur de haut niveau ? Donnez votre nom, demandez la vérification, "
+    + "et une pastille dira que vous êtes bien qui vous dites.");
+  boite.appendChild(apres);
 }
 
 /** Enregistre le profil. Le nom part au serveur, le reste suit. */
@@ -4885,10 +4954,12 @@ async function enregistrerLeProfil(): Promise<boolean> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      nomReel: ($("perso-nom") as HTMLInputElement).value,
+      prenom: ($("perso-prenom") as HTMLInputElement).value,
+      nom: ($("perso-nom") as HTMLInputElement).value,
       nomPublic: $("perso-public").getAttribute("aria-pressed") === "true",
       email: ($("perso-email") as HTMLInputElement).value,
       avatar: moiCompte.avatar,
+      avatarSombre: moiCompte.avatarSombre,
     }),
   });
   const d = await r.json();
@@ -4902,6 +4973,17 @@ async function enregistrerLeProfil(): Promise<boolean> {
 }
 
 async function demanderLaVerif(): Promise<void> {
+  // ON NE VERIFIE PAS QUELQU'UN QUI NE S'EST PAS NOMME : c'est son identite
+  // qu'on va confronter, et le dire ici evite un aller-retour pour rien.
+  const prenom = ($("perso-prenom") as HTMLInputElement).value.trim();
+  const nom = ($("perso-nom") as HTMLInputElement).value.trim();
+  if (prenom === "" || nom === "") {
+    $("perso-error").textContent =
+      "Renseignez votre prénom et votre nom : c'est votre identité qui se vérifie.";
+    $("perso-error").hidden = false;
+    ($(prenom === "" ? "perso-prenom" : "perso-nom") as HTMLInputElement).focus();
+    return;
+  }
   // Le nom en cours de saisie part AVANT la demande : sans cela on demanderait
   // la verification d'un nom que le serveur n'a pas encore recu.
   if (!(await enregistrerLeProfil())) return;
@@ -4990,7 +5072,11 @@ async function envoyerLeCompte(): Promise<void> {
   const r = await fetch(chemin, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pseudo: pseudoDonne, motDePasse: mdp, email }),
+    body: JSON.stringify({
+      pseudo: pseudoDonne, motDePasse: mdp, email,
+      // L'avatar nait aux couleurs du theme sous lequel on s'inscrit.
+      avatarSombre: themeSombre(),
+    }),
   });
   const d = await r.json();
   if (!r.ok) {
@@ -5017,7 +5103,7 @@ $("c-sans-compte").addEventListener("click", () => {
 
 $("perso-close").addEventListener("click", () => {
   void (async () => {
-    if (await enregistrerLeProfil()) { $("voile-perso").hidden = true; peindreAccueil(); }
+    if (await enregistrerLeProfil()) { fermerLeProfil(); peindreAccueil(); }
   })();
 });
 
@@ -5028,6 +5114,7 @@ $("perso-public").addEventListener("click", () => {
 });
 
 $("perso-nom").addEventListener("input", peindreLeNomPublic);
+$("perso-prenom").addEventListener("input", peindreLeNomPublic);
 
 /**
  * Le nom sous le pseudo : c'est CE QUE LES AUTRES VERRONT.
@@ -5037,16 +5124,21 @@ $("perso-nom").addEventListener("input", peindreLeNomPublic);
  * fait disparaitre quand on rend l'interrupteur.
  */
 function peindreLeNomPublic(): void {
+  const prenom = ($("perso-prenom") as HTMLInputElement).value.trim();
   const nom = ($("perso-nom") as HTMLInputElement).value.trim();
+  const complet = `${prenom} ${nom}`.trim();
   const ouvert = $("perso-public").getAttribute("aria-pressed") === "true";
-  $("perso-nom-public").textContent = nom;
-  $("perso-nom-public").hidden = !ouvert || nom === "";
+  $("perso-nom-public").textContent = complet;
+  $("perso-nom-public").hidden = !ouvert || complet === "";
 }
 
 $("perso-avatar-neuf").addEventListener("click", () => {
   if (moiCompte === null) return;
+  // On en tire un neuf AUX COULEURS DU MOMENT : c'est le seul instant ou le
+  // theme decide de quelque chose, parce que c'est le seul ou on l'a demande.
   moiCompte.avatar = Math.floor(Math.random() * 65536);
-  peindreAvatar($("perso-avatar"), moiCompte.avatar, 52);
+  moiCompte.avatarSombre = themeSombre();
+  peindreAvatar($("perso-avatar"), moiCompte.avatar, 84, moiCompte.avatarSombre);
 });
 
 $("perso-admin").addEventListener("click", () => { void ouvrirLAdministration(); });
@@ -5061,7 +5153,7 @@ $("perso-sortir").addEventListener("click", () => {
     // la partie suivante aurait ete refusee sans qu'on comprenne pourquoi.
     ($("name") as HTMLInputElement).value = "";
     try { localStorage.removeItem("pseudo"); } catch { /* navigation privee */ }
-    $("voile-perso").hidden = true;
+    fermerLeProfil();
     peindreAccueil();
   })();
 });
@@ -5091,7 +5183,7 @@ function dureeDuChrono(c: number | null | undefined): string {
  * en ecarte -- `7 sur 9` se lit tout seul, « Normale » ne se devine pas.
  */
 function nomDeLaVariante(c: ResumeSalon["config"]): string {
-  return c.tirage === 7 && c.jouables === 7 ? "Normale" : `${c.jouables} sur ${c.tirage}`;
+  return c.tirage === 7 && c.jouables === 7 ? "Normal" : `${c.jouables} sur ${c.tirage}`;
 }
 
 /**
@@ -5101,8 +5193,10 @@ function nomDeLaVariante(c: ResumeSalon["config"]): string {
  * arrive, et n'a jamais aide personne a choisir un salon.
  */
 function specDuSalon(c: ResumeSalon["config"]): string {
-  return [nomDeLaVariante(c), dureeDuChrono(c.chrono)]
-    .concat(c.mode === "duplicate" ? ["duplicate"] : [])
+  // LE MODE EN TETE : c'est ce qui change le plus la partie qu'on va trouver,
+  // et il ne se lisait nulle part.
+  const mode = c.mode === "duplicate" ? "Duplicate" : "Topping";
+  return [mode, nomDeLaVariante(c), dureeDuChrono(c.chrono)]
     .concat(c.joker === true ? ["joker"] : [])
     .join(" · ");
 }
@@ -5193,13 +5287,13 @@ function peindreCompte(): void {
 
   const b = el("button", "moi") as HTMLButtonElement;
   b.type = "button";
-  b.title = "Votre espace";
+  b.title = "Votre profil";
   const rond = el("span", "avatar");
-  peindreAvatar(rond, moiCompte.avatar, 24);
+  peindreAvatar(rond, moiCompte.avatar, 30, moiCompte.avatarSombre);
   b.appendChild(rond);
   b.appendChild(el("span", "", moiCompte.pseudo));
   if (moiCompte.verifie) b.appendChild(el("span", "pastille", "vérifié"));
-  b.addEventListener("click", () => ouvrirLEspace());
+  b.addEventListener("click", () => ouvrirLeProfil());
   boite.appendChild(b);
 
   const roue = el("button", "icon roue") as HTMLButtonElement;
@@ -5838,6 +5932,7 @@ $("quitter").addEventListener("click", quitterSalon);
 
 /** Le nom du site ramene a l'accueil, comme le titre du bandeau de jeu. */
 $("site-nom").addEventListener("click", () => {
+  if (!$("corps-profil").hidden) { fermerLeProfil(); return; }
   if ($("join").hidden) quitterSalon();
 });
 
@@ -5972,6 +6067,7 @@ async function rejoindre(id: string): Promise<void> {
   duplicate = false;
   online = [];
   verifies = new Set();
+  nomsPublics = {};
   servedAt = Date.now();
   createdAt = Date.now();
   $("sac").textContent = "";
@@ -6006,7 +6102,14 @@ peindreAccueil();
 // LE COMPTE AVANT LES SALONS : c'est lui qui decide de ce que le bandeau
 // affiche, et une seconde d'accueil peint en visiteur alors qu'on est connecte
 // se remarque.
-void lireLeCompte().then(() => { peindreAccueil(); return peuplerSalons(); });
+void lireLeCompte().then(() => {
+  peindreAccueil();
+  // Une adresse qui demande le profil l'ouvre, des que l'on sait qui l'on est.
+  if (new URLSearchParams(location.search).get("page") === "profil" && moiCompte !== null) {
+    ouvrirLeProfil(false);
+  }
+  return peuplerSalons();
+});
 
 // UN LIEN QUI PORTE UN SALON MENE AU SALON. On s'y nomme sur place si l'on ne
 // s'est jamais nomme -- c'est le seul moment ou le pseudo est demande.

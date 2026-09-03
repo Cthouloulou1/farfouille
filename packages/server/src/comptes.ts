@@ -79,13 +79,18 @@ export interface Compte {
   email: string;
   admin: boolean;
   /**
-   * Le vrai nom, pour la verification. PRIVE PAR DEFAUT.
+   * LE NOM EN DEUX CHAMPS, ET NON UN SEUL.
    *
-   * On peut etre un joueur verifie sans que son nom paraisse : la verification
-   * dit « cette personne est bien qui elle pretend etre », elle n'oblige
-   * personne a s'afficher.
+   * Un « Jean-Baptiste de La Tour » ne se coupe pas a la premiere espace, et
+   * personne ne sait dire, d'un nom compose ecrit d'un trait, ou finit le
+   * prenom. On demande donc les deux, et l'on ne devine rien.
+   *
+   * Prive par defaut : on peut etre verifie sans que son nom paraisse. La
+   * verification dit « cette personne est bien qui elle pretend etre », elle
+   * n'oblige personne a s'afficher.
    */
-  nomReel: string;
+  prenom: string;
+  nom: string;
   nomPublic: boolean;
   /** Une demande de verification deposee, et pas encore tranchee. */
   demande: boolean;
@@ -93,6 +98,20 @@ export interface Compte {
   verifie: boolean;
   /** La graine de l'avatar : un pave de la grille, propre a chacun. */
   avatar: number;
+  /**
+   * L'avatar est-il peint aux couleurs du theme sombre ?
+   *
+   * IL NE SUIT PAS LE THEME DU LECTEUR. Un avatar est une image qu'on s'est
+   * choisie : il changeait de couleurs des qu'on rouvrait son profil dans
+   * l'autre theme, comme s'il ne nous appartenait pas. Il garde donc celles du
+   * jour ou on l'a tire, et n'en change que si on le redemande.
+   */
+  avatarSombre: boolean;
+}
+
+/** Le nom complet, quand il y en a un. */
+export function nomComplet(c: Compte): string {
+  return `${c.prenom} ${c.nom}`.trim();
 }
 
 /** L'index en memoire, par cle de pseudo. Le journal reste la verite. */
@@ -161,8 +180,8 @@ export function lireLesComptes(): void {
         cree: Number(e["cree"] ?? Date.now()), mdpChangeLe: Number(e["cree"] ?? 0),
         admin: e["admin"] === true,
         email: String(e["email"] ?? ""),
-        nomReel: "", nomPublic: false, demande: false, demandeLe: 0, verifie: false,
-        avatar: Number(e["avatar"] ?? 0),
+        prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0, verifie: false,
+        avatar: Number(e["avatar"] ?? 0), avatarSombre: e["avatarSombre"] === true,
       });
       continue;
     }
@@ -172,10 +191,15 @@ export function lireLesComptes(): void {
       c.hash = String(e["hash"]); c.sel = String(e["sel"]);
       c.mdpChangeLe = Number(e["quand"] ?? Date.now());
     } else if (e["t"] === "profil") {
-      c.nomReel = String(e["nomReel"] ?? "");
+      // Les lignes d'avant la separation portaient un seul champ : on le range
+      // dans le nom, faute de savoir ou passait la coupure.
+      if (e["nomReel"] !== undefined) { c.prenom = ""; c.nom = String(e["nomReel"]); }
+      if (e["prenom"] !== undefined) c.prenom = String(e["prenom"]);
+      if (e["nom"] !== undefined) c.nom = String(e["nom"]);
       c.nomPublic = e["nomPublic"] === true;
       if (e["email"] !== undefined) c.email = String(e["email"]);
       if (e["avatar"] !== undefined) c.avatar = Number(e["avatar"]);
+      if (e["avatarSombre"] !== undefined) c.avatarSombre = e["avatarSombre"] === true;
     } else if (e["t"] === "demande") {
       c.demande = true; c.demandeLe = Number(e["quand"] ?? Date.now());
     } else if (e["t"] === "verdict") {
@@ -209,13 +233,13 @@ async function hacher(mdp: string, sel: Buffer): Promise<string> {
  * tape. Seule sa CLE est normalisee, pour l'unicite.
  */
 export async function creerCompte(
-  pseudo: string, mdp: string, email: string, admin = false,
+  pseudo: string, mdp: string, email: string, sombre = false, admin = false,
 ): Promise<string | null> {
   const nom = pseudo.trim();
   const mail = email.trim();
   if (nom.length < 2 || nom.length > 24) return "Le pseudo fait entre 2 et 24 caractères";
   if (cleDuPseudo(nom) === "") return "Ce pseudo ne contient rien de lisible";
-  if (comptes.has(cleDuPseudo(nom))) return "Ce pseudo est déjà pris";
+  if (comptes.has(cleDuPseudo(nom))) return "Ce pseudo est déjà utilisé.";
   if (mdp.length < MDP_MINIMUM) return `Le mot de passe fait au moins ${MDP_MINIMUM} caractères`;
   // Le compte d'administration est cree par la console, pas par un formulaire :
   // il n'a personne a qui ecrire.
@@ -229,15 +253,15 @@ export async function creerCompte(
   const avatar = randomBytes(2).readUInt16BE(0);
   const ev = {
     t: "cree", pseudo: nom, hash, sel: sel.toString("base64"), cree, avatar,
-    email: mail,
+    avatarSombre: sombre, email: mail,
     ...(admin ? { admin: true } : {}),
   };
   inscrire(ev);
   comptes.set(cleDuPseudo(nom), {
     pseudo: nom, hash, sel: sel.toString("base64"), cree, mdpChangeLe: cree,
     email: mail,
-    admin, nomReel: "", nomPublic: false, demande: false, demandeLe: 0,
-    verifie: false, avatar,
+    admin, prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0,
+    verifie: false, avatar, avatarSombre: sombre,
   });
   return null;
 }
@@ -272,28 +296,34 @@ export async function changerLeMotDePasse(c: Compte, mdp: string): Promise<strin
  * L'adresse se corrige : une faute de frappe le jour de l'inscription ne doit
  * pas condamner le compte, puisque c'est justement elle qui le rattrapera.
  */
-export function ecrireLeProfil(
-  c: Compte, nomReel: string, nomPublic: boolean, avatar: number, email: string,
-): string | null {
-  const mail = email.trim();
+export function ecrireLeProfil(c: Compte, p: {
+  prenom: string; nom: string; nomPublic: boolean; email: string;
+  avatar: number; avatarSombre: boolean;
+}): string | null {
+  const mail = p.email.trim();
   if (mail !== c.email) {
     if (!adressePlausible(mail)) return "Cette adresse ne ressemble pas à une adresse";
     if (mailPris(mail)) return "Un compte existe déjà avec cette adresse";
     c.email = mail;
   }
-  c.nomReel = nomReel.trim().slice(0, 64);
-  c.nomPublic = nomPublic;
-  c.avatar = avatar & 0xffff;
+  c.prenom = p.prenom.trim().slice(0, 40);
+  c.nom = p.nom.trim().slice(0, 40);
+  c.nomPublic = p.nomPublic;
+  c.avatar = p.avatar & 0xffff;
+  c.avatarSombre = p.avatarSombre;
   inscrire({
-    t: "profil", pseudo: c.pseudo, nomReel: c.nomReel, nomPublic: c.nomPublic,
-    email: c.email, avatar: c.avatar,
+    t: "profil", pseudo: c.pseudo, prenom: c.prenom, nom: c.nom,
+    nomPublic: c.nomPublic, email: c.email,
+    avatar: c.avatar, avatarSombre: c.avatarSombre,
   });
   return null;
 }
 
 export function demanderLaVerification(c: Compte): string | null {
   if (c.verifie) return "Vous êtes déjà vérifié";
-  if (c.nomReel === "") return "Donnez d'abord votre nom : c'est lui qui se vérifie";
+  if (c.prenom === "" || c.nom === "") {
+    return "Renseignez votre prénom et votre nom : c'est votre identité qui se vérifie.";
+  }
   const quand = Date.now();
   c.demande = true; c.demandeLe = quand;
   inscrire({ t: "demande", pseudo: c.pseudo, quand });
@@ -407,7 +437,8 @@ export function publicDuCompte(c: Compte): Record<string, unknown> {
     pseudo: c.pseudo,
     verifie: c.verifie,
     avatar: c.avatar,
-    ...(c.nomPublic && c.nomReel !== "" ? { nom: c.nomReel } : {}),
+    avatarSombre: c.avatarSombre,
+    ...(c.nomPublic && nomComplet(c) !== "" ? { nom: nomComplet(c) } : {}),
   };
 }
 
@@ -416,7 +447,8 @@ export function priveDuCompte(c: Compte): Record<string, unknown> {
   return {
     ...publicDuCompte(c),
     email: c.email,
-    nomReel: c.nomReel,
+    prenom: c.prenom,
+    nom: c.nom,
     nomPublic: c.nomPublic,
     demande: c.demande,
     admin: c.admin,
@@ -452,7 +484,7 @@ export async function assurerLAdmin(pseudo: string, mdpDemande: string): Promise
     return;
   }
   const mdp = mdpDemande !== "" ? mdpDemande : randomBytes(12).toString("base64url");
-  const erreur = await creerCompte(pseudo, mdp, "", true);
+  const erreur = await creerCompte(pseudo, mdp, "", false, true);
   if (erreur !== null) {
     console.log(`  [comptes] compte d'administration impossible : ${erreur}`);
     return;
