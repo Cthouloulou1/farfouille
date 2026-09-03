@@ -4541,9 +4541,10 @@ function applyState(s: {
   // LES LIGNES DE CHAT SONT PEINTES AVANT QUE L'ETAT N'ARRIVE, et rien ne les
   // repeint ensuite : sans cela, les pseudos deja affiches n'apprenaient jamais
   // qu'ils menent a une fiche. On ne repeint que si la liste a vraiment change.
-  const avantInscrits = [...inscrits].sort().join(" ");
-  inscrits = new Set(s.inscrits ?? []);
-  if ([...inscrits].sort().join(" ") !== avantInscrits) paintChat(chat);
+  const neufs = s.inscrits ?? [];
+  const memeListe = neufs.length === inscrits.size && neufs.every((n) => inscrits.has(n));
+  inscrits = new Set(neufs);
+  if (!memeListe) paintChat(chat);
   last = s.last ?? null;
   createdAt = s.createdAt;
   servedAt = s.servedAt;
