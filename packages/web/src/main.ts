@@ -129,6 +129,8 @@ let verifies = new Set<string>();
  * cherche, et il n'encombre jamais la lecture des chiffres.
  */
 let nomsPublics: Record<string, string> = {};
+/** Les presents qui ont un compte : eux seuls ont une fiche a ouvrir. */
+let inscrits = new Set<string>();
 let last: MoveInfo | null = null;
 let createdAt = Date.now();
 let servedAt = Date.now();
@@ -2064,6 +2066,19 @@ function paintSide() {
     if (openPlayer === name) {
       const list = document.createElement("div");
       list.className = "plist";
+      // LE CLIC SUR LE NOM DEROULE SES COUPS : on ne le lui reprend pas. La
+      // fiche s'ouvre d'ici, une fois deroule.
+      if (inscrits.has(name)) {
+        const voir = document.createElement("button");
+        voir.type = "button";
+        voir.className = "voir-profil";
+        voir.textContent = "Voir le profil";
+        voir.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void ouvrirLaFiche(name);
+        });
+        list.appendChild(voir);
+      }
       // AU DIX-MILLIEME COUP, LE NUMERO NE TIENT PLUS DANS SA COLONNE. Elle
       // etait figee a trois chiffres : au-dela, le numero debordait sur le mot
       // et la ligne se repliait en deux. La colonne suit donc la partie.
@@ -2149,6 +2164,10 @@ function paintSide() {
     e.textContent = verifies.has(n) ? `${n} ✓` : n;
     const vrai = nomsPublics[n];
     if (vrai !== undefined) e.title = vrai;
+    if (inscrits.has(n)) {
+      e.classList.add("fiche-ouvrable");
+      e.addEventListener("click", () => { void ouvrirLaFiche(n); });
+    }
     boiteEnLigne.appendChild(e);
     if (i < online.length - 1) boiteEnLigne.appendChild(document.createTextNode(", "));
   }
@@ -3456,6 +3475,10 @@ function ligneDeChat(m: Chat): HTMLElement {
   who.className = "who"; who.textContent = m.who;
   const vrai = nomsPublics[m.who];
   if (vrai !== undefined) who.title = vrai;
+  if (inscrits.has(m.who)) {
+    who.classList.add("fiche-ouvrable");
+    who.addEventListener("click", () => { void ouvrirLaFiche(m.who); });
+  }
   el.appendChild(who);
   if (m.text) el.appendChild(document.createTextNode(m.text));
   if (m.cell) {
@@ -3933,6 +3956,7 @@ addEventListener("keydown", (e) => {
   // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
   if (!$("join").hidden) {
     if (e.key !== "Escape") return;
+    if (!$("voile-joueur").hidden) { $("voile-joueur").hidden = true; return; }
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
     if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
     if (!$("voile-records").hidden) { $("voile-records").hidden = true; return; }
@@ -4449,7 +4473,7 @@ setInterval(() => {
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; verifies?: string[];
-  noms?: Record<string, string>;
+  noms?: Record<string, string>; inscrits?: string[];
   last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
@@ -4514,6 +4538,12 @@ function applyState(s: {
   online = s.online ?? [];
   verifies = new Set(s.verifies ?? []);
   nomsPublics = s.noms ?? {};
+  // LES LIGNES DE CHAT SONT PEINTES AVANT QUE L'ETAT N'ARRIVE, et rien ne les
+  // repeint ensuite : sans cela, les pseudos deja affiches n'apprenaient jamais
+  // qu'ils menent a une fiche. On ne repeint que si la liste a vraiment change.
+  const avantInscrits = [...inscrits].sort().join(" ");
+  inscrits = new Set(s.inscrits ?? []);
+  if ([...inscrits].sort().join(" ") !== avantInscrits) paintChat(chat);
   last = s.last ?? null;
   createdAt = s.createdAt;
   servedAt = s.servedAt;
@@ -4998,6 +5028,43 @@ async function demanderLaVerif(): Promise<void> {
   $("perso-error").hidden = true;
   peindreLaVerification();
 }
+
+/**
+ * Ouvre la fiche d'un joueur.
+ *
+ * Elle ne montre que ce que le serveur accepte de dire de lui : son avatar, sa
+ * pastille, et son nom s'il a choisi de le rendre public. Rien d'autre
+ * n'existe encore -- les statistiques viendront s'y loger.
+ */
+async function ouvrirLaFiche(qui: string): Promise<void> {
+  $("fiche-pseudo").textContent = qui;
+  $("fiche-nom").hidden = true;
+  $("fiche-badge").hidden = true;
+  $("fiche-error").hidden = true;
+  $("fiche-avatar").replaceChildren();
+  $("voile-joueur").hidden = false;
+  let d: { joueur?: { pseudo: string; verifie: boolean; avatar: number; avatarSombre: boolean; nom?: string } };
+  try { d = await (await fetch(`/api/joueur/${encodeURIComponent(qui)}`)).json(); }
+  catch { d = {}; }
+  const j = d.joueur;
+  if (j === undefined) {
+    $("fiche-error").textContent = "Ce joueur n'a pas de compte.";
+    $("fiche-error").hidden = false;
+    return;
+  }
+  $("fiche-pseudo").textContent = j.pseudo;
+  $("fiche-badge").hidden = !j.verifie;
+  peindreAvatar($("fiche-avatar"), j.avatar, 84, j.avatarSombre);
+  if (j.nom !== undefined) {
+    $("fiche-nom").textContent = j.nom;
+    $("fiche-nom").hidden = false;
+  }
+}
+
+$("fiche-close").addEventListener("click", () => { $("voile-joueur").hidden = true; });
+$("voile-joueur").addEventListener("click", (e) => {
+  if (e.target === $("voile-joueur")) $("voile-joueur").hidden = true;
+});
 
 /** La liste des demandes, pour qui a le droit de trancher. */
 async function ouvrirLAdministration(): Promise<void> {
@@ -6068,6 +6135,7 @@ async function rejoindre(id: string): Promise<void> {
   online = [];
   verifies = new Set();
   nomsPublics = {};
+  inscrits = new Set();
   servedAt = Date.now();
   createdAt = Date.now();
   $("sac").textContent = "";

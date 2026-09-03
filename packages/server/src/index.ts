@@ -313,6 +313,8 @@ function publicState(s: Salon) {
     online: occupants(s.id),
     verifies: verifiesPresents(s.id),
     noms: nomsPublics(s.id),
+    // Un invite n'a pas de fiche : le client ne rend cliquables que ceux-la.
+    inscrits: occupants(s.id).filter((n) => compte(n) !== undefined),
     createdAt: g.createdAt,
     demarreA: DEMARRE_A,
     now: Date.now(),
@@ -620,6 +622,15 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   }
 
   // ------------------------------------------------------------- comptes
+
+  // La fiche publique d'un joueur. Ce qu'elle rend est exactement ce que
+  // `publicDuCompte` accepte de dire : ni adresse, ni nom garde prive.
+  if (url.startsWith("/api/joueur/") && req.method === "GET") {
+    const c = compte(decodeURIComponent(url.slice("/api/joueur/".length)));
+    if (c === undefined) { json(res, 404, { erreur: "aucun compte à ce nom" }); return; }
+    json(res, 200, { joueur: publicDuCompte(c) });
+    return;
+  }
 
   if (url === "/api/moi" && req.method === "GET") {
     const c = quiParle(req);

@@ -629,6 +629,16 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bascules button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); font-weight: 500; }
 .pseudo .etiquette { display: block; margin: 18px 0 7px; font-size: 13px; color: var(--ink-faint); }
 .pseudo input + input { margin-top: 8px; }
+.fiche { width: min(420px, 94vw); }
+.fiche-tete { display: flex; align-items: center; gap: 16px; }
+.fiche-tete h2 { margin: 0; }
+.fiche .valider { margin-top: 24px; }
+/* Un pseudo qui mene quelque part le dit : il se souligne au survol, sans
+   changer de couleur -- le vert est deja pris par l'auteur d'un message. */
+.msg .who.fiche-ouvrable, #online span.fiche-ouvrable { cursor: pointer; }
+.msg .who.fiche-ouvrable:hover, #online span.fiche-ouvrable:hover { text-decoration: underline; }
+.plist .voir-profil { align-self: flex-start; margin: 2px 0 4px; padding: 3px 9px; font-size: 11px; color: var(--ink-faint); background: none; }
+.plist .voir-profil:hover { color: var(--accent); border-color: var(--accent); }
 .profil { max-width: 760px; margin: 0 auto; }
 .profil-tete { display: flex; align-items: center; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
 .profil-tete .lien { margin-left: auto; font-size: 13px; padding: 6px 12px; }
@@ -927,6 +937,28 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <button class="valider" type="submit">Continuer</button>
       <button class="lien renoncer" id="renoncer" type="button">Plus tard</button>
     </form>
+  </div>
+</div>
+
+<!-- LA FICHE D'UN JOUEUR. Une fenetre et non une page : on la consulte depuis
+   un salon, et sortir du salon pour lire trois lignes serait payer cher un
+   renseignement.
+
+   ELLE VIT A LA RACINE, ET NON DANS L'ACCUEIL : l'accueil est masque des
+   qu'on entre dans un salon, et tout ce qu'il contient avec lui. Posee
+   dedans, elle s'ouvrait sans jamais rien montrer. -->
+<div class="voile" id="voile-joueur" hidden>
+  <div class="pseudo fiche">
+    <div class="fiche-tete">
+      <span class="avatar grand" id="fiche-avatar"></span>
+      <div>
+        <h2 id="fiche-pseudo">—</h2>
+        <span class="nom-public" id="fiche-nom" hidden></span>
+        <span class="pastille" id="fiche-badge" hidden>joueur vérifié</span>
+      </div>
+    </div>
+    <div class="join-error" id="fiche-error" hidden></div>
+    <button class="valider" id="fiche-close" type="button">Fermer</button>
   </div>
 </div>
 
