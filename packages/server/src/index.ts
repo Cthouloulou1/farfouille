@@ -32,7 +32,7 @@ import {
   lireLesComptes, creerCompte, compte, motDePasseJuste, changerLeMotDePasse,
   ecrireLeProfil, demanderLaVerification, trancherLaVerification, tousLesComptes,
   emettreUnJeton, compteDuJeton, jetonDesEntetes, cookieDeSession, cookieEfface,
-  publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLAdmin, cleDuPseudo,
+  publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLesAdmins, cleDuPseudo,
   nomComplet, type Compte,
 } from "./comptes.ts";
 
@@ -49,8 +49,15 @@ const GAME_ID = arg("partie", "mondiale");
 const LAYOUT = arg("pavage", "pave1") as LayoutName;
 /** Bouton "reveler le top" : commodite de test, absente pour les joueurs. */
 const REVEAL = process.argv.includes("--reveler");
-/** Le compte qui tranche les demandes de verification. */
-const ADMIN = arg("admin", "admin");
+/**
+ * Les comptes qui tranchent les demandes de verification.
+ *
+ * Plusieurs noms separes par des virgules. Le premier est le compte
+ * d'administration proprement dit -- cree s'il manque, et seul concerne par
+ * `--admin-mdp`. Les suivants sont des comptes de joueurs a qui l'on donne les
+ * droits sans toucher a leur mot de passe.
+ */
+const ADMINS = arg("admin", "admin").split(",").map((n) => n.trim()).filter((n) => n !== "");
 const ADMIN_MDP = arg("admin-mdp", process.env["FARFOUILLE_ADMIN_MDP"] ?? "");
 
 /**
@@ -693,6 +700,32 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // CHANGER SON MOT DE PASSE DEMANDE L'ANCIEN. Un cookie vole suffirait sinon
+  // a s'emparer du compte pour de bon, en fermant la porte a son proprietaire.
+  if (url === "/api/motdepasse" && req.method === "POST") {
+    const c = quiParle(req);
+    if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
+    if (tropDEssais(req)) {
+      json(res, 429, { erreur: "Trop d'essais, attendez un instant" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    if (!(await motDePasseJuste(c, String(corps.ancien ?? "")))) {
+      json(res, 403, { erreur: "Mot de passe actuel incorrect" });
+      return;
+    }
+    const erreur = await changerLeMotDePasse(c, String(corps.nouveau ?? ""));
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    // Changer de mot de passe invalide TOUS les jetons anterieurs, y compris le
+    // notre : on en remet un neuf, sinon on se deconnecterait soi-meme.
+    res.setHeader("set-cookie", cookieDeSession(emettreUnJeton(c), sousHttps(req)));
+    console.log(`[comptes] ${c.pseudo} a change son mot de passe`);
+    json(res, 200, { ok: true });
+    return;
+  }
+
   if (url === "/api/verification" && req.method === "POST") {
     const c = quiParle(req);
     if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
@@ -1166,7 +1199,7 @@ http.listen(PORT, () => {
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');
   lireLesComptes();
-  void assurerLAdmin(ADMIN, ADMIN_MDP);
+  void assurerLesAdmins(ADMINS, ADMIN_MDP);
 
   console.log(`
   preparation des parties...`);

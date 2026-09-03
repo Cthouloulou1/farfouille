@@ -4917,6 +4917,10 @@ function ouvrirLeProfil(pousser = true): void {
   if (moiCompte === null) { ouvrirLeCompte(); return; }
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
+  ($("mdp-ancien") as HTMLInputElement).value = "";
+  ($("mdp-neuf") as HTMLInputElement).value = "";
+  $("mdp-error").hidden = true;
+  $("mdp-fait").hidden = true;
   peindreAvatar($("perso-avatar"), moiCompte.avatar, 84, moiCompte.avatarSombre);
   ($("perso-prenom") as HTMLInputElement).value = moiCompte.prenom;
   ($("perso-nom") as HTMLInputElement).value = moiCompte.nom;
@@ -4929,7 +4933,7 @@ function ouvrirLeProfil(pousser = true): void {
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = false;
   $("join").hidden = false;
-  if (pousser) window.history.pushState({ page: "profil" }, "", "?page=profil");
+  if (pousser) window.history.pushState({ page: "compte" }, "", "?page=compte");
 }
 
 /** Referme le profil et rend la place au mur de salons. */
@@ -4941,7 +4945,7 @@ function fermerLeProfil(pousser = true): void {
 
 // Le bouton « precedent » du navigateur suit la page, comme partout ailleurs.
 addEventListener("popstate", () => {
-  const veutLeProfil = new URLSearchParams(location.search).get("page") === "profil";
+  const veutLeProfil = new URLSearchParams(location.search).get("page") === "compte";
   if (veutLeProfil && moiCompte !== null) ouvrirLeProfil(false);
   else fermerLeProfil(false);
 });
@@ -4965,17 +4969,13 @@ function peindreLaVerification(): void {
     boite.appendChild(dit);
     return;
   }
-  dit.textContent = "Demandez à être un joueur vérifié (les joueurs vérifiés n'auront "
-    + "leur nom affiché que s'ils le veulent).";
-  boite.appendChild(dit);
   const b = el("button", "appliquer", "Demander la vérification") as HTMLButtonElement;
   b.type = "button";
   b.addEventListener("click", () => { void demanderLaVerif(); });
   boite.appendChild(b);
-  const apres = el("p", "apres-bouton",
-    "Joueur de haut niveau ? Donnez votre nom, demandez la vérification, "
-    + "et une pastille dira que vous êtes bien qui vous dites.");
-  boite.appendChild(apres);
+  boite.appendChild(el("p", "apres-bouton",
+    "Demandez à être un joueur vérifié (les joueurs vérifiés n'auront leur nom "
+    + "affiché que s'ils le veulent)."));
 }
 
 /** Enregistre le profil. Le nom part au serveur, le reste suit. */
@@ -5180,6 +5180,41 @@ $("perso-public").addEventListener("click", () => {
   b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
   peindreLeNomPublic();
 });
+
+/**
+ * L'ESPACE PERSONNEL N'EST PAS LE PROFIL.
+ *
+ * Ici l'on regle ce qui nous appartient ; le profil est ce que les autres
+ * lisent. Le pseudo mene de l'un a l'autre, ce qui est la seule facon de voir
+ * ce qu'on montre vraiment.
+ */
+$("perso-pseudo").addEventListener("click", () => {
+  if (moiCompte !== null) void ouvrirLaFiche(moiCompte.pseudo);
+});
+
+$("mdp-changer").addEventListener("click", () => { void changerMonMotDePasse(); });
+
+async function changerMonMotDePasse(): Promise<void> {
+  const ancien = ($("mdp-ancien") as HTMLInputElement).value;
+  const nouveau = ($("mdp-neuf") as HTMLInputElement).value;
+  $("mdp-fait").hidden = true;
+  const r = await fetch("/api/motdepasse", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ancien, nouveau }),
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    $("mdp-error").textContent = d.erreur ?? "changement impossible";
+    $("mdp-error").hidden = false;
+    return;
+  }
+  $("mdp-error").hidden = true;
+  ($("mdp-ancien") as HTMLInputElement).value = "";
+  ($("mdp-neuf") as HTMLInputElement).value = "";
+  $("mdp-fait").className = "apres fait";
+  $("mdp-fait").hidden = false;
+}
 
 $("perso-nom").addEventListener("input", peindreLeNomPublic);
 $("perso-prenom").addEventListener("input", peindreLeNomPublic);
@@ -6174,7 +6209,7 @@ peindreAccueil();
 void lireLeCompte().then(() => {
   peindreAccueil();
   // Une adresse qui demande le profil l'ouvre, des que l'on sait qui l'on est.
-  if (new URLSearchParams(location.search).get("page") === "profil" && moiCompte !== null) {
+  if (new URLSearchParams(location.search).get("page") === "compte" && moiCompte !== null) {
     ouvrirLeProfil(false);
   }
   return peuplerSalons();

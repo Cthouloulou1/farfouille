@@ -202,6 +202,8 @@ export function lireLesComptes(): void {
       if (e["avatarSombre"] !== undefined) c.avatarSombre = e["avatarSombre"] === true;
     } else if (e["t"] === "demande") {
       c.demande = true; c.demandeLe = Number(e["quand"] ?? Date.now());
+    } else if (e["t"] === "admin") {
+      c.admin = e["admin"] === true;
     } else if (e["t"] === "verdict") {
       c.verifie = e["verifie"] === true;
       c.demande = false;
@@ -456,17 +458,40 @@ export function priveDuCompte(c: Compte): Record<string, unknown> {
   };
 }
 
+/** Donne -- ou retire -- les droits d'administration a un compte. */
+export function reglerLAdmin(c: Compte, admin: boolean): void {
+  if (c.admin === admin) return;
+  c.admin = admin;
+  inscrire({ t: "admin", pseudo: c.pseudo, admin, quand: Date.now() });
+}
+
 /**
- * Le compte d'administration, cree au premier demarrage.
+ * Les comptes d'administration, assures au demarrage.
  *
  * Le mot de passe vient de `--admin-mdp` ou de la variable d'environnement
  * `FARFOUILLE_ADMIN_MDP`. A defaut, on en tire un au hasard et on l'ecrit une
  * SEULE fois dans la console : un mot de passe d'administration en dur dans le
  * code serait le meme chez tout le monde.
  */
-export async function assurerLAdmin(pseudo: string, mdpDemande: string): Promise<void> {
+export async function assurerLesAdmins(pseudos: string[], mdpDemande: string): Promise<void> {
+  for (const [i, pseudo] of pseudos.entries()) {
+    // LE MOT DE PASSE NE VAUT QUE POUR LE PREMIER NOM. Les autres sont des
+    // comptes de joueurs a qui l'on donne des droits : on ne touche pas a leur
+    // mot de passe, ce serait les mettre dehors de chez eux.
+    await assurerUnAdmin(pseudo, i === 0 ? mdpDemande : "");
+  }
+}
+
+async function assurerUnAdmin(pseudo: string, mdpDemande: string): Promise<void> {
   const deja = comptes.get(cleDuPseudo(pseudo));
   if (deja !== undefined) {
+    // Un compte qui existe deja recoit les droits, et rien d'autre.
+    if (!deja.admin) {
+      reglerLAdmin(deja, true);
+      console.log(`
+  ADMINISTRATION -- "${deja.pseudo}" est desormais administrateur.
+`);
+    }
     // DONNER `--admin-mdp` A UN COMPTE QUI EXISTE LE REMET A CE MOT DE PASSE.
     //
     // Sans cela, un mot de passe tire au hasard et manque au demarrage
