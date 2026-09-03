@@ -22,11 +22,16 @@ import {
   confierLesReglages, comptedesInfinies, MAX_SALONS, MAX_INFINIES, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
-import { avec, configParDefaut, deserialiser, serialiser } from "../../engine/src/config.ts";
+import {
+  avec, avecDictionnaire, configParDefaut, deserialiser, serialiser,
+} from "../../engine/src/config.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
-import { DAWG_PATH } from "../../engine/src/paths.ts";
+import { dawgPath } from "../../engine/src/paths.ts";
+import {
+  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaireConnu, type Langue,
+} from "../../engine/src/dictionnaires.ts";
 import { Seau, seauDeRafale, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
 import {
   lireLesComptes, creerCompte, compte, motDePasseJuste, changerLeMotDePasse,
@@ -477,8 +482,10 @@ const MIME: Record<string, string> = {
  * partie que tout le monde reconnait. Grille infinie : les probabilites
  * ponderees, qui ne s'epuisent jamais.
  */
-function configDeDepart(infinie: boolean) {
-  const base = configParDefaut();
+function configDeDepart(infinie: boolean, langue: Langue = "fr") {
+  // Le lexique suit la langue de celui qui ouvre le salon : venu de la version
+  // anglaise, on n'ouvre pas une partie en francais.
+  const base = avecDictionnaire(configParDefaut(), DICO_PAR_LANGUE[langue]);
   return infinie
     ? avec(base, { bornes: null, pioche: "probabilites" })
     // UN SALON NEUF EST UN BLITZ. Sans chrono, un salon ouvert reste sur son
@@ -589,7 +596,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         id: identifiantLibre(nom), nom, proprietaire, prive: c.prive === true,
         // Un salon neuf est une partie normale : plateau 15x15. La grille
         // infinie se choisit ensuite, dans les reglages du salon.
-        layout: LAYOUT, cfg: configDeDepart(false), nouveau: true,
+        layout: LAYOUT, cfg: configDeDepart(false, c.langue === "en" ? "en" : "fr"),
+        nouveau: true,
       });
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
@@ -795,8 +803,12 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // `?d=<id>` choisit le lexique. Sans parametre, le francais : c'est ce que
+  // demandaient les clients d'avant les dictionnaires multiples.
   if (url === "/dawg.bin") {
-    const buf = readFileSync(DAWG_PATH);
+    const demande = new URLSearchParams((req.url ?? "").split("?")[1] ?? "").get("d");
+    const quel = dictionnaireConnu(demande) ? demande! : DICO_PAR_DEFAUT;
+    const buf = readFileSync(dawgPath(quel));
     res.writeHead(200, {
       "content-type": "application/octet-stream",
       "content-length": String(buf.length),
@@ -1058,6 +1070,9 @@ wss.on("connection", (ws, req) => {
       // La partie joker a besoin d'un sac : « il ne reste plus de R » n'a aucun
       // sens avec des probabilites qui ne s'epuisent pas.
       const joker = msg.joker === true && pioche !== "probabilites";
+      // Le lexique, et ce qui vient avec : la valeur des lettres et le sac.
+      const dico = dictionnaireConnu(msg.dictionnaire)
+        ? String(msg.dictionnaire) : base.dictionnaire;
       // Primes personnalisees : un nombre de caramels poses, des points. On
       // ne garde que des entiers positifs sur un nombre de caramels plausible.
       const primes: Record<number, number> = {};
@@ -1121,7 +1136,7 @@ wss.on("connection", (ws, req) => {
       // leur poser un terme en donnerait DEUX, et la partie s'arreterait au
       // premier atteint sans qu'on sache lequel. Ces deux-la n'en ont pas.
       const sansTerme = bornes !== null || pioch === "sac102";
-      const archives = await relancer(s, avec(base, {
+      const archives = await relancer(s, avec(avecDictionnaire(base, dico), {
         tirage, jouables, joker,
         pioche: pioch,
         bornes, pavage, pavageNom, mode, decompte,
@@ -1138,7 +1153,8 @@ wss.on("connection", (ws, req) => {
       // Valider les reglages, c'est lancer la partie.
       await s.partie.demarrer();
       console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
-        `pioche ${pioche}${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
+        `pioche ${pioche}, ${dico}` +
+        `${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
       for (const [c, v] of clients) {
         if (v.salon !== s.id) continue;
         send(c, {

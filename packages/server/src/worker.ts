@@ -16,7 +16,7 @@ import { generateMoves, pickTop } from "../../engine/src/movegen.ts";
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
-import { DAWG_PATH, GADDAG_PATH } from "../../engine/src/paths.ts";
+import { dawgPath, gaddagPath } from "../../engine/src/paths.ts";
 import type { Placement } from "../../engine/src/board.ts";
 
 const { layout, seed, config } = workerData as {
@@ -24,8 +24,10 @@ const { layout, seed, config } = workerData as {
 };
 setLayout(layout);
 
-const dawg = loadDict(DAWG_PATH);
-const gaddag = loadDict(GADDAG_PATH);
+// Le solveur lit le lexique de SA partie. Un salon anglais et un salon
+// francais tournent cote a cote, chacun avec son fil et son dictionnaire.
+const dawg = loadDict(dawgPath(config.dictionnaire));
+const gaddag = loadDict(gaddagPath(config.dictionnaire));
 // La grille du solveur porte la MEME configuration que celle du serveur, sinon
 // il calculerait des tops pour une autre variante.
 const board = new Board(dawg, deserialiser(config));

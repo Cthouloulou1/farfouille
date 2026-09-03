@@ -29,9 +29,10 @@ import { fileURLToPath } from "node:url";
 import type { Dict } from "../../engine/src/dictionary.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
-import { Bag, DEFAULT_BAG } from "../../engine/src/bag.ts";
+import { Bag, type BagConfig } from "../../engine/src/bag.ts";
 import { BLANK, rangerLeTirage } from "../../engine/src/alphabet.ts";
-import { SacFini, SAC_FRANCAIS, type Pioche } from "../../engine/src/sac.ts";
+import { SacFini, type Pioche } from "../../engine/src/sac.ts";
+import { dictionnaire } from "../../engine/src/dictionnaires.ts";
 import {
   configParDefaut, serialiser, deserialiser,
   type ConfigPartie, type ConfigSerialisee,
@@ -40,7 +41,7 @@ import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
 import { resolveTypedWord, PLAY_MESSAGE, type PlayError } from "../../engine/src/play.ts";
 import { noteCoup, type Dir } from "../../engine/src/coords.ts";
-import { DAWG_PATH } from "../../engine/src/paths.ts";
+import { dawgPath } from "../../engine/src/paths.ts";
 import type { Move } from "../../engine/src/score.ts";
 
 /** Ce que chacun a marque, rate, et trouve. Voir `bilanDesJoueurs`. */
@@ -457,7 +458,9 @@ export class Game {
     this.layout = layout;
     setLayout(layout);
     this.cfg = cfg ?? configParDefaut();
-    this.dawg = loadDict(DAWG_PATH);
+    // Le lexique de la partie, pas celui du serveur : deux salons voisins
+    // peuvent jouer l'un en francais et l'autre en anglais.
+    this.dawg = loadDict(dawgPath(this.cfg.dictionnaire));
     this.board = new Board(this.dawg, this.cfg);
     this.file = join(DATA_DIR, `${gameId}.json`);
     this.journal = join(DATA_DIR, `${gameId}.journal.jsonl`);
@@ -754,12 +757,20 @@ export class Game {
     const parTirage = this.cfg.tirage - (this.cfg.joker ? 1 : 0);
     const alea = mulberry32(moveSeed(this.seed, 0));
 
+    // Le sac et les poids suivent le dictionnaire : le W anglais est une
+    // lettre ordinaire dont on a deux exemplaires, le W francais une rarete
+    // unique.
+    const lexique = dictionnaire(this.cfg.dictionnaire);
     if (this.cfg.pioche === "probabilites") {
-      this.bag = new Bag(DEFAULT_BAG, alea, undefined, parTirage);
+      const ponderee: BagConfig = {
+        weights: lexique.poids, blankWeight: lexique.poidsJoker,
+        alpha: 0.08, cap: 4, maxBlanks: 2,
+      };
+      this.bag = new Bag(ponderee, alea, undefined, parTirage);
     } else {
       const distribution = this.cfg.joker
-        ? Object.fromEntries(Object.entries(SAC_FRANCAIS).filter(([l]) => l !== BLANK))
-        : SAC_FRANCAIS;
+        ? Object.fromEntries(Object.entries(lexique.sac).filter(([l]) => l !== BLANK))
+        : lexique.sac;
       const sac = new SacFini(distribution, alea, parTirage);
       sac.recharge = this.cfg.pioche === "sac102boucle";
       this.bag = sac;

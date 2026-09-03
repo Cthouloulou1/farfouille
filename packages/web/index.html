@@ -1172,6 +1172,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="large">
     <div class="rg-corps">
       <div class="reglage">
+        <label>Dictionnaire</label>
+        <div class="choix hautes" id="r-dico"></div>
+      </div>
+
+      <div class="reglage">
         <label>Grille</label>
         <div class="choix" id="r-grille">
           <button type="button" data-v="15">Normale</button>
@@ -1280,6 +1285,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <button id="prefs-close">Fermer</button>
     </header>
     <div class="rg-corps">
+      <div class="reglage">
+        <label>Langue</label>
+        <div class="choix" id="p-langue">
+          <button type="button" data-v="fr">Français</button>
+          <button type="button" data-v="en">English</button>
+        </div>
+      </div>
+
       <div class="reglage">
         <label>Thème</label>
         <div class="choix" id="p-theme">

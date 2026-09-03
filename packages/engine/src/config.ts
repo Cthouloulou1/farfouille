@@ -13,8 +13,8 @@
  * la sienne, et le score, le generateur et la resolution d'un mot tape la
  * lisent la plutot que dans une variable partagee.
  */
-import { VALUES } from "./alphabet.ts";
 import { activeLayout, currentLayout, LAYOUTS, type LayoutFn, type LayoutName } from "./bonus.ts";
+import { DICO_PAR_DEFAUT, dictionnaire } from "./dictionnaires.ts";
 
 /**
  * Primes par nombre de caramels poses en un coup.
@@ -38,6 +38,15 @@ export interface ConfigPartie {
   primes: Readonly<Record<number, number>>;
   /** Valeur de chaque lettre. Change avec le dictionnaire. */
   valeurs: Readonly<Record<string, number>>;
+  /**
+   * Le lexique de la partie : quels mots existent.
+   *
+   * Il ne dit pas que les mots. Il emmene avec lui la valeur des lettres, la
+   * composition du sac et les poids de la pioche ponderee -- voir
+   * `dictionnaires.ts`. En changer sans changer le reste ferait jouer un
+   * lexique anglais avec un W a dix points dont il n'existe qu'un exemplaire.
+   */
+  dictionnaire: string;
   /**
    * D'ou viennent les caramels. Les probabilites ponderees ne s'epuisent
    * jamais ; le sac de 102 est ce que reclament la partie joker et la fin de
@@ -108,7 +117,8 @@ export function configParDefaut(): ConfigPartie {
     tirage: 7,
     jouables: 7,
     primes: primesParDefaut(),
-    valeurs: VALUES,
+    valeurs: dictionnaire(DICO_PAR_DEFAUT).valeurs,
+    dictionnaire: DICO_PAR_DEFAUT,
     pioche: "probabilites",
     joker: false,
     mode: "topping",
@@ -131,6 +141,7 @@ export interface ConfigSerialisee {
   jouables: number;
   primes: Record<number, number>;
   valeurs: Record<string, number>;
+  dictionnaire: string;
   pioche: "probabilites" | "sac102" | "sac102boucle";
   joker: boolean;
   mode: "topping" | "duplicate";
@@ -146,6 +157,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
   return {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
+    dictionnaire: cfg.dictionnaire,
     pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode,
     coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
     decompte: cfg.decompte, chrono: cfg.chrono,
@@ -162,6 +174,9 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
   return {
     tirage: plat.tirage, jouables: plat.jouables,
     primes: plat.primes, valeurs: plat.valeurs, pioche: plat.pioche,
+    // Les parties d'avant les dictionnaires multiples n'ont pas ce champ :
+    // elles ont toutes ete jouees en francais.
+    dictionnaire: plat.dictionnaire ?? DICO_PAR_DEFAUT,
     joker: plat.joker === true,
     mode: plat.mode === "duplicate" ? "duplicate" : "topping",
     coupsMax: plat.coupsMax ?? null,
@@ -172,6 +187,18 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     pavage: nomme ?? activeLayout(),
     pavageNom: plat.pavageNom,
   };
+}
+
+/**
+ * Change le dictionnaire d'une configuration -- ET CE QUI VIENT AVEC.
+ *
+ * La valeur des lettres suit le lexique : c'est le meme reglage vu de deux
+ * cotes, et les separer donnerait un plateau ou le Q vaut huit points dans un
+ * lexique qui n'a pas de mot en Q sans U.
+ */
+export function avecDictionnaire(base: ConfigPartie, id: string): ConfigPartie {
+  const d = dictionnaire(id);
+  return { ...base, dictionnaire: d.id, valeurs: d.valeurs };
 }
 
 /** Une configuration derivee, pour ne pas repeter les champs inchanges. */

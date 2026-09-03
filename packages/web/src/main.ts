@@ -9,9 +9,15 @@
  */
 import { Dict } from "../../engine/src/dictionary.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
-import { configParDefaut, deserialiser, type ConfigPartie } from "../../engine/src/config.ts";
+import {
+  configParDefaut, deserialiser, valeurDe, type ConfigPartie,
+} from "../../engine/src/config.ts";
+import {
+  DICO_PAR_DEFAUT, tousLesDictionnaires,
+} from "../../engine/src/dictionnaires.ts";
+import { choisirLaLangue, langue, t, t2, traduireLeDocument } from "./langue.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
-import { valueOf, BLANK } from "../../engine/src/alphabet.ts";
+import { BLANK } from "../../engine/src/alphabet.ts";
 import {
   step, noteCoup, setReperes, nomColonne, nomLigne, type Dir, type Reperes,
 } from "../../engine/src/coords.ts";
@@ -54,8 +60,27 @@ interface MoveInfo {
 interface Chat { at: number; who: string; text: string; cell?: { x: number; y: number } }
 
 let dict: Dict;
-/** Le dictionnaire n'est telecharge qu'une fois, au premier salon rejoint. */
-let dictCharge = false;
+/**
+ * Les lexiques deja telecharges, par identifiant.
+ *
+ * Un salon anglais et un salon francais ne lisent pas le meme fichier, et l'on
+ * passe de l'un a l'autre sans recharger la page : on garde donc ce qui est
+ * arrive plutot que de le redemander a chaque va-et-vient. Le DAWG anglais pese
+ * 0,23 Mo, le francais 0,45 : les garder tous les deux ne coute rien.
+ */
+const lexiques = new Map<string, Dict>();
+/** Le lexique actuellement dans `dict`. Vide tant que rien n'est charge. */
+let dictId = "";
+
+async function chargerLeDictionnaire(id: string): Promise<void> {
+  const deja = lexiques.get(id);
+  if (deja !== undefined) { dict = deja; dictId = id; return; }
+  const bytes = await (await fetch(`/dawg.bin?d=${encodeURIComponent(id)}`)).arrayBuffer();
+  const charge = Dict.fromBytes(bytes);
+  lexiques.set(id, charge);
+  dict = charge;
+  dictId = id;
+}
 let board: Board;
 /** La variante jouee, envoyee par le serveur a la connexion. */
 let cfg: ConfigPartie = configParDefaut();
@@ -637,7 +662,7 @@ function draw() {
     ctx.font = `700 ${Math.round(h * .62)}px Archivo, system-ui, sans-serif`;
     ctx.fillText(letter, px + w / 2, py + h * .53);
     // Un joker vaut zero, et il l'affiche : le 0 dit ce qu'il rapporte.
-    const v = blank ? 0 : valueOf(letter);
+    const v = blank ? 0 : valeurDe(cfg, letter);
     if (h >= 18) {
       ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink); ctx.globalAlpha = blank ? .8 : .6;
       ctx.font = `500 ${Math.round(h * .27)}px "IBM Plex Mono", monospace`;
@@ -710,7 +735,7 @@ function draw() {
       const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
       g.fillStyle = ink;
       g.globalAlpha = q.b === 1 ? .8 : .6;
-      g.fillText(String(q.b === 1 ? 0 : valueOf(q.l)), px + w - w * .1, py + h * .84);
+      g.fillText(String(q.b === 1 ? 0 : valeurDe(cfg, q.l)), px + w - w * .1, py + h * .84);
     }
     g.globalAlpha = 1;
     g.textAlign = "center";
@@ -1328,7 +1353,7 @@ function dessinerLeTirage(
     g.globalAlpha = .6;
     g.font = `500 ${Math.round(taille * .26)}px "IBM Plex Mono", monospace`;
     g.textAlign = "right";
-    g.fillText(String(joker ? 0 : valueOf(ch)), px + taille * .9, py + taille * .84);
+    g.fillText(String(joker ? 0 : valeurDe(cfg, ch)), px + taille * .9, py + taille * .84);
     g.textAlign = "center"; g.globalAlpha = 1;
     px += taille + gap;
   }
@@ -1663,7 +1688,7 @@ function peindreCaramels(lettres: readonly string[]): void {
     el.className = "caramel" + (joker ? " joker" : "");
     el.textContent = joker ? "?" : ch;
     if (!joker) {
-      const v = valueOf(ch);
+      const v = valeurDe(cfg, ch);
       if (v) { const s = document.createElement("i"); s.textContent = String(v); el.appendChild(s); }
     }
     el.dataset["l"] = ch;
@@ -4182,7 +4207,7 @@ $("rejouer").addEventListener("click", () => {
     t: "relancer", tirage: cfg.tirage, jouables: cfg.jouables, pioche: cfg.pioche,
     joker: cfg.joker, primes: cfg.primes, chrono: cfg.chrono, bornes: cfg.bornes,
     mode: cfg.mode, coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
-    decompte: cfg.decompte,
+    decompte: cfg.decompte, dictionnaire: cfg.dictionnaire,
   });
 });
 
@@ -4357,6 +4382,9 @@ const ICONE_ROUE =
 $("prefs-open").innerHTML = ICONE_ROUE;
 
 function peuplerPreferences(): void {
+  for (const b of $("p-langue").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === langue()));
+  }
   for (const b of $("p-theme").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.theme));
   }
@@ -4371,6 +4399,15 @@ function peuplerPreferences(): void {
   }
 }
 
+// Changer de langue recharge la page : voir `choisirLaLangue`. Le reglage ne
+// vit donc pas dans `prefs`, qui se relit apres coup -- il vit dans langue.ts,
+// qui doit etre lu AVANT que la page ne se peigne.
+for (const b of $("p-langue").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    const choisie = (b as HTMLElement).dataset["v"] === "en" ? "en" : "fr";
+    if (choisie !== langue()) choisirLaLangue(choisie);
+  });
+}
 for (const b of $("p-theme").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     prefs.theme = (b as HTMLElement).dataset["v"] as Preferences["theme"];
@@ -4650,6 +4687,7 @@ function connect() {
         setTimeout(ouvrirReglages, 60);
       }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
+      accorderLeDictionnaire();
       paintChat(chat);
       paintJournal();
       applyState(m.state);
@@ -4697,6 +4735,7 @@ function connect() {
       chat = m.chat ?? [];
       board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
+      accorderLeDictionnaire();
       typed = ""; ghost = null; best = null; finie = false;
       cursor = null; marks = [];
       paintChat(chat);
@@ -4789,6 +4828,8 @@ interface ResumeSalon {
   config: {
     tirage: number; jouables: number; pioche: string; bornes: number | null;
     joker?: boolean; chrono?: number | null; mode?: string;
+    /** Absent des serveurs d'avant les dictionnaires multiples : c'etait le francais. */
+    dictionnaire?: string;
   };
 }
 
@@ -5642,6 +5683,8 @@ async function supprimerSalon(id: string, moi: string): Promise<void> {
 
 /** Les reglages en cours d'edition dans le salon. */
 let cTirage = 7, cJouables = 7, cPioche = "probabilites";
+/** Le lexique en cours d'edition. */
+let cDico = DICO_PAR_DEFAUT;
 /** Primes en cours d'edition : points par nombre de caramels poses. */
 let cPrimes: Record<number, number> = {};
 /** Chrono en cours d'edition, en secondes. null = sans chrono. */
@@ -6010,11 +6053,41 @@ function peuplerPioche(): void {
   }
 }
 
+/**
+ * Un bouton par lexique.
+ *
+ * CHOISIR LE LEXIQUE, C'EST CHOISIR LA LANGUE DE LA PARTIE. Le nom de la langue
+ * passe donc avant celui du dictionnaire : on cherche « English » bien avant de
+ * savoir ce qu'est un EEL 22. Le detail se lit dessous.
+ */
+function peuplerDico(): void {
+  const box = $("r-dico");
+  if (box.childElementCount === 0) {
+    for (const d of tousLesDictionnaires()) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset["v"] = d.id;
+      b.innerHTML = "";
+      b.append(d.langue === "en" ? "English" : "Français");
+      const em = document.createElement("em");
+      em.textContent = d.nom;
+      b.append(document.createElement("br"), em);
+      b.title = d.detail;
+      b.addEventListener("click", () => { cDico = d.id; peuplerDico(); });
+      box.appendChild(b);
+    }
+  }
+  for (const b of box.querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cDico));
+  }
+}
+
 /** Ouvre les reglages sur l'etat courant de la partie. */
 function ouvrirReglages(): void {
   cTirage = cfg.tirage;
   cJouables = cfg.jouables;
   cPioche = cfg.pioche;
+  cDico = cfg.dictionnaire;
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
@@ -6033,6 +6106,7 @@ function ouvrirReglages(): void {
   $("r-primes-open").textContent = "Primes de farfouilles";
   peuplerNombres();
   peuplerPioche();
+  peuplerDico();
   $("r-error").hidden = true;
   // SOUS LE RELIQUAT, PAS PLUS HAUT. Regler une partie, c'est regarder le
   // tirage et les lettres restantes en meme temps : un panneau qui les
@@ -6055,6 +6129,7 @@ $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
 $("r-appliquer").addEventListener("click", () => {
   envoyer({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
+    dictionnaire: cDico,
     joker: ($("r-joker") as HTMLInputElement).checked,
     primes: cPrimes,
     chrono: cChrono,
@@ -6116,7 +6191,9 @@ async function creerSalon(): Promise<void> {
   const r = await fetch("/api/salons", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ proprietaire: moi }),
+    // Le salon nait dans la langue du site : venu de la version anglaise, on
+    // n'ouvre pas une partie en francais.
+    body: JSON.stringify({ proprietaire: moi, langue: langue() }),
   });
   const s = await r.json();
   if (!r.ok) {
@@ -6158,6 +6235,31 @@ $("journal-tete").addEventListener("click", () => {
 $("accueil").addEventListener("click", () => {
   if ($("join").hidden) quitterSalon();
 });
+
+/** Le lexique qu'annonce la liste des salons, a defaut le francais. */
+function dicoDuSalon(id: string): string {
+  return salonsRecus.find((q) => q.id === id)?.config?.dictionnaire ?? DICO_PAR_DEFAUT;
+}
+
+/**
+ * Le plateau a-t-il ete bati sur le bon lexique ?
+ *
+ * La liste des salons peut etre perimee -- le salon a pu changer de
+ * dictionnaire entre-temps. `hello` fait foi : si les deux ne s'accordent pas,
+ * on telecharge le bon et l'on refait le plateau. Rien ne se voit, sinon un
+ * repeignage.
+ */
+function accorderLeDictionnaire(): void {
+  if (cfg.dictionnaire === dictId) return;
+  void chargerLeDictionnaire(cfg.dictionnaire).then(() => {
+    board = new Board(dict, cfg);
+    board.place(tiles.map((t: Tile): Placement => (
+      { x: t.x, y: t.y, letter: t.l, blank: t.b === 1 }
+    )));
+    plateauRejeu = null;
+    draw();
+  });
+}
 
 /** Quitte l'accueil et entre dans un salon. */
 async function rejoindre(id: string): Promise<void> {
@@ -6236,12 +6338,13 @@ async function rejoindre(id: string): Promise<void> {
 
   await fermerConnexion();
 
-  if (!dictCharge) {
-    const bytes = await (await fetch("/dawg.bin")).arrayBuffer();
-    dict = Dict.fromBytes(bytes);
-    dictCharge = true;
-    new ResizeObserver(resize).observe(cv);
-  }
+  // LE LEXIQUE AVANT LA CONNEXION. Le plateau ne peut pas naitre sans
+  // dictionnaire, et `hello` arrive trop tard pour attendre un telechargement
+  // sans laisser l'ecran vide. On prend donc celui qu'annonce la liste des
+  // salons ; `accorderLeDictionnaire` rattrapera si elle etait perimee.
+  const premier = dictId === "";
+  await chargerLeDictionnaire(dicoDuSalon(id));
+  if (premier) new ResizeObserver(resize).observe(cv);
   // Le plateau, lui, attend le dictionnaire : il ne peut pas naitre plus tot.
   board = new Board(dict, cfg);
   resize();
@@ -6253,6 +6356,9 @@ try {
   if (saved) ($("name") as HTMLInputElement).value = saved;
 } catch { /* navigation privee : sans importance */ }
 
+// LE BALISAGE SE TRADUIT AVANT LE PREMIER PEIGNAGE. Sinon la page s'affiche en
+// francais le temps d'un battement, puis bascule -- ce qui se voit.
+traduireLeDocument();
 peindreAccueil();
 // LE COMPTE AVANT LES SALONS : c'est lui qui decide de ce que le bandeau
 // affiche, et une seconde d'accueil peint en visiteur alors qu'on est connecte
