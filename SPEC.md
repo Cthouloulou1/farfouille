@@ -1841,6 +1841,40 @@ Le topping infini est un cas particulier : grille sans bord, probabilités
 pondérées, 7 lettres, pas de chrono, et le coup avance dès que le top est
 trouvé. Tout cela devient réglable.
 
+### Deux fenêtres de réglages
+
+**La fenêtre simple** est celle où l'on arrive. Quatre décisions : la grille
+(normale ou infinie), le mode (topping ou duplicate), le **format** et le temps
+par coup. Plus un interrupteur pour la partie joker.
+
+Le format se **nomme** plutôt que de se composer — « Normal » (7 sur 7),
+« 7 sur 8 », « 7 et 8 », et « Personnalisé » qui ouvre les deux grilles de
+nombres de la fenêtre complète. « 7 sur 8 » se lit tout seul ; « jouables 7,
+tirage 8 » demande un instant de traduction.
+
+Ce qu'elle ne montre pas, elle le **décide** : le lexique est celui de la langue
+du site, le tirage est le sac du jeu classique — qui se recharge sans fin sur
+une grille sans bord, sinon elle s'arrêterait au bout de cent caramels. Elle ne
+propose pas non plus les quinze secondes par coup : c'est un réglage de joueur
+aguerri, qui coûte cher au serveur.
+
+**La fenêtre complète** montre tout, dictionnaire et primes compris. La bascule
+de l'une à l'autre se retient (`prefs.avance`) : qui a demandé les réglages
+avancés ne veut pas les redemander à chaque salon.
+
+### Une grille permanente par langue
+
+`mondiale` joue en français, `mondiale-en` — « The Infinite Grid » — en anglais.
+L'accueil ne montre que celles de votre langue ; **« Tout afficher »** empile
+les autres dans la colonne de gauche.
+
+Une grille permanente **neuve** ne démarre pas toute seule : elle n'appartient à
+personne, donc personne ne la règle. Un compte administrateur ouvre un compte à
+rebours de dix secondes, tout le monde le voit descendre au milieu de la grille,
+et le premier tirage tombe à zéro. Le chrono du coup ne part pas avant. Une
+grille permanente **déjà jouée** repart d'office : ses milliers de coups
+n'attendent l'autorisation de personne.
+
 ### La configuration voyage avec la grille
 
 Elle n'est **pas** un réglage global. Un serveur héberge plusieurs salons à la
