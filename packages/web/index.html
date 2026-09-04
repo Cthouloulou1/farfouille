@@ -839,22 +839,18 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* La liste des lexiques ne prend que sa place : elle tient en trois mots. */
 .rg-corps .ligne > select { flex: 0 1 260px; }
 .rg-corps .ligne .sep { flex: none; width: 1px; margin: 1px 0; background: var(--rule); }
-.rg-corps .ligne .accueille { flex: none; display: flex; }
+/* Le bouton se pose AU BOUT de la rangee, quelle qu'elle soit : il occupe
+   ainsi la meme place en fenetre simple et en fenetre complete, et ne saute
+   pas d'un endroit a l'autre quand on bascule. */
+.rg-corps .ligne .accueille { flex: none; display: flex; margin-left: auto; }
 /* La place vide n'existe pas : le bouton est ailleurs, et le filet qui devait
    l'annoncer flottait tout seul au bout de la rangee. */
 .rg-corps .ligne:has(> .accueille:empty) .sep,
 .rg-corps .ligne .accueille:empty { display: none; }
 
-/* Les nombres a gauche, le joker a droite : c'est le meme reglage, « combien de
-   caramels et lesquels ». La colonne du joker ne prend que ce qu'il lui faut. */
-.rg-corps .reglage.lettres { display: flex; gap: 18px; align-items: flex-start; }
 /* `hidden` doit l'emporter sur les `display` poses ailleurs, plus specifiques
    que la regle du navigateur. Sans cela, un bloc cache reste a l'ecran. */
 .rg-corps [hidden], .rg-corps .choix button[hidden] { display: none; }
-.rg-corps .reglage.lettres .colonne { flex: 1; min-width: 0; }
-/* La colonne du joker n'a pas d'etiquette : on la descend a la hauteur de la
-   premiere rangee de nombres, pour que les deux se lisent sur la meme ligne. */
-.rg-corps .reglage.lettres .colonne.mince { flex: none; margin-top: 35px; }
 .rg-corps select { width: 100%; padding: 9px 11px; font-family: inherit;
   font-size: .88em; color: var(--ink); background: var(--panel);
   border: 1px solid var(--rule); border-radius: 5px; }
@@ -1222,7 +1218,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <label>Dictionnaire</label>
         <div class="ligne">
           <select id="r-dico"></select>
-          <span class="sep"></span>
           <span class="accueille" id="r-avance-dico"></span>
         </div>
       </div>
@@ -1241,9 +1236,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
       <div class="reglage">
         <label>Mode de jeu</label>
-        <div class="choix" id="r-mode">
-          <button type="button" data-v="topping">Topping</button>
-          <button type="button" data-v="duplicate">Duplicate</button>
+        <div class="ligne">
+          <div class="choix" id="r-mode">
+            <button type="button" data-v="topping">Topping</button>
+            <button type="button" data-v="duplicate">Duplicate</button>
+          </div>
+          <span class="sep"></span>
+          <button type="button" class="interrupteur" id="r-joker" aria-pressed="false">
+            Partie joker
+          </button>
         </div>
       </div>
 
@@ -1257,18 +1258,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage lettres" id="r-lettres-bloc">
-        <div class="colonne" id="r-nombres-bloc">
-          <label>Nombre de lettres</label>
-          <div class="nombres" id="r-tirage"></div>
-          <label>Nombre de lettres jouables</label>
-          <div class="nombres" id="r-jouables"></div>
-        </div>
-        <div class="colonne mince">
-          <button type="button" class="interrupteur" id="r-joker" aria-pressed="false">
-            Partie joker
-          </button>
-        </div>
+      <div class="reglage" id="r-nombres-bloc">
+        <label>Nombre de lettres</label>
+        <div class="nombres" id="r-tirage"></div>
+        <label>Nombre de lettres jouables</label>
+        <div class="nombres" id="r-jouables"></div>
       </div>
 
       <div class="reglage">
@@ -1278,7 +1272,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="30">Super blitz<br><em>30 s</em></button>
           <button type="button" data-v="60">Blitz<br><em>60 s</em></button>
           <button type="button" data-v="120">Semi-rapide<br><em>2 min</em></button>
-          <button type="button" data-v="180">Long<br><em>3 min</em></button>
+          <button type="button" data-v="180" data-simple>Long<br><em>3 min</em></button>
           <button type="button" data-v="libre">Infini</button>
           <div class="perso" id="r-perso-case">Personnalisé
             <span><input type="text" inputmode="numeric" id="r-perso" maxlength="4"> s</span>

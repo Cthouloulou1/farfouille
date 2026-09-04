@@ -5671,7 +5671,9 @@ function tuileStar(s: ResumeSalon): HTMLElement {
   pastille.appendChild(el("span", "", t2("{n} en ligne", { n: s.connectes })));
   tuile.appendChild(pastille);
 
-  tuile.appendChild(el("span", "surtitre", t("Salon star")));
+  // Le surtitre appartient au salon, comme son accroche : « Featured room »
+  // au-dessus de The Infinite Grid, meme lu depuis la version francaise.
+  tuile.appendChild(el("span", "surtitre", tDans(langueDuSalon(s), "Salon star")));
   tuile.appendChild(el("span", "titre", s.nom));
   const accroche = el("span", "accroche");
   for (const ligne of accrocheStar(langueDuSalon(s))) {
@@ -6296,6 +6298,11 @@ function appliquerLeModeDeReglages(): void {
   // cher au serveur et ne laisse le temps de rien a qui decouvre.
   for (const b of $("r-chrono").querySelectorAll("button[data-avance]")) {
     (b as HTMLElement).hidden = !avance;
+  }
+  // Et inversement : trois minutes par coup est un rythme de decouverte, pas
+  // une variante qu'on regle. Le champ libre reste la pour qui la veut.
+  for (const b of $("r-chrono").querySelectorAll("button[data-simple]")) {
+    (b as HTMLElement).hidden = avance;
   }
 }
 
