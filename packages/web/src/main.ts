@@ -1876,23 +1876,17 @@ function paintCurrent() {
       w.className = "word";
       w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
       meta.textContent = noteCoup(r.move.dir, r.move.x, r.move.y, cfg.bornes);
-      // Le score d'abord, toujours. Ce qui clocherait se dit a voix basse, en
-      // dessous : « mot non valide » a la place du score, pendant qu'on tape,
-      // cache la seule chose qu'on regardait.
-      if (r.bad !== undefined && r.bad.length > 0) {
-        bad.hidden = false;
-        bad.textContent = r.bad.length > 1
-          ? `collages faux : ${r.bad.join(", ")}` : `collage faux : ${r.bad[0]}`;
-      }
+      // ON NE NOMME PAS LES COLLAGES FAUTIFS PENDANT LA FRAPPE.
+      //
+      // La ligne le faisait, et c'etait un renseignement de trop : elle disait
+      // quel mot perpendiculaire n'existe pas AVANT qu'on ait rien risque,
+      // c'est-a-dire quelles lettres ne vont pas la. On l'apprend en validant,
+      // comme on apprend le reste.
       return;
     }
     w.className = "word";
     w.innerHTML = `<span>${r.word ?? typed}</span><span class="pts">—</span>`;
-    meta.textContent = PLAY_MESSAGE[r.error];
-    if (r.bad && r.bad.length > 0) {
-      bad.hidden = false;
-      bad.textContent = r.bad.length > 1 ? `collages faux : ${r.bad.join(", ")}` : `collage faux : ${r.bad[0]}`;
-    }
+    meta.textContent = t(PLAY_MESSAGE[r.error]);
     return;
   }
 
@@ -4257,13 +4251,18 @@ function submit() {
   if (c === null) return;
   const r = resolveTypedWord(board, dict, c.dir, c.x, c.y, c.typed, rack);
   if (!r.ok) {
-    // ON NE RETIENT QUE CE QUI EST UN MOT. « Trop de caramels » ou « le mot ne
-    // touche rien » parlent du placement, pas du lexique : les ranger parmi
-    // les mots refuses ferait croire qu'ils n'existent pas.
-    const mot = r.word ?? c.typed;
-    if ((r.error === "MOT_INCONNU" || r.error === "COLLAGE_INCONNU")
-        && mot !== "" && !motsRefuses.includes(mot)) {
-      motsRefuses.push(mot);
+    // CE QUI SE NOTE, C'EST CE QUE LE LEXIQUE A REFUSE : le mot tape s'il
+    // n'existe pas, ET les mots perpendiculaires qu'il fabriquait. Les deux
+    // arrivent ensemble -- un mot invente en forme souvent d'autres.
+    //
+    // Le reste n'a rien a y faire : « trop de caramels » ou « le mot ne touche
+    // rien » parlent du placement, pas du lexique, et les ranger la ferait
+    // croire que ces mots n'existent pas.
+    const refuses = r.error === "MOT_INCONNU" ? [r.word ?? c.typed, ...(r.bad ?? [])]
+      : r.error === "COLLAGE_INCONNU" ? (r.bad ?? [])
+      : [];
+    for (const mot of refuses) {
+      if (mot !== "" && !motsRefuses.includes(mot)) motsRefuses.push(mot);
     }
     flash(r.error === "TROP_DE_CARAMELS"
       ? t2("C'est une partie {x} sur {y}", { x: cfg.jouables, y: cfg.tirage })

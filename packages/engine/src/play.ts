@@ -207,15 +207,23 @@ export function resolveTypedWord(
   }
 
   const inconnu = !dawg.contains(word);
-  if (inconnu && !apercu) return { ok: false, error: "MOT_INCONNU", word };
 
   // 4. Les mots perpendiculaires formes doivent exister eux aussi.
+  //
+  // ON LES COMPTE MEME QUAND LE MOT PRINCIPAL EST FAUX, alors qu'on refusait
+  // avant d'y arriver. Un joueur qui pose un mot inexistant en fabrique
+  // souvent d'autres au passage : ne lui en nommer qu'un l'oblige a revenir
+  // trois fois pour apprendre ce qu'une seule reponse pouvait lui dire.
   const bad: string[] = [];
   for (const c of placed) {
     const cc = board.crossCheck(dir, c.x, c.y);
     if (cc.has && (cc.mask & (1 << (code(c.letter) - 1))) === 0) {
       bad.push(crossWordAt(board, dir, c.x, c.y, c.letter));
     }
+  }
+  // Le mot principal l'emporte dans le message : c'est celui qu'on a tape.
+  if (inconnu && !apercu) {
+    return { ok: false, error: "MOT_INCONNU", word, ...(bad.length > 0 ? { bad } : {}) };
   }
   if (bad.length > 0 && !apercu) return { ok: false, error: "COLLAGE_INCONNU", word, bad };
 
