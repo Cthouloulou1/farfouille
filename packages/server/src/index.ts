@@ -36,7 +36,8 @@ import {
 import { Seau, seauDeRafale, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
 import {
   lireLesComptes, creerCompte, compte, motDePasseJuste, changerLeMotDePasse,
-  ecrireLeProfil, demanderLaVerification, trancherLaVerification, tousLesComptes,
+  ecrireLeProfil, ecrireLaLangue, demanderLaVerification, trancherLaVerification,
+  tousLesComptes,
   emettreUnJeton, compteDuJeton, jetonDesEntetes, cookieDeSession, cookieEfface,
   publicDuCompte, priveDuCompte, pseudoEnregistre, assurerLesAdmins, cleDuPseudo,
   nomComplet, envoyerLeLienDeVerification, confirmerLAdresse, type Compte,
@@ -749,6 +750,18 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     });
     if (erreur !== null) { json(res, 400, { erreur }); return; }
     json(res, 200, { compte: priveDuCompte(c) });
+    return;
+  }
+
+  // La langue suit le compte : la changer ici, c'est la retrouver ailleurs.
+  if (url === "/api/langue" && req.method === "POST") {
+    const c = quiParle(req);
+    if (c === undefined) { json(res, 401, { erreur: "connectez-vous d'abord" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    ecrireLaLangue(c, String(corps.langue ?? ""));
+    json(res, 200, { ok: true });
     return;
   }
 

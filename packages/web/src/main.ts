@@ -16,7 +16,8 @@ import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import {
-  choisirLaLangue, langue, surChangementDeLangue, t, t2, traduireLeDocument,
+  choisirLaLangue, langue, surChangementDeLangue, t, t2, tDans, traduireLeDocument,
+  type Langue,
 } from "./langue.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { BLANK } from "../../engine/src/alphabet.ts";
@@ -4463,6 +4464,14 @@ for (const b of $("p-langue").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     const choisie = (b as HTMLElement).dataset["v"] === "en" ? "en" : "fr";
     if (choisie === langue()) return;
+    // ELLE SUIT LE COMPTE, PAS LA MACHINE. Sans cela, se connecter depuis un
+    // autre navigateur rendait le site a la langue de celui-la.
+    if (moiCompte !== null) {
+      void fetch("/api/langue", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ langue: choisie }),
+      });
+    }
     // Les reperes suivent, SAUF si on les a regles a la main : c'est le meme
     // principe qu'au demarrage, et le reglage reste juste a cote.
     if (!reperesChoisis) {
@@ -4920,11 +4929,18 @@ interface ResumeSalon {
  * Elle ne vient pas du serveur : c'est la promesse du site, pas l'etat d'une
  * partie. Elle vit ici, en un seul endroit.
  */
-function accrocheStar(): string[] {
+/**
+ * L'accroche d'un salon star, DANS LA LANGUE DU SALON.
+ *
+ * Pas dans celle de la page : « The Infinite Grid » se joue en anglais, et son
+ * accroche le dit meme lue depuis la version francaise. C'est la promesse de
+ * cette grille-la, pas un element de l'interface.
+ */
+function accrocheStar(l: Langue): string[] {
   return [
-    t("Grille infinie, sans limite de temps, sans fin."),
-    t("Jusqu'où pourrons-nous aller ?"),
-    t("Rejoignez la plus grande partie de topping jamais créée."),
+    tDans(l, "Grille infinie, sans limite de temps, sans fin."),
+    tDans(l, "Jusqu'où pourrons-nous aller ?"),
+    tDans(l, "Rejoignez la plus grande partie de topping jamais créée."),
   ];
 }
 
@@ -4966,6 +4982,8 @@ interface MonCompte {
   email: string;
   prenom: string; nom: string; nomPublic: boolean;
   demande: boolean; admin: boolean;
+  /** La langue choisie par ce compte. Vide = jamais choisie. */
+  langue?: string;
 }
 
 /** Le theme en cours, tel que la feuille de style le voit. */
@@ -4989,6 +5007,14 @@ async function lireLeCompte(): Promise<void> {
     // c'est sous ce nom-la que le serveur nous fera jouer, de toute facon.
     ($("name") as HTMLInputElement).value = moiCompte.pseudo;
     try { localStorage.setItem("pseudo", moiCompte.pseudo); } catch { /* navigation privee */ }
+    // LA LANGUE DU COMPTE L'EMPORTE. Se connecter depuis un autre navigateur,
+    // c'est retrouver le site comme on l'a laisse -- pas dans la langue de la
+    // machine ou l'on se trouve. Tant que le compte n'en a jamais choisi, on
+    // garde celle du navigateur : il n'y a rien a restaurer.
+    const sienne = moiCompte.langue;
+    if ((sienne === "fr" || sienne === "en") && sienne !== langue()) {
+      choisirLaLangue(sienne);
+    }
   }
 }
 
@@ -5501,7 +5527,7 @@ const chiffres = (n: number): string =>
   n.toLocaleString(langue() === "en" ? "en-US" : "fr-FR");
 
 /** La langue d'un salon, c'est celle de son lexique. */
-function langueDuSalon(s: ResumeSalon): string {
+function langueDuSalon(s: ResumeSalon): Langue {
   return dictionnaire(s.config.dictionnaire).langue;
 }
 
@@ -5622,7 +5648,7 @@ function peindreFiltres(): void {
   // LES AUTRES LANGUES SE MONTRENT, ELLES NE SE CHOISISSENT PAS. Ce n'est pas
   // une puce de plus dans la meme serie -- les quatre premieres s'excluent,
   // celle-ci s'ajoute a n'importe laquelle.
-  const autres = el("button", "puce langues", t("Tout afficher")) as HTMLButtonElement;
+  const autres = el("button", "puce langues", t("Toutes les langues")) as HTMLButtonElement;
   autres.type = "button";
   autres.setAttribute("aria-pressed", String(toutesLangues));
   autres.title = t("Montrer aussi les salons des autres langues");
@@ -5648,7 +5674,9 @@ function tuileStar(s: ResumeSalon): HTMLElement {
   tuile.appendChild(el("span", "surtitre", t("Salon star")));
   tuile.appendChild(el("span", "titre", s.nom));
   const accroche = el("span", "accroche");
-  for (const ligne of accrocheStar()) accroche.appendChild(el("span", "", ligne));
+  for (const ligne of accrocheStar(langueDuSalon(s))) {
+    accroche.appendChild(el("span", "", ligne));
+  }
   tuile.appendChild(accroche);
 
   const action = el("span", "action");
@@ -6256,6 +6284,9 @@ $("r-joker").addEventListener("click", () => {
 function appliquerLeModeDeReglages(): void {
   const avance = prefs.avance;
   $("r-avance").setAttribute("aria-pressed", String(avance));
+  // Le bouton suit ce qui est a l'ecran : a droite du dictionnaire quand il y
+  // en a un, a droite de la grille sinon. Un seul exemplaire, qu'on deplace.
+  $(avance ? "r-avance-dico" : "r-avance-grille").appendChild($("r-avance"));
   $("r-dico-bloc").hidden = !avance;
   $("r-pioche-bloc").hidden = !avance;
   $("r-primes-bloc").hidden = !avance;

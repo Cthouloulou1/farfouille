@@ -82,7 +82,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Nombre de lettres": "Tiles drawn",
   "Nombre de lettres jouables": "Tiles playable",
   "Partie joker": "Blank game",
-  "Toujours un joker": "Always one blank",
   "Long": "Long",
   "Temps par coup": "Time per move",
   // « Frades » est un mot de joueurs, sans equivalent anglais : a trancher.
@@ -209,7 +208,7 @@ export const EN: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------- accueil
   "Tous": "All",
   "En attente": "Waiting",
-  "Tout afficher": "Show all",
+  "Toutes les langues": "All languages",
   "Montrer aussi les salons des autres langues": "Also show rooms in other languages",
   "Créer un salon": "Create a room",
   "Salon star": "Featured room",

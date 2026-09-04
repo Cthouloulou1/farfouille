@@ -118,6 +118,15 @@ export interface Compte {
    * jour ou on l'a tire, et n'en change que si on le redemande.
    */
   avatarSombre: boolean;
+  /**
+   * La langue du site, telle que ce compte l'a choisie. Vide = jamais choisie.
+   *
+   * ELLE APPARTIENT AU COMPTE, PAS AU NAVIGATEUR. Le rangement local suffit
+   * tant qu'on joue depuis la meme machine ; des qu'on se connecte ailleurs, on
+   * retrouvait le site dans la langue de ce navigateur-la. Un compte porte donc
+   * sa langue avec lui, et elle l'emporte a la connexion.
+   */
+  langue: "" | "fr" | "en";
 }
 
 /** Le nom complet, quand il y en a un. */
@@ -193,6 +202,7 @@ export function lireLesComptes(): void {
         email: String(e["email"] ?? ""), emailVerifie: false,
         prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0, verifie: false,
         avatar: Number(e["avatar"] ?? 0), avatarSombre: e["avatarSombre"] === true,
+        langue: "",
       });
       continue;
     }
@@ -201,6 +211,9 @@ export function lireLesComptes(): void {
     if (e["t"] === "mdp") {
       c.hash = String(e["hash"]); c.sel = String(e["sel"]);
       c.mdpChangeLe = Number(e["quand"] ?? Date.now());
+    } else if (e["t"] === "langue") {
+      const l = String(e["langue"] ?? "");
+      c.langue = l === "fr" || l === "en" ? l : "";
     } else if (e["t"] === "profil") {
       // Les lignes d'avant la separation portaient un seul champ : on le range
       // dans le nom, faute de savoir ou passait la coupure.
@@ -281,6 +294,7 @@ export async function creerCompte(
     pseudo: nom, hash, sel: sel.toString("base64"), cree, mdpChangeLe: cree,
     email: mail, emailVerifie: false,
     admin, prenom: "", nom: "", nomPublic: false, demande: false, demandeLe: 0,
+    langue: "",
     verifie: false, avatar, avatarSombre: sombre,
   });
   return null;
@@ -338,6 +352,19 @@ export function ecrireLeProfil(c: Compte, p: {
     avatar: c.avatar, avatarSombre: c.avatarSombre,
   });
   return null;
+}
+
+/**
+ * Retient la langue choisie par ce compte.
+ *
+ * Un evenement a part, et non un champ du profil : la langue se change depuis
+ * les preferences, en un clic, sans passer par le formulaire du profil.
+ */
+export function ecrireLaLangue(c: Compte, l: string): void {
+  const propre = l === "fr" || l === "en" ? l : "";
+  if (propre === c.langue) return;
+  c.langue = propre;
+  inscrire({ t: "langue", pseudo: c.pseudo, langue: propre });
 }
 
 export function demanderLaVerification(c: Compte): string | null {
@@ -539,6 +566,7 @@ export function priveDuCompte(c: Compte): Record<string, unknown> {
     demande: c.demande,
     admin: c.admin,
     cree: c.cree,
+    langue: c.langue,
   };
 }
 

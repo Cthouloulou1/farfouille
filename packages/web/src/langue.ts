@@ -108,7 +108,18 @@ export function choisirLaLangue(l: Langue): void {
 
 /** Le texte, dans la langue en cours. Un texte inconnu reste en francais. */
 export function t(fr: string): string {
-  if (courante === "fr") return fr;
+  return tDans(courante, fr);
+}
+
+/**
+ * Le texte dans UNE LANGUE DONNEE, qui n'est pas forcement celle du site.
+ *
+ * Sert a ce qui appartient a autre chose qu'a la page : l'accroche d'un salon
+ * anglais reste en anglais, meme lue depuis la version francaise. C'est la
+ * promesse de CE salon, pas un element de l'interface.
+ */
+export function tDans(l: Langue, fr: string): string {
+  if (l === "fr") return fr;
   return EN[fr] ?? fr;
 }
 

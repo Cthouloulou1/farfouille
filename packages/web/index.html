@@ -826,6 +826,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rg-corps .prime b { display: block; width: 100%; text-align: center; font-size: 11px; color: var(--ink-soft); font-weight: 500; }
 .petit { margin-top: 10px; padding: 5px 9px; font-size: 11.5px; }
 .rg-pied { display: flex; gap: 8px; margin-top: 14px; }
+/* UN INTERRUPTEUR EST UN BOUTON QUI RESTE ENFONCE. Meme boite et meme couleur
+   que les choix voisins : ce qui le distingue, c'est qu'il ne fait pas partie
+   d'une serie -- d'ou le filet qui l'en separe. */
+.rg-corps .interrupteur { padding: 7px 15px; font-family: inherit; font-size: .86em;
+  line-height: 1.35; white-space: nowrap; border: 1px solid var(--rule);
+  border-radius: 3px; background: var(--ground); color: var(--ink); }
+.rg-corps .interrupteur[aria-pressed="true"] { border-color: var(--accent);
+  color: var(--accent); background: var(--accent-bg); font-weight: 500; }
+.rg-corps .ligne { display: flex; align-items: stretch; gap: 10px; }
+.rg-corps .ligne > .choix { flex: 1; }
+/* La liste des lexiques ne prend que sa place : elle tient en trois mots. */
+.rg-corps .ligne > select { flex: 0 1 260px; }
+.rg-corps .ligne .sep { flex: none; width: 1px; margin: 1px 0; background: var(--rule); }
+.rg-corps .ligne .accueille { flex: none; display: flex; }
+/* La place vide n'existe pas : le bouton est ailleurs, et le filet qui devait
+   l'annoncer flottait tout seul au bout de la rangee. */
+.rg-corps .ligne:has(> .accueille:empty) .sep,
+.rg-corps .ligne .accueille:empty { display: none; }
+
 /* Les nombres a gauche, le joker a droite : c'est le meme reglage, « combien de
    caramels et lesquels ». La colonne du joker ne prend que ce qu'il lui faut. */
 .rg-corps .reglage.lettres { display: flex; gap: 18px; align-items: flex-start; }
@@ -833,15 +852,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    que la regle du navigateur. Sans cela, un bloc cache reste a l'ecran. */
 .rg-corps [hidden], .rg-corps .choix button[hidden] { display: none; }
 .rg-corps .reglage.lettres .colonne { flex: 1; min-width: 0; }
-.rg-corps .reglage.lettres .colonne.mince { flex: none; width: 210px; }
-.rg-corps .reglage.lettres .colonne.mince .bascule { margin-top: 2px; height: 40px;
-  border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); }
+/* La colonne du joker n'a pas d'etiquette : on la descend a la hauteur de la
+   premiere rangee de nombres, pour que les deux se lisent sur la meme ligne. */
+.rg-corps .reglage.lettres .colonne.mince { flex: none; margin-top: 35px; }
 .rg-corps select { width: 100%; padding: 9px 11px; font-family: inherit;
   font-size: .88em; color: var(--ink); background: var(--panel);
   border: 1px solid var(--rule); border-radius: 5px; }
 .rg-corps select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.rg-corps > .reglage:first-child .bascule { border: 1px solid var(--rule);
-  border-radius: 5px; background: var(--panel); }
+
 .rg-pied .appliquer { flex: 3; margin: 0; }
 .rg-pied #rg-close { flex: 1; padding: 9px; font-size: 13px; }
 .appliquer { width: 100%; padding: 9px; font-size: 13.5px; border-color: var(--accent); color: var(--accent); }
@@ -1192,22 +1210,32 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="roadmap enHaut" id="reglages" hidden>
   <div class="large">
     <div class="rg-corps">
-      <div class="reglage">
-        <button type="button" class="bascule" id="r-avance" aria-pressed="false">
-          <span class="voyant"></span>Réglages avancés
-        </button>
-      </div>
+      <!-- LE BOUTON DES REGLAGES AVANCES VIT DANS UNE SEULE PLACE A LA FOIS.
+           En fenetre simple il se pose a droite de la grille, en fenetre
+           complete a droite du dictionnaire : c'est le code qui le deplace,
+           plutot que d'en tenir deux exemplaires a jour. -->
+      <button type="button" class="interrupteur" id="r-avance" aria-pressed="false">
+        Réglages avancés
+      </button>
 
       <div class="reglage" id="r-dico-bloc">
         <label>Dictionnaire</label>
-        <select id="r-dico"></select>
+        <div class="ligne">
+          <select id="r-dico"></select>
+          <span class="sep"></span>
+          <span class="accueille" id="r-avance-dico"></span>
+        </div>
       </div>
 
       <div class="reglage">
         <label>Grille</label>
-        <div class="choix" id="r-grille">
-          <button type="button" data-v="15">Normale</button>
-          <button type="button" data-v="infinie">Infinie</button>
+        <div class="ligne">
+          <div class="choix" id="r-grille">
+            <button type="button" data-v="15">Normale</button>
+            <button type="button" data-v="infinie">Infinie</button>
+          </div>
+          <span class="sep"></span>
+          <span class="accueille" id="r-avance-grille"></span>
         </div>
       </div>
 
@@ -1237,9 +1265,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <div class="nombres" id="r-jouables"></div>
         </div>
         <div class="colonne mince">
-          <label>Partie joker</label>
-          <button type="button" class="bascule" id="r-joker" aria-pressed="false">
-            <span class="voyant"></span>Toujours un joker
+          <button type="button" class="interrupteur" id="r-joker" aria-pressed="false">
+            Partie joker
           </button>
         </div>
       </div>
