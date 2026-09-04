@@ -1012,6 +1012,11 @@ wss.on("connection", (ws, req) => {
         tiles: cible.partie.tiles(),
         moves: cible.partie.moves.map(publicMove),
         chat: cible.partie.chat,
+        // CE QU'IL AVAIT TROUVE AVANT DE FERMER SA PAGE. Sur la grille
+        // permanente un coup dure des heures : on revient le lendemain, et sa
+        // meilleure solution avait disparu avec l'onglet. Elle ne part qu'a
+        // celui qui l'a proposee.
+        maSolution: cible.partie.propositionDe(nom),
         state: publicState(cible),
       });
       broadcast(cible.id, { t: "state", state: publicState(cible) });

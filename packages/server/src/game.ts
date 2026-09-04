@@ -393,10 +393,28 @@ export class Game {
    * cours de coup.
    */
   readonly presents = new Set<string>();
-  /** DUPLICATE : la meilleure solution de chacun sur le coup en cours. */
+  /**
+   * La meilleure solution de chacun sur le coup EN COURS.
+   *
+   * Le duplicate en a besoin pour compter les points ; le topping s'en sert
+   * pour le demi-point, et pour rendre a un joueur qui revient ce qu'il avait
+   * trouve avant de fermer sa page. Elle ne survit pas a un redemarrage du
+   * serveur : elle n'est ecrite au journal qu'a la cloture du coup.
+   */
   private propositions = new Map<
     string, { score: number; word: string; dir: Dir; x: number; y: number; at: number }
   >();
+
+  /**
+   * Ce que ce joueur a propose de mieux sur le coup en cours, ou null.
+   *
+   * NE SE DIFFUSE PAS. Chacun ne recoit que la sienne, a la connexion : savoir
+   * qu'un voisin tient 84 points est deja un renseignement sur la position.
+   */
+  propositionDe(joueur: string): { word: string; score: number; dir: Dir; x: number; y: number } | null {
+    const p = this.propositions.get(joueur);
+    return p === undefined ? null : { word: p.word, score: p.score, dir: p.dir, x: p.x, y: p.y };
+  }
   /** DUPLICATE : qui etait present quand le tirage est tombe. */
   private participants = new Set<string>();
   solving = false;

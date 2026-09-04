@@ -4749,6 +4749,8 @@ function connect() {
       // La variante vient du serveur : c'est elle qui dit combien de caramels se
       // posent, ce que vaut chaque lettre et quelle prime recompense quoi.
       cfg = m.config ? deserialiser(m.config) : configParDefaut();
+      // Ce qu'on avait trouve de mieux sur ce coup-la, avant de fermer la page.
+      best = m.maSolution ?? null;
       board = new Board(dict, cfg);
       // Seul le gerant regle son salon. La grille permanente n'en a pas.
       gerant = m.gerant ?? null;
