@@ -2149,7 +2149,18 @@ function paintSide() {
       e.stopPropagation();
       void ouvrirLaFiche(name);
     });
-    row.addEventListener("click", () => { openPlayer = openPlayer === name ? null : name; paintSide(); });
+    row.addEventListener("click", () => {
+      openPlayer = openPlayer === name ? null : name;
+      // REPLIER LA LISTE RETIRE LE MOT DE LA GRILLE.
+      //
+      // On l'y avait pose pour voir OU ce joueur avait joue ; la liste
+      // refermee, il n'a plus de raison d'y etre -- et il barrait les cases ou
+      // l'on voulait ecrire. Il fallait jusqu'ici recliquer le mot du top, ou
+      // attendre la fin du coup, pour retrouver une grille libre.
+      ghost = null;
+      paintSide();
+      draw();
+    });
     rank.appendChild(row);
 
     if (openPlayer === name) {
@@ -4883,6 +4894,9 @@ function connect() {
       accorderLeDictionnaire();
       typed = ""; ghost = null; best = null; motsRefuses = []; finie = false;
       cursor = null; marks = [];
+      // Les listes deroulees parlaient de la partie d'avant : leurs coups
+      // n'existent plus, et la ligne restait ouverte sur du vide.
+      openPlayer = null;
       paintChat(chat);
       paintJournal();
       applyState(m.state);
@@ -6619,6 +6633,7 @@ async function rejoindre(id: string): Promise<void> {
   ghost = null;
   best = null;
   motsRefuses = [];
+  openPlayer = null;
   typed = "";
   rack = "";
   marks = [];
