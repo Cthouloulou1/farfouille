@@ -656,17 +656,20 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const s = salon(id);
     if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
     if (estPermanent(s)) {
-      json(res, 403, {
-        erreur: s.proprietaire === null
-          ? "le salon Topping infini est permanent"
-          : `le salon « ${s.nom} » est permanent`,
-      });
+      // Le nom vient du salon : il y a desormais plus d'une grille permanente,
+      // et l'une d'elles s'appelait toujours par le nom de l'autre.
+      json(res, 403, { erreur: `le salon « ${s.nom} » est permanent` });
       return;
     }
     // Le cookie fait foi quand il y en a un ; l'en-tete ne sert plus qu'aux
     // joueurs sans compte, pour qui il n'a jamais ete qu'un garde-fou.
-    const par = quiParle(req)?.pseudo ?? String(req.headers["x-pseudo"] ?? "");
-    if (par !== s.proprietaire) {
+    const moi = quiParle(req);
+    const par = moi?.pseudo ?? String(req.headers["x-pseudo"] ?? "");
+    // L'ADMINISTRATION PASSE PARTOUT, sauf sur les grilles permanentes que le
+    // controle ci-dessus a deja mises hors d'atteinte. Un salon laisse ouvert
+    // par quelqu'un qui ne reviendra pas encombre la liste, et son createur est
+    // le seul a pouvoir le fermer -- ce qui n'arrive jamais.
+    if (par !== s.proprietaire && moi?.admin !== true) {
       json(res, 403, { erreur: "seul le créateur du salon peut le supprimer" });
       return;
     }

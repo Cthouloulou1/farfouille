@@ -189,6 +189,12 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .flash { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 8px 16px; border-radius: 4px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 18px var(--shadow); pointer-events: none; white-space: nowrap; }
 .flash[hidden] { display: none; }
 .flash.bad { background: var(--warn-bg); color: var(--warn); }
+/* LE MEME REFUS, DEUX FOIS DE SUITE, DOIT SE VOIR DEUX FOIS. Le bandeau etait
+   deja la, avec le meme texte : rien ne bougeait a l'ecran et l'on croyait sa
+   frappe perdue. Un refus de plus le fait donc basculer d'une teinte a
+   l'autre, et le suivant le ramene -- meme a trois mots par seconde, chaque
+   refus se voit passer. */
+.flash.bad.encore { background: var(--warn); color: var(--warn-bg); }
 .flash.ok { background: var(--panel); color: var(--ink); border: 1px solid var(--rule); }
 .flash.top { background: var(--accent-bg); color: var(--accent); }
 
@@ -583,6 +589,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .star .accroche { margin-top: 9px; max-width: 44ch; font-size: 13.5px; line-height: 1.5; color: var(--nuit-soft); text-wrap: pretty; }
 .star .accroche span { display: block; }
 .star .action { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+/* Le lexique de la grille, dans son coin. Il ne change jamais d'une partie a
+   l'autre : il se lit une fois, et n'a pas a disputer sa place au reste. */
+.star .lexique { position: absolute; right: 24px; bottom: 24px;
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .04em;
+  color: var(--nuit-faint); }
 .star .jouer { padding: 11px 30px; border-radius: 4px; background: var(--nuit-accent); color: #0E1412; font-size: 14.5px; font-weight: 600; }
 .star .chiffres { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--nuit-faint); }
 .star:hover .jouer { filter: brightness(1.08); }
@@ -839,14 +850,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* La liste des lexiques ne prend que sa place : elle tient en trois mots. */
 .rg-corps .ligne > select { flex: 0 1 260px; }
 .rg-corps .ligne .sep { flex: none; width: 1px; margin: 1px 0; background: var(--rule); }
-/* Le bouton se pose AU BOUT de la rangee, quelle qu'elle soit : il occupe
-   ainsi la meme place en fenetre simple et en fenetre complete, et ne saute
-   pas d'un endroit a l'autre quand on bascule. */
-.rg-corps .ligne .accueille { flex: none; display: flex; margin-left: auto; }
-/* La place vide n'existe pas : le bouton est ailleurs, et le filet qui devait
-   l'annoncer flottait tout seul au bout de la rangee. */
-.rg-corps .ligne:has(> .accueille:empty) .sep,
-.rg-corps .ligne .accueille:empty { display: none; }
+/* Ce qui n'est pas la liste ni la serie de boutons se pose AU BOUT de la
+   rangee : le bouton des reglages avances, l'interrupteur du joker. */
+.rg-corps .ligne > .interrupteur { margin-left: auto; }
 
 /* `hidden` doit l'emporter sur les `display` poses ailleurs, plus specifiques
    que la regle du navigateur. Sans cela, un bloc cache reste a l'ecran. */
@@ -1074,6 +1080,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div><span>Coup</span><b id="elapsed">—</b></div>
     <div><span>Temps</span><b id="age">—</b></div>
   </div>
+  <div class="stat"><span>Dictionnaire</span><b id="rb-dico">—</b></div>
   <div class="stat"><span>Cumul</span><b id="rb-cumul">—</b></div>
   <button class="image" id="rb-image" type="button" title="enregistrer la grille en image">
     <svg viewBox="0 0 18 16" width="16" height="14" aria-hidden="true">
@@ -1206,31 +1213,24 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="roadmap enHaut" id="reglages" hidden>
   <div class="large">
     <div class="rg-corps">
-      <!-- LE BOUTON DES REGLAGES AVANCES VIT DANS UNE SEULE PLACE A LA FOIS.
-           En fenetre simple il se pose a droite de la grille, en fenetre
-           complete a droite du dictionnaire : c'est le code qui le deplace,
-           plutot que d'en tenir deux exemplaires a jour. -->
-      <button type="button" class="interrupteur" id="r-avance" aria-pressed="false">
-        Réglages avancés
-      </button>
-
-      <div class="reglage" id="r-dico-bloc">
+      <!-- LE DICTIONNAIRE SE REGLE DANS LES DEUX FENETRES. La langue du site
+           le choisit par defaut, mais un francophone sur un navigateur anglais
+           doit pouvoir le voir et le corriger sans passer par les avances. -->
+      <div class="reglage">
         <label>Dictionnaire</label>
         <div class="ligne">
           <select id="r-dico"></select>
-          <span class="accueille" id="r-avance-dico"></span>
+          <button type="button" class="interrupteur" id="r-avance" aria-pressed="false">
+            Réglages avancés
+          </button>
         </div>
       </div>
 
       <div class="reglage">
         <label>Grille</label>
-        <div class="ligne">
-          <div class="choix" id="r-grille">
-            <button type="button" data-v="15">Normale</button>
-            <button type="button" data-v="infinie">Infinie</button>
-          </div>
-          <span class="sep"></span>
-          <span class="accueille" id="r-avance-grille"></span>
+        <div class="choix" id="r-grille">
+          <button type="button" data-v="15">Normale</button>
+          <button type="button" data-v="infinie">Infinie</button>
         </div>
       </div>
 

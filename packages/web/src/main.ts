@@ -13,7 +13,7 @@ import {
   configParDefaut, deserialiser, valeurDe, type ConfigPartie,
 } from "../../engine/src/config.ts";
 import {
-  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tousLesDictionnaires,
+  DICO_PAR_DEFAUT, dictionnaire, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import {
   choisirLaLangue, langue, surChangementDeLangue, t, t2, tDans, traduireLeDocument,
@@ -188,6 +188,16 @@ let clockSkew = 0;
 let cursor: { x: number; y: number; dir: Dir; rec: boolean } | null = null;
 let typed = "";
 let best: { word: string; score: number; dir: Dir; x: number; y: number } | null = null;
+
+/**
+ * Les mots que le dictionnaire a refuses SUR CE COUP-CI.
+ *
+ * Un bandeau qui passe ne se retient pas : au bout de trois essais on ne sait
+ * plus lesquels on a deja tentes, et l'on retape le meme. La liste, elle,
+ * reste sous les yeux tant qu'on ne tape pas -- et repart a zero au coup
+ * suivant, ou elle ne voudrait plus rien dire.
+ */
+let motsRefuses: string[] = [];
 let openPlayer: string | null = null;
 /**
  * Qui REGLE le salon en ce moment -- pas toujours qui l'a cree.
@@ -1884,6 +1894,14 @@ function paintCurrent() {
       bad.textContent = r.bad.length > 1 ? `collages faux : ${r.bad.join(", ")}` : `collage faux : ${r.bad[0]}`;
     }
     return;
+  }
+
+  // Les mots refuses de ce coup, tant qu'on ne tape pas : la premiere lettre
+  // tapee rend la place au mot en cours.
+  if (motsRefuses.length > 0) {
+    bad.hidden = false;
+    bad.textContent = (motsRefuses.length > 1
+      ? t("Mots non valides :") : t("Mot non valide :")) + " " + motsRefuses.join(", ");
   }
 
   if (best !== null) {
@@ -3944,11 +3962,21 @@ function sonner(ms: number): void {
 
 function flash(text: string, kind: "bad" | "ok" | "top") {
   const el = $("flash");
+  // Un bandeau deja ouvert qui redit la meme chose ne se voit pas : on lui
+  // fait changer de teinte, et le refus suivant le ramene a la premiere.
+  const repete = !el.hidden && el.classList.contains(kind);
+  const encore = repete && !el.classList.contains("encore");
   el.textContent = text;
-  el.className = `flash ${kind}`;
+  el.className = `flash ${kind}${encore ? " encore" : ""}`;
   el.hidden = false;
   clearTimeout(flashTimer);
   flashTimer = window.setTimeout(() => { el.hidden = true; }, kind === "top" ? 2600 : 1900);
+}
+
+/** Referme le bandeau sur-le-champ, sans attendre son echeance. */
+function fermerLeFlash(): void {
+  clearTimeout(flashTimer);
+  $("flash").hidden = true;
 }
 
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -4229,12 +4257,23 @@ function submit() {
   if (c === null) return;
   const r = resolveTypedWord(board, dict, c.dir, c.x, c.y, c.typed, rack);
   if (!r.ok) {
+    // ON NE RETIENT QUE CE QUI EST UN MOT. « Trop de caramels » ou « le mot ne
+    // touche rien » parlent du placement, pas du lexique : les ranger parmi
+    // les mots refuses ferait croire qu'ils n'existent pas.
+    const mot = r.word ?? c.typed;
+    if ((r.error === "MOT_INCONNU" || r.error === "COLLAGE_INCONNU")
+        && mot !== "" && !motsRefuses.includes(mot)) {
+      motsRefuses.push(mot);
+    }
     flash(r.error === "TROP_DE_CARAMELS"
-      ? `C'est une partie ${cfg.jouables} sur ${cfg.tirage}`
-      : PLAY_MESSAGE[r.error], "bad");
+      ? t2("C'est une partie {x} sur {y}", { x: cfg.jouables, y: cfg.tirage })
+      : t(PLAY_MESSAGE[r.error]), "bad");
     typed = ""; paintRack(); paintCurrent(); draw();
     return;
   }
+  // Un mot accepte ferme le bandeau du refus precedent : le laisser vivre ses
+  // deux secondes fait croire que celui-ci vient d'etre refuse aussi.
+  fermerLeFlash();
   if (best === null || r.move.score > best.score) {
     best = { word: r.move.word, score: r.move.score, dir: r.move.dir, x: r.move.x, y: r.move.y };
   }
@@ -4629,6 +4668,7 @@ function applyState(s: {
   // CONTENU -- qui change a chaque coup et finit vide -- mais de la variante,
   // qui ne change pas de la partie.
   const sac = s.sac ?? "";
+  $("rb-dico").textContent = dictionnaire(cfg.dictionnaire).nom;
   $("sac").hidden = cfg.pioche === "probabilites";
   $("sac").textContent = sac;
   chrono = s.chrono ?? null;
@@ -4824,7 +4864,7 @@ function connect() {
       board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
       accorderLeDictionnaire();
-      typed = ""; ghost = null; best = null; finie = false;
+      typed = ""; ghost = null; best = null; motsRefuses = []; finie = false;
       cursor = null; marks = [];
       paintChat(chat);
       paintJournal();
@@ -4865,6 +4905,9 @@ function connect() {
       }
       history.push(mv);
       best = null;
+      // Les mots refuses parlaient de la position d'avant : elle vient de
+      // changer, et certains sont peut-etre jouables maintenant.
+      motsRefuses = [];
       typed = "";
       // EN REJEU, LE MOT EN EVIDENCE EST CE QU'ON EXAMINE. Un coup qui tombe
       // ailleurs ne doit pas l'effacer -- on regarde le passe, pas le direct.
@@ -5512,8 +5555,11 @@ function specDuSalon(c: ResumeSalon["config"]): string {
   // LE MODE EN TETE : c'est ce qui change le plus la partie qu'on va trouver,
   // et il ne se lisait nulle part.
   const mode = c.mode === "duplicate" ? "Duplicate" : "Topping";
+  // LE LEXIQUE EN DERNIER, mais il y est : c'est ce qui decide si l'on peut
+  // jouer dans ce salon, et rien d'autre ne le disait.
   return [mode, nomDeLaVariante(c), dureeDuChrono(c.chrono)]
     .concat(c.joker === true ? ["joker"] : [])
+    .concat([dictionnaire(c.dictionnaire).nom])
     .join(" · ");
 }
 
@@ -5691,6 +5737,8 @@ function tuileStar(s: ResumeSalon): HTMLElement {
   action.appendChild(el("span", "chiffres", compte));
   tuile.appendChild(action);
 
+  tuile.appendChild(el("span", "lexique", dictionnaire(s.config.dictionnaire).nom));
+
   tuile.addEventListener("click", () => allerA(s.id));
   return tuile;
 }
@@ -5708,7 +5756,8 @@ function carteSalon(s: ResumeSalon): HTMLElement {
   // Le createur peut retirer son salon -- sauf s'il est permanent : des
   // milliers de coups joues a plusieurs ne tiennent pas a un clic.
   const moi = pseudo();
-  if (s.permanent !== true && moi !== "" && s.proprietaire === moi) {
+  const aLeDroit = s.proprietaire === moi || moiCompte?.admin === true;
+  if (s.permanent !== true && moi !== "" && aLeDroit) {
     const jeter = el("button", "jeter", t("Supprimer")) as HTMLButtonElement;
     jeter.type = "button";
     // Le bouton dit ce qu'il fait VRAIMENT : seule une 15x15 terminee survit a
@@ -6286,10 +6335,6 @@ $("r-joker").addEventListener("click", () => {
 function appliquerLeModeDeReglages(): void {
   const avance = prefs.avance;
   $("r-avance").setAttribute("aria-pressed", String(avance));
-  // Le bouton suit ce qui est a l'ecran : a droite du dictionnaire quand il y
-  // en a un, a droite de la grille sinon. Un seul exemplaire, qu'on deplace.
-  $(avance ? "r-avance-dico" : "r-avance-grille").appendChild($("r-avance"));
-  $("r-dico-bloc").hidden = !avance;
   $("r-pioche-bloc").hidden = !avance;
   $("r-primes-bloc").hidden = !avance;
   $("r-format-bloc").hidden = avance;
@@ -6321,8 +6366,6 @@ $("r-avance").addEventListener("click", () => {
 
 /** Ce que la fenetre simple decide a la place du joueur. */
 function simplifierLesReglages(): void {
-  // Le lexique est celui de la langue : la fenetre simple n'en parle pas.
-  cDico = DICO_PAR_LANGUE[langue()];
   // Le sac du jeu classique, qui se recharge sur une grille sans bord -- sinon
   // elle s'arreterait au bout de cent caramels.
   cPioche = cBornes === null ? "sac102boucle" : "sac102";
@@ -6550,6 +6593,7 @@ async function rejoindre(id: string): Promise<void> {
   cursor = null;
   ghost = null;
   best = null;
+  motsRefuses = [];
   typed = "";
   rack = "";
   marks = [];
