@@ -16,9 +16,15 @@
  * corriger une faute de frappe cote francais casse la traduction. On vit tres
  * bien avec.
  *
- * LE HTML N'A RIEN A DECLARER. `traduireLeDocument` parcourt la page et
- * remplace ce qu'il reconnait -- textes, `placeholder`, `title`, `aria-label`.
- * Aucun attribut a semer dans le balisage, aucune cle a inventer.
+ * LE HTML N'A RIEN A DECLARER. `releverLeBalisage` note, au demarrage, chaque
+ * texte ecrit dans la page -- contenus, `placeholder`, `title`, `aria-label` --
+ * et `appliquerLaLangue` les remplace. Aucun attribut a semer dans le balisage,
+ * aucune cle a inventer.
+ *
+ * ON NE TOUCHE QU'A CE QUI A ETE RELEVE AU DEMARRAGE. Repasser sur la page
+ * entiere apres coup traduirait aussi ce que le jeu y a ecrit depuis : un
+ * pseudo, un mot pose, un message de chat ou l'on aurait tape « Chat ». Le
+ * dynamique, lui, passe par `t()` a l'endroit ou il se compose.
  */
 import { EN } from "./textes-en.ts";
 
@@ -70,21 +76,34 @@ export function langue(): Langue {
   return courante;
 }
 
+/** Ce que le reste du programme repeint quand la langue change. */
+let repeindre: (() => void) | null = null;
+
+export function surChangementDeLangue(quoi: () => void): void {
+  repeindre = quoi;
+}
+
 /**
- * Change la langue, et RECHARGE LA PAGE.
+ * Change la langue, SANS RECHARGER LA PAGE.
  *
- * Retraduire a chaud demanderait que chaque texte deja peint sache se repeindre
- * -- le journal des coups, le chat, le classement, les bandeaux. Un rechargement
- * fait le meme travail en une ligne et sans rien oublier. On ne change pas de
- * langue vingt fois par partie.
+ * Un rechargement ferait le travail en une ligne, mais il blanchit l'ecran une
+ * demi-seconde et fait repartir la connexion au salon. On remet donc le
+ * balisage dans la nouvelle langue et l'on redemande au jeu de se repeindre :
+ * l'ecran change sous les yeux, sans a-coup.
  */
 export function choisirLaLangue(l: Langue): void {
+  if (l === courante) return;
+  courante = l;
   try { localStorage.setItem(CLE, l); } catch { /* navigation privee */ }
-  // L'adresse peut porter `?lang=`, qui l'emporterait sur le choix qu'on vient
-  // d'enregistrer : on la nettoie avant de recharger.
+  // L'adresse peut porter `?lang=`, qui l'emporterait a la prochaine visite sur
+  // le choix qu'on vient d'enregistrer : on la nettoie.
   const u = new URL(location.href);
-  u.searchParams.delete("lang");
-  location.replace(u.toString());
+  if (u.searchParams.has("lang")) {
+    u.searchParams.delete("lang");
+    history.replaceState({}, "", u.toString());
+  }
+  appliquerLaLangue();
+  repeindre?.();
 }
 
 /** Le texte, dans la langue en cours. Un texte inconnu reste en francais. */
@@ -108,40 +127,57 @@ export function t2(fr: string, trous: Record<string, string | number>): string {
 /** Les attributs qui portent du texte lu par quelqu'un. */
 const ATTRIBUTS = ["placeholder", "title", "aria-label", "aria-placeholder"];
 
+/** Un texte du balisage, avec son francais d'origine. */
+const textes: { noeud: Text; brut: string }[] = [];
+const attributs: { el: Element; nom: string; brut: string }[] = [];
+let releve = false;
+
 /**
- * Traduit ce qui est ecrit dans le balisage.
- *
- * On ne touche qu'aux textes qu'on RECONNAIT : ce qui n'est pas dans la table
- * reste tel quel. Un pseudo, un score ou un mot pose ne risquent donc rien --
- * et de toute facon ceux-la sont poses par le code, pas par le balisage.
+ * Note tout ce que le balisage ecrit. A appeler UNE FOIS, avant le premier
+ * peignage : ce qui arrive apres n'est plus du balisage, c'est du jeu.
  */
-export function traduireLeDocument(racine: ParentNode = document.body): void {
-  if (courante === "fr") return;
+export function releverLeBalisage(racine: ParentNode = document.body): void {
+  if (releve) return;
+  releve = true;
   const marche = document.createTreeWalker(racine as Node, NodeFilter.SHOW_TEXT);
-  const aChanger: [Text, string][] = [];
   for (let n = marche.nextNode(); n !== null; n = marche.nextNode()) {
     const noeud = n as Text;
-    const parent = noeud.parentElement;
-    if (parent === null) continue;
-    const balise = parent.tagName;
-    if (balise === "SCRIPT" || balise === "STYLE") continue;
-    const brut = noeud.data;
-    const net = brut.trim();
-    if (net === "") continue;
-    const trad = EN[net];
-    if (trad === undefined) continue;
-    // On garde les espaces d'origine : ils separent le texte de ses voisins.
-    aChanger.push([noeud, brut.replace(net, trad)]);
+    const balise = noeud.parentElement?.tagName;
+    if (balise === undefined || balise === "SCRIPT" || balise === "STYLE") continue;
+    if (noeud.data.trim() === "") continue;
+    textes.push({ noeud, brut: noeud.data });
   }
-  for (const [noeud, texte] of aChanger) noeud.data = texte;
-
   for (const el of (racine as Element).querySelectorAll("*")) {
-    for (const a of ATTRIBUTS) {
-      const v = el.getAttribute(a);
-      if (v === null) continue;
-      const trad = EN[v.trim()];
-      if (trad !== undefined) el.setAttribute(a, trad);
+    for (const nom of ATTRIBUTS) {
+      const v = el.getAttribute(nom);
+      if (v !== null && v.trim() !== "") attributs.push({ el, nom, brut: v });
     }
   }
+}
+
+/**
+ * Remet le balisage dans la langue en cours.
+ *
+ * On repart TOUJOURS du francais d'origine, jamais du texte affiche : c'est ce
+ * qui permet de revenir en arriere, et ce qui empeche une traduction de se
+ * traduire une seconde fois.
+ */
+export function appliquerLaLangue(): void {
+  for (const { noeud, brut } of textes) {
+    const net = brut.trim();
+    const trad = courante === "fr" ? undefined : EN[net];
+    // Les espaces d'origine se gardent : ils separent le texte de ses voisins.
+    noeud.data = trad === undefined ? brut : brut.replace(net, trad);
+  }
+  for (const { el, nom, brut } of attributs) {
+    const trad = courante === "fr" ? undefined : EN[brut.trim()];
+    el.setAttribute(nom, trad ?? brut);
+  }
   document.documentElement.lang = courante;
+}
+
+/** Le relevé puis la pose, en un geste : ce qu'on appelle au demarrage. */
+export function traduireLeDocument(): void {
+  releverLeBalisage();
+  appliquerLaLangue();
 }

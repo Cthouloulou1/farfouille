@@ -920,7 +920,7 @@ wss.on("connection", (ws, req) => {
       if (inscrit === null && pseudoEnregistre(nom)) {
         send(ws, {
           t: "refus", quoi: "pseudo",
-          message: "Ce pseudo appartient à un compte : connectez-vous, ou prenez-en un autre",
+          message: "Ce nom est déjà utilisé : connectez-vous, ou prenez-en un autre",
         });
         return;
       }

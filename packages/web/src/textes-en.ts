@@ -105,6 +105,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Go": "Go",
 
   // --------------------------------------------------------- preferences
+  "Langue": "Language",
   "Thème": "Theme",
   "Clair": "Light",
   "Sombre": "Dark",
@@ -185,22 +186,29 @@ export const EN: Readonly<Record<string, string>> = {
     ", otherwise the settings will have no effect.",
 
   // =====================================================================
-  //  PAS ENCORE BRANCHES
+  //  CE QUE LE CODE ECRIT
   //
-  //  Les textes ci-dessous sont ceux que le CODE ecrit, pas le balisage :
-  //  l'accueil, le journal des coups, les messages d'erreur. Ils sont deja
-  //  traduits ici, mais le code les affiche encore en dur -- il faut entourer
-  //  chaque litteral de `t(...)` dans main.ts pour que la table les serve.
+  //  Au-dessus, le balisage, qui se traduit tout seul. Ici, ce que main.ts
+  //  compose : l'accueil, le journal des coups, les messages d'erreur.
   //
   //  Un texte a trous s'ecrit `t2("...", { n: 3 })` : les trous portent un NOM,
   //  parce que l'ordre des mots change d'une langue a l'autre.
   // =====================================================================
 
   // ------------------------------------------------------------- accueil
+  "Tous": "All",
+  "En attente": "Waiting",
+  "Tout afficher": "Show all",
+  "Montrer aussi les salons des autres langues": "Also show rooms in other languages",
   "Créer un salon": "Create a room",
+  "Salon star": "Featured room",
+  "Jouer": "Play",
+  "Supprimer": "Delete",
+  "permanent": "permanent",
+  "Coup {n}": "Move {n}",
+  "Coup {n} · {p} points": "Move {n} · {p} points",
+  "{n} joueur{s}": "{n} player{s}",
   "Créer un compte": "Create an account",
-  "Un nom, et vous entrez. Il vous suit d'un salon à l'autre.":
-    "A name, and you are in. It follows you from room to room.",
   "Entrez un pseudo pour continuer": "Enter a name to continue",
   "Grille infinie, sans limite de temps, sans fin.":
     "An infinite board, no time limit, endless.",
@@ -231,10 +239,8 @@ export const EN: Readonly<Record<string, string>> = {
   "vérifié": "verified",
   "Demander la vérification": "Ask for verification",
   "Demande déposée.": "Request sent.",
-  "Votre identité a été vérifiée. La pastille suit votre pseudo.":
-    "Your verification has been approved",
-  "Renseignez votre prénom et votre nom : c'est votre identité qui se vérifie.":
-    "Input your first and last name",
+  "Votre vérification a été actée": "Your verification has been approved",
+  "Renseignez votre prénom et votre nom": "Enter your first and last name",
   "aucune demande, aucun joueur vérifié": "no request, no verified player",
   "Adresse vérifiée.": "Address verified.",
   "Adresse non vérifiée.": "Address not verified.",
@@ -257,7 +263,9 @@ export const EN: Readonly<Record<string, string>> = {
   "coup révélé, personne à féliciter": "move revealed, no one to congratulate",
   "bravo à {qui}": "well played, {qui}",
   "coup": "move",
+  "coup {n}": "move {n}",
   "coups": "moves",
+  "{n} joueurs": "{n} players",
   "grille": "board",
   "partie": "game",
   "salon": "room",
@@ -287,6 +295,10 @@ export const EN: Readonly<Record<string, string>> = {
     "image too large for this browser — {l} × {h} px",
   "l'image n'a pas pu être produite": "the image could not be produced",
   "revoir le coup {n}": "replay move {n}",
+  "Coup {n} : {mot} pour {pts} pts.": "Move {n}: {mot} for {pts} pts.",
+  "Le top {top} valait {pts} pts": "The top {top} was worth {pts} pts",
+  "— trouvé.": "— found.",
+  ", manqué de {ecart} pts.": ", missed by {ecart} pts.",
   "voir {mot} en {ou}": "see {mot} at {ou}",
   "trouvé par {qui}": "found by {qui}",
   "joué par {qui}": "played by {qui}",
@@ -297,6 +309,8 @@ export const EN: Readonly<Record<string, string>> = {
   "Le temps de calcul du top grandit avec la grille et le tirage.":
     "The top's calculation time grows with the board and the rack.",
   "ça risque de lagger au bout d'un moment.": "it will start to lag after a while.",
+  "Attention : sac sans fin sur une grille {c}×{c}.":
+    "Warning: endless bag on a {c}×{c} board.",
   "Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque":
     "The bag refills forever: the game only ends when no move",
   "aucun coup n'est jouable, et elle sera très longue.":
@@ -306,6 +320,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Ce salon a été supprimé": "This room has been deleted",
   "Ce salon n'existe plus": "This room no longer exists",
   "Ce nom d'utilisateur n'est pas disponible": "That username is not available",
+  "Nom d'utilisateur": "Username",
   "Ce nom est déjà utilisé : connectez-vous, ou prenez-en un autre":
     "That name is already taken: sign in, or pick another",
   "cette grille est permanente": "this board is permanent",

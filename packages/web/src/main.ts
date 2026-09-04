@@ -13,9 +13,11 @@ import {
   configParDefaut, deserialiser, valeurDe, type ConfigPartie,
 } from "../../engine/src/config.ts";
 import {
-  DICO_PAR_DEFAUT, tousLesDictionnaires,
+  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
-import { choisirLaLangue, langue, t, t2, traduireLeDocument } from "./langue.ts";
+import {
+  choisirLaLangue, langue, surChangementDeLangue, t, t2, traduireLeDocument,
+} from "./langue.ts";
 import { bonusChar, setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { BLANK } from "../../engine/src/alphabet.ts";
 import {
@@ -1260,11 +1262,12 @@ async function exporterImage(coup?: number): Promise<void> {
   // Le navigateur RABOTE en silence un canevas trop grand : on redemande sa
   // taille plutot que de produire une image vide sans savoir pourquoi.
   if (hors.width !== largeur || hors.height !== hauteur) {
-    flash(`image trop grande pour ce navigateur · ${largeur} × ${hauteur} px`, "bad");
+    flash(t2("image trop grande pour ce navigateur — {l} × {h} px",
+      { l: largeur, h: hauteur }), "bad");
     return;
   }
   const g = hors.getContext("2d");
-  if (g === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
+  if (g === null) { flash(t("l'image n'a pas pu être produite"), "bad"); return; }
 
   // UN SEUL CANEVAS, PAS DEUX.
   //
@@ -1273,9 +1276,16 @@ async function exporterImage(coup?: number): Promise<void> {
   // et c'est la memoire qui limite la finesse des lettres. Un decalage du repere
   // suffit : `draw()` peint comme si le bandeau n'existait pas, et ses numeros
   // de colonnes tombent juste dessous au lieu d'etre recouverts.
-  const memoire = { ctx, W, H, ox, oy, cell, cle: cacheCle };
+  const memoire = { ctx, W, H, ox, oy, cell, cle: cacheCle, ghost };
   bouton.disabled = true;
   try {
+    // L'IMAGE D'UN COUP NOMME NE MONTRE PAS SA SOLUTION.
+    //
+    // Sans numero, on photographie l'ecran tel qu'il est -- le mot du rejeu
+    // compris, c'est ce qu'on regarde. Avec un numero, l'image vient de la
+    // feuille de route : c'est une position a chercher, et elle partait avec le
+    // mot du coup qu'on avait ouvert pose dessus, en clair.
+    if (coup !== undefined) ghost = null;
     ctx = g; W = largeur; H = hauteur - BANDEAU; cell = taille;
     ox = REGLE.x - x0 * taille; oy = REGLE.y - y0 * taille;
     exportEnCours = true;
@@ -1291,6 +1301,7 @@ async function exporterImage(coup?: number): Promise<void> {
     exportJusqua = null;
     ctx = memoire.ctx; W = memoire.W; H = memoire.H;
     ox = memoire.ox; oy = memoire.oy; cell = memoire.cell;
+    ghost = memoire.ghost;
     cacheCle = "";   // l'image de cote a servi a autre chose entre-temps
     bouton.disabled = false;
     draw();
@@ -1304,9 +1315,9 @@ async function exporterImage(coup?: number): Promise<void> {
   }
 
   const blob: Blob | null = await new Promise((res) => hors.toBlob(res, "image/png"));
-  if (blob === null) { flash("l'image n'a pas pu être produite", "bad"); return; }
+  if (blob === null) { flash(t("l'image n'a pas pu être produite"), "bad"); return; }
   const quand = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "h");
-  const quoi = `coup ${numero}`;
+  const quoi = t2("coup {n}", { n: numero });
   const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1314,7 +1325,8 @@ async function exporterImage(coup?: number): Promise<void> {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   const mo = blob.size / 1e6;
-  flash(`image enregistrée · ${largeur} × ${hauteur} px · ${mo.toFixed(1)} Mo`, "ok");
+  flash(t2("image enregistrée — {l} × {h} px — {mo} Mo",
+    { l: largeur, h: hauteur, mo: mo.toFixed(1) }), "ok");
 }
 
 /**
@@ -2116,7 +2128,7 @@ function paintSide() {
       ).reverse();
       if (mine.length === 0) {
         const e = document.createElement("div");
-        e.className = "none"; e.textContent = "aucun coup enregistré";
+        e.className = "none"; e.textContent = t("aucun coup enregistré");
         list.appendChild(e);
       }
       for (const m of mine) {
@@ -2144,9 +2156,9 @@ function paintSide() {
                         placeDuJoueur(ailleurs, sien) +
                         `<span class="s">${sc}</span>` +
                         `<span class="t ${ecart === 0 ? "top" : ""}">${ecart === 0 ? "Top" : `−${ecart}`}</span>`;
-          r.title = `Coup ${m.n} : ${mot} pour ${sc} pts. ` +
-            `Le top ${m.word} valait ${m.score} pts` +
-            (ecart === 0 ? " — trouvé." : `, manqué de ${ecart} pts.`);
+          r.title = t2("Coup {n} : {mot} pour {pts} pts.", { n: m.n, mot, pts: sc }) + " " +
+            t2("Le top {top} valait {pts} pts", { top: m.word, pts: m.score }) +
+            (ecart === 0 ? " " + t("— trouvé.") : t2(", manqué de {ecart} pts.", { ecart }));
         } else {
           // Un demi-point porte le mot que le joueur a reellement propose, suivi
           // de « (0.5) » : c'etait sa meilleure solution, pas le top.
@@ -2227,8 +2239,8 @@ function likeButton(m: MoveInfo): HTMLButtonElement {
   b.type = "button";
   const mine = (m.likers ?? []).includes(me);
   b.setAttribute("aria-pressed", String(mine));
-  b.title = m.player === null ? "coup révélé, personne à féliciter"
-    : m.player === me ? "votre coup" : `bravo à ${m.player}`;
+  b.title = m.player === null ? t("coup révélé, personne à féliciter")
+    : m.player === me ? t("votre coup") : t2("bravo à {qui}", { qui: m.player });
   b.disabled = m.player === null || m.player === me;
   b.innerHTML = `<span aria-hidden="true">${mine ? "♥" : "♡"}</span>` +
                 `<span class="n">${m.likes ?? 0}</span>`;
@@ -2250,6 +2262,11 @@ function voirLeCoup(n: number): void {
   if (history.length === 0) return;
   const borne = Math.max(1, Math.min(history.length, n));
   rejeu = { n: borne, paliers: null };
+  // MASQUER UN MOT EST UN GESTE EPHEMERE. On barre l'oeil pour chercher CETTE
+  // position-la ; passer au coup suivant -- par les fleches ou par la feuille
+  // de route -- c'est en regarder une autre, et l'on veut la voir. L'oeil se
+  // rouvre donc a chaque coup, comme il se rouvre en fermant le rejeu.
+  ghostCache = false;
   const m = history.find((q) => q.n === borne);
   $("panel-live").hidden = true;
   $("panel-rejeu").hidden = false;
@@ -2258,7 +2275,7 @@ function voirLeCoup(n: number): void {
   // 40 au milieu de nulle part. Le chat se replie sans disparaitre.
   document.querySelector(".side")!.classList.add("rejeu");
   $("journal-bloc").hidden = true;
-  $("rj-titre").textContent = `Coup ${borne}`;
+  $("rj-titre").textContent = t2("Coup {n}", { n: borne });
   for (const [id, off] of [["rj-debut", borne <= 1], ["rj-avant", borne <= 1],
                            ["rj-apres", borne >= history.length], ["rj-fin", borne >= history.length]] as const) {
     ($(id) as HTMLButtonElement).disabled = off;
@@ -2279,7 +2296,7 @@ function voirLeCoup(n: number): void {
     const attente = document.createElement("div");
     attente.className = "none";
     attente.style.padding = "10px 15px";
-    attente.textContent = "chargement des solutions…";
+    attente.textContent = t("chargement des solutions…");
     piste.appendChild(attente);
   }
   $("rj-sols").scrollTop = 0;
@@ -2338,10 +2355,10 @@ function trouveursDuCoup(m: MoveInfo): string[] {
  */
 function quiLaTrouve(m: MoveInfo, complet = false): string {
   if (duplicate) {
-    const t = trouveursDuCoup(m);
-    if (t.length === 0) return "non trouvé";
-    if (complet || t.length <= 2) return t.join(", ");
-    return `${t.length} joueurs`;
+    const trouveurs = trouveursDuCoup(m);
+    if (trouveurs.length === 0) return t("non trouvé");
+    if (complet || trouveurs.length <= 2) return trouveurs.join(", ");
+    return t2("{n} joueurs", { n: trouveurs.length });
   }
   return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé");
 }
@@ -2470,7 +2487,7 @@ function chercherPartout(): void {
   if (!dict.contains(mot)) {
     recherche = { mot, total: 0, vues: [] };
     peindreSolutions();
-    $("rj-compte").textContent = "mot inconnu";
+    $("rj-compte").textContent = t("mot inconnu");
     return;
   }
   // Le balayage dure de un a cinq dixiemes de seconde : on laisse l'ecran dire
@@ -2882,7 +2899,7 @@ function paintRoadmap() {
   $("rm-tete").innerHTML = enTeteDeLaRoute();
   if (history.length === 0) {
     const e = document.createElement("div");
-    e.className = "none"; e.style.padding = "14px 18px"; e.textContent = "aucun coup joué";
+    e.className = "none"; e.style.padding = "14px 18px"; e.textContent = t("aucun coup joué");
     body.appendChild(e);
     return;
   }
@@ -3017,7 +3034,7 @@ function peindreLaRouteVisible(): void {
   // Un filtre qui ne ramene rien laissait un grand blanc, sans rien qui dise si
   // la recherche avait echoue ou si le tableau s'etait casse.
   if (n === 0) {
-    piste.innerHTML = `<div class="rm-vide">aucun coup ne correspond</div>`;
+    piste.innerHTML = `<div class="rm-vide">${t("aucun coup ne correspond")}</div>`;
     return;
   }
   const haut = Math.max(0, Math.floor(body.scrollTop / hauteurDeLigne()) - 5);
@@ -3156,8 +3173,9 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   const muet = m.player === null || m.player === me;
   const like =
     `<button type="button" class="like" data-aime="${m.n}"${muet ? " disabled" : ""}` +
-    ` aria-pressed="${aime}" title="${m.player === null ? "coup révélé, personne à féliciter"
-      : m.player === me ? "votre coup" : `bravo à ${echapper(m.player)}`}">` +
+    ` aria-pressed="${aime}" title="${m.player === null ? t("coup révélé, personne à féliciter")
+      : m.player === me ? t("votre coup")
+      : t2("bravo à {qui}", { qui: echapper(m.player) })}">` +
     `<span aria-hidden="true">${aime ? "♥" : "♡"}</span>` +
     `<span class="n">${m.likes ?? 0}</span></button>`;
 
@@ -3166,13 +3184,13 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   // qui permet de proposer un coup a chercher a tout moment.
   const image =
     `<button type="button" class="rm-image" data-image="${m.n}"` +
-    ` title="image de la grille au coup ${m.n}, avec son tirage">${ICONE_IMAGE}</button>`;
+    ` title="${t2("image de la grille au coup {n}, avec son tirage", { n: m.n })}">${ICONE_IMAGE}</button>`;
   // Rejouer CE coup. Sur une partie close, ou sur une grille qu'on etudie et
   // qui ouvre son rejeu : ailleurs, le serveur refuse les paliers et le rejeu
   // n'aurait rien a montrer. Une grille infinie n'a pas de fin -- sans cette
   // ouverture, ses isotops et ses sous-tops resteraient a jamais invisibles.
   const rejouer = finie || rejeuOuvert
-    ? `<button type="button" class="rm-rejouer" data-revoir="${m.n}" title="revoir le coup ${m.n}">R</button>`
+    ? `<button type="button" class="rm-rejouer" data-revoir="${m.n}" title="${t2("revoir le coup {n}", { n: m.n })}">R</button>`
     : `<span class="r"></span>`;
 
   const tousLesTrouveurs = duplicate ? trouveursDuCoup(m) : [];
@@ -3211,7 +3229,7 @@ const ICONE_ENREGISTRER =
  * ne se chercherait pas.
  */
 function enregistrerLaRoute(): void {
-  if (history.length === 0) { flash("aucun coup à enregistrer", "bad"); return; }
+  if (history.length === 0) { flash(t("aucun coup à enregistrer"), "bad"); return; }
   const salonNom = ($("conn").textContent ?? "").split("·").pop()?.trim() || "grille";
   const q = ($("rm-q") as HTMLInputElement).value.trim();
   const quand = new Date().toLocaleString("fr", {
@@ -3292,7 +3310,8 @@ ${lignes}
   a.download = `${titre} — ${new Date().toISOString().slice(0, 10)}.html`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-  flash(`feuille enregistrée · ${routeVues.length} coup${routeVues.length > 1 ? "s" : ""}`, "ok");
+  flash(t2("feuille enregistrée — {n} coup{s}",
+    { n: routeVues.length, s: routeVues.length > 1 ? "s" : "" }), "ok");
 }
 
 /**
@@ -3604,12 +3623,25 @@ const prefs: Preferences = {
   hauteurs: { live: null, journal: null, rank: null },
   largeurCote: null,
   imageHD: false,
-  reperes: "fr",
+  // LES REPERES SUIVENT LA LANGUE, tant que personne n'en a decide autrement.
+  // L'ecole francaise nomme les lignes A a O, l'anglaise les colonnes : arriver
+  // sur la version anglaise et lire « H8 » a la francaise, c'est chercher sa
+  // case au mauvais endroit. Un choix explicite est relu ensuite et l'emporte.
+  reperes: langue() === "en" ? "en" : "fr",
   quatre: false,
   zoomRoute: 1,
   zoomCote: 1,
 };
 const CLE_PREFS = "farfouille.preferences";
+
+/**
+ * A-t-on choisi ses reperes soi-meme ?
+ *
+ * Tant que non, ils suivent la langue. Des qu'on y touche, ils n'obeissent plus
+ * qu'a ce choix -- un joueur francophone qui prefere les colonnes doit pouvoir
+ * les garder en passant le site en anglais, et l'inverse aussi.
+ */
+let reperesChoisis = false;
 
 /** Les bornes du grossissement, et le pas d'un clic. */
 const ZOOM_MIN = 0.8, ZOOM_MAX = 1.6, ZOOM_PAS = 0.1;
@@ -3655,7 +3687,10 @@ function lirePreferences(): void {
     if (typeof v.sons === "boolean") prefs.sons = v.sons;
     if (typeof v.vols === "boolean") prefs.vols = v.vols;
     if (typeof v.imageHD === "boolean") prefs.imageHD = v.imageHD;
-    if (v.reperes === "fr" || v.reperes === "en") prefs.reperes = v.reperes;
+    if (v.reperes === "fr" || v.reperes === "en") {
+      prefs.reperes = v.reperes;
+      reperesChoisis = true;
+    }
     if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
     for (const cle of ["zoomRoute", "zoomCote"] as const) {
       const z = v[cle];
@@ -4399,13 +4434,19 @@ function peuplerPreferences(): void {
   }
 }
 
-// Changer de langue recharge la page : voir `choisirLaLangue`. Le reglage ne
-// vit donc pas dans `prefs`, qui se relit apres coup -- il vit dans langue.ts,
-// qui doit etre lu AVANT que la page ne se peigne.
+// La langue ne vit pas dans `prefs`, qui se relit apres coup : elle vit dans
+// langue.ts, qui doit etre lu AVANT que la page ne se peigne.
 for (const b of $("p-langue").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     const choisie = (b as HTMLElement).dataset["v"] === "en" ? "en" : "fr";
-    if (choisie !== langue()) choisirLaLangue(choisie);
+    if (choisie === langue()) return;
+    // Les reperes suivent, SAUF si on les a regles a la main : c'est le meme
+    // principe qu'au demarrage, et le reglage reste juste a cote.
+    if (!reperesChoisis) {
+      prefs.reperes = choisie === "en" ? "en" : "fr";
+      garderPreferences();
+    }
+    choisirLaLangue(choisie);
   });
 }
 for (const b of $("p-theme").querySelectorAll("button")) {
@@ -4452,6 +4493,8 @@ $("p-quatre").addEventListener("click", () => {
 for (const b of $("p-reperes").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     prefs.reperes = (b as HTMLElement).dataset["v"] as Reperes;
+    // A partir d'ici les reperes ne suivent plus la langue : on les a choisis.
+    reperesChoisis = true;
     garderPreferences();
     appliquerLesReperes();
     peuplerPreferences();
@@ -4657,7 +4700,7 @@ function connect() {
     // Une connexion remplacee ou fermee expres ne se rouvre pas toute seule.
     if (quitteVolontairement || ws !== moi) return;
     $("dot").classList.remove("on");
-    $("conn").textContent = "déconnecté — reconnexion…";
+    $("conn").textContent = t("déconnecté — reconnexion…");
     setTimeout(connect, 1500);
   });
   moi.addEventListener("message", (ev) => {
@@ -4808,7 +4851,9 @@ function connect() {
       return;
     }
 
-    if (m.t === "result" && !m.ok) flash(m.message, "bad");
+    // Le serveur parle francais : ses messages passent par la table comme les
+    // autres. Un message inconnu d'elle s'affiche tel quel.
+    if (m.t === "result" && !m.ok) flash(t(m.message), "bad");
   });
 }
 
@@ -4839,14 +4884,27 @@ interface ResumeSalon {
  * Elle ne vient pas du serveur : c'est la promesse du site, pas l'etat d'une
  * partie. Elle vit ici, en un seul endroit.
  */
-const ACCROCHE_STAR = [
-  "Grille infinie, sans limite de temps, sans fin.",
-  "Jusqu'où pourrons-nous aller ?",
-  "Rejoignez la plus grande partie de topping jamais créée.",
-];
+function accrocheStar(): string[] {
+  return [
+    t("Grille infinie, sans limite de temps, sans fin."),
+    t("Jusqu'où pourrons-nous aller ?"),
+    t("Rejoignez la plus grande partie de topping jamais créée."),
+  ];
+}
 
 /** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
 let filtre: "tous" | "bornee" | "infinie" | "attente" = "tous";
+
+/**
+ * Montre-t-on les salons des AUTRES langues ?
+ *
+ * Non, par defaut. Un salon se joue dans un lexique, et un lexique est une
+ * langue : entrer dans une partie francaise avec le site en anglais, c'est
+ * arriver devant un chevalet dont aucun mot ne se forme. L'accueil ne montre
+ * donc que ce que l'on peut jouer -- et ce bouton rend le reste visible pour
+ * qui veut aller voir ailleurs.
+ */
+let toutesLangues = false;
 
 /** La derniere liste recue du serveur. Les filtres repeignent depuis elle. */
 let salonsRecus: ResumeSalon[] = [];
@@ -4961,7 +5019,7 @@ function peindreOngletsDuCompte(): void {
   const inscrit = ongletCompte === "inscription";
   $("c-email").hidden = !inscrit;
   $("compte-titre").textContent = inscrit ? "Inscription" : "Connexion";
-  $("c-valider").textContent = inscrit ? "Créer mon compte" : "Se connecter";
+  $("c-valider").textContent = inscrit ? t("Créer un compte") : t("Se connecter");
   ($("c-mdp") as HTMLInputElement).autocomplete = inscrit ? "new-password" : "current-password";
 }
 
@@ -5018,13 +5076,13 @@ function peindreLaVerification(): void {
   boite.appendChild(el("h2", "", "Vérification"));
   const dit = el("p");
   if (moiCompte.verifie) {
-    dit.textContent = "Votre identité a été vérifiée. La pastille suit votre pseudo.";
+    dit.textContent = t("Votre vérification a été actée");
     boite.appendChild(dit);
     return;
   }
   if (moiCompte.demande) {
     dit.className = "attente";
-    dit.textContent = "Demande déposée.";
+    dit.textContent = t("Demande déposée.");
     boite.appendChild(dit);
     return;
   }
@@ -5069,7 +5127,7 @@ async function demanderLaVerif(): Promise<void> {
   const nom = ($("perso-nom") as HTMLInputElement).value.trim();
   if (prenom === "" || nom === "") {
     $("perso-error").textContent =
-      "Renseignez votre prénom et votre nom : c'est votre identité qui se vérifie.";
+      t("Renseignez votre prénom et votre nom");
     $("perso-error").hidden = false;
     ($(prenom === "" ? "perso-prenom" : "perso-nom") as HTMLInputElement).focus();
     return;
@@ -5108,7 +5166,7 @@ async function ouvrirLaFiche(qui: string): Promise<void> {
   catch { d = {}; }
   const j = d.joueur;
   if (j === undefined) {
-    $("fiche-error").textContent = "Ce joueur n'a pas de compte.";
+    $("fiche-error").textContent = t("Ce joueur n'a pas de compte.");
     $("fiche-error").hidden = false;
     return;
   }
@@ -5403,10 +5461,17 @@ function courtDeLaGrille(bornes: number | null): string {
 }
 
 /** Les chiffres se lisent par tranches de trois, comme partout ailleurs. */
-const chiffres = (n: number): string => n.toLocaleString("fr-FR");
+const chiffres = (n: number): string =>
+  n.toLocaleString(langue() === "en" ? "en-US" : "fr-FR");
+
+/** La langue d'un salon, c'est celle de son lexique. */
+function langueDuSalon(s: ResumeSalon): string {
+  return dictionnaire(s.config.dictionnaire).langue;
+}
 
 /** Le filtre s'applique a tous les salons, la grille mondiale comprise. */
 function retenu(s: ResumeSalon): boolean {
+  if (!toutesLangues && langueDuSalon(s) !== langue()) return false;
   if (filtre === "bornee") return s.config.bornes !== null;
   if (filtre === "infinie") return s.config.bornes === null;
   if (filtre === "attente") return s.coups === 0;
@@ -5436,9 +5501,7 @@ function allerA(id: string): void {
 /** Ouvre le voile du pseudo. `ou` est la destination a reprendre ensuite. */
 function demanderLePseudo(ou: string | null): void {
   destination = ou;
-  $("pseudo-quoi").textContent = ou === null
-    ? "Il vous suit d'un salon à l'autre."
-    : "Un nom, et vous entrez. Il vous suit d'un salon à l'autre.";
+  $("pseudo-quoi").textContent = t("Il vous suit d'un salon à l'autre.");
   $("join-error").hidden = true;
   $("voile").hidden = false;
   ($("name") as HTMLInputElement).focus();
@@ -5466,7 +5529,7 @@ function peindreCompte(): void {
   if (moiCompte === null && moi !== "") {
     const b = el("button", "moi") as HTMLButtonElement;
     b.type = "button";
-    b.title = "Changer de pseudo";
+    b.title = t("Changer de pseudo");
     b.appendChild(el("span", "avatar", moi.slice(0, 1).toUpperCase()));
     b.appendChild(el("span", "", moi));
     b.addEventListener("click", () => demanderLePseudo(null));
@@ -5494,8 +5557,8 @@ function peindreCompte(): void {
 
   const roue = el("button", "icon roue") as HTMLButtonElement;
   roue.type = "button";
-  roue.title = "Paramètres";
-  roue.setAttribute("aria-label", "Paramètres");
+  roue.title = t("Paramètres");
+  roue.setAttribute("aria-label", t("Paramètres"));
   roue.innerHTML = ICONE_ROUE;
   roue.addEventListener("click", () => ouvrirLesPreferences());
   boite.appendChild(roue);
@@ -5510,8 +5573,8 @@ function peindreFiltres(): void {
   const barre = $("filtres");
   barre.replaceChildren();
   const puces: [typeof filtre, string][] = [
-    ["tous", "Tous"], ["bornee", "15×15"], ["infinie", "Infinie"],
-    ["attente", "En attente"],
+    ["tous", t("Tous")], ["bornee", "15×15"], ["infinie", t("Infinie")],
+    ["attente", t("En attente")],
   ];
   for (const [cle, texte] of puces) {
     const b = el("button", "puce", texte) as HTMLButtonElement;
@@ -5520,8 +5583,17 @@ function peindreFiltres(): void {
     b.addEventListener("click", () => { filtre = cle; peindreAccueil(); });
     barre.appendChild(b);
   }
+  // LES AUTRES LANGUES SE MONTRENT, ELLES NE SE CHOISISSENT PAS. Ce n'est pas
+  // une puce de plus dans la meme serie -- les quatre premieres s'excluent,
+  // celle-ci s'ajoute a n'importe laquelle.
+  const autres = el("button", "puce langues", t("Tout afficher")) as HTMLButtonElement;
+  autres.type = "button";
+  autres.setAttribute("aria-pressed", String(toutesLangues));
+  autres.title = t("Montrer aussi les salons des autres langues");
+  autres.addEventListener("click", () => { toutesLangues = !toutesLangues; peindreAccueil(); });
+  barre.appendChild(autres);
   if (pseudo() === "") return;
-  const creer = el("button", "creer-bar", "Créer un salon") as HTMLButtonElement;
+  const creer = el("button", "creer-bar", t("Créer un salon")) as HTMLButtonElement;
   creer.type = "button";
   creer.addEventListener("click", () => { void creerSalon(); });
   barre.appendChild(creer);
@@ -5529,32 +5601,32 @@ function peindreFiltres(): void {
 
 /** La tuile du salon star : la grille mondiale, deux colonnes sur deux rangees. */
 function tuileStar(s: ResumeSalon): HTMLElement {
-  const t = el("button", "star") as HTMLButtonElement;
-  t.type = "button";
+  const tuile = el("button", "star") as HTMLButtonElement;
+  tuile.type = "button";
 
   const pastille = el("span", "enligne");
   pastille.appendChild(el("span", "point"));
-  pastille.appendChild(el("span", "", `${s.connectes} en ligne`));
-  t.appendChild(pastille);
+  pastille.appendChild(el("span", "", t2("{n} en ligne", { n: s.connectes })));
+  tuile.appendChild(pastille);
 
-  t.appendChild(el("span", "surtitre", "Salon star"));
-  t.appendChild(el("span", "titre", s.nom));
+  tuile.appendChild(el("span", "surtitre", t("Salon star")));
+  tuile.appendChild(el("span", "titre", s.nom));
   const accroche = el("span", "accroche");
-  for (const ligne of ACCROCHE_STAR) accroche.appendChild(el("span", "", ligne));
-  t.appendChild(accroche);
+  for (const ligne of accrocheStar()) accroche.appendChild(el("span", "", ligne));
+  tuile.appendChild(accroche);
 
   const action = el("span", "action");
-  action.appendChild(el("span", "jouer", "Jouer"));
+  action.appendChild(el("span", "jouer", t("Jouer")));
   // Le cumul manque tant que le serveur tourne une version anterieure : on
   // affiche alors le coup seul plutot qu'un « undefined points ».
   const compte = s.cumul === undefined
-    ? `Coup ${chiffres(s.coups)}`
-    : `Coup ${chiffres(s.coups)} · ${chiffres(s.cumul)} points`;
+    ? t2("Coup {n}", { n: chiffres(s.coups) })
+    : t2("Coup {n} · {p} points", { n: chiffres(s.coups), p: chiffres(s.cumul) });
   action.appendChild(el("span", "chiffres", compte));
-  t.appendChild(action);
+  tuile.appendChild(action);
 
-  t.addEventListener("click", () => allerA(s.id));
-  return t;
+  tuile.addEventListener("click", () => allerA(s.id));
+  return tuile;
 }
 
 /** Une carte de salon : sa vraie grille, son nom, sa variante, son etat. */
@@ -5571,13 +5643,13 @@ function carteSalon(s: ResumeSalon): HTMLElement {
   // milliers de coups joues a plusieurs ne tiennent pas a un clic.
   const moi = pseudo();
   if (s.permanent !== true && moi !== "" && s.proprietaire === moi) {
-    const jeter = el("button", "jeter", "Supprimer") as HTMLButtonElement;
+    const jeter = el("button", "jeter", t("Supprimer")) as HTMLButtonElement;
     jeter.type = "button";
     // Le bouton dit ce qu'il fait VRAIMENT : seule une 15x15 terminee survit a
     // la disparition de son salon.
     jeter.title = !infinie && s.finie
-      ? "Retire le salon. La partie terminée est conservée."
-      : "Retire le salon ET efface la partie. Sans retour.";
+      ? t("Retire le salon. La partie terminée est conservée.")
+      : t("Retire le salon ET efface la partie. Sans retour.");
     jeter.addEventListener("click", (e) => {
       e.stopPropagation();
       void supprimerSalon(s.id, moi);
@@ -5596,11 +5668,11 @@ function carteSalon(s: ResumeSalon): HTMLElement {
   const vif = s.finie ? "close" : s.coups === 0 ? "attente" : "encours";
   etat.appendChild(el("span", `point ${vif}`));
   etat.appendChild(el("span", "", s.mondiale
-    ? "permanent"
-    : `${s.connectes} joueur${s.connectes > 1 ? "s" : ""}`));
+    ? t("permanent")
+    : t2("{n} joueur{s}", { n: s.connectes, s: s.connectes > 1 ? "s" : "" })));
   etat.appendChild(el("span", "ou", s.finie
-    ? "terminée"
-    : s.coups === 0 ? "en attente" : `coup ${chiffres(s.coups)}`));
+    ? t("terminée")
+    : s.coups === 0 ? t("en attente") : t2("coup {n}", { n: chiffres(s.coups) })));
   dedans.appendChild(etat);
   c.appendChild(dedans);
 
@@ -5610,10 +5682,10 @@ function carteSalon(s: ResumeSalon): HTMLElement {
 
 /** La tuile pointillee, en fin de mur — seulement si l'on s'est nomme. */
 function tuileCreer(): HTMLElement {
-  const t = el("button", "tuile-creer", "Créer un salon") as HTMLButtonElement;
-  t.type = "button";
-  t.addEventListener("click", () => { void creerSalon(); });
-  return t;
+  const tuile = el("button", "tuile-creer", t("Créer un salon")) as HTMLButtonElement;
+  tuile.type = "button";
+  tuile.addEventListener("click", () => { void creerSalon(); });
+  return tuile;
 }
 
 /**
@@ -5646,13 +5718,14 @@ function peindreAccueil(): void {
   for (const s of autres) rouleau.appendChild(carteSalon(s));
   if (vus.length === 0) {
     rouleau.appendChild(el("div", "none",
-      liste.length === 0 ? "aucun salon ouvert" : "aucun salon de cette sorte"));
+      liste.length === 0 ? t("aucun salon ouvert") : t("aucun salon comme ça")));
   }
   if (pseudo() !== "") rouleau.appendChild(tuileCreer());
 
   // Un joueur ne compte qu'une fois : il n'est present que dans un salon.
   const total = salonsRecus.reduce((a, s) => a + s.connectes, 0);
-  $("pied-total").textContent = `${chiffres(total)} joueur${total > 1 ? "s" : ""} en ligne`;
+  $("pied-total").textContent = t2("{n} joueur{s} en ligne",
+    { n: chiffres(total), s: total > 1 ? "s" : "" });
 }
 
 /** Demande la liste des salons au serveur, puis repeint. */
@@ -5848,9 +5921,10 @@ function avertirSiExplosif(): void {
   // grille de quinze cases met longtemps a se boucher pour de bon.
   if (cBornes !== null && cPioche === "sac102boucle") {
     boite.innerHTML =
-      `<b>Attention : sac sans fin sur une grille ${cBornes * 2 + 1}×${cBornes * 2 + 1}.</b><br>` +
-      `Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque plus ` +
-      `aucun coup n'est jouable, et elle sera très longue.`;
+      `<b>${t2("Attention : sac sans fin sur une grille {c}×{c}.",
+        { c: cBornes * 2 + 1 })}</b><br>` +
+      t("Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque") + " " +
+      t("aucun coup n'est jouable, et elle sera très longue.");
     boite.hidden = false;
     return;
   }
@@ -5980,7 +6054,7 @@ function peuplerPrimes(): void {
 $("r-primes-open").addEventListener("click", () => {
   const ouvert = $("r-primes").hidden;
   $("r-primes").hidden = !ouvert;
-  $("r-primes-open").textContent = ouvert ? "Masquer les primes" : "Primes de farfouilles";
+  $("r-primes-open").textContent = ouvert ? t("Masquer les primes") : t("Primes de farfouilles");
   if (ouvert) peuplerPrimes();
 });
 
@@ -6103,7 +6177,7 @@ function ouvrirReglages(): void {
   avertirSiExplosif();
   ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
   $("r-primes").hidden = true;
-  $("r-primes-open").textContent = "Primes de farfouilles";
+  $("r-primes-open").textContent = t("Primes de farfouilles");
   peuplerNombres();
   peuplerPioche();
   peuplerDico();
@@ -6197,7 +6271,7 @@ async function creerSalon(): Promise<void> {
   });
   const s = await r.json();
   if (!r.ok) {
-    $("c-error").textContent = s.erreur ?? "création impossible";
+    $("c-error").textContent = s.erreur ?? t("création impossible");
     $("c-error").hidden = false;
     return;
   }
@@ -6208,7 +6282,7 @@ $("joinform").addEventListener("submit", (e) => {
   e.preventDefault();
   const moi = pseudo();
   if (moi === "") {
-    $("join-error").textContent = "Entrez un pseudo pour continuer";
+    $("join-error").textContent = t("Entrez un pseudo pour continuer");
     $("join-error").hidden = false;
     return;
   }
@@ -6359,6 +6433,32 @@ try {
 // LE BALISAGE SE TRADUIT AVANT LE PREMIER PEIGNAGE. Sinon la page s'affiche en
 // francais le temps d'un battement, puis bascule -- ce qui se voit.
 traduireLeDocument();
+
+/**
+ * Repeint TOUT ce que le jeu a compose, dans la nouvelle langue.
+ *
+ * Le balisage, lui, s'est deja remis d'aplomb tout seul (`appliquerLaLangue`).
+ * Restent les endroits ou le code ecrit : l'accueil, le bandeau, le journal, le
+ * chat, la grille. On ne repeint que ce qui est A L'ECRAN -- un panneau ferme
+ * se repeindra a son ouverture.
+ */
+surChangementDeLangue(() => {
+  peindreAccueil();
+  peuplerPreferences();
+  if (!$("join").hidden) return;
+  paintSide();
+  paintJournal();
+  paintChat(chat);
+  paintRack();
+  if (!$("roadmap").hidden) paintRoadmap();
+  // Le rejeu porte le numero du coup dans son titre : il se refait en entier.
+  if (rejeu !== null) voirLeCoup(rejeu.n);
+  // Les reglages ouverts se referment : leurs boutons sont batis a l'ouverture,
+  // et rouvrir le panneau vaut mieux que de reconstruire chaque rangee.
+  $("reglages").hidden = true;
+  draw();
+});
+
 peindreAccueil();
 // LE COMPTE AVANT LES SALONS : c'est lui qui decide de ce que le bandeau
 // affiche, et une seconde d'accueil peint en visiteur alors qu'on est connecte
@@ -6374,7 +6474,7 @@ void lireLeCompte().then(() => {
   const retourMail = new URLSearchParams(location.search).get("email");
   if (retourMail !== null) {
     $("c-error").textContent = retourMail === "ok"
-      ? "Votre adresse est confirmée." : retourMail;
+      ? t("Votre mail est confirmé.") : retourMail;
     $("c-error").hidden = false;
     window.history.replaceState({}, "", location.pathname);
   }
