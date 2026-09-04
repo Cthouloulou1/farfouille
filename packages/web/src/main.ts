@@ -3595,6 +3595,14 @@ interface Preferences {
   /** De quel cote du plateau se lisent les lettres : « fr » ou « en ». */
   reperes: Reperes;
   /**
+   * Regle-t-on ses salons dans la fenetre simple ou dans la fenetre complete ?
+   *
+   * On arrive dans la simple : quatre decisions, pas quinze. Le jour ou l'on
+   * bascule, on y reste -- qui a demande les reglages avances ne veut pas les
+   * redemander a chaque salon.
+   */
+  avance: boolean;
+  /**
    * La barre d'espace fait-elle le tour des QUATRE sens ?
    *
    * Par defaut elle alterne droite et bas, les deux seuls sens dans lesquels
@@ -3628,6 +3636,7 @@ const prefs: Preferences = {
   // sur la version anglaise et lire « H8 » a la francaise, c'est chercher sa
   // case au mauvais endroit. Un choix explicite est relu ensuite et l'emporte.
   reperes: langue() === "en" ? "en" : "fr",
+  avance: false,
   quatre: false,
   zoomRoute: 1,
   zoomCote: 1,
@@ -3692,6 +3701,7 @@ function lirePreferences(): void {
       reperesChoisis = true;
     }
     if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
+    if (typeof v.avance === "boolean") prefs.avance = v.avance;
     for (const cle of ["zoomRoute", "zoomCote"] as const) {
       const z = v[cle];
       if (typeof z === "number" && z >= ZOOM_MIN && z <= ZOOM_MAX) prefs[cle] = z;
@@ -5758,6 +5768,25 @@ async function supprimerSalon(id: string, moi: string): Promise<void> {
 let cTirage = 7, cJouables = 7, cPioche = "probabilites";
 /** Le lexique en cours d'edition. */
 let cDico = DICO_PAR_DEFAUT;
+/** La partie joker, en cours d'edition. */
+let cJoker = false;
+/**
+ * Le format en cours d'edition, dans la fenetre simple.
+ *
+ * Trois formats se nomment -- ce sont ceux qu'on joue en club -- et le
+ * quatrieme ouvre les deux grilles de nombres de la fenetre complete. Le nom
+ * dit la chose bien mieux que « 7 » et « 8 » cote a cote : « 7 sur 8 », on sait
+ * ce que c'est ; « jouables 7, tirage 8 » demande un instant de traduction.
+ */
+let cFormat: "7/7" | "7/8" | "8/8" | "perso" = "7/7";
+
+/** Le format nomme qui correspond a ces deux nombres, ou « perso ». */
+function formatDe(tirage: number, jouables: number): typeof cFormat {
+  if (tirage === 7 && jouables === 7) return "7/7";
+  if (tirage === 8 && jouables === 7) return "7/8";
+  if (tirage === 8 && jouables === 8) return "8/8";
+  return "perso";
+}
 /** Primes en cours d'edition : points par nombre de caramels poses. */
 let cPrimes: Record<number, number> = {};
 /** Chrono en cours d'edition, en secondes. null = sans chrono. */
@@ -5962,6 +5991,10 @@ for (const b of $("r-grille").querySelectorAll("button")) {
     // finissent jamais de remplir la grille. Le sac SANS FIN, lui, y a
     // desormais sa place et n'est plus chasse.
     if (cBornes !== null && cPioche === "probabilites") cPioche = "sac102";
+    // La fenetre simple ne montre pas le tirage : elle le decide. Le sac du jeu
+    // classique sur un plateau ferme, le meme qui se recharge sans fin sur une
+    // grille sans bord -- sinon elle s'arreterait au bout de cent caramels.
+    if (!prefs.avance) cPioche = cBornes === null ? "sac102boucle" : "sac102";
     peuplerPioche();
     // APRES le tirage : l'affichage des bornes depend des deux, et le tirage
     // vient de changer sous nos pieds.
@@ -6090,6 +6123,7 @@ function peuplerNombres(): void {
         // l'autre, c'est emporter un bareme qui ne veut plus rien dire -- et
         // sans rien dire, puisque la section est repliee.
         if (`${cTirage}/${cJouables}` !== avant) cPrimes = primesHabituelles();
+        cFormat = formatDe(cTirage, cJouables);
         peuplerNombres();
         avertirSiExplosif();
         if (!$("r-primes").hidden) peuplerPrimes();
@@ -6128,32 +6162,105 @@ function peuplerPioche(): void {
 }
 
 /**
- * Un bouton par lexique.
+ * Le lexique, en une ligne.
  *
  * CHOISIR LE LEXIQUE, C'EST CHOISIR LA LANGUE DE LA PARTIE. Le nom de la langue
  * passe donc avant celui du dictionnaire : on cherche « English » bien avant de
- * savoir ce qu'est un EEL 22. Le detail se lit dessous.
+ * savoir ce qu'est un EEL 22.
+ *
+ * Un menu deroulant plutot qu'une rangee de boutons : il y aura bientot quatre
+ * lexiques, et une rangee qui grandit a chaque ajout mangerait la moitie du
+ * panneau pour un reglage qu'on touche une fois.
  */
 function peuplerDico(): void {
-  const box = $("r-dico");
-  if (box.childElementCount === 0) {
-    for (const d of tousLesDictionnaires()) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.dataset["v"] = d.id;
-      b.innerHTML = "";
-      b.append(d.langue === "en" ? "English" : "Français");
-      const em = document.createElement("em");
-      em.textContent = d.nom;
-      b.append(document.createElement("br"), em);
-      b.title = d.detail;
-      b.addEventListener("click", () => { cDico = d.id; peuplerDico(); });
-      box.appendChild(b);
-    }
+  const menu = $("r-dico") as HTMLSelectElement;
+  menu.replaceChildren();
+  for (const d of tousLesDictionnaires()) {
+    const o = document.createElement("option");
+    o.value = d.id;
+    o.textContent = `${d.langue === "en" ? "English" : "Français"} — ${d.nom}`;
+    o.title = d.detail;
+    menu.appendChild(o);
   }
-  for (const b of box.querySelectorAll("button")) {
-    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cDico));
+  menu.value = cDico;
+}
+
+($("r-dico") as HTMLSelectElement).addEventListener("change", () => {
+  cDico = ($("r-dico") as HTMLSelectElement).value;
+});
+
+/** Les quatre formats de la fenetre simple. */
+function peuplerFormat(): void {
+  for (const b of $("r-format").querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === cFormat));
   }
+  // « Personnalise » fait apparaitre les deux grilles de nombres -- les memes
+  // que la fenetre complete, pas une seconde paire a tenir a jour.
+  if (!prefs.avance) $("r-nombres-bloc").hidden = cFormat !== "perso";
+}
+
+for (const b of $("r-format").querySelectorAll("button")) {
+  b.addEventListener("click", () => {
+    cFormat = (b as HTMLElement).dataset["v"] as typeof cFormat;
+    if (cFormat === "7/7") { cTirage = 7; cJouables = 7; }
+    else if (cFormat === "7/8") { cTirage = 8; cJouables = 7; }
+    else if (cFormat === "8/8") { cTirage = 8; cJouables = 8; }
+    cPrimes = primesHabituelles();
+    peuplerFormat();
+    peuplerNombres();
+    avertirSiExplosif();
+  });
+}
+
+$("r-joker").addEventListener("click", () => {
+  cJoker = !cJoker;
+  $("r-joker").setAttribute("aria-pressed", String(cJoker));
+});
+
+/**
+ * Montre la fenetre simple ou la fenetre complete.
+ *
+ * CE QUI DISPARAIT N'EST PAS PERDU : les reglages caches gardent la valeur de
+ * la partie en cours, et la fenetre simple en impose quelques-uns -- le lexique
+ * de la langue, le sac du jeu classique. C'est le contrat : moins de decisions,
+ * pas moins de partie.
+ */
+function appliquerLeModeDeReglages(): void {
+  const avance = prefs.avance;
+  $("r-avance").setAttribute("aria-pressed", String(avance));
+  $("r-dico-bloc").hidden = !avance;
+  $("r-pioche-bloc").hidden = !avance;
+  $("r-primes-bloc").hidden = !avance;
+  $("r-format-bloc").hidden = avance;
+  $("r-nombres-bloc").hidden = !avance && cFormat !== "perso";
+  // Quinze secondes par coup, c'est un reglage de joueur aguerri : il coute
+  // cher au serveur et ne laisse le temps de rien a qui decouvre.
+  for (const b of $("r-chrono").querySelectorAll("button[data-avance]")) {
+    (b as HTMLElement).hidden = !avance;
+  }
+}
+
+$("r-avance").addEventListener("click", () => {
+  prefs.avance = !prefs.avance;
+  garderPreferences();
+  // La fenetre simple impose le sac et le lexique : en y revenant, on les
+  // remet, sans quoi le panneau montrerait un reglage qu'il ne propose plus.
+  if (!prefs.avance) simplifierLesReglages();
+  appliquerLeModeDeReglages();
+  peuplerPioche();
+  peuplerDico();
+  peuplerFormat();
+  avertirSiExplosif();
+});
+
+/** Ce que la fenetre simple decide a la place du joueur. */
+function simplifierLesReglages(): void {
+  // Le lexique est celui de la langue : la fenetre simple n'en parle pas.
+  cDico = DICO_PAR_LANGUE[langue()];
+  // Le sac du jeu classique, qui se recharge sur une grille sans bord -- sinon
+  // elle s'arreterait au bout de cent caramels.
+  cPioche = cBornes === null ? "sac102boucle" : "sac102";
+  cFormat = formatDe(cTirage, cJouables);
 }
 
 /** Ouvre les reglages sur l'etat courant de la partie. */
@@ -6162,6 +6269,7 @@ function ouvrirReglages(): void {
   cJouables = cfg.jouables;
   cPioche = cfg.pioche;
   cDico = cfg.dictionnaire;
+  cJoker = cfg.joker === true;
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
@@ -6175,12 +6283,16 @@ function ouvrirReglages(): void {
   peuplerChrono();
   peuplerGrille();
   avertirSiExplosif();
-  ($("r-joker") as HTMLInputElement).checked = cfg.joker === true;
+  $("r-joker").setAttribute("aria-pressed", String(cJoker));
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = t("Primes de farfouilles");
+  cFormat = formatDe(cTirage, cJouables);
+  if (!prefs.avance) simplifierLesReglages();
   peuplerNombres();
   peuplerPioche();
   peuplerDico();
+  peuplerFormat();
+  appliquerLeModeDeReglages();
   $("r-error").hidden = true;
   // SOUS LE RELIQUAT, PAS PLUS HAUT. Regler une partie, c'est regarder le
   // tirage et les lettres restantes en meme temps : un panneau qui les
@@ -6190,10 +6302,20 @@ function ouvrirReglages(): void {
   // change de hauteur avec la taille des caramels, qui change avec le nombre
   // de lettres. Une constante serait juste aujourd'hui et fausse au premier
   // tirage a quinze.
+  // LA FENETRE DOIT TENIR A L'ECRAN, MEME SUR UN PETIT.
+  //
+  // Le panneau se posait sous le reliquat quoi qu'il arrive, avec une hauteur
+  // plancher de 240 pixels : sur un ecran bas, son pied -- donc le bouton qui
+  // valide -- tombait hors de la fenetre, et rien ne pouvait l'y ramener
+  // puisque la page, elle, ne defile pas. On remonte donc le panneau autant
+  // qu'il le faut, quitte a couvrir le chevalet : un reglage qu'on ne peut pas
+  // valider ne sert a rien.
   const bas = Math.round($("sac").getBoundingClientRect().bottom);
-  $("reglages").style.paddingTop = `${bas}px`;
+  const MINIMUM = 260, AIR = 14;
+  const haut = Math.max(0, Math.min(bas, innerHeight - MINIMUM - AIR));
+  $("reglages").style.paddingTop = `${haut}px`;
   ($("reglages").firstElementChild as HTMLElement).style.maxHeight =
-    `${Math.max(240, innerHeight - bas - 14)}px`;
+    `${Math.max(MINIMUM, innerHeight - haut - AIR)}px`;
   $("reglages").hidden = false;
 }
 
@@ -6204,7 +6326,7 @@ $("r-appliquer").addEventListener("click", () => {
   envoyer({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
     dictionnaire: cDico,
-    joker: ($("r-joker") as HTMLInputElement).checked,
+    joker: cJoker,
     primes: cPrimes,
     chrono: cChrono,
     bornes: cBornes,

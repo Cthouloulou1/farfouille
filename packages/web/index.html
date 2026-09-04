@@ -824,6 +824,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rg-corps .prime b { display: block; width: 100%; text-align: center; font-size: 11px; color: var(--ink-soft); font-weight: 500; }
 .petit { margin-top: 10px; padding: 5px 9px; font-size: 11.5px; }
 .rg-pied { display: flex; gap: 8px; margin-top: 14px; }
+/* Les nombres a gauche, le joker a droite : c'est le meme reglage, « combien de
+   caramels et lesquels ». La colonne du joker ne prend que ce qu'il lui faut. */
+.rg-corps .reglage.lettres { display: flex; gap: 18px; align-items: flex-start; }
+/* `hidden` doit l'emporter sur les `display` poses ailleurs, plus specifiques
+   que la regle du navigateur. Sans cela, un bloc cache reste a l'ecran. */
+.rg-corps [hidden], .rg-corps .choix button[hidden] { display: none; }
+.rg-corps .reglage.lettres .colonne { flex: 1; min-width: 0; }
+.rg-corps .reglage.lettres .colonne.mince { flex: none; width: 210px; }
+.rg-corps .reglage.lettres .colonne.mince .bascule { margin-top: 2px; height: 40px;
+  border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); }
+.rg-corps select { width: 100%; padding: 9px 11px; font-family: inherit;
+  font-size: .88em; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 5px; }
+.rg-corps select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rg-corps > .reglage:first-child .bascule { border: 1px solid var(--rule);
+  border-radius: 5px; background: var(--panel); }
 .rg-pied .appliquer { flex: 3; margin: 0; }
 .rg-pied #rg-close { flex: 1; padding: 9px; font-size: 13px; }
 .appliquer { width: 100%; padding: 9px; font-size: 13.5px; border-color: var(--accent); color: var(--accent); }
@@ -1172,8 +1188,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="large">
     <div class="rg-corps">
       <div class="reglage">
+        <button type="button" class="bascule" id="r-avance" aria-pressed="false">
+          <span class="voyant"></span>Réglages avancés
+        </button>
+      </div>
+
+      <div class="reglage" id="r-dico-bloc">
         <label>Dictionnaire</label>
-        <div class="choix hautes" id="r-dico"></div>
+        <select id="r-dico"></select>
       </div>
 
       <div class="reglage">
@@ -1192,23 +1214,39 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage">
-        <label>Nombre de lettres</label>
-        <div class="nombres" id="r-tirage"></div>
+      <div class="reglage" id="r-format-bloc">
+        <label>Format</label>
+        <div class="choix hautes" id="r-format">
+          <button type="button" data-v="7/7">Normal<em>7 sur 7</em></button>
+          <button type="button" data-v="7/8">7 sur 8<em>7 posables sur 8</em></button>
+          <button type="button" data-v="8/8">7 et 8<em>8 posables sur 8</em></button>
+          <button type="button" data-v="perso">Personnalisé</button>
+        </div>
       </div>
 
-      <div class="reglage">
-        <label>Nombre de lettres jouables</label>
-        <div class="nombres" id="r-jouables"></div>
+      <div class="reglage lettres" id="r-lettres-bloc">
+        <div class="colonne" id="r-nombres-bloc">
+          <label>Nombre de lettres</label>
+          <div class="nombres" id="r-tirage"></div>
+          <label>Nombre de lettres jouables</label>
+          <div class="nombres" id="r-jouables"></div>
+        </div>
+        <div class="colonne mince">
+          <label>Partie joker</label>
+          <button type="button" class="bascule" id="r-joker" aria-pressed="false">
+            <span class="voyant"></span>Toujours un joker
+          </button>
+        </div>
       </div>
 
       <div class="reglage">
         <label>Temps par coup</label>
         <div class="choix hautes" id="r-chrono">
-          <button type="button" data-v="15">Frades<br><em>15 s</em></button>
+          <button type="button" data-v="15" data-avance>Frades<br><em>15 s</em></button>
           <button type="button" data-v="30">Super blitz<br><em>30 s</em></button>
           <button type="button" data-v="60">Blitz<br><em>60 s</em></button>
           <button type="button" data-v="120">Semi-rapide<br><em>2 min</em></button>
+          <button type="button" data-v="180">Long<br><em>3 min</em></button>
           <button type="button" data-v="libre">Infini</button>
           <div class="perso" id="r-perso-case">Personnalisé
             <span><input type="text" inputmode="numeric" id="r-perso" maxlength="4"> s</span>
@@ -1243,7 +1281,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
-      <div class="reglage">
+      <div class="reglage" id="r-pioche-bloc">
         <label>Tirage des lettres</label>
         <div class="choix" id="r-pioche">
           <button type="button" data-v="probabilites">Probabilités pondérées</button>
@@ -1254,10 +1292,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
       <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
-        <label class="case"><input type="checkbox" id="r-joker"> Joker</label>
       </div>
 
-      <div class="reglage">
+      <div class="reglage" id="r-primes-bloc">
         <button class="creer-open" id="r-primes-open" type="button">Primes de farfouilles</button>
         <div class="primes" id="r-primes" hidden>
           <p class="apres">Prime selon le nombre de lettres posées</p>
