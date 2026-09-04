@@ -375,6 +375,17 @@ export class Game {
    * pas lancer une partie qu'on n'a pas choisie.
    */
   demarree = false;
+
+  /**
+   * Instant, en millisecondes, ou le lancement s'acheve. Zero = aucun en cours.
+   *
+   * UNE GRILLE PERMANENTE NE DEMARRE PAS TOUTE SEULE quand elle est neuve.
+   * C'est le jour du lancement : on veut que la salle soit pleine quand le
+   * premier tirage tombe, pas qu'il soit tombe la veille devant personne. Un
+   * administrateur ouvre donc un compte a rebours, tout le monde le voit
+   * descendre, et le tirage arrive a zero.
+   */
+  lancementA = 0;
   /**
    * Qui est dans le salon. Tenu a jour par le transport : le moteur n'a pas de
    * WebSocket, mais le duplicate a besoin de savoir QUI etait la au moment du
@@ -1803,6 +1814,24 @@ export class Game {
     // Le salon s'etait vide au milieu d'une avance : elle a pu s'arreter avant
     // d'avoir ses cinq coups. On la reprend la ou elle en etait.
     void this.precalculer();
+  }
+
+  /**
+   * Ouvre le compte a rebours du lancement.
+   *
+   * Rend faux si la partie est deja lancee, deja partie, ou finie -- il n'y a
+   * alors rien a lancer.
+   */
+  lancer(secondes: number): boolean {
+    if (this.demarree || this.finie) return false;
+    if (this.lancementA > Date.now()) return false;
+    this.lancementA = Date.now() + Math.max(1, Math.round(secondes)) * 1000;
+    this.emit();
+    setTimeout(() => {
+      this.lancementA = 0;
+      void this.demarrer();
+    }, Math.max(1, Math.round(secondes)) * 1000);
+    return true;
   }
 
   /** Lance la partie : premier tirage, et le chrono si la variante en a un. */

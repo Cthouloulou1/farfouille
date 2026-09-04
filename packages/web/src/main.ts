@@ -102,6 +102,14 @@ let tops: Record<string, number> = {};
 let nonTrouves = 0;
 /** Fin du decompte d'avant-coup, 0 s'il n'y en a pas. */
 let decompteJusqua = 0;
+/**
+ * Instant ou le compte a rebours du lancement s'acheve. Zero = aucun en cours.
+ *
+ * Une grille permanente neuve n'a personne pour la regler : c'est
+ * l'administration qui la lance, et tout le monde voit descendre les memes
+ * dix secondes.
+ */
+let lancementA = 0;
 /** La partie du salon a-t-elle commence ? Un salon neuf attend ses reglages. */
 let demarree = true;
 /**
@@ -4235,6 +4243,11 @@ function submit() {
 
 $("reveal").addEventListener("click", () => envoyer({ t: "reveal" }));
 
+$("lancer").addEventListener("click", () => {
+  envoyer({ t: "lancer" });
+  $("lancer-wrap").hidden = true;
+});
+
 /**
  * REJOUER LA MEME PARTIE, une fois celle-ci finie.
  *
@@ -4531,12 +4544,16 @@ appliquerLesHauteurs();
 setInterval(() => {
   const now = Date.now() + clockSkew;
   // Decompte d'avant-coup : 2, puis 1, puis le jeu commence.
-  const reste2 = decompteJusqua - now;
+  // Le compte a rebours du LANCEMENT se lit au meme endroit, en plus long :
+  // dix secondes plutot que deux, et il ouvre la partie au lieu d'un coup.
+  const reste2 = Math.max(decompteJusqua, lancementA) - now;
   if (reste2 > 0) {
     $("decompte").hidden = false;
     $("decompte").textContent = String(Math.ceil(reste2 / 1000));
   } else {
     $("decompte").hidden = true;
+    // Le bouton reparait si le lancement a echoue ; il disparait des qu'il part.
+    if (lancementA !== 0) lancementA = 0;
   }
   // LE TEMPS DE LA PARTIE EST LA SOMME DE SES COUPS, PAS L'HORLOGE DU MUR.
   //
@@ -4577,6 +4594,7 @@ function applyState(s: {
   last?: MoveInfo | null;
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
+  lancementA?: number;
   gerant?: string | null;
   tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
   demarree?: boolean; coupsMax?: number | null;
@@ -4618,6 +4636,12 @@ function applyState(s: {
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
   $("reglages-open").hidden = gerant !== me || permanent;
   decompteJusqua = s.decompteJusqua ?? 0;
+  lancementA = s.lancementA ?? 0;
+  // LANCER, C'EST LE GESTE DU JOUR DU LANCEMENT. Une grille permanente
+  // n'appartient a personne, donc personne ne la regle : sans ce bouton, une
+  // grille neuve resterait a son coup zero pour toujours.
+  $("lancer-wrap").hidden = !(permanent && s.demarree === false
+    && moiCompte?.admin === true && lancementA === 0);
   demarree = s.demarree !== false;
   coupsMax = s.coupsMax ?? null;
   dureeMax = s.dureeMax ?? null;
@@ -5719,10 +5743,12 @@ function peindreAccueil(): void {
   // ancien au plus recent.
   const liste = [...salonsRecus].sort((a, b) => Number(b.mondiale) - Number(a.mondiale));
   const vus = liste.filter(retenu);
-  const star = vus.find((s) => s.mondiale);
-  if (star !== undefined) vedette.appendChild(tuileStar(star));
-  vedette.hidden = star === undefined;
-  $("mur").classList.toggle("sans-star", star === undefined);
+  // UNE TUILE PAR GRILLE PERMANENTE. Il y en a une par langue, et « Tout
+  // afficher » les montre toutes : la colonne s'allonge, elle ne les serre pas.
+  const stars = vus.filter((s) => s.mondiale);
+  for (const s of stars) vedette.appendChild(tuileStar(s));
+  vedette.hidden = stars.length === 0;
+  $("mur").classList.toggle("sans-star", stars.length === 0);
 
   const autres = vus.filter((s) => !s.mondiale);
   for (const s of autres) rouleau.appendChild(carteSalon(s));

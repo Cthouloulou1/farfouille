@@ -148,6 +148,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Rejouer": "Play again",
   "Revoir la partie": "Review the game",
   "Révéler le top": "Reveal the top",
+  "Lancer la partie": "Start the game",
   "Coup": "Move",
   "Coup 1": "Move 1",
   "Coups joués": "Moves played",
@@ -337,4 +338,7 @@ export const EN: Readonly<Record<string, string>> = {
   "seul le propriétaire règle le salon": "only the owner sets the room up",
   "seul le créateur du salon peut le supprimer": "only the creator can delete the room",
   "trop de mots d'un coup": "too many words at once",
+  "réservé à l'administration": "reserved for the administration",
+  "ce salon se règle, il ne se lance pas": "this room is set up, not started",
+  "la partie est déjà lancée": "the game is already starting",
 };

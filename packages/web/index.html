@@ -548,7 +548,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .mur { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 /* La colonne de droite ne pousse pas la rangee : son contenu est detache,
    et c'est la tuile star qui donne la hauteur. */
-.vedette { display: flex; }
+/* Une tuile star par langue, l'une sous l'autre : « Tout afficher » les montre
+   toutes, et la colonne s'allonge plutot que de les serrer cote a cote. */
+.vedette { display: flex; flex-direction: column; gap: 14px; }
 .vedette[hidden] { display: none; }
 .vedette > * { flex: 1; }
 /* Sans salon star -- filtre 15x15, ou grille mondiale absente -- les salons
@@ -1080,6 +1082,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="poignee-cote" id="poignee-cote"
          title="Tirer pour redimensionner — double-clic pour rétablir"></div>
     <div class="panel" id="panel-live">
+      <div class="block" id="lancer-wrap" hidden>
+        <button id="lancer">Lancer la partie</button>
+      </div>
       <div class="block fin" id="fin" hidden>Partie terminée</div>
       <div class="block" id="rejouer-wrap" hidden>
         <button id="rejouer">Rejouer</button>

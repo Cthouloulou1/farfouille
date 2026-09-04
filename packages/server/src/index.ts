@@ -24,6 +24,7 @@ import {
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import {
   avec, avecDictionnaire, configParDefaut, deserialiser, serialiser,
+  type ConfigPartie,
 } from "../../engine/src/config.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
@@ -51,6 +52,16 @@ function arg(name: string, fallback: string): string {
 
 const PORT = Number(arg("port", "3000"));
 const GAME_ID = arg("partie", "mondiale");
+/** La grille permanente anglaise, jumelle de la francaise. */
+const GAME_ID_EN = arg("partie-en", "mondiale-en");
+const NOM_MONDIALE_EN = "The Infinite Grid";
+/**
+ * Secondes de compte a rebours quand l'administration lance une grille.
+ *
+ * Dix : le temps de prevenir la salle, de reposer les mains sur le clavier, et
+ * de regarder les chiffres descendre ensemble.
+ */
+const DECOMPTE_LANCEMENT = 10;
 const LAYOUT = arg("pavage", "pave1") as LayoutName;
 /** Bouton "reveler le top" : commodite de test, absente pour les joueurs. */
 const REVEAL = process.argv.includes("--reveler");
@@ -306,6 +317,7 @@ function publicState(s: Salon) {
     solving: g.solving,
     actif: g.actif,
     demarree: g.demarree,
+    lancementA: g.lancementA,
     coupsMax: g.cfg.coupsMax,
     dureeMax: g.cfg.dureeMax,
     debutDeLaPartie: g.debutDeLaPartie,
@@ -403,13 +415,29 @@ async function ouvrirLesSalons(): Promise<void> {
     process.exit(1);
   }
   surveiller(salonMondial);
-  // La grille permanente n'a pas de proprietaire pour la regler : elle demarre
-  // d'office, elle est le jeu par defaut du site.
-  salonMondial.partie.demarree = true;
+  // UNE GRILLE PERMANENTE DEJA JOUEE REPART D'OFFICE : personne ne la regle, et
+  // ses milliers de coups n'attendent l'autorisation de personne. Une grille
+  // permanente NEUVE, elle, attend qu'un administrateur la lance -- c'est le
+  // jour du lancement, et le premier tirage doit tomber devant du monde.
+  if (salonMondial.partie.moves.length > 0) salonMondial.partie.demarree = true;
+
+  // La grille permanente anglaise, jumelle de la francaise. Elle ne se voit
+  // qu'en anglais, ou sous « Tout afficher ».
+  try {
+    const salonAnglais = await ouvrirSalon({
+      id: GAME_ID_EN, nom: NOM_MONDIALE_EN, proprietaire: null, prive: false,
+      layout: LAYOUT, cfg: cfgMondialeAnglaise(), nouveau: false,
+    });
+    surveiller(salonAnglais);
+    if (salonAnglais.partie.moves.length > 0) salonAnglais.partie.demarree = true;
+  } catch (e) {
+    // Elle n'est pas vitale : si son verrou traine, le site tourne sans elle.
+    console.error(`[salon] grille permanente anglaise indisponible : ${(e as Error).message}`);
+  }
 
   // Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
   for (const e of salonsEnregistres()) {
-    if (e["id"] === GAME_ID) continue;
+    if (e["id"] === GAME_ID || e["id"] === GAME_ID_EN) continue;
     try {
       const s = await ouvrirSalon({
         id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? null,
@@ -474,6 +502,19 @@ const MIME: Record<string, string> = {
   // les vignettes de l'accueil restaient vides sans que rien ne le dise.
   ".svg": "image/svg+xml; charset=utf-8",
 };
+
+/**
+ * La variante de la grille permanente anglaise.
+ *
+ * La meme que la francaise -- grille sans bord, sac du jeu classique qui se
+ * recharge -- avec son lexique a elle. Une partie deja commencee garde la
+ * sienne : `ouvrirSalon` relit celle du journal avant celle-ci.
+ */
+function cfgMondialeAnglaise(): ConfigPartie {
+  return avec(avecDictionnaire(configParDefaut(), DICO_PAR_LANGUE.en), {
+    bornes: null, pioche: "sac102boucle", chrono: null,
+  });
+}
 
 /**
  * La partie qu'on trouve en entrant dans un salon neuf.
@@ -1042,6 +1083,37 @@ wss.on("connection", (ws, req) => {
         moi.nom, msg.dir as Dir, Number(msg.x), Number(msg.y), String(msg.typed ?? ""),
       );
       send(ws, { t: "result", ...r });
+      return;
+    }
+
+    /**
+     * LANCER UNE GRILLE PERMANENTE NEUVE.
+     *
+     * Elle n'appartient a personne, donc personne ne la regle -- et sans ce
+     * bouton elle ne partirait jamais. C'est le geste du jour du lancement :
+     * l'administration ouvre un compte a rebours, la salle le voit descendre,
+     * et le premier tirage tombe a zero devant tout le monde.
+     */
+    if (msg.t === "lancer") {
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      if (!estAdmin) {
+        send(ws, { t: "result", ok: false, message: "réservé à l'administration" });
+        return;
+      }
+      if (!estPermanent(s)) {
+        send(ws, { t: "result", ok: false, message: "ce salon se règle, il ne se lance pas" });
+        return;
+      }
+      if (!s.partie.lancer(DECOMPTE_LANCEMENT)) {
+        send(ws, { t: "result", ok: false, message: "la partie est déjà lancée" });
+        return;
+      }
+      console.log(`[salon] "${s.nom}" lance par ${moi.nom} dans ${DECOMPTE_LANCEMENT} s`);
+      broadcast(s.id, { t: "state", state: publicState(s) });
+      // A l'echeance, la partie s'ouvre : on rediffuse pour que le tirage
+      // apparaisse sans attendre qu'autre chose bouge.
+      setTimeout(() => broadcast(s.id, { t: "state", state: publicState(s) }),
+        DECOMPTE_LANCEMENT * 1000 + 250);
       return;
     }
 
