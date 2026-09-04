@@ -11,3 +11,4 @@ layouts.json
 
 # Fichiers d essai jetables
 *.tmp.mjs
+__pycache__/

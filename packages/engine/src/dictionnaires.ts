@@ -86,7 +86,7 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
     id: "ods9",
     nom: "ODS 9",
     langue: "fr",
-    detail: "Le dictionnaire officiel du Scrabble francophone. 407 128 mots.",
+    detail: "Le lexique officiel du jeu francophone. 407 128 mots.",
     source: "dictionnaire.txt",
     dawg: "dawg.bin",
     gaddag: "gaddag.bin",

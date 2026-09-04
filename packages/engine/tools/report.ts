@@ -83,11 +83,11 @@ const wall = (performance.now() - t0) / 1000;
 
 const placed = new Set<number>();
 let totalScore = 0;
-let bingos = 0;
+let farfouilles = 0;
 for (const r of log) {
   for (const p of r.move.placements) placed.add(key(p.x, p.y));
   totalScore += r.move.score;
-  if (r.move.placements.length === 7) bingos++;
+  if (r.move.placements.length === 7) farfouilles++;
 }
 
 const iso = log.map((r) => r.isotops);
@@ -97,7 +97,7 @@ const rejections = log.reduce((a, r) => a + r.rejections, 0);
 
 console.log(`${log.length} coups joues en ${wall.toFixed(1)} s de calcul total`);
 console.log(`score cumule de la grille : ${totalScore.toLocaleString("fr")}   (moyenne ${mean(scores).toFixed(1)} par coup)`);
-console.log(`scrabbles (7 caramels)    : ${bingos} (${(100 * bingos / log.length).toFixed(1)} %)`);
+console.log(`farfouilles (7 caramels)  : ${farfouilles} (${(100 * farfouilles / log.length).toFixed(1)} %)`);
 console.log(`tirages rejetes           : ${rejections} pour ${log.length} coups (${(100 * rejections / (rejections + log.length)).toFixed(1)} %)`);
 console.log();
 

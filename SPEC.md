@@ -20,8 +20,9 @@ enchaîne sur le coup suivant.
 Ce n'est donc pas une partie que l'on gagne, c'est une grille que l'on construit
 ensemble. Le classement compte les coups trouvés, la grille cumule les points.
 
-**Le jeu ne s'appelle jamais « Scrabble »**, ni dans le code, ni dans
-l'interface, ni dans la documentation.
+**Le jeu ne porte jamais le nom du jeu de societe dont il descend** — ni dans
+le code, ni dans les commentaires, ni dans l'interface, ni dans cette
+spécification. Le mot du jeu est **farfouille**.
 
 ---
 
@@ -126,7 +127,7 @@ joueur de duplicate, et l'inverser rendrait la notation étrangère à l'usage.
 
 #### Les deux écoles : française et anglaise
 
-Les deux mondes du scrabble n'ont pas mis les lettres du même côté du plateau.
+Les deux écoles n'ont pas mis les lettres du même côté du plateau.
 
 | | lignes | colonnes | centre horizontal | centre vertical |
 |---|---|---|---|---|
@@ -611,7 +612,7 @@ Une lettre absente du tirage est **ignorée à la frappe** — sauf si un joker
 reste, qui la prend. Aucun message : il ne se passe simplement rien.
 
 **Le score du mot en cours s'affiche à chaque lettre.** En tapant `RUILERA` on
-lit 2, 4, … 14, puis 66 à la dernière lettre avec la prime de scrabble. Il est
+lit 2, 4, … 14, puis 66 à la dernière lettre avec la prime de farfouille. Il est
 calculé par le moteur lui-même, donc il tient compte des bonus, des collages et
 de l'affectation des jokers.
 
@@ -715,7 +716,7 @@ l'écran.
 
 Un **plateau borné**, lui, ne bouge pas. Ses repères n'ont donc aucune raison de
 vivre à l'autre bout du canevas, loin de la case qu'ils nomment — c'est ainsi que
-le font les jeux de société et les logiciels de scrabble, et cela se lit bien
+le font les jeux de société et les logiciels du genre, et cela se lit bien
 mieux.
 
 **En haut et à gauche seulement.** Un plateau de bois les répète des quatre côtés
@@ -1580,11 +1581,11 @@ qui **reste à construire**, et ce qui **a été vu sans être expliqué**.
 | Sujet | État |
 |---|---|
 | **Passage à l'échelle du générateur** | **Arbitré : on l'assume.** Le coût croît linéairement avec le nombre de coups joués (§15). Le précalcul de quelques coups d'avance le masque ; dans le cas improbable où les joueurs vont plus vite que la machine, ils attendent. |
-| **Taux de scrabbles à 64 %** | Mesuré, pas décidé. Conséquence directe de la table de tirage : le sac classique donnerait 30 % (§15). |
+| **Taux de farfouilles à 64 %** | Mesuré, pas décidé. Conséquence directe de la table de tirage : le sac classique donnerait 30 % (§15). |
 | **Motif des cases bonus** | Couture corrigée (période 14, §3). Le motif définitif, conçu pour l'infini, reste à choisir parmi les trois pistes de §3. |
 | **Mots de plus de 15 lettres** | L'ODS s'arrête à 15, la grille non. Les étendre supposerait de dériver pluriels et conjugaisons — ce ne sont plus des formes officielles. |
 | **Avantage de ping** | Non résolu. Pistes : mesurer le temps client depuis l'affichage du tirage, avec un plafond anti-triche. |
-| **Nom du jeu** | À trouver. Le mot du jeu est **farfouille**, jamais « scrabble ». |
+| **Nom du jeu** | À trouver. Le mot du jeu est **farfouille** (§1). |
 | **Deux colonnes « Coup »** | Sur la barre du chevalet, l'une porte le **numéro** du coup, l'autre sa **durée**. Se lit dans le contexte ; à renommer si l'ambiguïté gêne. |
 | **La police du reste du jeu** | Seule la feuille de route est passée à la monospace du système. Le reste tient encore d'IBM Plex Mono. |
 
@@ -1792,17 +1793,17 @@ craignait.
 
 Les 4,6 % restants sont normaux et voulus : sur le plateau officiel aussi, deux
 MCT distantes de 7 cases peuvent être couvertes par un mot de 8 lettres. C'est
-simplement plus fréquent ici, avec 69 % de scrabbles.
+simplement plus fréquent ici, avec 69 % de farfouilles.
 
-### Le jeu est dominé par les scrabbles
+### Le jeu est dominé par les farfouilles
 
 ```
-sac classique 102 caramels   scrabbles 30,0 %   score moyen 75,8   rejets 26,4 %
-table calibrée (dico 2-9)    scrabbles 52-69 %  score moyen 83,3   rejets 13,2 %
+sac classique 102 caramels   farfouilles 30,0 %   score moyen 75,8   rejets 26,4 %
+table calibrée (dico 2-9)    farfouilles 52-69 %  score moyen 83,3   rejets 13,2 %
 ```
 
-Décomposition : le Scrabble 15x15 classique tourne autour de 10-15 % de
-scrabbles ; **la grille infinie double ce taux** (30 %, il y a toujours de la
+Décomposition : le jeu classique 15x15 tourne autour de 10-15 % de
+farfouilles ; **la grille infinie double ce taux** (30 %, il y a toujours de la
 place pour poser 7 caramels) ; **la table calibrée le redouble encore** (64 %).
 
 C'est mécanique : une table calibrée sur la fréquence des lettres *dans les
@@ -1811,7 +1812,7 @@ délibérément plus dur — trop de `U`, `V`, `H`, `F`, pas assez de `S`, `R`, 
 par rapport à ce dont les mots ont besoin.
 
 Conséquence sur le jeu : la prime de 50 points devient quasi constante et
-l'exercice se réduit à placer son scrabble au mieux plutôt qu'à le trouver.
+l'exercice se réduit à placer sa farfouille au mieux plutôt qu'à la trouver.
 
 ### Forme de la grille
 

@@ -31,7 +31,7 @@ if (tiles[2] && tiles[2][13]?.length === 14) tiles[2][13] += ".";
 function run(label: string) {
   const log = simulate(N, "compare", dawg, gaddag);
   const total = log.reduce((a, r) => a + r.move.score, 0);
-  const bingos = log.filter((r) => r.move.placements.length === 7).length;
+  const farfouilles = log.filter((r) => r.move.placements.length === 7).length;
   let nonuples = 0, quadruples = 0;
   for (const r of log) {
     let m = 1;
@@ -43,7 +43,7 @@ function run(label: string) {
   const iso = log.map((r) => r.isotops).sort((a, b) => a - b);
   console.log(
     `${label.padEnd(16)} ${(total / log.length).toFixed(1).padStart(6)} ` +
-    `${String(best).padStart(6)} ${(100 * bingos / log.length).toFixed(0).padStart(7)}% ` +
+    `${String(best).padStart(6)} ${(100 * farfouilles / log.length).toFixed(0).padStart(7)}% ` +
     `${(100 * nonuples / log.length).toFixed(1).padStart(8)}% ${(100 * quadruples / log.length).toFixed(1).padStart(9)}% ` +
     `${String(iso[Math.floor(iso.length / 2)]).padStart(8)}`,
   );
@@ -53,7 +53,7 @@ console.log(`${N} coups, meme graine de pioche pour tous.`);
 console.log("Les parties divergent des le coup 2 : le top retenu differe selon le pave,");
 console.log("donc le reliquat aussi. La comparaison est statistique, pas coup a coup.
 ");
-console.log("pave             score  meilleur scrabbles  nonuples quadruples  isotops");
+console.log("pave             score  meilleur farfouil.  nonuples quadruples  isotops");
 console.log("-".repeat(76));
 for (const name of ["croixCourte", "croixEnrichie"] as LayoutName[]) { setLayout(name); run(name); }
 tiles.forEach((t, i) => { setCustomLayout(t); run(`pavage ${i + 1}`); });

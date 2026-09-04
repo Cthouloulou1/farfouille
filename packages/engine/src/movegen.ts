@@ -47,7 +47,7 @@ const OFF = 20;
  * ADMISSIBLE PAR CONSTRUCTION : chaque terme surestime separement, donc la
  * somme surestime. C'est ce qui garantit qu'aucun top n'est perdu.
  *
- * En particulier le majorant compte TOUJOURS la prime de scrabble et la valeur
+ * En particulier le majorant compte TOUJOURS la prime de farfouille et la valeur
  * des sept caramels, meme sur une zone sans la moindre case bonus. Un
  * "blanchard" -- sept caramels poses sur des cases blanches -- a donc un
  * plafond de 70 a 90 points et ne peut pas etre elague par erreur. C'est

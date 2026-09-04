@@ -7,8 +7,8 @@ La refonte de la page d'accueil : le bandeau d'identité, la mise en avant du
 ouverts, et l'accès au compte. Deux écrans sont livrés — **la même page dans
 deux états de session**.
 
-Le jeu ne s'appelle jamais « scrabble », ni dans le code, ni dans l'interface
-(SPEC.md §1).
+Le jeu ne porte jamais le nom du jeu de société dont il descend — ni dans le
+code, ni dans l'interface. Le mot du jeu est **farfouille** (SPEC.md §1).
 
 ## À propos des fichiers de design
 

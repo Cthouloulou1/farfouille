@@ -35,9 +35,9 @@ export const EN: Readonly<Record<string, string>> = {
   "Inscription": "Sign up",
   "Se connecter": "Sign in",
   "Se déconnecter": "Sign out",
-  "Jouer sans compte": "Play without an account",
+  "Jouer sans compte": "Play as a guest",
   "Pseudo d'invité": "Guest name",
-  "Votre pseudo": "Your name",
+  "Votre pseudo": "Your user name",
   "Pseudo": "Username",
   "Mot de passe": "Password",
   "Mot de passe actuel": "Current password",
@@ -76,10 +76,10 @@ export const EN: Readonly<Record<string, string>> = {
   "Nombre de lettres jouables": "Tiles playable",
   "Temps par coup": "Time per move",
   // « Frades » est un mot de joueurs, sans equivalent anglais : a trancher.
-  "Frades": "Flash",
+  "Frades": "Nigel",
   "Super blitz": "Super blitz",
   "Blitz": "Blitz",
-  "Semi-rapide": "Semi-rapid",
+  "Semi-rapide": "Rapid",
   // Un seul mot pour deux endroits -- le temps par coup et la duree totale --
   // parce que le francais n'en emploie qu'un.
   "Infini": "Unlimited",
@@ -97,8 +97,8 @@ export const EN: Readonly<Record<string, string>> = {
   "Décompte": "Countdown",
   "Joker": "Blank",
   "Prime selon le nombre de lettres posées": "Bonus by number of tiles placed",
-  // « Farfouille » designe ici le coup qui pose tout son chevalet : « bingo »
-  // en anglais, « scrabble » chez les francophones.
+  // « Farfouille » designe ici le coup qui pose tout son chevalet. L'anglais
+  // dit « bingo », qui n'appartient a personne.
   "Primes de farfouilles": "Bingo bonuses",
   "Primes standards": "Standard bonuses",
   "Masquer les primes": "Hide bonuses",
@@ -198,22 +198,22 @@ export const EN: Readonly<Record<string, string>> = {
 
   // ------------------------------------------------------------- accueil
   "Créer un salon": "Create a room",
-  "Créer mon compte": "Create my account",
+  "Créer un compte": "Create an account",
   "Un nom, et vous entrez. Il vous suit d'un salon à l'autre.":
     "A name, and you are in. It follows you from room to room.",
   "Entrez un pseudo pour continuer": "Enter a name to continue",
   "Grille infinie, sans limite de temps, sans fin.":
-    "An infinite board, untimed, endless.",
+    "An infinite board, no time limit, endless.",
   "Jusqu'où pourrons-nous aller ?": "How far can we go?",
   "Rejoignez la plus grande partie de topping jamais créée.":
-    "Join the largest game of topping ever played.",
-  "aucun salon ouvert": "no room open",
-  "aucun salon de cette sorte": "no room of that kind",
+    "Join the largest game of topping ever created.",
+  "aucun salon ouvert": "no open room",
+  "aucun salon comme ça": "no room like that",
   "création impossible": "could not be created",
   "en attente": "waiting",
   "en pause": "paused",
   "terminée": "finished",
-  "sans chrono": "untimed",
+  "sans chrono": "no time limit",
   "Normal": "Normal",
   "{n} joueur{s} en ligne": "{n} player{s} online",
   "{n} en ligne": "{n} online",
@@ -232,19 +232,19 @@ export const EN: Readonly<Record<string, string>> = {
   "Demander la vérification": "Ask for verification",
   "Demande déposée.": "Request sent.",
   "Votre identité a été vérifiée. La pastille suit votre pseudo.":
-    "Your identity has been verified. The badge follows your name.",
+    "Your verification has been approved",
   "Renseignez votre prénom et votre nom : c'est votre identité qui se vérifie.":
-    "Give your first and last name: it is your identity that gets verified.",
+    "Input your first and last name",
   "aucune demande, aucun joueur vérifié": "no request, no verified player",
   "Adresse vérifiée.": "Address verified.",
   "Adresse non vérifiée.": "Address not verified.",
-  "Votre adresse est confirmée.": "Your address is confirmed.",
+  "Votre mail est confirmé.": "Your mail is confirmed.",
   "Envoyer le lien": "Send the link",
   "Lien demandé.": "Link requested.",
 
   // ----------------------------------------------------- pendant la partie
   // (« Partie terminée » est deja plus haut : le balisage l'affiche aussi.)
-  "la partie est terminée": "the game is over",
+  "la partie est terminée": "game over",
   "le coup n'est pas encore prêt": "the move is not ready yet",
   "pas encore connecté au salon": "not connected to the room yet",
   "déconnecté — reconnexion…": "disconnected — reconnecting…",
@@ -295,19 +295,19 @@ export const EN: Readonly<Record<string, string>> = {
 
   // ------------------------------------------------------ avertissements
   "Le temps de calcul du top grandit avec la grille et le tirage.":
-    "The time it takes to find the top grows with the board and the rack.",
+    "The top's calculation time grows with the board and the rack.",
   "ça risque de lagger au bout d'un moment.": "it will start to lag after a while.",
-  "Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque plus":
+  "Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque":
     "The bag refills forever: the game only ends when no move",
   "aucun coup n'est jouable, et elle sera très longue.":
-    "can be played at all, and it will run very long.",
+    "can be played at all, and it will be very long.",
 
   // -------------------------------------------- messages venus du serveur
   "Ce salon a été supprimé": "This room has been deleted",
   "Ce salon n'existe plus": "This room no longer exists",
   "Ce nom d'utilisateur n'est pas disponible": "That username is not available",
-  "Ce pseudo appartient à un compte : connectez-vous, ou prenez-en un autre":
-    "That name belongs to an account: sign in, or pick another",
+  "Ce nom est déjà utilisé : connectez-vous, ou prenez-en un autre":
+    "That name is already taken: sign in, or pick another",
   "cette grille est permanente": "this board is permanent",
   "seul le propriétaire règle le salon": "only the owner sets the room up",
   "seul le créateur du salon peut le supprimer": "only the creator can delete the room",

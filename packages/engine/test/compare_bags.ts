@@ -1,5 +1,5 @@
 /**
- * Le taux de scrabbles vient-il de la table de poids, ou de la grille infinie ?
+ * Le taux de farfouilles vient-il de la table de poids, ou de la grille infinie ?
  *
  * On rejoue la meme partie avec les frequences du sac classique (102 caramels)
  * et avec la table calibree. Si les deux donnent le meme taux, la cause est la
@@ -24,18 +24,18 @@ const gaddag = loadDict(GADDAG_PATH);
 const N = Number(process.argv[2] ?? 100);
 
 for (const [label, cfg] of [["sac classique 102 caramels", CLASSIC], ["table calibree", DEFAULT_BAG]] as const) {
-  let bingos = 0, moves = 0, score = 0, rej = 0;
+  let farfouilles = 0, moves = 0, score = 0, rej = 0;
   for (const seed of ["a", "b", "c"]) {
     const log = simulate(N, seed, dawg, gaddag, cfg);
     for (const r of log) {
       moves++;
       score += r.move.score;
       rej += r.rejections;
-      if (r.move.placements.length === 7) bingos++;
+      if (r.move.placements.length === 7) farfouilles++;
     }
   }
   console.log(
-    `${label.padEnd(28)} scrabbles ${(100 * bingos / moves).toFixed(1)} %   ` +
+    `${label.padEnd(28)} farfouilles ${(100 * farfouilles / moves).toFixed(1)} %   ` +
     `score moyen ${(score / moves).toFixed(1)}   rejets ${(100 * rej / (rej + moves)).toFixed(1)} %`,
   );
 }

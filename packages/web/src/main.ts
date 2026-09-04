@@ -1026,7 +1026,7 @@ function draw() {
  * sortirait de l'ecran. Un plateau borne, lui, ne bouge pas -- ses reperes
  * n'ont donc aucune raison de vivre a l'autre bout du canevas, loin de la case
  * qu'ils nomment. C'est ainsi que le font les jeux de societe et les logiciels
- * de scrabble, et cela se lit bien mieux.
+ * du genre, et cela se lit bien mieux.
  *
  * EN HAUT ET A GAUCHE SEULEMENT. Un plateau de bois les repete des quatre cotes
  * parce qu'on tourne autour ; ici on clique la case, et elle se nomme d'
