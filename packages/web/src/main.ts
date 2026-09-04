@@ -13,7 +13,7 @@ import {
   configParDefaut, deserialiser, valeurDe, type ConfigPartie,
 } from "../../engine/src/config.ts";
 import {
-  DICO_PAR_DEFAUT, dictionnaire, tousLesDictionnaires,
+  DICO_PAR_DEFAUT, dictionnaire, tailleDuSac, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import {
   choisirLaLangue, langue, surChangementDeLangue, t, t2, tDans, traduireLeDocument,
@@ -6260,8 +6260,14 @@ for (const b of $("r-pioche").querySelectorAll("button")) {
  * donc jusqu'au bout, ce qui est une variante en soi.
  */
 function peuplerPioche(): void {
+  // LE NOMBRE DE CARAMELS SUIT LE LEXIQUE. Le jeu francais en compte cent
+  // deux, l'anglais cent : « sac de 102 lettres » au-dessus d'un chevalet
+  // anglais serait faux, et c'est le genre de detail qu'un joueur verifie.
+  const n = tailleDuSac(dictionnaire(cDico));
   for (const b of $("r-pioche").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
+    if (v === "sac102") b.textContent = t2("Sac de {n} lettres", { n });
+    if (v === "sac102boucle") b.textContent = t2("Sac de {n} sans fin", { n });
     b.setAttribute("aria-pressed", String(v === cPioche));
     (b as HTMLButtonElement).disabled = false;
     (b as HTMLButtonElement).title = "";
@@ -6286,7 +6292,7 @@ function peuplerDico(): void {
     const o = document.createElement("option");
     o.value = d.id;
     o.textContent = `${d.langue === "en" ? "English" : "Français"} — ${d.nom}`;
-    o.title = d.detail;
+    o.title = t(d.detail);
     menu.appendChild(o);
   }
   menu.value = cDico;
@@ -6294,6 +6300,8 @@ function peuplerDico(): void {
 
 ($("r-dico") as HTMLSelectElement).addEventListener("change", () => {
   cDico = ($("r-dico") as HTMLSelectElement).value;
+  // Le sac n'a pas le meme nombre de caramels d'un lexique a l'autre.
+  peuplerPioche();
 });
 
 /** Les quatre formats de la fenetre simple. */

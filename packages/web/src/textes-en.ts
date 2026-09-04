@@ -100,9 +100,18 @@ export const EN: Readonly<Record<string, string>> = {
   "150 coups": "150 moves",
   "Tirage des lettres": "Tile draw",
   "Probabilités pondérées": "Weighted probabilities",
-  // Le sac anglais compte 100 caramels, pas 102 : le nombre disparait.
-  "Sac de 102 lettres": "Standard bag",
-  "Sac de 102 sans fin": "Endless standard bag",
+  // Le nombre suit le lexique : 102 en francais, 100 en anglais.
+  "Sac de {n} lettres": "{n}-tile bag",
+  "Sac de {n} sans fin": "Endless {n}-tile bag",
+  // Les infobulles des lexiques.
+  "Le lexique officiel du jeu francophone. 407 128 mots.":
+    "The official francophone word list. 407,128 words.",
+  "Les mots anglais courants, et eux seuls. 68 135 mots.":
+    "Everyday English words, and nothing else. 68,135 words.",
+  "Le lexique Collins, l'international anglophone. 280 887 mots.":
+    "The Collins list, used everywhere but North America. 280,887 words.",
+  "Le lexique nord-americain. 196 601 mots.":
+    "The North American list. 196,601 words.",
   "Décompte": "Countdown",
   "Joker": "Blank",
   "Prime selon le nombre de lettres posées": "Bonus by number of tiles placed",

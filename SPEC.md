@@ -373,8 +373,10 @@ Deux lexiques, décrits dans `packages/engine/src/dictionnaires.ts` :
 
 | id | source | mots | langue |
 |---|---|---|---|
-| `ods9` | `dictionnaire.txt` | 407 128 | français — **ODS9** (2024) |
+| `ods9` | `dictionnaire.txt` | 407 128 | français — **ODS 9** (2024) |
 | `eel22` | `dictionnaire-eel22.txt` | 68 135 | anglais — **EEL 22**, mots courants |
+| `csw24` | `dictionnaire-csw24.txt` | 280 887 | anglais — **CSW 24**, l'international |
+| `nwl23` | `dictionnaire-nwl23.txt` | 196 601 | anglais — **NWL 23**, l'Amérique du Nord |
 
 Les deux sont en ASCII A-Z pur, triés, sans doublon, longueurs 2 à 15. Aucun
 nettoyage nécessaire.
@@ -402,10 +404,14 @@ joker vise 2 %, la proportion du jeu classique.
 
 ### Deux structures, deux usages
 
-| | où | rôle | ODS9 | EEL 22 |
-|---|---|---|---|---|
-| **DAWG** | client | validation d'un mot, calcul de score | **0,45 Mo** | **0,23 Mo** |
-| **GADDAG** | serveur | génération exhaustive des coups, top, isotops | **4,04 Mo** | **1,47 Mo** |
+| | où | rôle | ODS 9 | EEL 22 | CSW 24 | NWL 23 |
+|---|---|---|---|---|---|---|
+| **DAWG** | client | validation d'un mot, calcul de score | 0,45 Mo | 0,23 Mo | 0,77 Mo | 0,55 Mo |
+| **GADDAG** | serveur | génération des coups, top, isotops | 4,04 Mo | 1,47 Mo | 5,05 Mo | 3,69 Mo |
+
+Les trois lexiques anglais partagent la distribution et les valeurs anglaises
+(100 caramels, jokers compris) ; seuls leurs poids de pioche diffèrent, chacun
+calibré sur son propre lexique.
 
 Compilation d'un lexique — les `.bin` ne sont pas dans le dépôt :
 
@@ -416,23 +422,24 @@ python packages/engine/tools/build_gaddag.py <source> packages/engine/data/<gadd
 
 ### Ce que coûte un second dictionnaire
 
-Chaque salon tient son fil de calcul, qui charge SES deux structures : 4,5 Mo
-pour un salon français, 1,7 Mo pour un salon anglais. Rien de nouveau — c'était
-déjà le cas quand il n'y avait qu'un lexique — et l'anglais est 2,6 fois plus
-léger.
+Chaque salon tient son fil de calcul, qui charge SES deux structures — de
+1,7 Mo (EEL 22) à 5,8 Mo (CSW 24). Rien de nouveau : c'était déjà le cas quand
+il n'y avait qu'un lexique. Le plafond, lui, monte : cinquante salons en CSW 24
+demanderaient 291 Mo là où cinquante salons en ODS 9 en demandaient 225.
 
-Le temps de résolution, lui, dépend de la taille du plateau bien plus que de
-celle du lexique :
+Le temps de résolution dépend de la taille du plateau bien plus que de celle du
+lexique :
 
-| | ODS9 | EEL 22 |
-|---|---|---|
-| 15x15, 40 coups joués | 4,8 ms par top | 5,0 ms |
-| grille infinie, 300 coups joués | 220 ms par top | 97 ms |
+| | ODS 9 | EEL 22 | CSW 24 | NWL 23 |
+|---|---|---|---|---|
+| 15x15, 40 coups joués | 3,9 ms | 4,4 ms | 4,4 ms | 5,7 ms |
+| grille infinie, 300 coups | 209 ms | 96 ms | 186 ms | 224 ms |
 
 Sur un plateau borné le coût est dicté par les ancrages, pas par le nombre de
-mots : les deux lexiques se valent. Sur grille infinie l'écart se creuse — le
-GADDAG anglais a 2,7 fois moins d'arêtes à parcourir — et un salon anglais coûte
-environ deux fois moins qu'un salon français à position comparable.
+mots : les quatre lexiques se valent. Sur grille infinie, seul l'EEL 22 se
+détache — deux fois moins cher, il a six fois moins de mots. Les trois gros se
+tiennent, et leurs écarts relèvent autant de la forme du plateau atteint que du
+lexique : la comparaison est statistique, pas coup à coup.
 
 Le **GADDAG** (Gordon, 1994) stocke chaque mot dans toutes ses rotations autour
 de chaque lettre pivot, ce qui permet de partir d'une case d'ancrage et

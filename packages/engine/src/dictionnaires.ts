@@ -81,6 +81,24 @@ export const POIDS_ANGLAIS: Readonly<Record<string, number>> = {
 
 export const POIDS_JOKER_ANGLAIS = 1.700;
 
+/** Poids du CSW 24, calibres sur son propre lexique. */
+export const POIDS_CSW24: Readonly<Record<string, number>> = {
+  E: 12.347, S: 10.372, R: 9.438, N: 7.591, A: 7.479, I: 7.261, T: 7.245,
+  L: 6.404, O: 5.259, D: 4.063, C: 3.632, G: 2.800, P: 2.651, M: 2.638,
+  U: 2.326, H: 2.177, B: 1.848, Y: 1.343, F: 1.065, K: 1.056, W: 0.815,
+  V: 0.643, Z: 0.314, X: 0.192, J: 0.157, Q: 0.111,
+};
+export const POIDS_JOKER_CSW24 = 1.661;
+
+/** Poids du NWL 23, calibres sur son propre lexique. */
+export const POIDS_NWL23: Readonly<Record<string, number>> = {
+  E: 12.465, S: 10.272, R: 9.687, N: 7.542, T: 7.419, A: 7.358, I: 7.185,
+  L: 6.651, O: 5.193, D: 4.149, C: 3.772, G: 2.680, P: 2.677, M: 2.581,
+  U: 2.285, H: 2.098, B: 1.870, Y: 1.348, F: 1.103, K: 0.990, W: 0.793,
+  V: 0.663, Z: 0.295, X: 0.205, J: 0.151, Q: 0.113,
+};
+export const POIDS_JOKER_NWL23 = 1.667;
+
 export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
   ods9: {
     id: "ods9",
@@ -99,7 +117,7 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
     id: "eel22",
     nom: "EEL 22",
     langue: "en",
-    detail: "Everyday English lexicon: common words only, 2 to 15 letters. 68 135 words.",
+    detail: "Les mots anglais courants, et eux seuls. 68 135 mots.",
     source: "dictionnaire-eel22.txt",
     dawg: "dawg-eel22.bin",
     gaddag: "gaddag-eel22.bin",
@@ -108,7 +126,46 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
     poids: POIDS_ANGLAIS,
     poidsJoker: POIDS_JOKER_ANGLAIS,
   },
+  csw24: {
+    id: "csw24",
+    nom: "CSW 24",
+    langue: "en",
+    detail: "Le lexique Collins, l'international anglophone. 280 887 mots.",
+    source: "dictionnaire-csw24.txt",
+    dawg: "dawg-csw24.bin",
+    gaddag: "gaddag-csw24.bin",
+    valeurs: VALEURS_ANGLAISES,
+    sac: SAC_ANGLAIS,
+    poids: POIDS_CSW24,
+    poidsJoker: POIDS_JOKER_CSW24,
+  },
+  nwl23: {
+    id: "nwl23",
+    nom: "NWL 23",
+    langue: "en",
+    detail: "Le lexique nord-americain. 196 601 mots.",
+    source: "dictionnaire-nwl23.txt",
+    dawg: "dawg-nwl23.bin",
+    gaddag: "gaddag-nwl23.bin",
+    valeurs: VALEURS_ANGLAISES,
+    sac: SAC_ANGLAIS,
+    poids: POIDS_NWL23,
+    poidsJoker: POIDS_JOKER_NWL23,
+  },
 };
+
+/**
+ * Combien de caramels contient le sac de ce lexique, jokers compris.
+ *
+ * Cent deux en francais, cent en anglais. Le nombre s'affiche dans les
+ * reglages : « sac de 102 lettres » sur un lexique anglais serait faux, et
+ * c'est precisement le genre de detail qu'un joueur verifie.
+ */
+export function tailleDuSac(d: Dictionnaire): number {
+  let n = 0;
+  for (const c of Object.values(d.sac)) n += c;
+  return n;
+}
 
 /** Celui qu'on joue quand rien ne dit lequel : les parties d'avant en sont la. */
 export const DICO_PAR_DEFAUT = "ods9";
