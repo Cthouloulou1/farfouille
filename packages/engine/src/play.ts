@@ -165,6 +165,14 @@ export function resolveTypedWord(
     const other: Dir = dir === "H" ? "V" : "H";
     const alt = resolveTypedWord(board, dawg, other, sx, sy, typed, rack, true);
     if (alt.ok) return alt;
+    // L'AUTRE SENS RESTE LE BON QUAND IL REFUSE.
+    //
+    // Une lettre seule ne forme pas de mot dans son propre sens : elle n'y a
+    // aucun voisin, et le « mot » vaut la lettre elle-meme. Poser un J au bout
+    // de TURFING repondait donc « J non valide » -- ce qui n'apprend rien et
+    // tait la vraie faute, qui est TURFINGJ. On rend l'autre refus des qu'il
+    // nomme quelque chose de plus long qu'une lettre.
+    if ((alt.word ?? "").length > 1) return alt;
   }
 
   if (cells.length > MAX_WORD) return { ok: false, error: "MOT_TROP_LONG" };

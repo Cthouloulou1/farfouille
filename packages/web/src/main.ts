@@ -190,14 +190,32 @@ let typed = "";
 let best: { word: string; score: number; dir: Dir; x: number; y: number } | null = null;
 
 /**
- * Les mots que le dictionnaire a refuses SUR CE COUP-CI.
+ * Les mots que le dictionnaire a refuses AU DERNIER ESSAI.
  *
- * Un bandeau qui passe ne se retient pas : au bout de trois essais on ne sait
- * plus lesquels on a deja tentes, et l'on retape le meme. La liste, elle,
- * reste sous les yeux tant qu'on ne tape pas -- et repart a zero au coup
- * suivant, ou elle ne voudrait plus rien dire.
+ * Un bandeau qui passe ne se retient pas : le temps de relire, il est parti.
+ * La liste, elle, reste sous les yeux tant qu'on ne tape pas.
+ *
+ * ELLE NE CUMULE PAS. Elle l'a fait, et c'etait pire que rien : un mot refuse
+ * trois essais plus tot restait affiche sous une solution qui, elle, venait
+ * d'etre acceptee -- on lisait « votre meilleure solution WAX » et,
+ * juste dessous, un refus qui ne parlait plus de rien.
  */
 let motsRefuses: string[] = [];
+
+/**
+ * Remplace la liste par ce que le dernier essai a fait refuser.
+ *
+ * ON NE NOTE QUE DES MOTS. Une lettre seule n'en est pas un -- elle ne forme
+ * rien dans son propre sens -- et « trop de caramels » ou « le mot ne touche
+ * rien » parlent du placement, pas du lexique : les ranger la ferait croire
+ * que ces mots n'existent pas.
+ */
+function noterLesRefus(mots: readonly string[]): void {
+  motsRefuses = [];
+  for (const mot of mots) {
+    if (mot.length > 1 && !motsRefuses.includes(mot)) motsRefuses.push(mot);
+  }
+}
 let openPlayer: string | null = null;
 /**
  * Qui REGLE le salon en ce moment -- pas toujours qui l'a cree.
@@ -4064,6 +4082,14 @@ addEventListener("keydown", (e) => {
     if (!$("voile").hidden) { destination = null; $("voile").hidden = true; }
     return;
   }
+  // ENTREE VALIDE LES REGLAGES, comme dans n'importe quel formulaire -- que le
+  // curseur soit dans un de ses champs ou nulle part. Sans cela elle tombait
+  // dans le jeu, derriere le panneau, et tentait de poser le mot en cours.
+  if (!$("reglages").hidden && e.key === "Enter") {
+    e.preventDefault();
+    ($("r-appliquer") as HTMLButtonElement).click();
+    return;
+  }
   // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
   // avale par le jeu et n'effacait rien dans les champs des reglages.
   const cible = document.activeElement;
@@ -4251,19 +4277,9 @@ function submit() {
   if (c === null) return;
   const r = resolveTypedWord(board, dict, c.dir, c.x, c.y, c.typed, rack);
   if (!r.ok) {
-    // CE QUI SE NOTE, C'EST CE QUE LE LEXIQUE A REFUSE : le mot tape s'il
-    // n'existe pas, ET les mots perpendiculaires qu'il fabriquait. Les deux
-    // arrivent ensemble -- un mot invente en forme souvent d'autres.
-    //
-    // Le reste n'a rien a y faire : « trop de caramels » ou « le mot ne touche
-    // rien » parlent du placement, pas du lexique, et les ranger la ferait
-    // croire que ces mots n'existent pas.
-    const refuses = r.error === "MOT_INCONNU" ? [r.word ?? c.typed, ...(r.bad ?? [])]
+    noterLesRefus(r.error === "MOT_INCONNU" ? [r.word ?? c.typed, ...(r.bad ?? [])]
       : r.error === "COLLAGE_INCONNU" ? (r.bad ?? [])
-      : [];
-    for (const mot of refuses) {
-      if (mot !== "" && !motsRefuses.includes(mot)) motsRefuses.push(mot);
-    }
+      : []);
     flash(r.error === "TROP_DE_CARAMELS"
       ? t2("C'est une partie {x} sur {y}", { x: cfg.jouables, y: cfg.tirage })
       : t(PLAY_MESSAGE[r.error]), "bad");
@@ -4271,8 +4287,10 @@ function submit() {
     return;
   }
   // Un mot accepte ferme le bandeau du refus precedent : le laisser vivre ses
-  // deux secondes fait croire que celui-ci vient d'etre refuse aussi.
+  // deux secondes fait croire que celui-ci vient d'etre refuse aussi. Et il
+  // efface la liste : elle ne parle que du dernier essai.
   fermerLeFlash();
+  noterLesRefus([]);
   if (best === null || r.move.score > best.score) {
     best = { word: r.move.word, score: r.move.score, dir: r.move.dir, x: r.move.x, y: r.move.y };
   }
