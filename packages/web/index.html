@@ -893,6 +893,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* Ce qui n'est pas la liste ni la serie de boutons se pose AU BOUT de la
    rangee : le bouton des reglages avances, l'interrupteur du joker. */
 .rg-corps .ligne > .interrupteur { margin-left: auto; }
+/* Deux interrupteurs de suite : seul le premier se pousse au bout. Sans cela
+   l'espace libre se partageait entre eux et ils flottaient chacun de leur cote,
+   alors qu'ils commandent la meme chose. */
+.rg-corps .ligne > .interrupteur ~ .interrupteur { margin-left: 0; }
 
 /* `hidden` doit l'emporter sur les `display` poses ailleurs, plus specifiques
    que la regle du navigateur. Sans cela, un bloc cache reste a l'ecran. */
@@ -1325,6 +1329,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <span class="sep"></span>
           <button type="button" class="interrupteur" id="r-joker" aria-pressed="false">
             Partie joker
+          </button>
+          <!-- DEUX JOKERS PAR COUP. Reglage avance, et grilles bornees
+               seulement : le temps de recherche du top croit vite avec les
+               jokers, et une grille sans fin le paie deja au prix fort. -->
+          <button type="button" class="interrupteur" id="r-joker2" data-avance aria-pressed="false"
+                  title="Deux jokers à chaque tirage, au lieu d'un">
+            Double joker
           </button>
         </div>
       </div>

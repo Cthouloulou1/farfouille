@@ -1273,6 +1273,21 @@ wss.on("connection", (ws, req) => {
         : bornes === SUPER_BORNES ? LAYOUTS.super21 : LAYOUTS.classique15;
       const pavageNom = bornes === null ? s.layout
         : bornes === SUPER_BORNES ? "super21" as const : "classique15" as const;
+      // LE DOUBLE SAC VA AVEC LA SUPER GRILLE, comme le pavage. 441 cases ne se
+      // remplissent pas avec 102 caramels : le plateau resterait au quart plein
+      // et la partie s'arreterait avant d'avoir commence. Le client n'a donc
+      // rien a envoyer, et ne peut pas demander un sac qui ne va pas avec sa
+      // grille.
+      const sacs = bornes === SUPER_BORNES ? 2 : 1;
+      // DEUX JOKERS PAR COUP, ET SEULEMENT SUR UNE GRILLE BORNEE. Le temps de
+      // recherche du top croit vite avec le nombre de jokers, et une grille sans
+      // fin le paie deja au prix fort : sur elle, la variante est ramenee a un
+      // joker plutot que refusee, pour qu'un client d'une autre version ne
+      // puisse pas mettre le serveur a genoux.
+      const jokersDemandes = Math.max(1, Math.min(2, Math.round(Number(msg.jokersParCoup ?? 1)) || 1));
+      // Et jamais plus de jokers que le tirage n'a de place, moins une lettre :
+      // un chevalet fait de jokers seuls ne se joue pas.
+      const jokersParCoup = bornes === null ? 1 : Math.min(jokersDemandes, Math.max(1, tirage - 1));
       // Le sac sans fin ne vaut que sur une grille infinie.
       const pioch = bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche;
       // Un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi :
@@ -1280,8 +1295,8 @@ wss.on("connection", (ws, req) => {
       // premier atteint sans qu'on sache lequel. Ces deux-la n'en ont pas.
       const sansTerme = bornes !== null || pioch === "sac102";
       const archives = await relancer(s, avec(avecDictionnaire(base, dico), {
-        tirage, jouables, joker,
-        pioche: pioch,
+        tirage, jouables, joker, jokersParCoup,
+        pioche: pioch, sacs,
         bornes, pavage, pavageNom, mode, decompte,
         coupsMax: !sansTerme && Number.isFinite(coupsMax as number) ? coupsMax : null,
         dureeMax: !sansTerme && Number.isFinite(dureeMax as number) ? dureeMax : null,

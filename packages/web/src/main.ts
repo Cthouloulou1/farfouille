@@ -5030,6 +5030,8 @@ interface ResumeSalon {
   config: {
     tirage: number; jouables: number; pioche: string; bornes: number | null;
     joker?: boolean; chrono?: number | null; mode?: string;
+    /** Absent des serveurs d'avant le double joker : c'en etait un par coup. */
+    jokersParCoup?: number;
     /** Absent des serveurs d'avant les dictionnaires multiples : c'etait le francais. */
     dictionnaire?: string;
   };
@@ -5626,8 +5628,12 @@ function specDuSalon(c: ResumeSalon["config"]): string {
   const mode = c.mode === "duplicate" ? "Duplicate" : "Topping";
   // LE LEXIQUE EN DERNIER, mais il y est : c'est ce qui decide si l'on peut
   // jouer dans ce salon, et rien d'autre ne le disait.
+  // Le double joker se nomme : deux jokers par coup n'est pas la meme partie
+  // qu'un, et c'est ce qu'on regarde avant d'entrer.
+  const joker = c.joker !== true ? []
+    : c.jokersParCoup === 2 ? [t("double joker")] : [t("joker")];
   return [mode, nomDeLaVariante(c), dureeDuChrono(c.chrono)]
-    .concat(c.joker === true ? ["joker"] : [])
+    .concat(joker)
     .concat([dictionnaire(c.dictionnaire).nom])
     .join(" · ");
 }
@@ -5648,6 +5654,18 @@ function langueDuSalon(s: ResumeSalon): Langue {
 
 /** La super grille se reconnait a son demi-cote : dix cases, donc 21x21. */
 const SUPER_BORNES = 10;
+
+/**
+ * Combien d'exemplaires du jeu le sac contient, pour cette grille.
+ *
+ * Deux sur la super grille, un partout ailleurs. C'est le serveur qui tranche
+ * -- le client n'envoie pas ce reglage -- mais l'accueil et les reglages
+ * doivent l'annoncer juste avant qu'il ne le fasse.
+ */
+function sacsDeLaGrille(bornes: number | null): number {
+  return bornes === SUPER_BORNES ? 2 : 1;
+}
+
 function estSuper(c: ResumeSalon["config"]): boolean {
   return c.bornes === SUPER_BORNES;
 }
@@ -5971,6 +5989,11 @@ let cDico = DICO_PAR_DEFAUT;
 /** La partie joker, en cours d'edition. */
 let cJoker = false;
 /**
+ * Combien de jokers par tirage, en cours d'edition : un, ou deux en double
+ * joker. Ne vaut que si `cJoker` est vrai.
+ */
+let cJokers = 1;
+/**
  * Le format en cours d'edition, dans la fenetre simple.
  *
  * Trois formats se nomment -- ce sont ceux qu'on joue en club -- et le
@@ -6187,6 +6210,12 @@ for (const b of $("r-grille").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"];
     cBornes = v === "infinie" ? null : v === "super" ? SUPER_BORNES : 7;
     peuplerGrille();
+    // LE DOUBLE JOKER NE SUIT PAS SUR UNE GRILLE SANS FIN : le serveur le
+    // ramenerait a un joker sans le dire, et l'interrupteur resterait allume
+    // au-dessus d'une partie qui ne le joue pas.
+    if (cBornes === null) cJokers = 1;
+    peuplerJoker();
+    appliquerLeModeDeReglages();
     // Chaque grille a son tirage naturel : les probabilites ponderees ne
     // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
     // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
@@ -6357,10 +6386,13 @@ for (const b of $("r-pioche").querySelectorAll("button")) {
  * donc jusqu'au bout, ce qui est une variante en soi.
  */
 function peuplerPioche(): void {
-  // LE NOMBRE DE CARAMELS SUIT LE LEXIQUE. Le jeu francais en compte cent
-  // deux, l'anglais cent : « sac de 102 lettres » au-dessus d'un chevalet
-  // anglais serait faux, et c'est le genre de detail qu'un joueur verifie.
-  const n = tailleDuSac(dictionnaire(cDico));
+  // LE NOMBRE DE CARAMELS SUIT LE LEXIQUE ET LA GRILLE. Le jeu francais en
+  // compte cent deux, l'anglais cent : « sac de 102 lettres » au-dessus d'un
+  // chevalet anglais serait faux, et c'est le genre de detail qu'un joueur
+  // verifie. La super grille en demande deux exemplaires -- 441 cases ne se
+  // remplissent pas avec 102 caramels -- et l'option de 102 devient donc celle
+  // de 204, sans qu'il y ait rien de plus a choisir.
+  const n = tailleDuSac(dictionnaire(cDico), sacsDeLaGrille(cBornes));
   for (const b of $("r-pioche").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
     if (v === "sac102") b.textContent = t2("Sac de {n} lettres", { n });
@@ -6427,9 +6459,34 @@ for (const b of $("r-format").querySelectorAll("button")) {
   });
 }
 
+/**
+ * Les deux interrupteurs du joker.
+ *
+ * « Double joker » ALLUME AUSSI « Partie joker » : deux jokers par coup, c'est
+ * une partie joker, et laisser le premier eteint pendant que le second brille
+ * demanderait au joueur de deviner lequel commande l'autre. Eteindre l'un
+ * ramene a un joker par tirage plutot qu'a zero -- on ne retire qu'un cran.
+ */
+function peuplerJoker(): void {
+  $("r-joker").setAttribute("aria-pressed", String(cJoker));
+  $("r-joker2").setAttribute("aria-pressed", String(cJoker && cJokers === 2));
+}
+
 $("r-joker").addEventListener("click", () => {
   cJoker = !cJoker;
-  $("r-joker").setAttribute("aria-pressed", String(cJoker));
+  if (!cJoker) cJokers = 1;
+  peuplerJoker();
+  appliquerLeModeDeReglages();
+});
+
+$("r-joker2").addEventListener("click", () => {
+  const deja = cJoker && cJokers === 2;
+  cJokers = deja ? 1 : 2;
+  if (!deja) cJoker = true;
+  peuplerJoker();
+  // L'eteindre en fenetre simple le fait disparaitre : il n'y figurait que
+  // parce qu'il etait allume.
+  appliquerLeModeDeReglages();
 });
 
 /**
@@ -6453,6 +6510,10 @@ function appliquerLeModeDeReglages(): void {
   for (const b of $("r-grille").querySelectorAll("button[data-avance]")) {
     (b as HTMLElement).hidden = !avance && cBornes !== SUPER_BORNES;
   }
+  // Le double joker demande les reglages avances ET une grille bornee. Sur une
+  // grille sans fin il n'existe pas du tout : ce n'est pas une option cachee,
+  // c'est une option qui n'a pas cours.
+  $("r-joker2").hidden = cBornes === null || (!avance && cJokers !== 2);
   // Quinze secondes par coup, c'est un reglage de joueur aguerri : il coute
   // cher au serveur et ne laisse le temps de rien a qui decouvre.
   for (const b of $("r-chrono").querySelectorAll("button[data-avance]")) {
@@ -6483,6 +6544,10 @@ function simplifierLesReglages(): void {
   // Le sac du jeu classique, qui se recharge sur une grille sans bord -- sinon
   // elle s'arreterait au bout de cent caramels.
   cPioche = cBornes === null ? "sac102boucle" : "sac102";
+  // LE DOUBLE JOKER N'EST PAS REMIS A ZERO ICI. C'est un reglage avance, mais
+  // la fenetre simple garde son interrupteur visible tant qu'il est allume
+  // (voir `appliquerLeModeDeReglages`) : l'eteindre en douce ferait repartir en
+  // simple joker une partie qu'on venait juste rouvrir.
   cFormat = formatDe(cTirage, cJouables);
 }
 
@@ -6493,6 +6558,7 @@ function ouvrirReglages(): void {
   cPioche = cfg.pioche;
   cDico = cfg.dictionnaire;
   cJoker = cfg.joker === true;
+  cJokers = cfg.jokersParCoup === 2 ? 2 : 1;
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
@@ -6506,7 +6572,7 @@ function ouvrirReglages(): void {
   peuplerChrono();
   peuplerGrille();
   avertirSiExplosif();
-  $("r-joker").setAttribute("aria-pressed", String(cJoker));
+  peuplerJoker();
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = t("Primes de farfouilles");
   cFormat = formatDe(cTirage, cJouables);
@@ -6550,6 +6616,7 @@ $("r-appliquer").addEventListener("click", () => {
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
     dictionnaire: cDico,
     joker: cJoker,
+    jokersParCoup: cJokers,
     primes: cPrimes,
     chrono: cChrono,
     bornes: cBornes,

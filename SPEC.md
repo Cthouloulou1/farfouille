@@ -1990,8 +1990,14 @@ tirage 8 » demande un instant de traduction.
 Ce qu'elle ne montre pas, elle le **décide** : le lexique est celui de la langue
 du site, le tirage est le sac du jeu classique — qui se recharge sans fin sur
 une grille sans bord, sinon elle s'arrêterait au bout de cent caramels. Elle ne
-propose pas non plus les quinze secondes par coup : c'est un réglage de joueur
-aguerri, qui coûte cher au serveur.
+propose pas non plus les quinze secondes par coup ni le double joker : ce sont
+des réglages de joueur aguerri, qui coûtent cher au serveur.
+
+**Ce qu'elle cache, elle le remet à zéro** — sauf si la partie en cours s'en
+sert. La super grille et le double joker gardent leur bouton visible tant qu'ils
+sont ceux de la partie ouverte : cacher le réglage qui tourne laisserait le
+panneau sans aucun bouton allumé, et le premier clic ailleurs changerait la
+partie sans le dire.
 
 **La fenêtre complète** montre tout, dictionnaire et primes compris. La bascule
 de l'une à l'autre se retient (`prefs.avance`) : qui a demandé les réglages
@@ -2039,17 +2045,20 @@ reste.
 > rouvrait l'ancienne partie, avec sa variante et ses coups.
 
 **Tout le reste se règle à l'intérieur du salon**, par son propriétaire : la
-grille (plateau 15×15 ou infinie), le nombre de caramels piochés et posables
-(2 à 15, en petits boutons carrés), le temps par coup, le tirage des lettres,
-la partie joker et les primes.
+grille (plateau 15×15, super grille 21×21 ou infinie), le nombre de caramels
+piochés et posables (2 à 15, en petits boutons carrés), le temps par coup, le
+tirage des lettres, la partie joker et les primes.
 
-Changer de grille change aussi le pavage : le plateau du commerce n'a de sens
-que borné, le pavage infini que sans bord. Appliquer relance une partie neuve dans le
-salon — l'ancienne est archivée, jamais effacée.
+Changer de grille change aussi le **pavage** et le **nombre de sacs** : le
+plateau du commerce n'a de sens que borné, le pavage infini que sans bord, et la
+super grille demande deux jeux de caramels. Appliquer relance une partie neuve
+dans le salon — l'ancienne est archivée, jamais effacée.
 
-Le **tirage des lettres** offre trois choix : probabilités pondérées, sac de 102
-lettres, et sac de 102 sans fin. Le troisième est réservé aux grilles infinies :
-sur un plateau fermé la partie s'arrête avant qu'il ait à se recharger.
+Le **tirage des lettres** offre trois choix : probabilités pondérées, sac du jeu
+classique, et le même sans fin. Le troisième est réservé aux grilles infinies :
+sur un plateau fermé la partie s'arrête avant qu'il ait à se recharger. Le
+nombre affiché suit le lexique **et la grille** — 102 en français, 100 en
+anglais, et le double sur la super grille.
 
 ### La grille 15×15
 
@@ -2159,6 +2168,21 @@ commerce, dix donne la super grille, l'absence de bornes donne le pavage infini
 du salon. Un client ne peut donc pas demander un pavage qui ne va pas avec sa
 grille.
 
+**Le double sac aussi.** 441 cases ne se remplissent pas avec 102 caramels : le
+plateau resterait au quart plein et la partie s'arrêterait avant d'avoir
+commencé. La super grille verse donc **deux jeux dans le même sac** — 204
+caramels en français, **200** en anglais, où le jeu en compte cent. Chaque
+lettre en double, les jokers compris : le double sac a **quatre** jokers.
+
+Ce n'est pas une option de plus : elle **remplace** celle de 102, qui s'écrit
+désormais « Sac de 204 lettres » dès que la grille est la super grille. Le
+nombre s'écrit d'après le lexique et le nombre de sacs, comme il s'écrivait déjà
+d'après le seul lexique.
+
+Mesuré : une partie entière sur la super grille au double sac fait **39 coups**
+et laisse 5 caramels, contre 20 coups et un plateau au quart plein avec un seul
+sac. Le coût du top n'y bouge pas — 16 ms par coup, comme sur une 15×15.
+
 **Elle ne se propose que dans les réglages avancés.** C'est un plateau que
 personne n'a jamais vu, avec deux primes de plus : on ne le met pas sous les
 yeux de qui ouvre un salon pour la première fois. Le bouton reparaît quand même
@@ -2212,7 +2236,7 @@ La question est de savoir **d'où vient ce R**.
 
 | pioche | ce qui se passe quand le joker est joué |
 |---|---|
-| sac de 102 | **du sac** : une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **deux** — perd une unité |
+| sac de 102 | **du sac** : une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **celle du sac**, deux, ou quatre en double sac — perd une unité |
 | sac de 102 sans fin | **de nulle part** : la lettre naît, le sac n'y perd rien, et le joker revient au tirage. Il ne s'épuise donc jamais |
 | probabilités pondérées | **de nulle part** non plus, pour la même raison |
 
@@ -2243,6 +2267,45 @@ qu'aucun joker ne reste jamais sur la grille.
 > les isotops qui ne l'emploient pas du tout : jamais pire, et cela couvre le
 > cas visé. Les isotops employant le joker restent listés, ils sont simplement
 > moins bons à jouer.
+
+### Le double joker
+
+**Deux jokers à chaque tirage** au lieu d'un : à 7 lettres, c'est 5 vraies
+lettres plus deux jokers. Tout le reste de la partie joker est inchangé — chaque
+joker joue une vraie lettre qui sort du sac, et revient au tirage suivant.
+
+Le nombre de jokers en réserve est celui du sac : **deux** avec un jeu,
+**quatre** avec le double sac de la super grille. Un joker qui n'a pas trouvé sa
+lettre s'est posé lui-même et ne revient plus ; quand la réserve descend en
+dessous de deux, le tirage n'en reçoit plus qu'un. C'est la même dégradation
+qu'en partie joker ordinaire, un cran plus haut.
+
+**Réglage avancé, et grilles bornées seulement.** Le temps de recherche du top
+croît vite avec le nombre de jokers, et une grille sans fin le paie déjà au prix
+fort (`test/blanks_vs_time.ts`). Le serveur ne refuse pas la variante sur une
+grille infinie, il la **ramène à un joker** : un client d'une autre version ne
+doit pas pouvoir mettre le serveur à genoux, et un refus au moment du « Go »
+n'apprendrait rien à personne.
+
+Mesuré sur la super grille, double sac et double joker : **42 coups**, 229 ms
+par coup au début de partie, 483 ms au pire, 15 ms en fin de partie. C'est
+largement sous les quinze secondes qui sont le chrono le plus court qu'un joueur
+puisse demander.
+
+**Jamais plus de jokers que le tirage n'a de place, moins une lettre.** Un
+chevalet fait de jokers seuls ne se joue pas, et le sac n'aurait plus rien à
+donner.
+
+**Les deux interrupteurs se commandent.** « Double joker » allume aussi « Partie
+joker » — deux jokers par coup, c'est une partie joker, et laisser le premier
+éteint pendant que le second brille demanderait au joueur de deviner lequel
+commande l'autre. Éteindre l'un ramène à un joker par tirage plutôt qu'à zéro :
+on ne retire qu'un cran.
+
+`check_double.ts` vérifie les deux réglages ensemble : le compte du sac tombe
+juste à chaque instant — sac plus chevalet plus grille plus réserve égale 204 —
+chaque tirage porte exactement deux jokers, et une partie relue depuis son
+journal retrouve le même sac et le même tirage.
 
 ### La règle de rejet s'adapte au tirage
 

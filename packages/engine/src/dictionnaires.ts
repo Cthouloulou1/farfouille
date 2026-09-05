@@ -160,11 +160,28 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
  * Cent deux en francais, cent en anglais. Le nombre s'affiche dans les
  * reglages : « sac de 102 lettres » sur un lexique anglais serait faux, et
  * c'est precisement le genre de detail qu'un joueur verifie.
+ *
+ * `sacs` compte les exemplaires du jeu : la super grille en demande DEUX, soit
+ * 204 caramels en francais et 200 en anglais. Quatre cent quarante et une cases
+ * a remplir avec cent deux caramels ne feraient qu'un quart de plateau.
  */
-export function tailleDuSac(d: Dictionnaire): number {
+export function tailleDuSac(d: Dictionnaire, sacs = 1): number {
   let n = 0;
   for (const c of Object.values(d.sac)) n += c;
-  return n;
+  return n * sacs;
+}
+
+/**
+ * La composition du sac, en `sacs` exemplaires.
+ *
+ * Un double sac, c'est deux jeux verses dans le meme : chaque lettre en double,
+ * les jokers compris. Rien d'autre ne change -- ni les valeurs, ni la regle de
+ * tirage, ni la convention de fin de partie.
+ */
+export function distributionDuSac(d: Dictionnaire, sacs = 1): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [lettre, n] of Object.entries(d.sac)) out[lettre] = n * sacs;
+  return out;
 }
 
 /** Celui qu'on joue quand rien ne dit lequel : les parties d'avant en sont la. */

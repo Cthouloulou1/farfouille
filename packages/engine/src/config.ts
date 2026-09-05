@@ -54,10 +54,29 @@ export interface ConfigPartie {
    */
   pioche: "probabilites" | "sac102" | "sac102boucle";
   /**
+   * Combien d'exemplaires du jeu le sac contient. Un, ou DEUX sur la super
+   * grille : 441 cases ne se remplissent pas avec 102 caramels.
+   *
+   * Sans effet sur les probabilites ponderees, qui n'ont pas de stock.
+   */
+  sacs: number;
+  /**
    * Partie joker : le tirage contient toujours un joker, et la lettre qu'il
    * joue est remplacee par une vraie sortie du sac. Voir SPEC.md §16.
    */
   joker: boolean;
+  /**
+   * Combien de jokers accompagnent CHAQUE tirage, en partie joker.
+   *
+   * Un d'ordinaire. DEUX en partie « double joker », qui ne se joue que sur une
+   * grille bornee : deux jokers par coup sur une grille sans fin feraient
+   * exploser le temps de recherche du top, et c'est le tirage qui le paie
+   * (voir `test/blanks_vs_time.ts`).
+   *
+   * Le sac ne distribue alors que `tirage - jokersParCoup` lettres : les jokers
+   * ne sont pas piochables, ils accompagnent le tirage.
+   */
+  jokersParCoup: number;
   /**
    * Comment un coup se termine. Voir SPEC.md §16.
    *
@@ -120,7 +139,9 @@ export function configParDefaut(): ConfigPartie {
     valeurs: dictionnaire(DICO_PAR_DEFAUT).valeurs,
     dictionnaire: DICO_PAR_DEFAUT,
     pioche: "probabilites",
+    sacs: 1,
     joker: false,
+    jokersParCoup: 1,
     mode: "topping",
     coupsMax: null,
     dureeMax: null,
@@ -143,7 +164,9 @@ export interface ConfigSerialisee {
   valeurs: Record<string, number>;
   dictionnaire: string;
   pioche: "probabilites" | "sac102" | "sac102boucle";
+  sacs: number;
   joker: boolean;
+  jokersParCoup: number;
   mode: "topping" | "duplicate";
   coupsMax: number | null;
   dureeMax: number | null;
@@ -158,7 +181,8 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
     tirage: cfg.tirage, jouables: cfg.jouables,
     primes: { ...cfg.primes }, valeurs: { ...cfg.valeurs },
     dictionnaire: cfg.dictionnaire,
-    pioche: cfg.pioche, joker: cfg.joker, mode: cfg.mode,
+    pioche: cfg.pioche, sacs: cfg.sacs,
+    joker: cfg.joker, jokersParCoup: cfg.jokersParCoup, mode: cfg.mode,
     coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
     decompte: cfg.decompte, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
@@ -177,7 +201,11 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     // Les parties d'avant les dictionnaires multiples n'ont pas ce champ :
     // elles ont toutes ete jouees en francais.
     dictionnaire: plat.dictionnaire ?? DICO_PAR_DEFAUT,
+    // Les parties d'avant le double sac et le double joker n'ont pas ces
+    // champs : elles ont toutes ete jouees a un sac et a un joker par coup.
+    sacs: plat.sacs === 2 ? 2 : 1,
     joker: plat.joker === true,
+    jokersParCoup: plat.jokersParCoup === 2 ? 2 : 1,
     mode: plat.mode === "duplicate" ? "duplicate" : "topping",
     coupsMax: plat.coupsMax ?? null,
     dureeMax: plat.dureeMax ?? null,

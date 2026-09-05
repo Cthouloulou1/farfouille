@@ -32,7 +32,7 @@ import { Board, type Placement } from "../../engine/src/board.ts";
 import { Bag, type BagConfig } from "../../engine/src/bag.ts";
 import { BLANK, rangerLeTirage } from "../../engine/src/alphabet.ts";
 import { SacFini, type Pioche } from "../../engine/src/sac.ts";
-import { dictionnaire } from "../../engine/src/dictionnaires.ts";
+import { dictionnaire, distributionDuSac } from "../../engine/src/dictionnaires.ts";
 import {
   configParDefaut, serialiser, deserialiser,
   type ConfigPartie, type ConfigSerialisee,
@@ -362,6 +362,22 @@ export class Game {
    * peut les remplacer sur la grille.
    */
   jokersEnReserve = 0;
+  /**
+   * Combien de jokers accompagnent chaque tirage : zero hors partie joker, un
+   * d'ordinaire, deux en double joker. Lu ici plutot que dans la configuration
+   * a chaque tirage -- les deux reglages n'ont de sens qu'ensemble.
+   */
+  private get jokersDuTirage(): number {
+    return this.cfg.joker ? Math.max(1, Math.round(this.cfg.jokersParCoup)) : 0;
+  }
+  /**
+   * Combien de jokers ce tirage-ci recevra. La reserve peut etre plus courte
+   * que le reglage en fin de partie : un joker qui n'a pas trouve sa lettre
+   * s'est pose lui-meme et ne revient plus.
+   */
+  private jokersServis(reserve: number): number {
+    return Math.min(this.jokersDuTirage, reserve);
+  }
   /** Cree dans start(), une fois la graine connue. */
   private worker!: Worker;
   private readonly file: string;
@@ -953,22 +969,28 @@ export class Game {
         console.log(`[partie] journal cree a partir de l'instantane`);
       }
     }
-    // En partie joker, le tirage contient toujours un joker : le sac ne
-    // distribue donc que `tirage - 1` lettres, et les deux jokers sont mis de
-    // cote. Ils ne sont pas piochables, ils accompagnent le tirage.
-    // Combien de jokers ? Deux si le sac est fini -- ce sont ceux du jeu. Sur
-    // une pioche qui ne s'epuise pas, ils ne s'epuisent pas non plus : on en
-    // reprend un chaque fois qu'un est pose.
-    this.jokersEnReserve = this.cfg.joker
-      ? (this.cfg.pioche === "sac102" ? 2 : Infinity)
-      : 0;
-    const parTirage = this.cfg.tirage - (this.cfg.joker ? 1 : 0);
-    const alea = mulberry32(moveSeed(this.seed, 0));
-
     // Le sac et les poids suivent le dictionnaire : le W anglais est une
     // lettre ordinaire dont on a deux exemplaires, le W francais une rarete
-    // unique.
+    // unique. `sacs` en compte les exemplaires : deux sur la super grille.
     const lexique = dictionnaire(this.cfg.dictionnaire);
+    const distribution = distributionDuSac(lexique, this.cfg.sacs);
+
+    // En partie joker, le tirage contient toujours son ou ses jokers : le sac
+    // ne distribue donc que `tirage - jokersParCoup` lettres, et les jokers du
+    // jeu sont mis de cote. Ils ne sont pas piochables, ils accompagnent le
+    // tirage.
+    //
+    // Combien en reserve ? Ceux du sac si le sac est fini -- deux, ou quatre en
+    // double sac. Sur une pioche qui ne s'epuise pas, ils ne s'epuisent pas non
+    // plus : on en reprend un chaque fois qu'un est pose.
+    this.jokersEnReserve = this.cfg.joker
+      ? (this.cfg.pioche === "sac102" ? (distribution[BLANK] ?? 0) : Infinity)
+      : 0;
+    // AU MOINS UNE VRAIE LETTRE AU TIRAGE. Un chevalet fait de jokers seuls ne
+    // se joue pas, et le sac n'a plus rien a donner.
+    const parTirage = Math.max(1, this.cfg.tirage - this.jokersDuTirage);
+    const alea = mulberry32(moveSeed(this.seed, 0));
+
     if (this.cfg.pioche === "probabilites") {
       const ponderee: BagConfig = {
         weights: lexique.poids, blankWeight: lexique.poidsJoker,
@@ -976,10 +998,10 @@ export class Game {
       };
       this.bag = new Bag(ponderee, alea, undefined, parTirage);
     } else {
-      const distribution = this.cfg.joker
-        ? Object.fromEntries(Object.entries(lexique.sac).filter(([l]) => l !== BLANK))
-        : lexique.sac;
-      const sac = new SacFini(distribution, alea, parTirage);
+      const sansJoker = this.cfg.joker
+        ? Object.fromEntries(Object.entries(distribution).filter(([l]) => l !== BLANK))
+        : distribution;
+      const sac = new SacFini(sansJoker, alea, parTirage);
       sac.recharge = this.cfg.pioche === "sac102boucle";
       this.bag = sac;
     }
@@ -999,8 +1021,8 @@ export class Game {
         // La pioche doit etre refaite dans l'ordre : c'est elle qui porte l'etat
         // de compensation, et il depend de tout l'historique. En partie joker
         // elle est completee SANS le joker, exactement comme au tirage.
-        const gardeJoker = this.cfg.joker && this.jokersEnReserve > 0;
-        this.bag.draw(gardeJoker ? this.reliquat.filter((c) => c !== BLANK) : this.reliquat);
+        const servis = this.jokersServis(this.jokersEnReserve);
+        this.bag.draw(servis > 0 ? this.reliquat.filter((c) => c !== BLANK) : this.reliquat);
         // LES PLACEMENTS SE REFONT ICI, avant de poser quoi que ce soit : la
         // grille est encore telle qu'elle etait avant ce coup, et c'est elle
         // qui dit quelles cases du mot etaient libres. Un journal d'avant ce
@@ -1255,18 +1277,19 @@ export class Game {
       this.emit();
       return;
     }
-    // Le joker ne repasse pas par le sac : on le retire du reliquat avant de
-    // completer, et on le remet ensuite.
-    const gardeJoker = this.cfg.joker && this.jokersEnReserve > 0;
-    const reliquatSansJoker = gardeJoker
+    // Les jokers ne repassent pas par le sac : on les retire du reliquat avant
+    // de completer, et on en remet le compte voulu ensuite.
+    const servis = this.jokersServis(this.jokersEnReserve);
+    const reliquatSansJoker = servis > 0
       ? this.reliquat.filter((c) => c !== BLANK)
       : this.reliquat;
     // Nouveau coup : les propositions repartent a zero, et on fige QUI est la.
     this.propositions.clear();
     this.participants = new Set(this.presents);
     const draw = this.bag.draw(reliquatSansJoker);
-    this.rack = rangerLeTirage(gardeJoker ? [...draw.rack, BLANK] : draw.rack);
-    this.rackNotation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
+    const jokers = BLANK.repeat(servis);
+    this.rack = rangerLeTirage(servis > 0 ? [...draw.rack, ...jokers] : draw.rack);
+    this.rackNotation = servis > 0 ? `${draw.notation}+${jokers}` : draw.notation;
     this.bestScore = -1;
     this.canonicalTop = null;
     this.isotops = 0;
@@ -1598,14 +1621,15 @@ export class Game {
     // les caramels au sac et on recommence. Le plafond est celui de la partie.
     const plafond = tiragesInjouables(this.cfg.bornes);
     for (let essai = 0; essai < plafond; essai++) {
-      // Le joker ne repasse pas par le sac, chez le double comme en direct.
-      const gardeJoker = this.cfg.joker && this.jokersAvance > 0;
-      const sansJoker = gardeJoker
+      // Les jokers ne repassent pas par le sac, chez le double comme en direct.
+      const servis = this.jokersServis(this.jokersAvance);
+      const sansJoker = servis > 0
         ? this.reliquatAvance.filter((c) => c !== BLANK)
         : this.reliquatAvance;
       const draw = sac.draw(sansJoker);
-      const rack = rangerLeTirage(gardeJoker ? [...draw.rack, BLANK] : draw.rack);
-      const notation = gardeJoker ? `${draw.notation}+${BLANK}` : draw.notation;
+      const auTirage = BLANK.repeat(servis);
+      const rack = rangerLeTirage(servis > 0 ? [...draw.rack, ...auTirage] : draw.rack);
+      const notation = servis > 0 ? `${draw.notation}+${auTirage}` : draw.notation;
       const id = this.nextId++;
       const reply: any = await new Promise((res) => {
         this.pending.set(id, res);
