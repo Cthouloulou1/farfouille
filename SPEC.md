@@ -2057,6 +2057,11 @@ grille (plateau 15×15, super grille 21×21 ou infinie), le nombre de caramels
 piochés et posables (2 à 15, en petits boutons carrés), le temps par coup, le
 tirage des lettres, la partie joker et les primes.
 
+**« Rejouer » repart sur la même variante, champ pour champ.** Un champ oublié
+là ne se voit pas : le serveur retombe sur sa valeur par défaut, et la partie
+repart en silence sur autre chose. `jokersParCoup` y manquait, si bien qu'un
+double joker se rejouait en joker simple.
+
 Changer de grille change aussi le **pavage** et le **nombre de sacs** : le
 plateau du commerce n'a de sens que borné, le pavage infini que sans bord, et la
 super grille demande deux jeux de caramels. Appliquer relance une partie neuve
@@ -2243,6 +2248,19 @@ défaut, on peut décider que poser 2 lettres vaut 15 et poser 3 lettres vaut 25
 Le tirage contient **toujours un joker** : à 7 lettres, c'est 6 vraies lettres
 plus le joker.
 
+**Le chevalet fait sept, quoi qu'il arrive.** Les jokers y comptent, mais ils ne
+le rétrécissent pas : le sac distribue ce qu'ils ne fournissent pas, et le jour
+où un joker s'est posé pour de bon — il ne revient plus — le sac distribue une
+lettre **de plus** à sa place. La partie se poursuit alors comme un 7 sur 7
+ordinaire.
+
+> Le nombre de lettres tirées était figé au départ de la partie. Un joker
+> disparu faisait donc tomber le chevalet à **six** lettres pour tout le reste
+> de la partie, et à cinq en double joker. **Les jokers sont une ressource
+> finie, pas une place réservée** : deux avec un jeu, quatre avec le double sac.
+> La seule chose qui rétrécit un chevalet, c'est un sac qui n'a plus de quoi le
+> remplir — la toute fin de partie.
+
 Quand le top emploie le joker comme un R, il compte **0 point** — mais ce qui se
 pose sur la grille est un **vrai R sorti du sac**, et le joker reste au tirage.
 Le R posé est un R ordinaire : il **vaut 1 point pour tous les coups suivants**.
@@ -2250,7 +2268,18 @@ C'est tout l'intérêt de la variante, la grille ne se couvre pas de cases morte
 
 S'il ne reste **aucun R dans le sac**, le joker lui-même se pose (à zéro, pour
 toujours) et on prend le **second joker**. Les deux jokers posés, la partie
-continue sans.
+continue sans — à sept vraies lettres.
+
+**Et elle ne s'arrête pas avant.** Un joker gardé en réserve n'est pas un joker
+joué : il a servi, il a rendu sa lettre, il est revenu au tirage. Tant qu'il en
+reste un, la partie continue même si le sac ne contient plus que des voyelles,
+et les derniers tirages finissent par n'être faits que des jokers, qu'il faut
+poser. **Il faut jouer les jokers pour finir une partie.**
+
+> Cela ne fait pas tourner la partie sans fin : le sac vide, chaque coup pose
+> des caramels du reliquat sans les remplacer, le tirage se vide, et il ne reste
+> bientôt plus que les jokers à jouer. Un tirage dont rien ne se joue est de
+> toute façon plafonné.
 
 **La variante s'accommode des trois pioches**, chacune à sa façon :
 
@@ -3058,6 +3087,11 @@ hors écran, assez grand pour contenir toute l'emprise des caramels. C'est le
 même code de dessin, donc l'image montre exactement ce que montre le jeu — y
 compris **le mot du rejeu masqué par l'œil**, ce qui donne une position à
 chercher.
+
+> **L'œil barré éteint aussi les repères.** Le mot disparaissait bien de la
+> grille, mais sa ligne et sa colonne restaient allumées sur les règles : la
+> position du top se lisait quand même — et une capture d'écran l'emportait
+> avec elle, ce qui vide l'exercice de son intérêt.
 
 L'échelle s'ajuste : jusqu'à 48 pixels par case pour une petite grille, au
 minimum 6 pour une grande, sous un plafond de 36 mégapixels. Mesuré sur une

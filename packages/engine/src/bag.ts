@@ -165,8 +165,12 @@ export class Bag {
   private reject: RejectPolicy;
   /** La politique vient-elle du dehors ? Voir `cloner`. */
   private readonly rejetFourni: boolean;
-  /** Nombre de caramels par tirage -- le Y de « X sur Y ». */
-  private readonly tirage: number;
+  /**
+   * Nombre de caramels que la pioche distribue -- le Y de « X sur Y », moins ce
+   * que les jokers fournissent. Voir `Pioche.tirage` : il se regle avant chaque
+   * tirage, parce qu'un joker qui manque doit etre remplace par une lettre.
+   */
+  tirage: number;
   /** Numero du tirage en cours, pour la regle du double joker. */
   private coup = 0;
   /**

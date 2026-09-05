@@ -301,6 +301,52 @@ console.log("\nLe double joker sur le plateau du commerce : un seul sac\n");
   nettoyer(ID);
 }
 
+console.log("\nLe chevalet fait sept, meme quand un joker manque\n");
+{
+  const ID = "chevalet-sept-test";
+  nettoyer(ID);
+  setLayout("classique");
+  // Un joker par tirage sur la super grille : la partie dure assez longtemps
+  // pour que les quatre jokers finissent par manquer, l'un apres l'autre.
+  const g = new Game(ID, "classique", cfgSuper({ joker: true, jokersParCoup: 1 }));
+  await g.start();
+  g.presents.add("essai");
+  await g.reveiller();
+  await g.demarrer();
+  await jouer(g, 80);
+
+  // A CHAQUE COUP, LE CHEVALET FAIT SEPT -- ou ce qui reste, en toute fin de
+  // partie. Un joker pose pour de bon ne revient plus : le sac doit alors
+  // distribuer une lettre de plus a sa place, faute de quoi le chevalet tombe a
+  // six pour le reste de la partie.
+  const total = tailleDuSac(dictionnaire("ods9"), 2);
+  let poses = 0, reserve = total === 204 ? 4 : 2;
+  const fautifs: string[] = [];
+  for (const m of g.moves) {
+    // Ce qu'il restait a distribuer avant ce coup : tout, moins ce qui est deja
+    // pose, moins les jokers encore mis de cote.
+    const dispo = total - poses - reserve;
+    const attendu = Math.min(7, dispo + Math.min(1, reserve));
+    if (m.rack.length !== attendu) {
+      fautifs.push(`coup ${m.n} : ${m.rack} (${m.rack.length}) au lieu de ${attendu}`);
+    }
+    reserve -= m.jokers?.restes ?? 0;
+    poses += m.placements.length;
+  }
+  const perdus = g.moves.filter((m) => (m.jokers?.restes ?? 0) > 0).length;
+  verifie("la partie va jusqu'au bout", g.finie, `${g.moves.length} coups`);
+  // Sans jokers perdus, le test ne prouverait rien : c'est leur disparition qui
+  // faisait maigrir le chevalet.
+  verifie("des jokers ont fini par manquer", perdus > 0, `${perdus} perdu(s)`);
+  verifie("aucun chevalet n'a maigri", fautifs.length === 0,
+    fautifs.length === 0 ? `${g.moves.length} tirages` : fautifs.join(" · "));
+  // LES JOKERS DOIVENT ETRE JOUES POUR QUE LA PARTIE FINISSE (SPEC.md §11).
+  verifie("la partie ne s'est pas finie sur des jokers en reserve",
+    g.jokersEnReserve === 0, `reserve finale ${g.jokersEnReserve}`);
+  await g.stop();
+  nettoyer(ID);
+}
+
 console.log("\nUne partie sans joker n'en recoit aucun\n");
 {
   const ID = "sans-joker-test";

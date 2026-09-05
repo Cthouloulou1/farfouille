@@ -58,6 +58,23 @@ export const SAC_FRANCAIS: Readonly<Record<string, number>> = {
 
 /** Une pioche, quelle que soit sa nature. */
 export interface Pioche {
+  /**
+   * COMBIEN DE CARAMELS CETTE PIOCHE DOIT DISTRIBUER, jokers non compris.
+   *
+   * Il change d'un coup a l'autre en partie joker : le sac ne donne que ce que
+   * les jokers ne fournissent pas, et le jour ou un joker manque -- il s'est
+   * pose lui-meme, faute de lettre a lui substituer -- il en donne un de plus.
+   * LE CHEVALET FAIT TOUJOURS SEPT, quel que soit le nombre de jokers dessus.
+   */
+  tirage: number;
+  /**
+   * Combien de jokers accompagnent le tirage sans sortir de la pioche.
+   *
+   * Elle ne les distribue pas, mais la regle de rejet a besoin de les connaitre :
+   * ils comptent dans la TAILLE du tirage, et deux d'entre eux la changent du
+   * tout au tout.
+   */
+  jokersAuTirage: number;
   draw(reliquat: readonly string[]): DrawResult;
   /** La partie est-elle terminee ? Toujours faux pour une pioche infinie. */
   estFinie(reliquat: readonly string[]): boolean;
@@ -83,7 +100,8 @@ export interface Pioche {
 
 export class SacFini implements Pioche {
   private readonly random: Alea;
-  private readonly tirage: number;
+  /** Voir `Pioche.tirage` : il se regle avant chaque tirage. */
+  tirage: number;
   private readonly reject: RejectPolicy;
   /** La politique vient-elle du dehors ? Voir `cloner`. */
   private readonly rejetFourni: boolean;

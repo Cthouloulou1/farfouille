@@ -1135,8 +1135,14 @@ function drawRulers(C: Record<string, string>, gx0: number, gx1: number, gy0: nu
   // Une seule case signalee : celle du DEPART du mot. Souligner toute son
   // etendue allumait toute une rangee de numeros -- et c'est bien la case de
   // depart que la notation nomme, « H ligne,colonne ».
-  const depart = ghost !== null
-    ? { x: ghost.x, y: ghost.y }
+  //
+  // L'OEIL BARRE CACHE AUSSI LES REPERES. Le mot du rejeu disparaissait bien de
+  // la grille, mais sa ligne et sa colonne restaient allumees sur les regles :
+  // la position du top se lisait quand meme, capture d'ecran comprise -- et
+  // c'est justement une capture qu'on envoie a qui doit chercher le coup.
+  const montre = ghost !== null && !ghostCache;
+  const depart = montre
+    ? { x: ghost!.x, y: ghost!.y }
     : cursor !== null ? { x: cursor.x, y: cursor.y } : null;
   const mark = depart === null ? null
     : { x0: depart.x, y0: depart.y, x1: depart.x, y1: depart.y };
@@ -4356,10 +4362,18 @@ $("lancer").addEventListener("click", () => {
  * Il renvoie la variante EN COURS, pas celle du panneau de reglages : celui-ci
  * a pu etre ouvert et tripote sans etre valide.
  */
+/**
+ * « Rejouer » REPART SUR LA MEME VARIANTE, champ pour champ.
+ *
+ * Un champ oublie ici ne se voit pas : le serveur retombe sur sa valeur par
+ * defaut, et la partie repart en silence sur autre chose. `jokersParCoup`
+ * manquait, si bien qu'un double joker se rejouait en joker simple.
+ */
 $("rejouer").addEventListener("click", () => {
   envoyer({
     t: "relancer", tirage: cfg.tirage, jouables: cfg.jouables, pioche: cfg.pioche,
-    joker: cfg.joker, primes: cfg.primes, chrono: cfg.chrono, bornes: cfg.bornes,
+    joker: cfg.joker, jokersParCoup: cfg.jokersParCoup,
+    primes: cfg.primes, chrono: cfg.chrono, bornes: cfg.bornes,
     mode: cfg.mode, coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
     decompte: cfg.decompte, dictionnaire: cfg.dictionnaire,
   });

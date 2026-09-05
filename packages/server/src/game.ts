@@ -378,6 +378,45 @@ export class Game {
   private jokersServis(reserve: number): number {
     return Math.min(this.jokersDuTirage, reserve);
   }
+  /**
+   * Regle la pioche pour LE tirage qui vient, et dit combien de jokers
+   * l'accompagnent.
+   *
+   * LE CHEVALET FAIT TOUJOURS SEPT. Les jokers y comptent : sept sur sept avec
+   * un joker, c'est six lettres tirees et le joker. Mais un joker qui s'est
+   * pose lui-meme, faute de lettre a lui substituer, ne revient plus -- et le
+   * sac doit alors distribuer une lettre de plus a sa place. Sans cela le
+   * chevalet tombait a six lettres pour le reste de la partie, puis a cinq en
+   * double joker.
+   *
+   * La regle de rejet a besoin du meme compte : un joker et six lettres font un
+   * tirage de sept, qui exige deux voyelles et deux consonnes.
+   */
+  private preparerLaPioche(pioche: Pioche, reserve: number): number {
+    const servis = this.jokersServis(reserve);
+    pioche.tirage = Math.max(1, this.cfg.tirage - servis);
+    pioche.jokersAuTirage = servis;
+    return servis;
+  }
+  /**
+   * LES JOKERS DOIVENT ETRE JOUES POUR QUE LA PARTIE FINISSE. Voir SPEC.md §11.
+   *
+   * Un joker garde en reserve n'est pas un joker joue : il a servi, il a rendu
+   * sa lettre, il est revenu au tirage. Tant qu'il en reste un, la partie
+   * continue -- meme si le sac ne contient plus que des voyelles -- et le
+   * dernier tirage finit par n'etre fait que de jokers, qu'il faut poser.
+   *
+   * Cela ne fait pas boucler la partie : le sac vide, chaque coup pose des
+   * caramels du reliquat sans les remplacer, le tirage se vide, et il ne reste
+   * bientot plus que les jokers a jouer. Un tirage dont rien ne se joue est
+   * d'ailleurs plafonne par ailleurs.
+   */
+  private jokersTousPoses(): boolean {
+    if (!this.cfg.joker) return true;
+    // Une pioche qui ne s'epuise pas rend les jokers sans fin : la reserve y
+    // vaut l'infini, et la partie ne s'arrete de toute facon jamais par le sac.
+    return !Number.isFinite(this.jokersEnReserve) || this.jokersEnReserve === 0;
+  }
   /** Cree dans start(), une fois la graine connue. */
   private worker!: Worker;
   private readonly file: string;
@@ -1029,7 +1068,7 @@ export class Game {
         // La pioche doit etre refaite dans l'ordre : c'est elle qui porte l'etat
         // de compensation, et il depend de tout l'historique. En partie joker
         // elle est completee SANS le joker, exactement comme au tirage.
-        const servis = this.jokersServis(this.jokersEnReserve);
+        const servis = this.preparerLaPioche(this.bag, this.jokersEnReserve);
         this.bag.draw(servis > 0 ? this.reliquat.filter((c) => c !== BLANK) : this.reliquat);
         // LES PLACEMENTS SE REFONT ICI, avant de poser quoi que ce soit : la
         // grille est encore telle qu'elle etait avant ce coup, et c'est elle
@@ -1266,7 +1305,10 @@ export class Game {
     // ecoulee. Le compte part du premier tirage, pas de la creation du salon.
     const assezDure = this.cfg.dureeMax !== null && this.debutDeLaPartie !== 0
       && Date.now() - this.debutDeLaPartie >= this.cfg.dureeMax * 1000;
-    if (assezJoue || assezDure || this.bag.estFinie(this.reliquat)) {
+    // LE SAC EPUISE NE SUFFIT PAS EN PARTIE JOKER : il faut encore que les
+    // jokers soient poses. Voir `jokersTousPoses`.
+    const plusRienATirer = this.bag.estFinie(this.reliquat) && this.jokersTousPoses();
+    if (assezJoue || assezDure || plusRienATirer) {
       this.finie = true;
       this.solving = false;
       this.canonicalTop = null;
@@ -1287,7 +1329,7 @@ export class Game {
     }
     // Les jokers ne repassent pas par le sac : on les retire du reliquat avant
     // de completer, et on en remet le compte voulu ensuite.
-    const servis = this.jokersServis(this.jokersEnReserve);
+    const servis = this.preparerLaPioche(this.bag, this.jokersEnReserve);
     const reliquatSansJoker = servis > 0
       ? this.reliquat.filter((c) => c !== BLANK)
       : this.reliquat;
@@ -1610,7 +1652,12 @@ export class Game {
    */
   private async unCoupDAvance(): Promise<boolean> {
     const sac = this.sacAvance!;
-    if (sac.estFinie(this.reliquatAvance)) return false;
+    // Le double s'arrete au meme endroit que la vraie partie : sac epuise ET
+    // jokers poses, faute de quoi il cesserait de preparer des coups qui vont
+    // pourtant etre joues.
+    const jokersPoses = !this.cfg.joker
+      || !Number.isFinite(this.jokersAvance) || this.jokersAvance === 0;
+    if (sac.estFinie(this.reliquatAvance) && jokersPoses) return false;
     // L'INVARIANT DE L'AVANCE, en une ligne : la grille du solveur porte les
     // coups joues, plus le coup en cours, plus ceux qui attendent dans la file.
     // Tout le reste en decoule -- le numero du prochain calcul, et le fait que
@@ -1630,7 +1677,7 @@ export class Game {
     const plafond = tiragesInjouables(this.cfg.bornes);
     for (let essai = 0; essai < plafond; essai++) {
       // Les jokers ne repassent pas par le sac, chez le double comme en direct.
-      const servis = this.jokersServis(this.jokersAvance);
+      const servis = this.preparerLaPioche(sac, this.jokersAvance);
       const sansJoker = servis > 0
         ? this.reliquatAvance.filter((c) => c !== BLANK)
         : this.reliquatAvance;
