@@ -1226,14 +1226,31 @@ recalcul coûte **19 ms par coup**, jusqu'à 6 000 solutions.
 C'est l'équilibre habituel des logiciels de ce genre : on garde le paramétrage,
 les tirages et le coup joué, et on recalcule le reste.
 
-**Sur une grille infinie, on les garde** : au trois-millième coup, refaire une
-position demanderait près d'une seconde — la question ne se pose pas. Et il en
-faut un plafond : la grille grandit sans fin, donc le nombre d'ancrages aussi. Même mesure : **15 333 solutions par position en
-moyenne, 166 659 au pire, 35 Mo pour cent vingt coups**. On s'y arrête à quarante
-paliers ou cent vingt solutions, le premier atteint.
+**Sur une grille infinie, on garde le palier du top, et rien d'autre.** Le refaire
+demanderait 17,6 secondes au vingt-sept-millième coup — mesuré — et supposerait
+que le lexique n'ait pas bougé depuis, ce qui n'est vrai que jusqu'au jour où il
+bouge. Il pèse **61 octets**.
 
-C'est la seule différence de fond entre les deux grilles sur ce point, et elle
-vient d'un rapport de trente entre les deux.
+Les sous-tops, eux, ne sont plus écrits au journal. Ils y pesaient 2 694 octets
+par coup, soit 86 % du fichier, pour une lecture que personne ne fait : une
+grille sans fin n'a pas de fin, donc pas d'analyse d'après-partie. Et les montrer
+en cours de route apprendrait au joueur des mots et des points d'appui qu'il n'a
+pas trouvés — sur une grille qui, elle, est toujours là. Le mot qu'un sous-top
+révèle en pivot se jouera un autre jour.
+
+**Une grille sans fin bornée en temps ou en coups fait exception.** Elle a une
+fin, donc une analyse : ses sous-tops sont gardés, mais dans un fichier **à
+part** (voir §11), qu'on efface une fois la partie analysée sans toucher au
+journal. On s'y arrête à quarante paliers ou cent vingt solutions, le premier
+atteint : la grille grandit sans fin, donc le nombre d'ancrages aussi —
+**15 333 solutions par position en moyenne, 166 659 au pire**.
+
+Le solveur ne calcule que ce qu'on garde. Ne pas demander de paliers resserre
+l'élagage — le seuil monte aussitôt au meilleur score — et **le calcul du top y
+gagne jusqu'à un quart de son temps**, sans que le top ni ses isotops changent
+d'une virgule : un isotop a par définition le meilleur score, son ancrage n'est
+jamais sauté. Vérifié sur sept positions de `top-leger`, du coup 200 au coup
+20 000 : même mot, même case, même nombre d'isotops.
 
 **Un clic sur un coup passé amène la caméra dessus** et le met en évidence,
 avec dézoom puis zoom s'il est hors champ. Rien de plus.
@@ -1458,17 +1475,29 @@ tirage · mot · coordonnées · score · joueur · timestamp_ms · paliers[]
 Toutes les statistiques, le classement et le rejeu se dérivent de cette table.
 Il n'y a rien d'autre à stocker.
 
-### Deux fichiers, et c'est voulu
+### Un fichier qui fait foi, et des commodités
 
 | fichier | rôle |
 |---|---|
 | `<partie>.journal.jsonl` | **ajout seul**, une ligne par événement, `fsync` à chaque ligne, jamais réécrit. **C'est lui qui fait foi.** |
-| `<partie>.json` | instantané complet, réécrit à chaque coup. Commodité de lecture pour les outils. |
-| `<partie>.secours.json` | copie de l'instantané, prise tous les 20 coups. |
+| `<partie>.paliers.jsonl` | les sous-tops, quand la partie en garde. Ajout seul lui aussi, sans `fsync` — ce qui s'y trouve se recalcule. **Effaçable.** |
+| `<partie>.json` | instantané complet, réécrit tous les 20 coups et à l'arrêt. Commodité de lecture pour les outils. **Effaçable.** |
+| `<partie>.secours.json` | copie de l'instantané. **N'est plus produit** pour les parties qui ont un journal. |
 
 Une partie qui dure des mois ne doit pas tenir à un fichier qu'on réécrit sans
 cesse : il suffit d'une coupure au mauvais moment, d'un disque qui tousse ou
 d'une fausse manœuvre pour tout perdre. Le journal ne se réécrit jamais.
+
+**Pourquoi les sous-tops vivent à part.** Le journal est en ajout seul et adressé
+à l'octet : le serveur retient où commence la ligne de chaque coup pour aller la
+relire. On ne peut donc pas en retirer une ligne sans réécrire le fichier, et
+réécrire le fichier invalide toutes les adresses. Ce qui doit pouvoir s'effacer
+ne peut pas y être. L'annexe a le même adressage et s'efface d'un geste.
+
+**Pourquoi le secours ne servait à rien.** C'était la copie de sauvegarde d'un
+fichier jetable : l'instantané se refait à partir du journal. Pendant ce temps,
+le seul fichier irremplaçable n'était copié nulle part. Ce qu'il faut copier,
+c'est le journal, et hors de la machine.
 
 **On peut effacer l'instantané sans rien perdre** : au démarrage, s'il y a un
 journal, la partie se reconstruit intégralement à partir de lui — graine,
@@ -2000,16 +2029,26 @@ continue sans.
 
 **La variante s'accommode des trois pioches**, chacune à sa façon :
 
+La question est de savoir **d'où vient ce R**.
+
 | pioche | ce qui se passe quand le joker est joué |
 |---|---|
-| sac de 102 | une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **deux** — perd une unité |
-| sac de 102 sans fin | pareil, mais les jokers **ne s'épuisent jamais** : on en reprend un |
-| probabilités pondérées | **rien ne remplace** le joker : il se pose à zéro et on en reprend un aussitôt. Rien ne s'épuisant, « il ne reste plus de R » n'aurait aucun sens |
+| sac de 102 | **du sac** : une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **deux** — perd une unité |
+| sac de 102 sans fin | **de nulle part** : la lettre naît, le sac n'y perd rien, et le joker revient au tirage. Il ne s'épuise donc jamais |
+| probabilités pondérées | **de nulle part** non plus, pour la même raison |
 
-Mesuré sur 25 coups : aux probabilités, le tirage porte un joker à chaque coup
-et 28 se posent à zéro ; au sac sans fin, 5 seulement — les autres sont
-remplacés par de vraies lettres ; au sac de 102, les deux jokers s'épuisent et
-la partie continue sans.
+**Une pioche qui ne s'épuise pas n'a pas de stock à défendre.** Le sac qui boucle
+retrouve sa composition d'origine dès qu'il s'appauvrit : y prélever le R
+n'avançait que la date du prochain rechargement. Les probabilités pondérées, elles,
+n'ont jamais rien eu à retirer — si bien que **tous** les jokers y restaient
+jokers, et que la grille s'y couvrait de cases mortes, exactement ce que la
+variante veut éviter.
+
+Le sac de 102 est le seul à garder l'ancienne règle, et pour une raison qui lui
+est propre : le jeu n'a qu'un W, et le donner deux fois serait en inventer un
+second. `check_joker_sac.ts` vérifie l'invariant sur ce sac — sac plus chevalet
+plus grille égale toujours cent caramels — et, sur les deux autres pioches,
+qu'aucun joker ne reste jamais sur la grille.
 
 > ⚠️ **Règle d'isotop propre à cette variante.** Entre deux coups de même score
 > dont l'un emploie le joker et l'autre non, on retient **systématiquement celui
@@ -3366,3 +3405,90 @@ mémoire, que le journal les porte tous, que l'instantané ne les recopie plus �
 puis **arrête la partie, la rouvre, et compare les paliers de chaque coup un à
 un**. Les adresses sont refaites à la relecture : un octet de travers montrerait
 les sous-tops d'un autre coup, sans que rien ne le dise.
+
+---
+
+## 21. Ce qu'une partie laisse sur le disque
+
+Une grille sans fin écrivait **3 141 octets par coup** de journal, plus un
+instantané réécrit en entier à chaque coup, plus une copie de secours de cet
+instantané. `top-leger` — 27 596 coups — occupait 106 Mo et avait fait écrire au
+disque de l'ordre de 155 Go.
+
+La question posée était celle de l'hébergement : à ce rythme, une seule grille
+laissée tourner en chrono court remplit 11 Mo par heure.
+
+### Ce qui pesait, et pourquoi
+
+| | octets par coup | part |
+|---|---:|---:|
+| paliers de sous-tops | 2 694 | 86 % |
+| `placements` | 232 | 7 % |
+| tirage, mot, case, score, qui, temps | 215 | 7 % |
+
+Le détail qui décide : dans ces 2 694 octets, **le palier du top — le top et
+ses isotops — n'en fait que 61**. Il y a 1,5 isotop par coup en moyenne. Ce sont
+les sous-tops profonds qui pesaient tout, et personne ne les lisait : une grille
+sans fin n'a pas de fin, donc pas d'analyse d'après-partie.
+
+### Ce qui est écrit maintenant
+
+Le journal garde le palier du top, ce que les joueurs ont fait, et rien qui se
+recalcule à bon compte.
+
+**Les `placements` ne sont plus écrits.** Le mot, son sens et sa case suffisent à
+les refaire : on parcourt les cases du mot, celles qui étaient vides sont celles
+qu'il a posées. Vérifié sur les **31 196 coups des 185 parties enregistrées, sans
+un écart** — mêmes cases, mêmes lettres, même ordre.
+
+Seuls les jokers ne se devinent pas : rien dans « SIZE » ne dit que le S vaut
+zéro. Leur rang est donc écrit à part, `"blancs":[0]`. Trois octets là où les
+placements en prenaient 232.
+
+### Mesure, sur 120 coups d'une grille neuve
+
+| | avant | après |
+|---|---:|---:|
+| journal, grille sans fin | 3 141 o/coup | **262 o/coup** |
+| journal, grille bornée en coups | 3 141 o/coup | **261 o/coup**, plus 2 578 en annexe |
+| instantané | réécrit à chaque coup | tous les 20 coups, et à l'arrêt |
+| copie de secours | tous les 20 coups | plus produite |
+| calcul du top | — | **jusqu'à 28 % plus rapide** |
+
+Le calcul y gagne parce qu'on ne demande plus au solveur ce qu'on n'écrit pas :
+sans paliers à rendre, l'élagage se resserre aussitôt. Le top et ses isotops ne
+changent pas — vérifié position par position, du coup 200 au coup 20 000 de
+`top-leger`.
+
+Rapporté à `top-leger`, le même journal passerait de 83 Mo à environ 7,5 Mo, et
+la partie entière de 106 Mo à 11.
+
+### Ce qui ne change pas
+
+**Aucune partie déjà enregistrée n'est touchée.** Le réglage est écrit dans
+l'en-tête du journal à la création, et une partie garde le sien jusqu'à son
+dernier coup : une grille ouverte pour être étudiée ne doit pas cesser en cours
+de route d'enregistrer ce qu'on voulait étudier.
+
+Un en-tête **sans** ce champ désigne une partie d'avant le réglage : elle garde
+ses quarante paliers, comme elle l'a toujours fait. Rien à convertir, aucune
+liste d'exceptions à tenir, et `top-leger` continue exactement comme avant.
+
+De même, un journal qui porte encore ses `placements` est relu tel quel.
+
+### Vérification
+
+`check_sauvegarde.ts` joue une partie joker sur une grille sans fin bornée, en
+prend l'empreinte complète — chaque caramel avec sa case, sa lettre et son
+drapeau, chaque coup avec qui l'a trouvé, le classement, le chat, le sac, le
+tirage en cours — puis **efface les fichiers un à un** et vérifie à chaque fois
+que la partie revient entière :
+
+- instantané et copie de secours effacés : le journal seul suffit ;
+- annexe effacée : la partie est intacte, seuls les sous-tops manquent ;
+- dernière ligne du journal coupée en deux, comme une panne de courant l'aurait
+  fait : la partie s'ouvre quand même et repart.
+
+`check_paliers.ts` vérifie qu'un seul palier est écrit par coup, qu'une grille
+sans fin n'a pas d'annexe, qu'une grille bornée en a une, et que les sous-tops
+relus après un redémarrage sont exactement ceux qui avaient été écrits.

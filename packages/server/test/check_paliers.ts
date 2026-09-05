@@ -142,10 +142,14 @@ nettoyer();
 
 // ------------------------------------------------ GRILLE SANS FIN : LE JOURNAL
 //
-// Sur une grille sans fin, les paliers SONT ecrits au journal -- les refaire
-// couterait huit secondes au dix-millieme coup. Mais ils n'y sont plus RELUS en
-// memoire : le serveur retient l'octet ou chaque ligne commence et va la
-// chercher quand le rejeu la demande.
+// Sur une grille sans fin, le journal porte LE PALIER DU TOP -- le top et ses
+// isotops -- et rien de plus. Les refaire couterait dix-sept secondes au
+// vingt-sept-millieme coup, et supposerait que le lexique n'ait pas bouge ;
+// mais les sous-tops, eux, ne servent a rien sur une grille qui ne finit
+// jamais, et ils pesaient 86 % du fichier.
+//
+// Ils n'y sont pas RELUS en memoire : le serveur retient l'octet ou chaque
+// ligne commence et va la chercher quand le rejeu la demande.
 //
 // Ce qui doit tenir : les paliers rendus sont exactement ceux qui ont ete
 // ecrits, avant comme apres un redemarrage -- une adresse d'un octet de travers
@@ -153,7 +157,7 @@ nettoyer();
 console.log("\n  --- grille sans fin, paliers relus au journal ---\n");
 const IDI = ID + "-infini";
 const netI = (): void => {
-  for (const s of [".json", ".journal.jsonl", ".verrou", ".secours.json"]) {
+  for (const s of [".json", ".journal.jsonl", ".paliers.jsonl", ".verrou", ".secours.json"]) {
     const f = join(D, `${IDI}${s}`);
     if (existsSync(f)) rmSync(f);
   }
@@ -179,16 +183,27 @@ const enMemoire = gi.moves.filter((m) => m.tiers !== undefined && m.tiers.length
 verifie("aucun palier garde en memoire", enMemoire === 0,
   enMemoire === 0 ? "ils restent au journal" : `${enMemoire} coups en portent`);
 
-// Le journal, lui, doit les porter : c'est lui qui fait foi.
+// Le journal, lui, doit porter le palier du top : c'est lui qui fait foi.
 const brut = readFileSync(join(D, `${IDI}.journal.jsonl`), "utf8");
 const auJournal = brut.split("\n").filter((l) => l.includes('"tiers":')).length;
-verifie("le journal les porte tous", auJournal === gi.moves.length,
+verifie("le journal porte le palier du top", auJournal === gi.moves.length,
   `${auJournal} lignes sur ${gi.moves.length} coups`);
 
-// Et l'instantane ne doit plus les recopier a chaque coup.
-const instantane = readFileSync(join(D, `${IDI}.json`), "utf8");
-verifie("l'instantane ne les recopie plus", !instantane.includes('"tiers":'),
-  `${(instantane.length / 1024).toFixed(1)} ko`);
+// ET RIEN DE PLUS. Un seul palier par coup : celui du top et de ses isotops.
+// C'est ce qui fait passer le journal de 3 141 a 509 octets par coup.
+let trop = 0;
+for (const l of brut.split("\n")) {
+  if (!l.includes('"tiers":')) continue;
+  const t = (JSON.parse(l) as { move: { tiers: unknown[] } }).move.tiers;
+  if (t.length !== 1) trop++;
+}
+verifie("un seul palier par coup, celui du top", trop === 0,
+  trop === 0 ? "les sous-tops ne sont plus ecrits" : `${trop} coups en portent plus`);
+
+// Une grille sans fin ne tient pas d'annexe : personne n'analysera une partie
+// qui ne se termine pas.
+verifie("pas d'annexe sur une grille sans fin",
+  !existsSync(join(D, `${IDI}.paliers.jsonl`)));
 
 const avantArret: Record<number, string> = {};
 for (const m of gi.moves) avantArret[m.n] = signature(await gi.paliersDuCoup(m.n));
@@ -199,6 +214,15 @@ verifie("chaque coup rend des paliers",
 // LE JUGE DE PAIX : apres un redemarrage, les adresses sont refaites a la
 // lecture du journal. Un octet de travers se verrait ici.
 await gi.stop();
+
+// L'instantane n'est plus reecrit a chaque coup -- c'est une vue derivee, et
+// le journal fait foi. Il l'est a l'arret, et ne recopie pas les paliers.
+const instantane = readFileSync(join(D, `${IDI}.json`), "utf8");
+verifie("l'instantane est a jour a l'arret",
+  (JSON.parse(instantane) as { moves: unknown[] }).moves.length === gi.moves.length,
+  `${(instantane.length / 1024).toFixed(1)} ko`);
+verifie("et il ne recopie pas les paliers", !instantane.includes('"tiers":'));
+
 const relu = new Game(IDI, "pave1", cfgI);
 await relu.start();
 let ecarts = 0, premier = "";
@@ -213,6 +237,70 @@ verifie("apres un redemarrage, les memes paliers", ecarts === 0,
   ecarts === 0 ? `${relu.moves.length} coups compares un a un` : premier);
 await relu.stop();
 netI();
+
+// ------------------------------------------ GRILLE LIMITEE : L'ANNEXE
+//
+// Une grille sans fin bornee en coups ou en temps a, elle, une fin -- donc une
+// analyse d'apres-partie. Ses sous-tops sont gardes, mais A PART : le journal
+// est en ajout seul et adresse a l'octet, on ne peut pas en retirer une ligne
+// sans invalider toutes les autres adresses. L'annexe, elle, s'efface d'un
+// geste une fois la partie analysee, et le journal ne bouge pas.
+console.log("\n  --- grille limitee, sous-tops dans l'annexe ---\n");
+const IDA = ID + "-annexe";
+const netA = (): void => {
+  for (const s of [".json", ".journal.jsonl", ".paliers.jsonl", ".verrou", ".secours.json"]) {
+    const f = join(D, `${IDA}${s}`);
+    if (existsSync(f)) rmSync(f);
+  }
+};
+netA();
+setLayout("pave1");
+const cfgA = avec(configParDefaut(), {
+  bornes: null, pioche: "sac102boucle", chrono: null, mode: "topping", coupsMax: 40,
+});
+const ga = new Game(IDA, "pave1", cfgA);
+await ga.start();
+ga.presents.add("essai");
+await ga.reveiller();
+await ga.demarrer();
+for (let i = 0; i < 6 && !ga.finie; i++) {
+  await ga.reveal();
+  await new Promise((r) => setTimeout(r, 30));
+}
+verifie("la partie limitee a avance", ga.moves.length >= 5, `${ga.moves.length} coups`);
+verifie("l'annexe existe", existsSync(join(D, `${IDA}.paliers.jsonl`)));
+
+const avantA: Record<number, string> = {};
+for (const m of ga.moves) avantA[m.n] = signature(await ga.paliersDuCoup(m.n));
+const profonds = Object.values(avantA).filter((s) => s.includes(" / ")).length;
+verifie("les sous-tops y sont, pas seulement le top", profonds >= 4,
+  `${profonds} coups sur ${ga.moves.length} portent plusieurs paliers`);
+
+await ga.stop();
+const relueA = new Game(IDA, "pave1", cfgA);
+await relueA.start();
+let ecartsA = 0;
+for (const m of relueA.moves) {
+  if (signature(await relueA.paliersDuCoup(m.n)) !== avantA[m.n]) ecartsA++;
+}
+verifie("apres un redemarrage, les memes sous-tops", ecartsA === 0,
+  `${relueA.moves.length} coups compares un a un`);
+await relueA.stop();
+
+// ET L'ANNEXE EFFACEE, LA PARTIE TIENT TOUJOURS. C'est tout l'interet de la
+// mettre a part : ce qui s'efface est du calcul, jamais la partie.
+rmSync(join(D, `${IDA}.paliers.jsonl`));
+const sansAnnexe = new Game(IDA, "pave1", cfgA);
+await sansAnnexe.start();
+verifie("annexe effacee : la partie se relit entiere",
+  sansAnnexe.moves.length === relueA.moves.length,
+  `${sansAnnexe.moves.length} coups`);
+const restant = await sansAnnexe.paliersDuCoup(sansAnnexe.moves[1]!.n);
+verifie("et le palier du top reste au journal",
+  restant.length >= 1 && restant[0]!.score === sansAnnexe.moves[1]!.score,
+  `${restant.length} palier(s)`);
+await sansAnnexe.stop();
+netA();
 
 console.log(echecs === 0
   ? "\nOK : ce qui n'est plus enregistre se retrouve a l'identique\n"

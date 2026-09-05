@@ -67,7 +67,29 @@ export interface PlayedMove {
   x: number;
   y: number;
   score: number;
+  /**
+   * Les cases posees par ce coup, dans l'ordre du mot.
+   *
+   * EN MEMOIRE SEULEMENT. Le journal ne les porte plus : elles se refont a
+   * partir du mot, de sa case et de la grille telle qu'elle etait avant le
+   * coup. Un journal d'avant ce changement les porte encore, et on les prend
+   * telles quelles.
+   */
   placements: Placement[];
+  /**
+   * AU JOURNAL SEULEMENT : le rang des caramels poses qui sont des jokers.
+   *
+   * C'est la seule chose que le mot ne dit pas. Rien dans « SIZE » n'indique
+   * que le S vaut zero, et rien ne permet de le deviner : il faut l'ecrire.
+   * Trois octets la ou les placements en prenaient deux cent trente.
+   *
+   * Le rang est celui du caramel POSE, pas de la lettre dans le mot -- un mot
+   * qui s'appuie sur des lettres deja la n'en pose que quelques-unes.
+   *
+   * Un joker qui a joue une vraie lettre n'y figure pas : ce n'est plus un
+   * joker, c'est un R, et `jokers.sortis` en garde la trace.
+   */
+  blancs?: number[];
   /** Qui a trouve le top. null = revele sans joueur. */
   player: string | null;
   /**
@@ -178,6 +200,50 @@ const DATA_DIR = join(here, "..", "data");
  * couvrent une partie 15x15 entiere dans presque tous les cas.
  */
 const PALIERS_EN_MEMOIRE = 60_000;
+
+/**
+ * Ce qu'une partie d'AVANT le reglage enregistrait : quarante paliers.
+ *
+ * Une partie qui existait deja garde le comportement avec lequel elle est nee.
+ * Son entete ne porte pas le champ, et c'est ce qui la designe.
+ */
+const PALIERS_D_AVANT = 40;
+
+/**
+ * Tous les combien l'instantane est reecrit.
+ *
+ * Il l'etait a CHAQUE coup, en entier, sur le fil principal : neuf cent
+ * vingt-huit millisecondes de gel par coup sur une grande partie, et cent
+ * cinquante-cinq gigaoctets ecrits au fil d'une partie qui n'en conserve
+ * quatre-vingts. C'est une vue derivee : le journal fait foi, et une partie
+ * reprise se relit toujours depuis lui. Le retard de l'instantane ne coute
+ * donc rien -- il est de toute facon reecrit a l'arret.
+ */
+const INSTANTANE_TOUS_LES = 20;
+
+/**
+ * Combien de paliers de sous-tops une partie neuve garde.
+ *
+ * Le palier du top -- le top et ses isotops -- est toujours ecrit au journal
+ * sur une grille infinie : il pese soixante et un octets, et le refaire demande
+ * dix-sept secondes au vingt-sept-millieme coup, en supposant que le lexique
+ * n'ait pas bouge depuis.
+ *
+ * Les sous-tops, eux, ne sont gardes que si quelqu'un va les regarder :
+ *
+ *   plateau borne      rien. Le rejeu les refait en dix-neuf millisecondes.
+ *   grille sans fin    rien. Elle ne se termine jamais, donc rien ne s'analyse
+ *                      a la fin ; et les montrer en cours de partie apprend au
+ *                      joueur des mots et des points d'appui qu'il n'a pas
+ *                      trouves -- la grille, elle, est toujours la.
+ *   grille limitee     tout, dans l'annexe : une partie en soixante minutes ou
+ *                      en mille coups a une fin, donc une analyse d'apres-coup.
+ */
+function paliersParDefaut(cfg: ConfigPartie): number {
+  if (cfg.bornes !== null) return 0;
+  if (cfg.coupsMax !== null || cfg.dureeMax !== null) return PALIERS_D_AVANT;
+  return 0;
+}
 
 /** Duree du decompte d'avant-partie : 3, 2, 1, partez. */
 const DECOMPTE_MS = 3000;
@@ -299,6 +365,24 @@ export class Game {
    * commence, et on va la relire a la demande (SPEC.md §20).
    */
   private ouEstLeCoup = new Map<number, number>();
+  /**
+   * L'ANNEXE DES SOUS-TOPS -- un fichier qu'on peut effacer.
+   *
+   * Les paliers sous le top ne font pas foi : ils se recalculent a partir de la
+   * position et du tirage. Les mettre dans le journal, en ajout seul et
+   * adresse a l'octet, revenait a les rendre indestructibles : on ne peut pas
+   * en retirer une ligne sans reecrire le fichier, et reecrire le fichier
+   * invalide toutes les adresses.
+   *
+   * Ils vivent donc a part, avec le meme adressage. Une fois la partie finie et
+   * analysee, l'annexe s'efface d'un geste et le journal ne bouge pas.
+   */
+  private readonly annexe: string;
+  private afd: number | null = null;
+  private tailleAnnexe = 0;
+  private ouEstLePalier = new Map<number, number>();
+  /** Combien de paliers sous le top cette partie garde. Voir `paliersParDefaut`. */
+  private paliersGardes = PALIERS_D_AVANT;
   seed = "";
 
   moves: PlayedMove[] = [];
@@ -493,6 +577,7 @@ export class Game {
     this.board = new Board(this.dawg, this.cfg);
     this.file = join(DATA_DIR, `${gameId}.json`);
     this.journal = join(DATA_DIR, `${gameId}.journal.jsonl`);
+    this.annexe = join(DATA_DIR, `${gameId}.paliers.jsonl`);
     this.lockFile = join(DATA_DIR, `${gameId}.verrou`);
   }
 
@@ -571,6 +656,15 @@ export class Game {
     this.arretee = true;
     this.viderLAvance();
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    // L'instantane est en retard d'au plus vingt coups : on le remet a jour
+    // avant de partir, pour que les outils qui le lisent trouvent la partie
+    // telle qu'elle s'est arretee. Le journal, lui, est a jour au coup pres.
+    if (this.moves.length > 0) this.save(true);
+    for (const fd of [this.jfd, this.afd]) {
+      if (fd !== null) { try { closeSync(fd); } catch { /* deja ferme */ } }
+    }
+    this.jfd = null;
+    this.afd = null;
     this.releaseLock();
     for (const [, done] of this.pending) done({ result: null, ms: 0 });
     this.pending.clear();
@@ -614,6 +708,56 @@ export class Game {
     return ou;
   }
 
+  /**
+   * Ecrit les sous-tops d'un coup dans l'annexe, et rend l'octet ou ils sont.
+   *
+   * PAS DE FSYNC ICI, a la difference du journal. Ce qui est ecrit la se
+   * recalcule ; perdre la derniere ligne dans une coupure ne coute qu'un
+   * recalcul, et le fsync coutait une milliseconde a chaque coup.
+   */
+  private appendPaliers(n: number, tiers: readonly Tier[]): number {
+    mkdirSync(DATA_DIR, { recursive: true });
+    if (this.afd === null) {
+      this.afd = openSync(this.annexe, "a");
+      if (this.tailleAnnexe === 0 && existsSync(this.annexe)) {
+        this.tailleAnnexe = statSync(this.annexe).size;
+      }
+    }
+    const ligne = JSON.stringify({ n, tiers }) + "\n";
+    const ou = this.tailleAnnexe;
+    writeSync(this.afd, ligne);
+    this.tailleAnnexe += Buffer.byteLength(ligne, "utf8");
+    return ou;
+  }
+
+  /**
+   * Releve les adresses de l'annexe SANS EN LIRE LE CONTENU.
+   *
+   * Le fichier peut peser des dizaines de megaoctets et rien n'oblige a le
+   * comprendre au demarrage : on repere le debut de chaque ligne et on y lit le
+   * seul numero de coup, ecrit en tete par construction.
+   */
+  private relireLAnnexe(): void {
+    if (!existsSync(this.annexe)) return;
+    const brut = readFileSync(this.annexe);
+    let debut = 0, casses = 0;
+    for (let i = 0; i <= brut.length; i++) {
+      if (i !== brut.length && brut[i] !== 10) continue;
+      if (i > debut) {
+        const tete = brut.toString("latin1", debut, Math.min(debut + 32, i));
+        const m = /^\{"n":(\d+),/.exec(tete);
+        if (m !== null) this.ouEstLePalier.set(Number(m[1]), debut);
+        else casses++;
+      }
+      debut = i + 1;
+    }
+    this.tailleAnnexe = brut.length;
+    if (this.ouEstLePalier.size > 0) {
+      console.log(`[partie] ${this.ouEstLePalier.size} coup(s) avec sous-tops en annexe`);
+    }
+    if (casses > 0) console.warn(`[partie] ${casses} ligne(s) illisible(s) dans l'annexe`);
+  }
+
   /** Relit le journal. Les lignes tronquees par une coupure sont ignorees. */
   private readJournal(): { ev: Record<string, any>; ou: number }[] {
     if (!existsSync(this.journal)) return [];
@@ -645,12 +789,12 @@ export class Game {
    * la ou ils ont ete ecrits, et on va les chercher quand -- et seulement
    * quand -- quelqu'un ouvre le rejeu sur ce coup-la.
    */
-  private ligneDuJournal(ou: number): Record<string, any> | null {
+  private ligneDuJournal(ou: number, fichier = this.journal): Record<string, any> | null {
     let taille = 65536;
     for (let essai = 0; essai < 8; essai++) {
       let fd: number | null = null;
       try {
-        fd = openSync(this.journal, "r");
+        fd = openSync(fichier, "r");
         const tampon = Buffer.allocUnsafe(taille);
         const lus = readSync(fd, tampon, 0, taille, ou);
         const fin = tampon.indexOf(10, 0);
@@ -738,6 +882,7 @@ export class Game {
     // Le journal fait foi. L'instantane ne sert que s'il n'y a pas de journal
     // -- parties d'avant son existence, ou journal efface a la main.
     const events = this.readJournal();
+    this.relireLAnnexe();
     let saved: Saved | null = null;
 
     if (events.length > 0) {
@@ -754,12 +899,29 @@ export class Game {
     this.createdAt = saved?.createdAt ?? Date.now();
     this.chat = saved?.chat ?? [];
 
+    // COMBIEN DE PALIERS CETTE PARTIE GARDE.
+    //
+    // Le reglage est ecrit dans l'entete a la creation, et la partie garde le
+    // sien jusqu'a son dernier coup : changer la valeur par defaut ne doit pas
+    // modifier une partie deja commencee, sans quoi une grille qu'on a ouverte
+    // pour l'etudier cesserait en cours de route d'enregistrer ce qu'on
+    // voulait etudier.
+    //
+    // Un entete SANS le champ designe une partie d'avant le reglage : elle
+    // garde ses quarante paliers, dans le journal, comme elle a toujours fait.
+    const entete = events.find((e) => e.ev["t"] === "grille")?.ev ?? null;
+    const dejaCommencee = entete !== null || saved !== null;
+    this.paliersGardes = typeof entete?.["paliers"] === "number"
+      ? (entete["paliers"] as number)
+      : dejaCommencee ? PALIERS_D_AVANT : paliersParDefaut(this.cfg);
+
     // Le journal commence par l'entete de la grille : graine, pavage, date.
     // Sans lui on ne saurait pas rejouer la partie a partir du seul journal.
     if (events.length === 0) {
       this.append({
         t: "grille", gameId: this.gameId, layout: this.layout,
         seed: this.seed, createdAt: this.createdAt, config: serialiser(this.cfg),
+        paliers: this.paliersGardes,
       });
       // Migration : une partie qui n'avait qu'un instantane se voit dotee d'un
       // journal complet, retroactivement.
@@ -822,6 +984,13 @@ export class Game {
         // elle est completee SANS le joker, exactement comme au tirage.
         const gardeJoker = this.cfg.joker && this.jokersEnReserve > 0;
         this.bag.draw(gardeJoker ? this.reliquat.filter((c) => c !== BLANK) : this.reliquat);
+        // LES PLACEMENTS SE REFONT ICI, avant de poser quoi que ce soit : la
+        // grille est encore telle qu'elle etait avant ce coup, et c'est elle
+        // qui dit quelles cases du mot etaient libres. Un journal d'avant ce
+        // changement les porte : on les prend alors tels quels.
+        if ((m as { placements?: Placement[] }).placements === undefined) {
+          m.placements = this.refairePlacements(m);
+        }
         this.board.place(m.placements);
         this.worker.postMessage({ t: "place", placements: m.placements });
         if (this.cfg.joker) {
@@ -830,8 +999,10 @@ export class Game {
           this.reliquat = Bag.remainder(m.rack, Game.avantSubstitution(m, trace));
           // Les lettres que les jokers ont fait sortir doivent RESSORTIR : le
           // sac n'en a plus, et sans cela sa composition derive coup apres coup.
+          // Rien a ressortir d'une pioche qui ne s'epuise pas : elle n'avait
+          // rien donne.
           const sac = this.bag as SacFini;
-          if (typeof sac.retirer === "function") {
+          if (Game.preleveLesLettres(this.bag)) {
             for (const l of trace?.sortis ?? []) sac.retirer(l);
           }
           this.jokersEnReserve -= trace?.restes ?? 0;
@@ -1153,12 +1324,17 @@ export class Game {
     const id = this.nextId++;
     const reply: any = await new Promise((res) => {
       this.pending.set(id, res);
-      // Autant de paliers ENTIERS que tiennent dans 120 solutions. C'est ce
-      // qu'on enregistre sur une grille infinie ; sur un plateau borne on ne
-      // les enregistre plus du tout et le rejeu les refait, complets, a la
-      // demande. Pas la peine d'en calculer davantage ici.
+      // ON NE CALCULE QUE CE QU'ON GARDE.
+      //
+      // Le solveur en rendait quarante paliers a toutes les parties, y compris
+      // a celles qui n'en ecrivaient aucun. Or l'elagage se resserre quand on
+      // n'en demande pas : le seuil monte aussitot au meilleur score, et le
+      // calcul du top y gagne jusqu'a un quart de son temps. Le top et ses
+      // isotops, eux, ne bougent pas d'une virgule -- un isotop a par
+      // definition le meilleur score, son ancrage n'est jamais saute.
       this.worker.postMessage({
-        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1, tiers: 40,
+        t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1,
+        tiers: this.paliersGardes,
       });
     });
 
@@ -1417,7 +1593,7 @@ export class Game {
       const reply: any = await new Promise((res) => {
         this.pending.set(id, res);
         this.worker.postMessage({
-          t: "avance", id, rack, moveNumber: n, tiers: 40,
+          t: "avance", id, rack, moveNumber: n, tiers: this.paliersGardes,
         });
       });
       // Le solveur dit combien de coups sa grille porte. Un ecart voudrait dire
@@ -1703,13 +1879,19 @@ export class Game {
       playerY: played?.y,
       ms,
       isotops: this.isotops,
-      // Les paliers ne sont enregistres QUE sur une grille infinie.
+      // LE JOURNAL NE PORTE QUE LE PALIER DU TOP -- le top et ses isotops.
       //
-      // Ils representaient 86 % du poids d'un journal -- 3 028 octets par coup
-      // contre 415 sans eux. Sur un plateau borne on les refait a la demande en
-      // cinq millisecondes ; sur une grille infinie au trois millieme coup il
-      // faudrait presque une seconde, et la question ne se pose pas.
-      ...(this.cfg.bornes === null ? { tiers: this.tiers as Tier[] } : {}),
+      // Soixante et un octets, la ou les quarante paliers en pesaient 2 694 :
+      // ils faisaient 86 % du poids du fichier. Et ce sont les seuls qu'on ne
+      // saurait pas refaire a bon compte -- dix-sept secondes au
+      // vingt-sept-millieme coup d'une grille sans fin, en supposant que le
+      // lexique n'ait pas bouge depuis, ce qui n'est vrai que jusqu'au jour ou
+      // il bouge. Sur un plateau borne, meme cela ne s'ecrit pas : la position
+      // s'y refait en dix-neuf millisecondes.
+      //
+      // Les sous-tops vont dans l'annexe, juste apres, quand la partie en garde.
+      ...(this.cfg.bornes === null && this.tiers.length > 0
+        ? { tiers: [this.tiers[0]!] } : {}),
       ...(Object.keys(propositions).length > 0 ? { propositions } : {}),
       ...(duplicate ?? {}),
       ...(demiPoint ? { demiPoint } : {}),
@@ -1757,8 +1939,13 @@ export class Game {
     // Le journal recoit le coup ENTIER, paliers compris : c'est lui qui fait foi
     // et qui les conservera. La copie qu'on garde en memoire s'en defait
     // aussitot -- elle n'en a pas l'usage, et on sait ou les retrouver.
-    const ou = this.append({ t: "coup", move });
+    const ou = this.append({ t: "coup", move: Game.pourLeJournal(move) });
     this.ouEstLeCoup.set(move.n, ou);
+    // Les sous-tops vont a part : un fichier qu'on peut effacer, une fois la
+    // partie finie et analysee, sans toucher au journal ni a ses adresses.
+    if (this.paliersGardes > 0 && this.tiers.length > 1) {
+      this.ouEstLePalier.set(move.n, this.appendPaliers(move.n, this.tiers));
+    }
     delete move.tiers;
     this.save();
     for (const f of this.surCoup) f(move);
@@ -1894,7 +2081,7 @@ export class Game {
     placements: Placement[],
   ): { sortis: string[]; restes: number } {
     const d = Game.deciderLesJokers(placements, this.bag);
-    this.appliquerLesJokers(d, typeof (this.bag as SacFini).retirer === "function");
+    this.appliquerLesJokers(d, Game.preleveLesLettres(this.bag));
     return { sortis: d.sorties, restes: d.restes };
   }
 
@@ -1911,23 +2098,84 @@ export class Game {
     placements: Placement[], pioche: Pioche,
   ): { sorties: string[]; restes: number } {
     const sac = pioche as SacFini;
-    const avecSac = typeof sac.retirer === "function";
     const sorties: string[] = [];
     let restes = 0;
     for (const p of placements) {
       if (!p.blank) continue;
-      // Avec un sac, la lettre jouee par le joker en sort pour de vrai : elle
-      // vaudra ses points pour la suite, et le joker revient au tirage.
-      if (avecSac && sac.retirer(p.letter)) {
+      // SUR UNE PIOCHE QUI NE S'EPUISE PAS, LA LETTRE NAIT.
+      //
+      // Un sac qui se recharge et des probabilites ponderees n'ont pas de stock
+      // a defendre. Prelever le R du joker n'y avancait que la date du prochain
+      // rechargement ; pire, sur des probabilites il n'y avait rien a prelever
+      // et le joker restait joker a tous les coups. Il devient donc la lettre
+      // sans rien prendre a personne, et revient au tirage suivant.
+      if (!Game.preleveLesLettres(pioche)) {
         p.blank = false;
         sorties.push(p.letter);
         continue;
       }
-      // Sans sac -- ou sans lettre disponible -- le joker se pose lui-meme, a
-      // zero pour toujours. La reserve n'en souffre que si elle est finie.
+      // Sac fini : la lettre jouee par le joker en sort pour de vrai. Elle
+      // vaudra ses points pour la suite, et le joker revient au tirage.
+      if (sac.retirer(p.letter)) {
+        p.blank = false;
+        sorties.push(p.letter);
+        continue;
+      }
+      // Plus de lettre disponible : le joker se pose lui-meme, a zero pour
+      // toujours, et la reserve perd une unite (SPEC.md §16).
       restes++;
     }
     return { sorties, restes };
+  }
+
+  /**
+   * Cette pioche a-t-elle un stock a defendre ?
+   *
+   * Un sac fini seul en a un : ce qui en sort n'y revient plus, et le jeu n'a
+   * qu'un W. Un sac qui boucle retrouve sa composition d'origine des qu'il
+   * s'appauvrit, et des probabilites ponderees n'ont jamais rien eu a retirer.
+   */
+  private static preleveLesLettres(pioche: Pioche): boolean {
+    const sac = pioche as SacFini;
+    return typeof sac.retirer === "function" && sac.recharge !== true;
+  }
+
+  /**
+   * Le coup tel qu'il part au journal : SANS SES PLACEMENTS.
+   *
+   * Ils ne disent rien que le mot, son sens et sa case ne disent deja. On
+   * parcourt les cases du mot, celles qui etaient vides sont celles qu'il a
+   * posees -- verifie sur les 31 196 coups des parties enregistrees, sans un
+   * ecart. Ils pesaient 232 octets par coup, soit pres de la moitie de ce qui
+   * reste une fois les sous-tops partis a l'annexe.
+   *
+   * Seuls les jokers ne se devinent pas : leur rang est ecrit a part.
+   */
+  private static pourLeJournal(move: PlayedMove): Record<string, unknown> {
+    const { placements, ...reste } = move;
+    const blancs: number[] = [];
+    placements.forEach((p, i) => { if (p.blank) blancs.push(i); });
+    return blancs.length > 0 ? { ...reste, blancs } : reste;
+  }
+
+  /**
+   * Les placements d'un coup, refaits a partir du mot et de la grille.
+   *
+   * LA GRILLE DOIT ETRE DANS L'ETAT D'AVANT CE COUP : c'est elle qui dit
+   * quelles cases du mot etaient vides, donc lesquelles il a posees. On
+   * l'appelle donc au fil du rejeu, coup apres coup, jamais apres coup.
+   */
+  private refairePlacements(m: PlayedMove): Placement[] {
+    const dx = m.dir === "H" ? 1 : 0;
+    const dy = m.dir === "H" ? 0 : 1;
+    const blancs = m.blancs ?? [];
+    const out: Placement[] = [];
+    for (let k = 0; k < m.word.length; k++) {
+      const x = m.x + dx * k, y = m.y + dy * k;
+      if (this.board.occupied(x, y)) continue;
+      out.push({ x, y, letter: m.word[k]!, blank: blancs.includes(out.length) });
+    }
+    return out;
   }
 
   /** Rejoue une decision de joker sur la VRAIE partie : reserve et journal. */
@@ -1955,15 +2203,15 @@ export class Game {
    */
   private rejouerLesJokers(pret: CoupPret): void {
     const sac = this.bag as SacFini;
-    const avecSac = typeof sac.retirer === "function";
+    const preleve = Game.preleveLesLettres(this.bag);
     for (const l of pret.jokersSortis) {
-      if (avecSac && !sac.retirer(l)) {
+      if (preleve && !sac.retirer(l)) {
         this.renoncerALAvance(`le sac n'avait plus le ${l} promis par l'avance`);
         return;
       }
     }
     this.appliquerLesJokers(
-      { sorties: pret.jokersSortis, restes: pret.jokersRestes }, avecSac,
+      { sorties: pret.jokersSortis, restes: pret.jokersRestes }, preleve,
     );
   }
 
@@ -1979,41 +2227,49 @@ export class Game {
     const m = this.moves.find((q) => q.n === n);
     if (m === undefined) return [];
     if (m.tiers !== undefined && m.tiers.length > 0) return m.tiers;
-    // LES PALIERS SONT AU JOURNAL : on relit la ligne de ce coup-la, et elle
-    // seule. Une lecture d'un millieme de seconde, contre les recalculer -- huit
-    // secondes sur une grande grille -- ou les tenir tous en memoire.
-    const ou = this.ouEstLeCoup.get(n);
-    if (ou !== undefined) {
-      const garde = this.paliersRefaits.get(n);
-      if (garde !== undefined) {
-        this.paliersRefaits.delete(n);
-        this.paliersRefaits.set(n, garde);
-        return garde;
-      }
-      const ligne = this.ligneDuJournal(ou);
-      const paliers = (ligne?.["move"]?.tiers ?? []) as Tier[];
-      if (paliers.length > 0) {
-        this.paliersRefaits.set(n, paliers);
-        this.oublierLesPlusVieux(n);
-        return paliers;
-      }
-    }
+
     // ON NE RECALCULE PAS DEUX FOIS LE MEME COUP.
     //
-    // Sur un plateau borne, les paliers ne sont pas au journal -- on les refait
-    // a la demande, et un coup a deux jokers demande plusieurs secondes. Or on
-    // navigue dans le rejeu : coup 7, coup 8, retour au 7. Sans memoire, le
-    // retour coutait aussi cher que la premiere visite, pour un resultat
+    // Sur un plateau borne, les paliers ne sont pas enregistres -- on les
+    // refait a la demande, et un coup a deux jokers demande plusieurs secondes.
+    // Or on navigue dans le rejeu : coup 7, coup 8, retour au 7. Sans memoire,
+    // le retour coutait aussi cher que la premiere visite, pour un resultat
     // identique au caramel pres -- la position d'avant le coup et le tirage ne
     // changent plus, la partie est jouee.
+    //
+    // La reponse repasse en queue a chaque visite : c'est le plus ANCIENNEMENT
+    // CONSULTE qu'on jette, pas le plus anciennement calcule. Qui fait des
+    // allers-retours entre deux coups ne doit pas voir l'un des deux s'effacer
+    // a chaque passage.
     const garde = this.paliersRefaits.get(n);
     if (garde !== undefined) {
-      // On le remet en queue : c'est le plus ANCIENNEMENT consulte qu'on jette,
-      // pas le plus anciennement calcule. Qui fait des allers-retours entre
-      // deux coups ne doit pas voir l'un des deux s'effacer a chaque passage.
       this.paliersRefaits.delete(n);
       this.paliersRefaits.set(n, garde);
       return garde;
+    }
+
+    // L'ANNEXE D'ABORD : c'est elle qui porte les sous-tops, a l'octet ou ils
+    // ont ete ecrits. Une lecture d'un millieme de seconde.
+    const ouAnnexe = this.ouEstLePalier.get(n);
+    if (ouAnnexe !== undefined) {
+      const paliers = (this.ligneDuJournal(ouAnnexe, this.annexe)?.["tiers"] ?? []) as Tier[];
+      if (paliers.length > 0) return this.retenir(n, paliers);
+    }
+
+    // PUIS LE JOURNAL. Il porte le palier du top, et les quarante paliers des
+    // parties d'avant le reglage.
+    //
+    // Quand il n'a que le palier du top, les sous-tops manquent -- et les
+    // refaire demande des secondes sur une grille sans fin, SUR LE FIL QUI
+    // CHERCHE LE TOP DU COUP EN COURS. Tant que la partie se joue, on rend donc
+    // ce qu'on a plutot que de faire attendre la table entiere. Une partie
+    // finie, elle, ne fait plus attendre personne : l'analyse peut s'y refaire.
+    const ou = this.ouEstLeCoup.get(n);
+    if (ou !== undefined) {
+      const paliers = (this.ligneDuJournal(ou)?.["move"]?.tiers ?? []) as Tier[];
+      if (paliers.length > 1 || (paliers.length > 0 && !this.finie)) {
+        return this.retenir(n, paliers);
+      }
     }
     const avant: Placement[] = [];
     for (const q of this.moves) {
@@ -2025,7 +2281,11 @@ export class Game {
       this.pending.set(id, res);
       this.worker.postMessage({ t: "paliers", id, rack: m.rack, avant });
     });
-    const paliers = (reply.tiers ?? []) as Tier[];
+    return this.retenir(n, (reply.tiers ?? []) as Tier[]);
+  }
+
+  /** Garde une reponse pour la prochaine visite, et fait la place qu'il faut. */
+  private retenir(n: number, paliers: Tier[]): Tier[] {
     this.paliersRefaits.set(n, paliers);
     this.oublierLesPlusVieux(n);
     return paliers;
@@ -2051,13 +2311,29 @@ export class Game {
     await this.commit(null, Date.now() - this.servedAt);
   }
 
-  private save(): void {
+  private save(force = false): void {
+    // L'INSTANTANE EST UNE VUE DERIVEE, PAS LA SAUVEGARDE.
+    //
+    // Le journal vient d'etre ecrit et force sur le disque : le coup existe
+    // deja, meme si la machine s'eteint dans la seconde. Reecrire par-dessus
+    // onze megaoctets a chaque coup ne le rendait pas plus sur -- cela gelait
+    // le fil principal pres d'une seconde par coup sur une grande partie, et
+    // ecrivait cent cinquante-cinq gigaoctets au fil d'une partie qui n'en
+    // conserve quatre-vingts. Il est donc reecrit tous les vingt coups, et une
+    // derniere fois a l'arret.
+    //
+    // Sans journal -- parties d'avant son existence -- il reste la seule
+    // source : on l'ecrit alors a chaque fois, comme avant.
+    const avecJournal = existsSync(this.journal);
+    if (!force && avecJournal && this.moves.length % INSTANTANE_TOUS_LES !== 0) return;
     mkdirSync(DATA_DIR, { recursive: true });
-    // Filet de secours : tous les VINGT coups on garde une copie de la partie
-    // telle qu'elle etait. Une partie qui dure des mois sur un PC de maison ne
-    // doit pas tenir a un seul fichier -- une fausse manoeuvre, un disque qui
-    // tousse, et des centaines de coups joues a plusieurs disparaissent.
-    if (this.moves.length > 0 && this.moves.length % 20 === 0 && existsSync(this.file)) {
+    // Filet de secours DES PARTIES SANS JOURNAL. Pour elles l'instantane est
+    // tout ce qu'il y a, et une copie a cote a un sens. Partout ailleurs elle
+    // sauvegardait un fichier jetable -- l'instantane se refait a partir du
+    // journal -- pendant que le seul fichier irremplacable, lui, n'etait copie
+    // nulle part. Ce qu'il faut copier, c'est le journal, et hors de la machine.
+    if (!avecJournal && this.moves.length > 0
+        && this.moves.length % 20 === 0 && existsSync(this.file)) {
       try {
         copyFileSync(this.file, this.file.replace(/\.json$/, ".secours.json"));
       } catch {
