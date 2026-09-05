@@ -82,6 +82,57 @@ export const strictRejectPolicy: RejectPolicy = (rack) => {
   return v < exige || c < exige;
 };
 
+/**
+ * LE COUP OU LES REGLES DE TIRAGE SE RELACHENT. Voir SPEC.md §16.
+ *
+ * Deux regles s'en servent, pour deux raisons differentes :
+ *
+ *   sac fini        au debut il faut 2 voyelles ET 2 consonnes ; a partir d'ici
+ *                   une seule de chaque suffit, mais il en faut toujours au
+ *                   moins une. LE RELACHEMENT NE VAUT QUE POUR UN SAC QUI
+ *                   S'EPUISE : en fin de sac il ne reste plus assez de chaque
+ *                   sorte pour composer un tirage acceptable, et sans lui la
+ *                   partie serait injouable avant sa fin conventionnelle. Un
+ *                   sac qui se recharge n'a pas ce probleme, et des
+ *                   probabilites ponderees encore moins.
+ *   double joker    a partir d'ici, plus aucune regle du tout.
+ *
+ * Il vit ici, avec les politiques de rejet, plutot qu'avec le sac fini qui l'a
+ * fait naitre : les deux pioches le lisent desormais.
+ */
+export const COUP_RELACHEMENT = 16;
+
+/**
+ * LA REGLE DE REJET DU DOUBLE JOKER. Voir SPEC.md §16.
+ *
+ * Deux jokers changent ce qu'est un tirage jouable. Cinq consonnes et deux
+ * jokers se jouent tres bien -- les jokers fournissent les voyelles -- alors
+ * qu'a sept vraies lettres cela ne se joue pas. Exiger deux voyelles et deux
+ * consonnes reviendrait a servir un tirage confortable a qui tient deja les
+ * deux caramels les plus utiles du jeu.
+ *
+ *   coups 1 a 15    au moins UNE voyelle et UNE consonne, le temps que la
+ *                   grille se garnisse et qu'il y ait ou s'appuyer.
+ *   coup 16 et apres   plus aucune regle. Cinq voyelles et deux jokers, cinq
+ *                   consonnes et deux jokers : c'est jouable, et c'est
+ *                   justement l'interet de la variante.
+ *
+ * LA REGLE EST ECRITE PLUTOT QUE DEDUITE DE LA TAILLE DU TIRAGE. En sept sur
+ * sept le sac ne distribue que cinq lettres, si bien que la regle ordinaire
+ * tombait deja d'elle-meme a une voyelle et une consonne -- mais en « 7 sur 9 »
+ * il en distribue sept, et le deux-et-deux revenait sans qu'on l'ait voulu.
+ */
+export function regleDuDoubleJoker(rack: readonly string[], coup: number): boolean {
+  if (coup >= COUP_RELACHEMENT) return false;
+  if (rack.length < 2) return false;
+  let v = 0, c = 0;
+  for (const ch of rack) {
+    if (isVowel(ch)) v++;
+    else if (isConsonant(ch)) c++;
+  }
+  return v < 1 || c < 1;
+}
+
 export class Bag {
   private readonly cfg: BagConfig;
   private readonly random: Alea;
@@ -90,16 +141,31 @@ export class Bag {
   /** Tirages ecoules depuis la derniere sortie de chaque lettre. */
   private k: number[];
   private reject: RejectPolicy;
+  /** La politique vient-elle du dehors ? Voir `cloner`. */
+  private readonly rejetFourni: boolean;
   /** Nombre de caramels par tirage -- le Y de « X sur Y ». */
   private readonly tirage: number;
+  /** Numero du tirage en cours, pour la regle du double joker. */
+  private coup = 0;
+  /**
+   * Deux jokers accompagnent chaque tirage ? La regle de rejet change alors du
+   * tout au tout (voir `regleDuDoubleJoker`).
+   *
+   * Pose APRES la construction : la politique par defaut le lit a chaque
+   * tirage plutot qu'une fois pour toutes.
+   */
+  doubleJoker = false;
 
   constructor(
     cfg: BagConfig, random: Alea,
-    reject: RejectPolicy = strictRejectPolicy, tirage = RACK_SIZE,
+    reject?: RejectPolicy, tirage = RACK_SIZE,
   ) {
     this.cfg = cfg;
     this.random = random;
-    this.reject = reject;
+    this.rejetFourni = reject !== undefined;
+    this.reject = reject ?? ((rack) => this.doubleJoker
+      ? regleDuDoubleJoker(rack, this.coup)
+      : strictRejectPolicy(rack));
     this.tirage = tirage;
     this.letters = [...Object.keys(cfg.weights), BLANK];
     this.base = [...Object.values(cfg.weights), cfg.blankWeight];
@@ -148,6 +214,7 @@ export class Bag {
    * compensation sont restaures, il n'a jamais existe.
    */
   draw(reliquat: readonly string[]): DrawResult {
+    this.coup++;
     const snapshot = [...this.k];
 
     const first = this.fill(reliquat);
@@ -188,8 +255,16 @@ export class Bag {
    * verifie a chaque coup que les deux tombent d'accord.
    */
   cloner(): Bag {
-    const copie = new Bag(this.cfg, mulberryDepuis(this.random), this.reject, this.tirage);
+    // LA POLITIQUE PAR DEFAUT NE SE RECOPIE PAS : elle lit le numero de coup de
+    // la pioche a laquelle elle appartient, et la copier telle quelle lierait
+    // le double a l'original. Une politique venue du dehors, si.
+    const copie = new Bag(
+      this.cfg, mulberryDepuis(this.random),
+      this.rejetFourni ? this.reject : undefined, this.tirage,
+    );
     copie.k = [...this.k];
+    copie.coup = this.coup;
+    copie.doubleJoker = this.doubleJoker;
     return copie;
   }
 

@@ -2296,6 +2296,33 @@ puisse demander.
 chevalet fait de jokers seuls ne se joue pas, et le sac n'aurait plus rien à
 donner.
 
+#### Sa règle de rejet est plus lâche, puis disparaît
+
+**Deux jokers changent ce qu'est un tirage jouable.** Cinq consonnes et deux
+jokers se jouent très bien — les jokers fournissent les voyelles — alors qu'à
+sept vraies lettres cela ne se joue pas. Exiger deux voyelles et deux consonnes
+reviendrait à servir un tirage confortable à qui tient déjà les deux caramels
+les plus utiles du jeu.
+
+| | tirage ordinaire | double joker |
+|---|---|---|
+| **coups 1 à 15** | 2 voyelles et 2 consonnes à partir de 7 caramels | **1 voyelle et 1 consonne**, quelle que soit la taille |
+| **coup 16 et après** | 1 de chaque, et seulement sur un sac qui s'épuise | **aucune règle** |
+
+Passé le coup 15, cinq voyelles et deux jokers passent, cinq consonnes et deux
+jokers aussi. C'est justement l'intérêt de la variante.
+
+> **La règle est écrite, pas déduite de la taille du tirage.** En « 7 sur 7 » le
+> sac ne distribue que cinq lettres, si bien que la règle ordinaire tombait déjà
+> d'elle-même à une voyelle et une consonne — mais en **« 7 sur 9 »** il en
+> distribue sept, et le deux-et-deux revenait sans qu'on l'ait voulu.
+
+Elle vaut sur **les deux pioches**. Le relâchement du sac fini existe parce que
+le sac s'épuise ; celui-ci existe parce que deux jokers rendent tout jouable, ce
+qui ne dépend pas de la pioche. `COUP_RELACHEMENT` a donc quitté `sac.ts` pour
+`bag.ts`, où vivent déjà les politiques de rejet : deux règles s'en servent
+maintenant, pour deux raisons différentes.
+
 **Les deux interrupteurs se commandent.** « Double joker » allume aussi « Partie
 joker » — deux jokers par coup, c'est une partie joker, et laisser le premier
 éteint pendant que le second brille demanderait au joueur de deviner lequel
@@ -2304,8 +2331,9 @@ on ne retire qu'un cran.
 
 `check_double.ts` vérifie les deux réglages ensemble : le compte du sac tombe
 juste à chaque instant — sac plus chevalet plus grille plus réserve égale 204 —
-chaque tirage porte exactement deux jokers, et une partie relue depuis son
-journal retrouve le même sac et le même tirage.
+chaque tirage porte deux jokers **tant que la réserve les porte**, la règle de
+rejet refuse bien cinq consonnes au coup 1 et les laisse passer au coup 16, et
+une partie relue depuis son journal retrouve le même sac et le même tirage.
 
 ### La règle de rejet s'adapte au tirage
 
@@ -2319,6 +2347,10 @@ seule de chaque en dessous.** Rien ne change pour le tirage classique.
 **Sur un sac qui s'épuise, la règle se relâche à partir du coup 16** : les quinze
 premiers tirages exigent 2 et 2, ensuite une seule voyelle et une seule consonne
 suffisent, mais il en faut toujours au moins une de chaque.
+
+En **double joker**, elle est remplacée par une autre, qui disparaît
+complètement au même coup 16 — voir « Sa règle de rejet est plus lâche, puis
+disparaît » plus haut.
 
 Le relâchement existe pour **une seule raison** : en fin de sac fini, il ne reste
 plus assez de chaque sorte pour composer un tirage acceptable, et la partie

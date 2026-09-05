@@ -26,7 +26,9 @@ import { Game } from "../src/game.ts";
 import { configParDefaut, avec, avecDictionnaire } from "../../engine/src/config.ts";
 import { LAYOUTS, setLayout } from "../../engine/src/bonus.ts";
 import { dictionnaire, tailleDuSac } from "../../engine/src/dictionnaires.ts";
-import { BLANK } from "../../engine/src/alphabet.ts";
+import { BLANK, isVowel, isConsonant } from "../../engine/src/alphabet.ts";
+import { COUP_RELACHEMENT, regleDuDoubleJoker } from "../../engine/src/bag.ts";
+import { politiqueSacFini } from "../../engine/src/sac.ts";
 
 const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
 
@@ -52,6 +54,25 @@ function cfgSuper(extra: Record<string, unknown> = {}) {
 }
 
 const compte = (s: string, ch: string): number => [...s].filter((c) => c === ch).length;
+
+/**
+ * Les tirages qui ne portent pas le compte de jokers attendu.
+ *
+ * DEUX JOKERS, TANT QUE LA RESERVE LES PORTE. Un joker qui n'a pas trouve sa
+ * lettre s'est pose lui-meme et ne revient plus : la reserve baisse, et le
+ * tirage n'en recoit plus que ce qu'elle a. Exiger deux jokers a tous les coups
+ * rendrait ce test dependant du hasard du sac.
+ */
+function tiragesFautifs(g: Game, reserveInitiale: number): string[] {
+  let reserve = reserveInitiale;
+  const fautifs: string[] = [];
+  for (const m of g.moves) {
+    const attendu = Math.min(2, reserve);
+    if (compte(m.rack, BLANK) !== attendu) fautifs.push(`${m.rack} au lieu de ${attendu}`);
+    reserve -= m.jokers?.restes ?? 0;
+  }
+  return fautifs;
+}
 
 /** Joue `coups` coups et rend la partie, encore ouverte. */
 async function jouer(g: Game, coups: number): Promise<void> {
@@ -133,18 +154,16 @@ console.log("\nLe double joker : deux jokers a chaque tirage\n");
   verifie("le premier tirage porte deux jokers", compte(g.rack, BLANK) === 2, g.rack);
   verifie("et cinq vraies lettres", g.rack.length === 7, `${g.rack.length} caramels`);
 
-  const tirages: string[] = [g.rack];
   const debut = Date.now();
   await jouer(g, 12);
   const parCoup = Math.round((Date.now() - debut) / Math.max(1, g.moves.length));
-  for (const m of g.moves) tirages.push(m.rack);
 
   verifie("la partie avance", g.moves.length >= 10, `${g.moves.length} coups`);
   // LE POINT DU TEST. Chaque tirage porte ses deux jokers, du premier au
-  // dernier -- tant que la reserve n'est pas epuisee.
-  const sansDeux = tirages.filter((r) => compte(r, BLANK) !== 2);
+  // dernier -- tant que la reserve les porte.
+  const sansDeux = tiragesFautifs(g, 4);
   verifie("tous les tirages portent deux jokers", sansDeux.length === 0,
-    sansDeux.length === 0 ? `${tirages.length} tirages` : sansDeux.join(" "));
+    sansDeux.length === 0 ? `${g.moves.length} tirages` : sansDeux.join(" "));
   console.log(`         ${parCoup} ms par coup, calcul du top compris`);
 
   // Le compte du sac tient malgre les substitutions : un joker qui joue un R
@@ -175,6 +194,78 @@ console.log("\nLe double joker : deux jokers a chaque tirage\n");
   nettoyer(ID);
 }
 
+console.log("\nLa regle de rejet du double joker\n");
+{
+  // Refuse = `true`. Cinq consonnes et deux jokers se jouent tres bien : la
+  // regle ne les refuse que le temps que la grille se garnisse.
+  const cinqConsonnes = [..."BCDFG"];
+  const cinqVoyelles = [..."AEIOU"];
+  const melange = [..."BCDFA"];
+  verifie("au coup 1, cinq consonnes sont refusees",
+    regleDuDoubleJoker(cinqConsonnes, 1) === true);
+  verifie("au coup 1, cinq voyelles sont refusees",
+    regleDuDoubleJoker(cinqVoyelles, 1) === true);
+  verifie("au coup 1, une de chaque suffit",
+    regleDuDoubleJoker(melange, 1) === false);
+  verifie("au coup 15, la regle vaut encore",
+    regleDuDoubleJoker(cinqConsonnes, COUP_RELACHEMENT - 1) === true);
+  // LE POINT DU TEST. Passe le coup 15, il n'y a plus de regle du tout.
+  verifie("au coup 16, cinq consonnes passent",
+    regleDuDoubleJoker(cinqConsonnes, COUP_RELACHEMENT) === false);
+  verifie("au coup 16, cinq voyelles passent",
+    regleDuDoubleJoker(cinqVoyelles, COUP_RELACHEMENT) === false);
+
+  // LA REGLE ORDINAIRE NE TOMBE JAMAIS ENTIEREMENT, elle se relache seulement :
+  // meme au coup 30, il faut au moins une voyelle. C'est tout l'ecart avec le
+  // double joker, ou plus rien n'est exige.
+  const sansVoyelle = [..."BCDFGHJ"];
+  const ordinaire30 = politiqueSacFini(() => 30, () => true);
+  const double30 = politiqueSacFini(() => 30, () => true, () => true);
+  verifie("sans double joker, sept consonnes restent refusees au coup 30",
+    ordinaire30(sansVoyelle) === true);
+  verifie("en double joker, elles passent au coup 30",
+    double30(sansVoyelle) === false);
+  // ET LA REGLE NE SE DEDUIT PLUS DE LA TAILLE DU TIRAGE : en « 7 sur 9 » le
+  // sac distribue sept lettres, et le deux-et-deux revenait sans qu'on l'ait
+  // voulu -- au coup 1, la regle ordinaire refuse un tirage a une seule voyelle.
+  const uneVoyelle = [..."BCDFGHA"];
+  const ordinaire1 = politiqueSacFini(() => 1, () => true);
+  const double1 = politiqueSacFini(() => 1, () => true, () => true);
+  verifie("sans double joker, sept lettres a une voyelle sont refusees",
+    ordinaire1(uneVoyelle) === true, "il en faut deux");
+  verifie("en double joker, elles passent", double1(uneVoyelle) === false,
+    "une voyelle suffit");
+}
+
+console.log("\nLes tirages servis suivent la regle\n");
+{
+  const ID = "double-rejet-test";
+  nettoyer(ID);
+  setLayout("classique");
+  const g = new Game(ID, "classique", cfgSuper({ joker: true, jokersParCoup: 2 }));
+  await g.start();
+  g.presents.add("essai");
+  await g.reveiller();
+  await g.demarrer();
+  const tirages = [g.rack];
+  await jouer(g, 14);
+  for (const m of g.moves) tirages.push(m.rack);
+
+  // Les quinze premiers tirages : au moins une voyelle et une consonne parmi
+  // les VRAIES lettres, jokers mis a part.
+  const fautifs: string[] = [];
+  for (const r of tirages.slice(0, COUP_RELACHEMENT - 1)) {
+    const vraies = [...r].filter((c) => c !== BLANK);
+    if (vraies.filter(isVowel).length < 1 || vraies.filter(isConsonant).length < 1) {
+      fautifs.push(r);
+    }
+  }
+  verifie("les quinze premiers tirages ont une de chaque", fautifs.length === 0,
+    fautifs.length === 0 ? `${Math.min(tirages.length, 15)} tirages` : fautifs.join(" "));
+  await g.stop();
+  nettoyer(ID);
+}
+
 console.log("\nLe double joker sur le plateau du commerce : un seul sac\n");
 {
   const ID = "double-joker-15-test";
@@ -192,8 +283,9 @@ console.log("\nLe double joker sur le plateau du commerce : un seul sac\n");
   verifie("deux jokers en reserve", g.jokersEnReserve === 2, `${g.jokersEnReserve}`);
   verifie("le tirage en porte deux", compte(g.rack, BLANK) === 2, g.rack);
   await jouer(g, 8);
-  const tous = g.moves.every((m) => compte(m.rack, BLANK) === 2);
-  verifie("tous les tirages en portent deux", tous, `${g.moves.length} coups`);
+  const fautifs = tiragesFautifs(g, 2);
+  verifie("tous les tirages en portent deux", fautifs.length === 0,
+    fautifs.length === 0 ? `${g.moves.length} coups` : fautifs.join(" "));
   await g.stop();
   nettoyer(ID);
 }

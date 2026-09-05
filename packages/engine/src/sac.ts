@@ -7,28 +7,17 @@
  * part, et la **fin de partie**, qui demande que quelque chose s'epuise.
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
-import { type DrawResult, type RejectPolicy } from "./bag.ts";
+import {
+  COUP_RELACHEMENT, regleDuDoubleJoker, type DrawResult, type RejectPolicy,
+} from "./bag.ts";
+
 import { mulberry32, mulberryDepuis, type Alea } from "./rng.ts";
 
 /**
- * Le tirage se relache passe un certain nombre de coups. Voir SPEC.md §16.
- *
- * Au debut il faut 2 voyelles ET 2 consonnes ; a partir du COUP 16 une seule de
- * chaque suffit, mais il en faut toujours au moins une.
- *
- * LE RELACHEMENT NE VAUT QUE POUR UN SAC QUI S'EPUISE. C'est la seule raison
- * d'etre de la regle : en fin de sac fini, il ne reste plus assez de chaque
- * sorte pour composer un tirage acceptable, et sans relachement la partie
- * serait injouable avant sa fin conventionnelle.
- *
- * Un sac QUI SE RECHARGE n'a pas ce probleme -- il se remet a neuf des qu'il
- * devient pauvre d'un cote -- et des probabilites ponderees encore moins :
- * elles ne s'epuisent jamais. Sur une grille infinie tiree d'un sac bouclant,
- * le relachement s'appliquait quand meme et laissait passer, au coup 37, un
- * tirage a une seule voyelle. La regle stricte y vaut du premier coup au
- * dernier.
+ * Le seuil de relachement se relit d'ici : c'est la regle du sac fini qui l'a
+ * fait naitre, et c'est de ce cote qu'on vient le chercher.
  */
-export const COUP_RELACHEMENT = 16;
+export { COUP_RELACHEMENT } from "./bag.ts";
 
 /**
  * Combien de tirages on refuse avant de prendre ce qu'il y a.
@@ -43,8 +32,11 @@ export function politiqueSacFini(
   coup: () => number,
   /** Le sac s'epuise-t-il ? Seul un sac fini a droit au relachement. */
   sEpuise: () => boolean = () => true,
+  /** Deux jokers accompagnent-ils chaque tirage ? Voir `regleDuDoubleJoker`. */
+  doubleJoker: () => boolean = () => false,
 ): RejectPolicy {
   return (rack) => {
+    if (doubleJoker()) return regleDuDoubleJoker(rack, coup());
     const relache = sEpuise() && coup() >= COUP_RELACHEMENT;
     const exige = relache ? 1 : (rack.length >= 7 ? 2 : 1);
     if (rack.length < 2) return false;
@@ -107,6 +99,15 @@ export class SacFini implements Pioche {
   recharge = false;
   /** Nombre de rechargements, pour les statistiques et les tests. */
   rechargements = 0;
+  /**
+   * Deux jokers accompagnent chaque tirage ? La regle de rejet change alors du
+   * tout au tout (voir `regleDuDoubleJoker`).
+   *
+   * Pose APRES la construction, comme `recharge` : la politique par defaut le
+   * lit a chaque tirage plutot qu'une fois pour toutes, et la copie du sac le
+   * retrouve sans avoir a se faire passer une politique toute faite.
+   */
+  doubleJoker = false;
   /** Caramels restants, une entree par exemplaire. */
   private caramels: string[] = [];
   /** Numero du tirage en cours, pour le relachement de la regle de rejet. */
@@ -123,7 +124,8 @@ export class SacFini implements Pioche {
     this.rejetFourni = reject !== undefined;
     // `recharge` est pose APRES la construction : la politique le lit donc a
     // chaque tirage plutot qu'une fois pour toutes.
-    this.reject = reject ?? politiqueSacFini(() => this.coup, () => !this.recharge);
+    this.reject = reject
+      ?? politiqueSacFini(() => this.coup, () => !this.recharge, () => this.doubleJoker);
     this.distribution = distribution;
     this.remplir();
   }
@@ -293,6 +295,7 @@ export class SacFini implements Pioche {
     copie.coup = this.coup;
     copie.recharge = this.recharge;
     copie.rechargements = this.rechargements;
+    copie.doubleJoker = this.doubleJoker;
     return copie;
   }
 

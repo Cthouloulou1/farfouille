@@ -991,18 +991,26 @@ export class Game {
     const parTirage = Math.max(1, this.cfg.tirage - this.jokersDuTirage);
     const alea = mulberry32(moveSeed(this.seed, 0));
 
+    // DEUX JOKERS CHANGENT LA REGLE DE REJET, quelle que soit la pioche : cinq
+    // consonnes et deux jokers se jouent tres bien, et exiger des voyelles
+    // reviendrait a servir un tirage confortable a qui tient deja les deux
+    // caramels les plus utiles du jeu (SPEC.md §16).
+    const deuxJokers = this.jokersDuTirage >= 2;
     if (this.cfg.pioche === "probabilites") {
       const ponderee: BagConfig = {
         weights: lexique.poids, blankWeight: lexique.poidsJoker,
         alpha: 0.08, cap: 4, maxBlanks: 2,
       };
-      this.bag = new Bag(ponderee, alea, undefined, parTirage);
+      const sac = new Bag(ponderee, alea, undefined, parTirage);
+      sac.doubleJoker = deuxJokers;
+      this.bag = sac;
     } else {
       const sansJoker = this.cfg.joker
         ? Object.fromEntries(Object.entries(distribution).filter(([l]) => l !== BLANK))
         : distribution;
       const sac = new SacFini(sansJoker, alea, parTirage);
       sac.recharge = this.cfg.pioche === "sac102boucle";
+      sac.doubleJoker = deuxJokers;
       this.bag = sac;
     }
 
