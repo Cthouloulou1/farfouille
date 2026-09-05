@@ -1024,12 +1024,19 @@ grille** et **la langue**. Côte à côte dans une même rangée, « Tous » et
 premier ne parle que des grilles.
 
 ```
-[ Tous ] [ 15×15 ] [ 21×21 ] [ Infinie ] [ En attente ]  │  [ FR ] [ Toutes les langues ]
+[ Tous ] [ 15×15 ] [ 21×21 ] [ Infinie ] [ En attente ]  │  [ FR ] [ EN ] [ Toutes les langues ]
 ```
 
-Un trait les sépare, et **chaque groupe s'exclut de son côté**. La puce de
-langue porte celle du site — `FR` ou `EN` — parce que c'est elle qu'on quitte
-quand on veut aller voir ailleurs.
+Un trait les sépare, et **chaque groupe s'exclut de son côté**.
+
+**Les deux langues se montrent, pas seulement celle du site.** Une puce unique
+n'offrait que la sienne et le tout : un anglophone n'avait aucun moyen de
+regarder les salons français seuls, et un francophone aucun moyen de ne voir que
+les anglais.
+
+L'accueil s'ouvre sur la langue du site, et **le filtre la suit tant qu'on ne
+l'a pas choisi soi-même** — sans quoi passer le site en anglais laissait la
+liste sur les salons français.
 
 « 15×15 » attrape tous les plateaux bornés **sauf** la super grille, qui a sa
 puce à elle. Un plateau d'une autre taille — le serveur en accepte, même si rien
@@ -2178,6 +2185,15 @@ Deux points méritent d'être vus avant qu'un joueur ne les découvre :
 
 Ce sont deux propriétés du motif tel qu'il a été dessiné, pas des fautes de
 recopie : la symétrie les couvre des quatre côtés.
+
+**Sa vignette montre son coin, en gros.** Tenue entière dans la vignette de
+l'accueil, la super grille flottait au milieu d'un bandeau gris : 441 cases à
+124 pixels de haut ne se lisent pas, et ses coins verts — la seule chose qui la
+distingue — devenaient des points. C'est donc son **coin haut-gauche** qui
+remplit la vignette, à la taille des cases du 15×15 : le mot compte quadruple du
+coin et deux lettres comptent quadruple y sont, et la bordure sur deux côtés dit
+que le plateau est fini. Ancrée en haut à gauche, elle garde ce coin quelle que
+soit la largeur de la carte.
 
 **Le vert est la troisième famille de couleurs du plateau.** Le rouge compte les
 mots, le bleu compte les lettres ; le vert dit qu'on est passé au cran du

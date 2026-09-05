@@ -64,8 +64,6 @@ export const EN: Readonly<Record<string, string>> = {
   // -------------------------------------------------- signaler un bug
   "Signaler un bug": "Report a bug",
   "Décrivez ce qui ne va pas": "Describe what's wrong",
-  "Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez":
-    "What you were doing, what happened, what you expected",
   "Mail, facultatif": "Email, optional",
   // « Envoyer » est deja traduit plus bas, avec le chat.
   "Le rapport est bien arrivé. Merci.": "The report came through. Thank you.",
@@ -238,8 +236,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Tous": "All",
   "En attente": "Waiting",
   "Toutes les langues": "All languages",
-  "Montrer aussi les salons des autres langues": "Also show rooms in other languages",
-  "Ne montrer que les salons de votre langue": "Only show rooms in your language",
+  "Montrer les salons de toutes les langues": "Show rooms in every language",
+  "Ne montrer que les salons en {l}": "Only show {l} rooms",
+  // Les deux langues du site, telles qu'elles se disent en anglais.
+  "français": "French",
+  "anglais": "English",
   "Repères du plateau {n}×{n}": "{n}×{n} board coordinates",
   "lignes A–{z}": "rows A–{z}",
   "colonnes A–{z}": "columns A–{z}",

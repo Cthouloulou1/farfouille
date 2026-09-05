@@ -643,13 +643,16 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    pleine. La grille infinie, elle, n'a aucun bord a montrer : c'est tout ce
    qui les distingue, et c'est plus net qu'avant. */
 .carte .vignette.bornee { background-image: var(--vignette-15); background-size: 100% auto; background-position: center; background-repeat: no-repeat; }
-/* LA SUPER GRILLE SE MONTRE ENTIERE, elle ne se laisse pas couper.
-   Ce qui la distingue, ce sont ses QUATRE COINS -- les seuls mots comptent
-   quadruple du jeu. Cadree comme la 15x15, a toute la largeur, elle perdait
-   justement ses quatre coins en haut et en bas : il ne restait que du rouge et
-   du bleu, et rien ne disait plus qu'elle etait speciale. Elle tient donc dans
-   la hauteur, et le fond des vignettes remplit ce qui reste de chaque cote. */
-.carte .vignette.super { background-image: var(--vignette-21); background-size: contain; background-position: center; background-repeat: no-repeat; }
+/* LA SUPER GRILLE MONTRE SON COIN, EN GROS.
+   Tenue entiere dans la vignette, elle flottait au milieu d'un bandeau gris :
+   441 cases a 124 pixels de haut ne se lisent pas, et ses coins verts -- la
+   seule chose qui la distingue -- devenaient des points. Son coin haut-gauche
+   remplit donc la vignette, a la taille des cases du 15x15 : le mot compte
+   quadruple du coin et deux lettres comptent quadruple y sont, et la bordure
+   sur deux cotes dit que le plateau est fini.
+   Ancree EN HAUT A GAUCHE : c'est le coin qu'on veut voir, et il survit ainsi
+   a la coupe quelle que soit la largeur de la carte. */
+.carte .vignette.super { background-image: var(--vignette-21); background-size: cover; background-position: left top; background-repeat: no-repeat; }
 .carte .vignette.infinie { background-image: var(--vignette-infinie); background-size: 210px 210px; background-position: center; background-repeat: repeat; }
 /* LE TYPE DE GRILLE SE LIT DE LOIN. C'est le premier renseignement qu'on
    cherche sur une carte, et il etait ecrit en dix pixels dans un coin. */
@@ -1096,8 +1099,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <form class="pseudo bug-boite" id="form-bug" autocomplete="off">
     <h2>Décrivez ce qui ne va pas</h2>
     <div id="bug-champs">
-      <textarea id="bug-texte" rows="6" maxlength="4000"
-                placeholder="Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez"></textarea>
+      <textarea id="bug-texte" rows="6" maxlength="4000"></textarea>
       <input id="bug-mail" type="email" maxlength="254" placeholder="Mail, facultatif" autocomplete="email">
     </div>
     <!-- LA FENETRE NE SE REFERME PAS TOUTE SEULE APRES L'ENVOI. Un formulaire

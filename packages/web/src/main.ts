@@ -5086,15 +5086,28 @@ function accrocheStar(l: Langue): string[] {
 let filtre: "tous" | "bornee" | "super" | "infinie" | "attente" = "tous";
 
 /**
- * Montre-t-on les salons des AUTRES langues ?
+ * QUELLE LANGUE DE SALON ON REGARDE : la sienne, l'autre, ou toutes.
  *
- * Non, par defaut. Un salon se joue dans un lexique, et un lexique est une
- * langue : entrer dans une partie francaise avec le site en anglais, c'est
- * arriver devant un chevalet dont aucun mot ne se forme. L'accueil ne montre
- * donc que ce que l'on peut jouer -- et ce bouton rend le reste visible pour
- * qui veut aller voir ailleurs.
+ * Un salon se joue dans un lexique, et un lexique est une langue : entrer dans
+ * une partie francaise avec le site en anglais, c'est arriver devant un
+ * chevalet dont aucun mot ne se forme. L'accueil s'ouvre donc sur la langue du
+ * site.
+ *
+ * LES TROIS CHOIX SE MONTRENT, plutot qu'un interrupteur « toutes les langues ».
+ * Celui-ci n'offrait que la langue du site et le tout : un anglophone n'avait
+ * aucun moyen de regarder les salons francais seuls, et un francophone aucun
+ * moyen de ne voir que les anglais.
  */
-let toutesLangues = false;
+let langueMontree: Langue | "toutes" = langue();
+/**
+ * L'a-t-on choisie soi-meme ?
+ *
+ * Sans ce drapeau, changer la langue du site laissait le filtre sur l'ancienne
+ * -- des salons francais sur un site passe en anglais. Tant que personne n'a
+ * touche aux puces, le filtre suit la langue du site ; des qu'on en a choisi
+ * une, c'est elle qui commande.
+ */
+let langueChoisie = false;
 
 /** La derniere liste recue du serveur. Les filtres repeignent depuis elle. */
 let salonsRecus: ResumeSalon[] = [];
@@ -5696,7 +5709,7 @@ function estSuper(c: ResumeSalon["config"]): boolean {
 
 /** Le filtre s'applique a tous les salons, la grille mondiale comprise. */
 function retenu(s: ResumeSalon): boolean {
-  if (!toutesLangues && langueDuSalon(s) !== langue()) return false;
+  if (langueMontree !== "toutes" && langueDuSalon(s) !== langueMontree) return false;
   // « 15x15 » attrape tous les plateaux bornes SAUF la super grille, qui a sa
   // puce a elle. Un plateau d'une autre taille -- le serveur en accepte, meme
   // si rien ne les propose -- reste ainsi visible quelque part.
@@ -5818,18 +5831,27 @@ function peindreFiltres(): void {
   // « Tous » et « Toutes les langues » cote a cote dans la meme rangee se
   // lisaient comme deux reglages concurrents, alors que le premier ne parle que
   // de la forme de la grille. Un trait les separe, et la langue se choisit
-  // entre deux puces qui s'excluent : la sienne, ou toutes.
+  // entre trois puces qui s'excluent.
+  //
+  // LES DEUX LANGUES SE MONTRENT, pas seulement celle du site. Une puce unique
+  // n'offrait que la sienne et le tout : un anglophone n'avait aucun moyen de
+  // regarder les salons francais seuls.
   barre.appendChild(el("span", "coupure"));
-  const langues: [boolean, string, string][] = [
-    [false, langue() === "en" ? "EN" : "FR", t("Ne montrer que les salons de votre langue")],
-    [true, t("Toutes les langues"), t("Montrer aussi les salons des autres langues")],
+  const langues: [Langue | "toutes", string, string][] = [
+    ["fr", "FR", t2("Ne montrer que les salons en {l}", { l: "français" })],
+    ["en", "EN", t2("Ne montrer que les salons en {l}", { l: "anglais" })],
+    ["toutes", t("Toutes les langues"), t("Montrer les salons de toutes les langues")],
   ];
   for (const [valeur, texte, quoi] of langues) {
     const b = el("button", "puce", texte) as HTMLButtonElement;
     b.type = "button";
-    b.setAttribute("aria-pressed", String(toutesLangues === valeur));
+    b.setAttribute("aria-pressed", String(langueMontree === valeur));
     b.title = quoi;
-    b.addEventListener("click", () => { toutesLangues = valeur; peindreAccueil(); });
+    b.addEventListener("click", () => {
+      langueMontree = valeur;
+      langueChoisie = true;
+      peindreAccueil();
+    });
     barre.appendChild(b);
   }
   if (pseudo() === "") return;
@@ -6983,6 +7005,8 @@ traduireLeDocument();
  * se repeindra a son ouverture.
  */
 surChangementDeLangue(() => {
+  // Le filtre des salons suit le site, tant qu'on ne l'a pas choisi soi-meme.
+  if (!langueChoisie) langueMontree = langue();
   peindreAccueil();
   peuplerPreferences();
   if (!$("join").hidden) return;
