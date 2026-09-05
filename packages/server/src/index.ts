@@ -1160,9 +1160,17 @@ wss.on("connection", (ws, req) => {
       const pioche = msg.pioche === "sac102" ? "sac102"
         : msg.pioche === "sac102boucle" ? "sac102boucle"
         : msg.pioche === "probabilites" ? "probabilites" : base.pioche;
-      // La partie joker a besoin d'un sac : « il ne reste plus de R » n'a aucun
-      // sens avec des probabilites qui ne s'epuisent pas.
-      const joker = msg.joker === true && pioche !== "probabilites";
+      // LA PARTIE JOKER N'A PLUS BESOIN D'UN SAC.
+      //
+      // Elle etait refusee aux probabilites ponderees, parce que « il ne reste
+      // plus de R » n'y a aucun sens : rien ne s'y epuise, donc rien ne pouvait
+      // en sortir, donc le joker restait joker et la grille se couvrait de
+      // cases mortes -- exactement ce que la variante veut eviter.
+      //
+      // La lettre nait maintenant, sur toute pioche qui ne s'epuise pas
+      // (SPEC.md §16). Le refus n'avait plus d'objet, et il n'etait meme pas
+      // dit : l'interrupteur restait allume et la partie demarrait sans joker.
+      const joker = msg.joker === true;
       // Le lexique, et ce qui vient avec : la valeur des lettres et le sac.
       const dico = dictionnaireConnu(msg.dictionnaire)
         ? String(msg.dictionnaire) : base.dictionnaire;

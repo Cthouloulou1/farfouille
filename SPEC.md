@@ -1238,10 +1238,15 @@ en cours de route apprendrait au joueur des mots et des points d'appui qu'il n'a
 pas trouvés — sur une grille qui, elle, est toujours là. Le mot qu'un sous-top
 révèle en pivot se jouera un autre jour.
 
-**Une grille sans fin bornée en temps ou en coups fait exception.** Elle a une
-fin, donc une analyse : ses sous-tops sont gardés, mais dans un fichier **à
-part** (voir §11), qu'on efface une fois la partie analysée sans toucher au
-journal. On s'y arrête à quarante paliers ou cent vingt solutions, le premier
+**Une grille sans fin assez courte fait exception.** Bornée à **1 000 coups** ou
+**5 000 minutes** au plus, elle a une fin, donc une analyse : ses sous-tops sont
+gardés, mais dans un fichier **à part** (voir §11), qu'on efface une fois la
+partie analysée sans toucher au journal.
+
+« Bornée » ne veut pas dire « courte », et les deux bornes ne se valent pas :
+mille coups font une annexe de 2,6 Mo, mais cinq mille minutes en chrono d'une
+seconde en feraient 773. **L'annexe s'arrête donc au millième coup joué**, quelle
+que soit la borne annoncée. On s'y arrête à quarante paliers ou cent vingt solutions, le premier
 atteint : la grille grandit sans fin, donc le nombre d'ancrages aussi —
 **15 333 solutions par position en moyenne, 166 659 au pire**.
 
@@ -2036,6 +2041,10 @@ La question est de savoir **d'où vient ce R**.
 | sac de 102 | **du sac** : une vraie lettre en sort et se pose ; le joker revient au tirage. Faute de lettre, le joker se pose et la réserve — **deux** — perd une unité |
 | sac de 102 sans fin | **de nulle part** : la lettre naît, le sac n'y perd rien, et le joker revient au tirage. Il ne s'épuise donc jamais |
 | probabilités pondérées | **de nulle part** non plus, pour la même raison |
+
+La variante était **refusée aux probabilités pondérées** — le serveur éteignait
+le joker sans le dire, et la partie démarrait sans lui. Elle y est admise
+maintenant que la lettre naît.
 
 **Une pioche qui ne s'épuise pas n'a pas de stock à défendre.** Le sac qui boucle
 retrouve sa composition d'origine dès qu'il s'appauvrit : y prélever le R

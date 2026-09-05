@@ -222,6 +222,21 @@ const PALIERS_D_AVANT = 40;
 const INSTANTANE_TOUS_LES = 20;
 
 /**
+ * AU-DELA DE QUOI UNE PARTIE NE GARDE PLUS SES SOUS-TOPS.
+ *
+ * « Bornee » ne veut pas dire « courte ». Mille coups font une annexe de 2,6 Mo,
+ * ce qui est le prix d'une analyse d'apres-partie ; cinq mille minutes en chrono
+ * d'une seconde en feraient sept cent soixante-treize, pour une partie que
+ * personne ne relira coup par coup.
+ *
+ * Les deux bornes valent pour le REGLAGE de la partie. Le plafond en coups vaut
+ * en plus a l'ecriture : une partie bornee en temps peut jouer bien plus de
+ * coups que prevu si le chrono est court, et l'annexe s'arrete alors d'elle-meme.
+ */
+const PALIERS_JUSQU_A_COUPS = 1000;
+const PALIERS_JUSQU_A_DUREE = 5000 * 60;
+
+/**
  * Combien de paliers de sous-tops une partie neuve garde.
  *
  * Le palier du top -- le top et ses isotops -- est toujours ecrit au journal
@@ -241,8 +256,10 @@ const INSTANTANE_TOUS_LES = 20;
  */
 function paliersParDefaut(cfg: ConfigPartie): number {
   if (cfg.bornes !== null) return 0;
-  if (cfg.coupsMax !== null || cfg.dureeMax !== null) return PALIERS_D_AVANT;
-  return 0;
+  const assezCourte =
+    (cfg.coupsMax !== null && cfg.coupsMax <= PALIERS_JUSQU_A_COUPS)
+    || (cfg.dureeMax !== null && cfg.dureeMax <= PALIERS_JUSQU_A_DUREE);
+  return assezCourte ? PALIERS_D_AVANT : 0;
 }
 
 /** Duree du decompte d'avant-partie : 3, 2, 1, partez. */
@@ -1943,7 +1960,12 @@ export class Game {
     this.ouEstLeCoup.set(move.n, ou);
     // Les sous-tops vont a part : un fichier qu'on peut effacer, une fois la
     // partie finie et analysee, sans toucher au journal ni a ses adresses.
-    if (this.paliersGardes > 0 && this.tiers.length > 1) {
+    //
+    // ET PAS AU-DELA DE MILLE COUPS. Une partie bornee a cinq mille minutes en
+    // joue trois cent mille si le chrono est d'une seconde : la borne du
+    // reglage ne borne pas le volume, celle-ci si.
+    if (this.paliersGardes > 0 && this.tiers.length > 1
+        && move.n <= PALIERS_JUSQU_A_COUPS) {
       this.ouEstLePalier.set(move.n, this.appendPaliers(move.n, this.tiers));
     }
     delete move.tiers;

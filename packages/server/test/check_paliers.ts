@@ -302,6 +302,43 @@ verifie("et le palier du top reste au journal",
 await sansAnnexe.stop();
 netA();
 
+// ------------------------------ UNE BORNE LOINTAINE N'EST PAS UNE FIN
+//
+// « Bornee » ne veut pas dire « courte ». Une partie de cinq mille coups a beau
+// avoir un terme, personne ne relira ses sous-tops un a un -- et son annexe
+// peserait treize megaoctets. Au-dela de mille coups ou cinq mille minutes, elle
+// se range avec les grilles sans fin : le palier du top, et rien d'autre.
+console.log("\n  --- borne trop lointaine : pas d'annexe ---\n");
+const IDL = ID + "-lointain";
+const netL = (): void => {
+  for (const s of [".json", ".journal.jsonl", ".paliers.jsonl", ".verrou", ".secours.json"]) {
+    const f = join(D, `${IDL}${s}`);
+    if (existsSync(f)) rmSync(f);
+  }
+};
+netL();
+setLayout("pave1");
+const gl = new Game(IDL, "pave1", avec(configParDefaut(), {
+  bornes: null, pioche: "sac102boucle", chrono: null, mode: "topping", coupsMax: 5000,
+}));
+await gl.start();
+gl.presents.add("essai");
+await gl.reveiller();
+await gl.demarrer();
+for (let i = 0; i < 4 && !gl.finie; i++) {
+  await gl.reveal();
+  await new Promise((r) => setTimeout(r, 30));
+}
+verifie("la partie lointaine a avance", gl.moves.length >= 3, `${gl.moves.length} coups`);
+verifie("pas d'annexe pour une borne a 5 000 coups",
+  !existsSync(join(D, `${IDL}.paliers.jsonl`)));
+const seul = await gl.paliersDuCoup(gl.moves[1]!.n);
+verifie("mais le palier du top est bien la",
+  seul.length === 1 && seul[0]!.score === gl.moves[1]!.score,
+  `${seul.length} palier, ${seul[0]?.moves.length ?? 0} solution(s)`);
+await gl.stop();
+netL();
+
 console.log(echecs === 0
   ? "\nOK : ce qui n'est plus enregistre se retrouve a l'identique\n"
   : `\n${echecs} ECHEC(S)\n`);
