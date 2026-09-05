@@ -34,6 +34,7 @@ import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaireConnu, type Langue,
 } from "../../engine/src/dictionnaires.ts";
 import { Seau, seauDeRafale, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
+import { lireLeRapport, enregistrerLeRapport } from "./bugs.ts";
 import {
   lireLesComptes, creerCompte, compte, motDePasseJuste, changerLeMotDePasse,
   ecrireLeProfil, ecrireLaLangue, demanderLaVerification, trancherLaVerification,
@@ -76,6 +77,21 @@ const REVEAL = process.argv.includes("--reveler");
  */
 const ADMINS = arg("admin", "admin").split(",").map((n) => n.trim()).filter((n) => n !== "");
 const ADMIN_MDP = arg("admin-mdp", process.env["FARFOUILLE_ADMIN_MDP"] ?? "");
+
+/**
+ * Le demi-cote de la SUPER GRILLE : dix cases, donc un plateau de 21x21.
+ *
+ * C'est lui qui choisit le pavage : sept donne le plateau du commerce, dix
+ * donne la super grille et ses quadruples.
+ */
+const SUPER_BORNES = 10;
+
+/** Le nom d'une grille, pour la console. */
+function nomDeLaGrille(bornes: number | null): string {
+  if (bornes === null) return "grille infinie";
+  if (bornes === SUPER_BORNES) return "super grille 21x21";
+  return `${bornes * 2 + 1}x${bornes * 2 + 1}`;
+}
 
 /** Le temps par coup le plus court qu'un joueur puisse demander, en secondes. */
 const CHRONO_MINIMUM = 15;
@@ -643,7 +659,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       });
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
-        `${s.partie.cfg.bornes === null ? "grille infinie" : "15x15"}`);
+        `${nomDeLaGrille(s.partie.cfg.bornes)}`);
       json(res, 200, resume(s, 0, estPermanent(s)));
     } catch (e) {
       json(res, 400, { erreur: (e as Error).message });
@@ -816,6 +832,26 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       location: erreur === null ? "/?email=ok" : `/?email=${encodeURIComponent(erreur)}`,
     });
     res.end();
+    return;
+  }
+
+  // SIGNALER UN BUG. Rien ne part par courriel -- il n'y a pas encore d'adresse
+  // -- mais le rapport est garde et s'ecrit dans la console (voir `bugs.ts`).
+  //
+  // Aucun compte n'est demande : un joueur qui bute sur un bug de la connexion
+  // est justement celui qui ne peut pas se connecter pour le dire.
+  if (url === "/api/bug" && req.method === "POST") {
+    if (tropDEssais(req)) { json(res, 429, { erreur: "Trop d'essais, attendez un instant" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const r = lireLeRapport(corps);
+    if (r === null) { json(res, 400, { erreur: "Décrivez ce qui ne va pas" }); return; }
+    // LE COMPTE VIENT DU COOKIE, PAS DU FORMULAIRE : le pseudo annonce par le
+    // client se raconte, le cookie se verifie.
+    r.compte = quiParle(req)?.pseudo ?? "";
+    enregistrerLeRapport(r);
+    json(res, 200, { ok: true });
     return;
   }
 
@@ -1229,8 +1265,14 @@ wss.on("connection", (ws, req) => {
         });
         return;
       }
-      const pavage = bornes === null ? LAYOUTS[s.layout] : LAYOUTS.classique15;
-      const pavageNom = bornes === null ? s.layout : "classique15" as const;
+      // LE PAVAGE DECOULE DE LA GRILLE, ET DE RIEN D'AUTRE : le plateau du
+      // commerce n'a de sens que borne a sept, la super grille qu'a dix, le
+      // pavage infini que sans bord. Le client n'a donc pas de pavage a
+      // envoyer, et ne peut pas en demander un qui ne va pas avec sa grille.
+      const pavage = bornes === null ? LAYOUTS[s.layout]
+        : bornes === SUPER_BORNES ? LAYOUTS.super21 : LAYOUTS.classique15;
+      const pavageNom = bornes === null ? s.layout
+        : bornes === SUPER_BORNES ? "super21" as const : "classique15" as const;
       // Le sac sans fin ne vaut que sur une grille infinie.
       const pioch = bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche;
       // Un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi :

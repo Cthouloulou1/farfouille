@@ -60,14 +60,39 @@ export const EN: Readonly<Record<string, string>> = {
     "Verification happens elsewhere — you ask the player, on another platform, whether it is really them. Here you only record the verdict.",
   "Enregistrer": "Save",
   "Fermer": "Close",
+
+  // -------------------------------------------------- signaler un bug
+  "Signaler un bug": "Report a bug",
+  "Décrivez ce qui ne va pas": "Describe what went wrong",
+  "Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez":
+    "What you were doing, what happened, what you expected",
+  "Votre mail, si vous voulez une réponse": "Your email, if you want an answer",
+  "Facultatif": "Optional",
+  // « Envoyer » est deja traduit plus bas, avec le chat.
+  "Le rapport est bien arrivé. Merci.": "The report came through. Thank you.",
+  "Envoi impossible, réessayez": "Could not send, try again",
+  "Serveur injoignable": "Server unreachable",
+  "Partent avec : {liste}.": "Sent along: {liste}.",
+  "votre pseudo ({p})": "your name ({p})",
+  "le salon ({s})": "the room ({s})",
+  "le coup ({n})": "move {n}",
+  "votre navigateur": "your browser",
+  "aucun": "none",
+
   "Continuer": "Continue",
   "Plus tard": "Later",
 
   // ------------------------------------------------- reglages d'un salon
   "Réglages": "Settings",
   "Dictionnaire": "Dictionary",
+  // Le compteur de la barre du chevalet. « Lexicon » est le mot du jeu en
+  // anglais ; « dictionary » designe l'ouvrage, pas la liste qui fait autorite.
+  "DICO": "LEXI",
   "Grille": "Board",
   "Normale": "Standard",
+  "Super": "Super",
+  "Le plateau 21×21, avec ses mots et ses lettres comptent quadruple":
+    "The 21×21 board, with its quadruple word and letter squares",
   "Infinie": "Infinite",
   "Mode de jeu": "Game mode",
   "Topping": "Topping",
@@ -219,6 +244,10 @@ export const EN: Readonly<Record<string, string>> = {
   "En attente": "Waiting",
   "Toutes les langues": "All languages",
   "Montrer aussi les salons des autres langues": "Also show rooms in other languages",
+  "Ne montrer que les salons de votre langue": "Only show rooms in your language",
+  "Repères du plateau {n}×{n}": "{n}×{n} board coordinates",
+  "lignes A–{z}": "rows A–{z}",
+  "colonnes A–{z}": "columns A–{z}",
   "Créer un salon": "Create a room",
   "Salon star": "Featured room",
   "Jouer": "Play",

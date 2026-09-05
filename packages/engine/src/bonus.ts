@@ -13,7 +13,10 @@ export interface Bonus {
   word: number;
 }
 
-/** T = mot triple, D = mot double, t = lettre triple, d = lettre double, . = nue. */
+/**
+ * Q = mot quadruple, T = mot triple, D = mot double,
+ * q = lettre quadruple, t = lettre triple, d = lettre double, . = nue.
+ */
 export type LayoutFn = (x: number, y: number) => string;
 
 function mod(n: number, m: number): number {
@@ -267,6 +270,47 @@ const PREMIERS: LayoutFn = (x, y) =>
 
 // --------------------------------------------------------------------- API
 
+// ------------------------------------------------------------ plateaux bornes
+
+/**
+ * La SUPER GRILLE : 21x21, avec des cases qui comptent quadruple.
+ *
+ * Le plateau du commerce agrandi de trois cases de chaque cote. Les quatre
+ * coins portent des mots comptent QUADRUPLE, et huit cases portent des
+ * lettres comptent quadruple : ce sont les deux primes que le plateau du
+ * commerce n'a pas, et elles n'existent que la.
+ *
+ * Verifie par programme : le motif est invariant par les quatre symetries du
+ * carre -- les deux miroirs et les deux diagonales. Densites : MCQ 0,91 %,
+ * MCT 3,63 %, MCD 9,30 %, LCQ 1,81 %, LCT 4,54 %, LCD 8,16 %.
+ *
+ * Il ne se PAVE PAS : c'est un plateau borne, comme le 15x15 du commerce, et
+ * ses bords ne sont pas faits pour se recouvrir.
+ */
+const SUPER = [
+  "Q..d...T..d..T...d..Q",
+  ".D..t...D...D...t..D.",
+  "..D..q...D.D...q..D..",
+  "d..T..d...T...d..T..d",
+  ".t..D...t...t...D..t.",
+  "..q..D...d.d...D..q..",
+  "...d..D...d...D..d...",
+  "T......D.....D......T",
+  ".D..t...t...t...t..D.",
+  "..D..d...d.d...d..D..",
+  "d..T..d...D...d..T..d",
+  "..D..d...d.d...d..D..",
+  ".D..t...t...t...t..D.",
+  "T......D.....D......T",
+  "...d..D...d...D..d...",
+  "..q..D...d.d...D..q..",
+  ".t..D...t...t...D..t.",
+  "d..T..d...T...d..T..d",
+  "..D..q...D.D...q..D..",
+  ".D..t...D...D...t..D.",
+  "Q..d...T..d..T...d..Q",
+] as const;
+
 /**
  * Le plateau du commerce, NON pave : une seule grille de 15x15 centree sur
  * l'origine. Le pavage `classique` repete le motif a l'infini avec une periode
@@ -279,9 +323,20 @@ export const CLASSIQUE_15: LayoutFn = (x, y) => {
   return CLASSIQUE[i]![j]!;
 };
 
+/**
+ * La super grille, NON pavee : une seule grille de 21x21 centree sur l'origine.
+ * Le demi-cote correspondant est 10, comme 7 pour le plateau du commerce.
+ */
+export const SUPER_21: LayoutFn = (x, y) => {
+  const i = y + 10, j = x + 10;
+  if (i < 0 || i > 20 || j < 0 || j > 20) return ".";
+  return SUPER[i]![j]!;
+};
+
 export const LAYOUTS = {
   classique: tiled(CLASSIQUE),
   classique15: CLASSIQUE_15,
+  super21: SUPER_21,
   croixCourte: tiled(CROIX_COURTE),
   pave1: tiled(PAVE_1),
   croixEnrichie: tiled(CROIX_ENRICHIE),
@@ -340,8 +395,10 @@ const PLAIN: Bonus = Object.freeze({ letter: 1, word: 1 });
  */
 export function bonusAt(x: number, y: number, pavage: LayoutFn = active): Bonus {
   switch (pavage(x, y)) {
+    case "Q": return { letter: 1, word: 4 };
     case "T": return { letter: 1, word: 3 };
     case "D": case "*": return { letter: 1, word: 2 };
+    case "q": return { letter: 4, word: 1 };
     case "t": return { letter: 3, word: 1 };
     case "d": return { letter: 2, word: 1 };
     default: return PLAIN;

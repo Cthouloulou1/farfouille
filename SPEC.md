@@ -112,9 +112,10 @@ enregistré ne change, et une partie ancienne se relit sans rien perdre.
 
 **Grille bornée** — la notation du jeu de société. Les lignes portent des
 lettres à partir de A, les colonnes des numéros à partir de 1 ; sur un plateau
-de 15, A à O et 1 à 15. Un mot horizontal tient sur une ligne, donc sa **lettre**
-vient en tête ; un mot vertical tient sur une colonne, donc son **numéro** vient
-en tête.
+de 15, A à O et 1 à 15 ; sur la super grille de 21, **A à U et 1 à 21**. Les
+étiquettes se calculent depuis le demi-côté : rien n'est écrit en dur pour
+quinze. Un mot horizontal tient sur une ligne, donc sa **lettre** vient en tête ;
+un mot vertical tient sur une colonne, donc son **numéro** vient en tête.
 
 ```
 B13    horizontal, ligne B, à partir de la colonne 13
@@ -156,6 +157,18 @@ en française et `8C` en anglaise.
 
 `bonus(x, y)` **doit être une fonction pure, sans aucun stockage**. C'est ce qui
 rend le motif remplaçable à volonté : changer de design = réécrire une fonction.
+
+Un motif se décrit par un caractère par case :
+
+| | mot | lettre |
+|---|---|---|
+| **quadruple** | `Q` | `q` |
+| **triple** | `T` | `t` |
+| **double** | `D` | `d` |
+| nue | `.` | |
+
+Les quadruples n'existent que sur la **super grille** (§16) : aucun pavage
+infini n'en porte, et le plateau du commerce non plus.
 
 **Provisoire** : pavage à l'infini du plateau 15x15 classique, l'origine `(0,0)`
 coïncidant avec l'étoile centrale.
@@ -868,7 +881,7 @@ pendant la frappe** — le voir se défaire lettre après lettre serait insuppor
 | | |
 |---|---|
 | **Ctrl+R** | ouvre et referme la feuille de route |
-| **Ctrl+D** | ouvre les réglages de la partie |
+| **Ctrl+D**, **Ctrl+N** | ouvrent les réglages de la partie, donc en lancent une neuve |
 | **Ctrl+E** | ouvre le rejeu |
 | **Ctrl+A** | range le chevalet |
 | **flèches** | déplacent le curseur d'une case (§18) |
@@ -879,6 +892,17 @@ en cours et se reconnecter pour rien. `Ctrl+D` poserait un signet. Ni l'un ni
 l'autre n'a de sens ici, et tous deux se trouvent sous les doigts quand on joue.
 On les prend, et on les rend à leur usage dès qu'on est dans une **zone de
 saisie** — celles-ci reçoivent les touches avant le jeu.
+
+**`Ctrl+N` fait la même chose que `Ctrl+D`** : c'est le raccourci de « nouveau »
+partout ailleurs, et beaucoup l'ont dans les doigts. Le navigateur se le réserve
+et ouvrira peut-être sa fenêtre par-dessus ; là où il nous laisse la main, il
+marche. Deux touches pour un même geste ne coûtent rien ; en manquer une coûte
+un aller-retour à la souris.
+
+**Ils s'ouvrent aussi depuis le rejeu**, comme la feuille de route : on relit la
+partie qu'on vient de finir, et c'est précisément de là qu'on veut en relancer
+une. Le rejeu prenait la main sur toutes les touches et ne laissait passer que
+`Ctrl+R` ; il laisse maintenant passer les deux.
 
 `Ctrl+D` ne fait rien là où le bouton des réglages n'est pas là, et `Ctrl+E` rien
 là où le rejeu ne s'ouvre pas : **un raccourci ne donne pas un droit que l'écran
@@ -969,6 +993,76 @@ fois par partie.
 
 Le lexique suit la langue : un salon ouvert depuis la version anglaise naît en
 EEL 22 (`DICO_PAR_LANGUE`), et le réglage du salon permet d'en changer.
+
+### Le lexique se nomme, il ne se décrit pas
+
+Dans la liste des réglages, **le nom du lexique passe avant sa langue** :
+`ODS 9 - Français`, `CSW 24 - English`, `NWL 23 - English`, `EEL 22 - English`,
+dans cet ordre. C'est le nom qu'on cherche — on vient chercher le CSW, pas
+« l'anglais » — et la liste se lit alors comme une colonne de noms alignés
+plutôt que comme deux « English » suivis d'un troisième. Un **tiret simple** les
+sépare : le cadratin est la marque de ce qu'on n'a pas écrit soi-même.
+
+Dans la barre du chevalet, le compteur s'appelle **`DICO`**, et **`LEXI`** en
+anglais — de *lexicon*, qui est le mot du jeu ; *dictionary* désigne l'ouvrage,
+pas la liste qui fait autorité. « Dictionnaire » en toutes lettres prenait la
+place de deux compteurs pour dire ce que six lettres disent aussi bien, et la
+case tient sur 72 pixels au lieu de 96 : elle porte « CSW 24 », six caractères
+qui ne grandiront pas, là où le gabarit commun est taillé pour sept chiffres.
+
+### Deux axes, deux groupes de filtres
+
+L'accueil filtre sur deux choses qui n'ont rien à voir : **la forme de la
+grille** et **la langue**. Côte à côte dans une même rangée, « Tous » et
+« Toutes les langues » se lisaient comme deux réglages concurrents, alors que le
+premier ne parle que des grilles.
+
+```
+[ Tous ] [ 15×15 ] [ 21×21 ] [ Infinie ] [ En attente ]  │  [ FR ] [ Toutes les langues ]
+```
+
+Un trait les sépare, et **chaque groupe s'exclut de son côté**. La puce de
+langue porte celle du site — `FR` ou `EN` — parce que c'est elle qu'on quitte
+quand on veut aller voir ailleurs.
+
+« 15×15 » attrape tous les plateaux bornés **sauf** la super grille, qui a sa
+puce à elle. Un plateau d'une autre taille — le serveur en accepte, même si rien
+ne les propose — reste ainsi visible quelque part.
+
+### Signaler un bug
+
+Un bouton discret dans le **pied de l'accueil** et un autre dans le **bandeau du
+salon** : un bug se rencontre en jouant, et quitter la partie pour aller le
+raconter, c'est perdre l'écran qui le montre.
+
+La fenêtre demande deux choses : « Décrivez ce qui ne va pas », et une adresse
+mail **facultative**, pour qu'on puisse répondre. **Aucun compte n'est
+demandé** : celui qui bute sur un bug de la connexion est justement celui qui ne
+peut pas se connecter pour le dire.
+
+**Ce qui part avec le texte est écrit en toutes lettres sous le champ** — le
+pseudo, le salon, le numéro du coup, le navigateur. Personne n'aime envoyer un
+formulaire sans savoir ce qu'il emporte, et ce qu'il emporte est justement ce
+qui rend un rapport exploitable : sans le salon et le numéro du coup, « le top
+était faux » ne se vérifie pas. **L'adresse IP n'y est pas** : elle n'apprend
+rien sur un bug, et elle transformerait un fichier de rapports en fichier de
+joueurs.
+
+**Le compte vient du cookie, pas du formulaire.** Le pseudo annoncé par le
+client se raconte ; le cookie se vérifie.
+
+**La fenêtre ne se referme pas toute seule après l'envoi** : les champs cèdent
+la place au remerciement, le bouton d'envoi disparaît, il ne reste qu'à
+refermer. Un formulaire qui s'évanouit laisse un doute, et le doute fait
+renvoyer le même rapport une deuxième fois.
+
+> **Il n'y a pas encore d'adresse où les envoyer.** Le formulaire, lui, existe :
+> ce qu'un joueur écrit ne doit pas attendre qu'une boîte aux lettres soit
+> ouverte pour être gardé. Chaque rapport part dans `bugs.journal.jsonl`, en
+> ajout seul et `fsync` à chaque ligne comme les comptes et les parties, et
+> s'écrit en clair dans la console de l'hôte. Le jour où l'adresse existera, il
+> n'y aura qu'à brancher l'envoi dans `bugs.ts` : rien d'autre dans le serveur
+> ne connaît ce chemin.
 
 ---
 
@@ -1991,6 +2085,86 @@ bornes, le dehors prend un fond mat, et un trait franc marque le bord.
 
 Les règles portent alors **les repères du jeu de société** : les lignes de A à O,
 les colonnes de 1 à 15, chacune numérotée puisqu'elles ne sont que quinze.
+
+### La super grille 21×21
+
+Le plateau du commerce agrandi de **trois cases de chaque côté**, dessiné pour
+ce jeu-ci, avec **deux primes que le plateau du commerce n'a pas** : les mots
+comptent **quadruple** aux quatre coins, et huit cases font compter la lettre
+**quadruple**. Demi-côté 10, donc 21×21.
+
+```
+Q..d...T..d..T...d..Q      Q  mot compte quadruple    q  lettre compte quadruple
+.D..t...D...D...t..D.      T  mot compte triple       t  lettre compte triple
+..D..q...D.D...q..D..      D  mot compte double       d  lettre compte double
+d..T..d...T...d..T..d
+.t..D...t...t...D..t.      125 cases bonus sur 441 :
+..q..D...d.d...D..q..        4 MCQ · 16 MCT · 41 MCD
+...d..D...d...D..d...        8 LCQ · 20 LCT · 36 LCD
+T......D.....D......T
+.D..t...t...t...t..D.      Le centre est un mot compte double,
+..D..d...d.d...d..D..      comme l'étoile du plateau du commerce.
+d..T..d...D...d..T..d
+..D..d...d.d...d..D..
+.D..t...t...t...t..D.
+T......D.....D......T
+...d..D...d...D..d...
+..q..D...d.d...D..q..
+.t..D...t...t...D..t.
+d..T..d...T...d..T..d
+..D..q...D.D...q..D..
+.D..t...D...D...t..D.
+Q..d...T..d..T...d..Q
+```
+
+**Le motif est invariant par les quatre symétries du carré** — les deux miroirs
+et les deux diagonales. C'est ce que `check_super.ts` vérifie en premier : le
+motif a été recopié à la main, et une case oubliée quelque part ne se voit pas à
+l'œil, alors qu'elle rend la grille différente selon le côté où l'on joue.
+
+**Ce qu'elle change au plafond des scores.** Mesuré sur le motif :
+
+| | super 21×21 | plateau du commerce |
+|---|---|---|
+| multiplicateur maximum, mot de 7 lettres | **×9**, à 4 placements | ×4, jamais ×9 |
+| multiplicateur maximum, mot de 15 au plus | **×36** (Q+T+T, 14 lettres) | ×27 (T+T+T, 15 lettres) |
+| deux multiplicateurs de mot au plus près | **2 cases** | 6 cases |
+
+Deux points méritent d'être vus avant qu'un joueur ne les découvre :
+
+- **sur chaque bord, les deux MCT sont à 6 cases**, donc un tirage ordinaire de
+  sept lettres suffit à faire ×9. Sur le plateau du commerce, les MCT d'un bord
+  sont à 8 cases et le ×9 demande huit lettres ;
+- **lignes et colonnes C et S, deux MCD se touchent presque** — `D.D`, une case
+  d'écart — et un mot de **trois** lettres y vaut ×4. C'est le seul endroit du
+  plateau où deux multiplicateurs de mot sont si proches ; les lignes J et L,
+  qui portent le même dessin, y ont des lettres comptent double (`d.d`).
+
+Ce sont deux propriétés du motif tel qu'il a été dessiné, pas des fautes de
+recopie : la symétrie les couvre des quatre côtés.
+
+**Le vert est la troisième famille de couleurs du plateau.** Le rouge compte les
+mots, le bleu compte les lettres ; le vert dit qu'on est passé au cran du
+dessus. Vert foncé pour le mot, vert clair pour la lettre — un vert plus sourd
+et plus bleu que l'accent du site, pour qu'une case ne se confonde pas avec un
+caramel en cours de pose.
+
+Les repères vont jusqu'à **U** et **21**, les deux écoles comprises : les
+étiquettes se calculent depuis le demi-côté, elles n'ont jamais été écrites en
+dur pour quinze.
+
+**Le pavage découle de la grille, et de rien d'autre.** Le client n'envoie pas
+de nom de pavage : le serveur le déduit des bornes — sept donne le plateau du
+commerce, dix donne la super grille, l'absence de bornes donne le pavage infini
+du salon. Un client ne peut donc pas demander un pavage qui ne va pas avec sa
+grille.
+
+**Elle ne se propose que dans les réglages avancés.** C'est un plateau que
+personne n'a jamais vu, avec deux primes de plus : on ne le met pas sous les
+yeux de qui ouvre un salon pour la première fois. Le bouton reparaît quand même
+en fenêtre simple **si la partie en cours s'y joue** — cacher le réglage qu'elle
+utilise laisserait le panneau sans aucun bouton allumé, et le premier clic
+ailleurs changerait de plateau sans le dire.
 
 ### X sur Y
 

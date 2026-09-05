@@ -113,19 +113,6 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
     poids: DEFAULT_WEIGHTS,
     poidsJoker: DEFAULT_BLANK_WEIGHT,
   },
-  eel22: {
-    id: "eel22",
-    nom: "EEL 22",
-    langue: "en",
-    detail: "Les mots anglais courants, et eux seuls. 68 135 mots.",
-    source: "dictionnaire-eel22.txt",
-    dawg: "dawg-eel22.bin",
-    gaddag: "gaddag-eel22.bin",
-    valeurs: VALEURS_ANGLAISES,
-    sac: SAC_ANGLAIS,
-    poids: POIDS_ANGLAIS,
-    poidsJoker: POIDS_JOKER_ANGLAIS,
-  },
   csw24: {
     id: "csw24",
     nom: "CSW 24",
@@ -151,6 +138,19 @@ export const DICTIONNAIRES: Readonly<Record<string, Dictionnaire>> = {
     sac: SAC_ANGLAIS,
     poids: POIDS_NWL23,
     poidsJoker: POIDS_JOKER_NWL23,
+  },
+  eel22: {
+    id: "eel22",
+    nom: "EEL 22",
+    langue: "en",
+    detail: "Les mots anglais courants, et eux seuls. 68 135 mots.",
+    source: "dictionnaire-eel22.txt",
+    dawg: "dawg-eel22.bin",
+    gaddag: "gaddag-eel22.bin",
+    valeurs: VALEURS_ANGLAISES,
+    sac: SAC_ANGLAIS,
+    poids: POIDS_ANGLAIS,
+    poidsJoker: POIDS_JOKER_ANGLAIS,
   },
 };
 
@@ -192,7 +192,12 @@ export function dictionnaireConnu(id: unknown): boolean {
   return typeof id === "string" && id in DICTIONNAIRES;
 }
 
-/** Les dictionnaires, dans l'ordre d'affichage. */
+/**
+ * Les dictionnaires, DANS L'ORDRE D'AFFICHAGE.
+ *
+ * L'ordre est celui de cette table, et il se lit du plus gros lexique de
+ * chaque langue au plus petit : le francais d'abord, puis les trois anglais.
+ */
 export function tousLesDictionnaires(): Dictionnaire[] {
   return Object.values(DICTIONNAIRES);
 }

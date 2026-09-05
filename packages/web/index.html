@@ -27,6 +27,13 @@
   --mcd:        #E08D7E;
   --lct:        #3B7DA4;
   --lcd:        #90BCD4;
+  /* LES QUADRUPLES N'EXISTENT QUE SUR LA SUPER GRILLE, et le vert est la
+     troisieme famille de couleurs du plateau : le rouge compte les mots, le
+     bleu compte les lettres, le vert dit qu'on est passe au cran du dessus.
+     Un vert sourd, plus bleu et plus sombre que l'accent du site, pour qu'une
+     case ne se confonde pas avec un caramel en cours de pose. */
+  --mcq:        #3F7D57;
+  --lcq:        #96C6A9;
   --accent:     #1E7A4D;
   --accent-bg:  #DBEFE4;
   --warn:       #B4541C;
@@ -56,6 +63,7 @@
   /* Les vignettes changent de jeu de couleurs avec le theme : une grille claire
      posee sur une carte sombre eblouit. */
   --vignette-15:      url(grille-15.svg);
+  --vignette-21:      url(grille-21.svg);
   --vignette-infinie: url(grille-infinie.svg);
   /* LE BORD DES CARTES A SON PROPRE JETON. Sur fond sombre, `--rule` est
      presque le fond lui-meme : les cartes s'y dissolvaient, on ne voyait plus
@@ -79,12 +87,14 @@
     --hover: #1B2621; --tile-face: #EFEDE4; --tile-edge: #6A6455; --tile-ink: #1C221F;
     --joker-face: #C4D8E8; --joker-edge: #3D6180;
     --mct: #99392F; --mcd: #B2665A; --lct: #2E5D7C; --lcd: #4C84A2;
+    --mcq: #2E6344; --lcq: #4E8F6C;
     --accent: #44B27A; --accent-bg: #11301F; --warn: #DE8A4E; --warn-bg: #331E10;
     --cursor: #E6EDE9; --mark: #D8A24A; --shadow: rgba(0,0,0,.45);
     /* Le vert reste CLAIR en mode sombre : c'est un caramel pose sur la
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
-    --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
+    --vignette-15: url(grille-15-sombre.svg); --vignette-21: url(grille-21-sombre.svg);
+    --vignette-infinie: url(grille-infinie-sombre.svg);
     --carte-rule: rgba(230,237,233,.30); --vignette-fond: #101917;
 }
 @media (prefers-color-scheme: dark) {
@@ -94,12 +104,14 @@
     --hover: #1B2621; --tile-face: #EFEDE4; --tile-edge: #6A6455; --tile-ink: #1C221F;
     --joker-face: #C4D8E8; --joker-edge: #3D6180;
     --mct: #99392F; --mcd: #B2665A; --lct: #2E5D7C; --lcd: #4C84A2;
+    --mcq: #2E6344; --lcq: #4E8F6C;
     --accent: #44B27A; --accent-bg: #11301F; --warn: #DE8A4E; --warn-bg: #331E10;
     --cursor: #E6EDE9; --mark: #D8A24A; --shadow: rgba(0,0,0,.45);
     /* Le vert reste CLAIR en mode sombre : c'est un caramel pose sur la
        grille, il doit se lire comme les autres, encre foncee comprise. */
     --ghost-face: #A9DCC0; --ghost-edge: #4FBE86; --ghost-ink: #0E241A;
-    --vignette-15: url(grille-15-sombre.svg); --vignette-infinie: url(grille-infinie-sombre.svg);
+    --vignette-15: url(grille-15-sombre.svg); --vignette-21: url(grille-21-sombre.svg);
+    --vignette-infinie: url(grille-infinie-sombre.svg);
     --carte-rule: rgba(230,237,233,.30); --vignette-fond: #101917;
 }
 }
@@ -129,6 +141,10 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 /* Les deux durees partagent UN rectangle : elles se lisent ensemble -- le coup
    en cours s'ajoute au temps total, et le total n'est que la somme des coups. */
 .stat.chrono { display: flex; gap: 18px; padding: 3px 12px 4px; text-align: center; }
+/* LE LEXIQUE NE TIENT PAS SEPT CHIFFRES, il tient « CSW 24 » : six caracteres,
+   qui ne grandiront pas. Les 96 px du gabarit commun lui donnaient la largeur
+   d'un cumul a sept chiffres pour rien, et la barre en manquait ailleurs. */
+.stat.dico { min-width: 72px; }
 /* LA BOITE DU CHRONO NE CHANGE PLUS DE LARGEUR.
    A 58 px elle grandissait avec son contenu : « 59 s » tenait, « 1 min 00 »
    non, et la boite passait de 160 a 188 px au moment ou le coup franchissait la
@@ -541,7 +557,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .moi .avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--nuit-rule); color: var(--nuit-faint); font-size: 13px; font-weight: 600; line-height: 30px; text-align: center; }
 
 .corps { padding: 18px 24px 20px; }
-.filtres { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.filtres { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+/* Le trait qui separe la forme de la grille de la langue : deux axes, deux
+   groupes de puces qui s'excluent chacun de leur cote. */
+.filtres .coupure { width: 1px; height: 20px; align-self: center; margin: 0 5px; background: var(--carte-rule); }
 .puce { padding: 7px 16px; border: 1px solid var(--carte-rule); border-radius: 20px; background: var(--panel); color: var(--ink-soft); font-size: 13.5px; }
 .puce[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
 .puce[aria-pressed="true"]:hover { color: var(--ground); border-color: var(--ink); }
@@ -624,6 +643,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    pleine. La grille infinie, elle, n'a aucun bord a montrer : c'est tout ce
    qui les distingue, et c'est plus net qu'avant. */
 .carte .vignette.bornee { background-image: var(--vignette-15); background-size: 100% auto; background-position: center; background-repeat: no-repeat; }
+/* LA SUPER GRILLE SE MONTRE ENTIERE, elle ne se laisse pas couper.
+   Ce qui la distingue, ce sont ses QUATRE COINS -- les seuls mots comptent
+   quadruple du jeu. Cadree comme la 15x15, a toute la largeur, elle perdait
+   justement ses quatre coins en haut et en bas : il ne restait que du rouge et
+   du bleu, et rien ne disait plus qu'elle etait speciale. Elle tient donc dans
+   la hauteur, et le fond des vignettes remplit ce qui reste de chaque cote. */
+.carte .vignette.super { background-image: var(--vignette-21); background-size: contain; background-position: center; background-repeat: no-repeat; }
 .carte .vignette.infinie { background-image: var(--vignette-infinie); background-size: 210px 210px; background-position: center; background-repeat: repeat; }
 /* LE TYPE DE GRILLE SE LIT DE LOIN. C'est le premier renseignement qu'on
    cherche sur une carte, et il etait ecrit en dix pixels dans un coin. */
@@ -651,6 +677,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    decourage. Discret en pied de page, il informe sans peser. */
 .pied { display: flex; margin-top: 16px; padding-top: 11px; border-top: 1px solid var(--rule); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--pied-ink); }
 .pied span { margin-left: auto; }
+/* La porte des bugs se fond dans le pied : meme encre, meme taille, elle ne se
+   distingue qu'au survol. On la cherche quand on en a besoin, elle ne se
+   propose pas. */
+.pied .lien-pied { padding: 0; font: inherit; color: inherit; background: none; border: 0; }
+.pied .lien-pied:hover { color: var(--accent); text-decoration: underline; }
 
 /* SE NOMMER. Le voile ne barre pas le site : il demande le pseudo au moment ou
    il devient necessaire, et rend la main a la destination demandee. */
@@ -662,6 +693,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pseudo input { width: 100%; font: inherit; font-size: 15px; padding: 11px 13px; border: 1px solid var(--rule); border-radius: 5px; background: var(--ground); color: var(--ink); }
 .pseudo input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pseudo .join-error { margin-top: 10px; }
+/* UN BUG SE RACONTE EN PLUSIEURS LIGNES. Le champ d'une ligne des autres voiles
+   demanderait de resumer, et un rapport resume ne se reproduit pas. */
+.pseudo textarea { display: block; width: 100%; font: inherit; font-size: 15px; line-height: 1.45; padding: 11px 13px; border: 1px solid var(--rule); border-radius: 5px; background: var(--ground); color: var(--ink); resize: vertical; }
+.pseudo textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Ce qui part avec le rapport, ecrit en toutes lettres : personne n'aime
+   envoyer un formulaire sans savoir ce qu'il emporte. */
+.bug-quoi { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-faint); }
+.bug-merci { margin: 14px 0 0; font-size: 14px; color: var(--accent); }
+#bug-champs[hidden], .bug-merci[hidden] { display: none; }
 .pseudo .valider { width: 100%; margin-top: 16px; padding: 13px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 15px; font-weight: 500; }
 .pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
 .pseudo .renoncer { display: block; margin: 14px auto 0; font-size: 13px; padding: 5px 11px; }
@@ -917,7 +957,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <div class="vedette" id="vedette"></div>
       <div class="droite"><div class="rouleau" id="salons"><div class="none">chargement…</div></div></div>
     </div>
-    <div class="pied"><span id="pied-total"></span></div>
+    <!-- SIGNALER UN BUG SE FAIT DEPUIS LE PIED DE PAGE : c'est la qu'on va
+         chercher ce genre de porte, et elle ne dispute la place a rien. -->
+    <div class="pied">
+      <button type="button" class="lien-pied" id="bug-accueil">Signaler un bug</button>
+      <span id="pied-total"></span>
+    </div>
   </div>
 
   <!-- LE PROFIL EST UNE PAGE, pas une fenetre : il partage le bandeau de
@@ -1033,6 +1078,33 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
+<!-- SIGNALER UN BUG. Le formulaire vit a la racine parce que les deux boutons
+   qui l'ouvrent vivent de part et d'autre : l'un dans le pied de l'accueil,
+   l'autre dans le bandeau du salon.
+
+   AUCUN COMPTE N'EST DEMANDE. Celui qui bute sur un bug de la connexion est
+   justement celui qui ne peut pas se connecter pour le dire. -->
+<div class="voile" id="voile-bug" hidden>
+  <form class="pseudo bug-boite" id="form-bug" autocomplete="off">
+    <h2>Signaler un bug</h2>
+    <div id="bug-champs">
+      <p>Décrivez ce qui ne va pas</p>
+      <textarea id="bug-texte" rows="6" maxlength="4000"
+                placeholder="Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez"></textarea>
+      <span class="etiquette">Votre mail, si vous voulez une réponse</span>
+      <input id="bug-mail" type="email" maxlength="254" placeholder="Facultatif" autocomplete="email">
+      <p class="bug-quoi" id="bug-quoi"></p>
+    </div>
+    <!-- LA FENETRE NE SE REFERME PAS TOUTE SEULE APRES L'ENVOI. Un formulaire
+         qui disparait laisse un doute, et le doute fait renvoyer le meme
+         rapport une deuxieme fois. -->
+    <p class="bug-merci" id="bug-merci" hidden>Le rapport est bien arrivé. Merci.</p>
+    <div class="join-error" id="bug-error" hidden></div>
+    <button class="valider" id="bug-envoyer" type="submit">Envoyer</button>
+    <button class="lien renoncer" id="bug-close" type="button">Fermer</button>
+  </form>
+</div>
+
 <!-- LA FICHE D'UN JOUEUR. Une fenetre et non une page : on la consulte depuis
    un salon, et sortir du salon pour lire trois lignes serait payer cher un
    renseignement.
@@ -1058,6 +1130,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="bar">
   <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
   <div class="who">
+    <button class="lien" id="bug-jeu">Signaler un bug</button>
     <button class="lien" id="reglages-open" hidden>Réglages</button>
     <button class="lien" id="quitter">Quitter</button>
     <span class="dot" id="dot"></span><span id="conn">connexion…</span>
@@ -1080,7 +1153,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div><span>Coup</span><b id="elapsed">—</b></div>
     <div><span>Temps</span><b id="age">—</b></div>
   </div>
-  <div class="stat"><span>Dictionnaire</span><b id="rb-dico">—</b></div>
+  <!-- « DICO », et non « Dictionnaire » : le nom entier prenait la place de deux
+       compteurs pour dire ce que six lettres disent aussi bien. En anglais c'est
+       « LEXI », de lexicon -- « dictionary » n'est pas le mot du jeu. -->
+  <div class="stat dico"><span>DICO</span><b id="rb-dico">—</b></div>
   <div class="stat"><span>Cumul</span><b id="rb-cumul">—</b></div>
   <button class="image" id="rb-image" type="button" title="enregistrer la grille en image">
     <svg viewBox="0 0 18 16" width="16" height="14" aria-hidden="true">
@@ -1226,10 +1302,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </div>
       </div>
 
+      <!-- LA SUPER GRILLE EST UN REGLAGE AVANCE. C'est un plateau que personne
+           n'a jamais vu, avec deux primes de plus : on ne le propose pas a qui
+           ouvre un salon pour la premiere fois. -->
       <div class="reglage">
         <label>Grille</label>
         <div class="choix" id="r-grille">
           <button type="button" data-v="15">Normale</button>
+          <button type="button" data-v="super" data-avance
+                  title="Le plateau 21×21, avec ses mots et ses lettres comptent quadruple">Super</button>
           <button type="button" data-v="infinie">Infinie</button>
         </div>
       </div>
@@ -1387,11 +1468,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         </button>
       </div>
 
+      <!-- LES LETTRES NE S'ARRETENT PAS TOUJOURS A O : la super grille va
+           jusqu'a U. L'etiquette et les deux exemples se refont donc d'apres le
+           plateau qu'on a sous les yeux (voir `peuplerReperes`). -->
       <div class="reglage">
-        <label>Repères du plateau 15×15</label>
+        <label id="p-reperes-titre">Repères du plateau 15×15</label>
         <div class="choix deuxlignes" id="p-reperes">
-          <button type="button" data-v="fr">Française<em>lignes A–O</em></button>
-          <button type="button" data-v="en">Anglaise<em>colonnes A–O</em></button>
+          <button type="button" data-v="fr">Française<em id="p-reperes-fr">lignes A–O</em></button>
+          <button type="button" data-v="en">Anglaise<em id="p-reperes-en">colonnes A–O</em></button>
         </div>
       </div>
 

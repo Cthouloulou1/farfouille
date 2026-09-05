@@ -577,6 +577,8 @@ function draw() {
     ground: css("--ground"), bord: css("--ink-soft"),
     jface: css("--joker-face"), jedge: css("--joker-edge"),
     T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
+    // Les quadruples : la super grille est seule a en porter.
+    Q: css("--mcq"), q: css("--lcq"),
   };
   ctx.fillStyle = C.field;
   ctx.fillRect(0, 0, W, H);
@@ -4082,6 +4084,14 @@ cv.addEventListener("pointerup", (e) => {
 cv.addEventListener("pointercancel", () => { press = null; clearTimeout(holdTimer); cv.style.cursor = ""; });
 
 addEventListener("keydown", (e) => {
+  // LE FORMULAIRE DES BUGS S'OUVRE DES DEUX COTES, donc Echap le referme des
+  // deux cotes -- y compris depuis sa zone de texte, qui garderait la touche
+  // pour elle si l'on attendait les branches suivantes.
+  if (e.key === "Escape" && !$("voile-bug").hidden) {
+    fermerLesBugs();
+    e.preventDefault();
+    return;
+  }
   // SUR L'ACCUEIL, ECHAP REFERME CE QUI S'Y OUVRE, et rien d'autre ne passe :
   // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
   if (!$("join").hidden) {
@@ -4136,6 +4146,22 @@ addEventListener("keydown", (e) => {
     else fermerLaRoute();
     return;
   }
+  // LA NOUVELLE PARTIE S'OUVRE AUSSI DEPUIS LE REJEU, pour la meme raison que
+  // la feuille de route : on relit la partie qu'on vient de finir, et c'est
+  // precisement de la qu'on veut en relancer une.
+  //
+  // Ctrl+D poserait un signet, ce qui n'a aucun sens ici -- on le prend, et on
+  // le rend a son usage des qu'on est dans une zone de saisie, celles-ci ayant
+  // rendu la main plus haut. CTRL+N FAIT LA MEME CHOSE : c'est le raccourci de
+  // « nouveau » partout ailleurs, et beaucoup l'ont dans les doigts. Le
+  // navigateur se le reserve et ouvrira peut-etre sa fenetre par-dessus ; la ou
+  // il nous laisse la main, il marche.
+  if ((e.ctrlKey || e.metaKey)
+      && (e.key === "d" || e.key === "D" || e.key === "n" || e.key === "N")) {
+    e.preventDefault();
+    if (!$("reglages-open").hidden) ouvrirReglages();
+    return;
+  }
   if (!$("panel-rejeu").hidden) {
     if (e.key === "Escape") { fermerLeRejeu(); return; }
     if (e.key === "ArrowUp") { deplacerDansLaListe(-1); e.preventDefault(); return; }
@@ -4148,14 +4174,6 @@ addEventListener("keydown", (e) => {
   if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
-  // Ctrl+D poserait un signet, ce qui n'a aucun sens ici. On le prend, et on le
-  // rend a son usage des qu'on est dans une zone de saisie -- celles-ci ont
-  // rendu la main plus haut.
-  if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
-    e.preventDefault();
-    if (!$("reglages-open").hidden) ouvrirReglages();
-    return;
-  }
   // Ctrl+E ouvre le rejeu -- la ou le bouton l'ouvre, et nulle part ailleurs :
   // sur une partie en cours, montrer les paliers serait donner les reponses.
   if ((e.ctrlKey || e.metaKey) && (e.key === "e" || e.key === "E")) {
@@ -4523,6 +4541,26 @@ function peuplerPreferences(): void {
   for (const b of $("p-reperes").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.reperes));
   }
+  peuplerReperes();
+}
+
+/**
+ * Les reperes se nomment d'apres LE PLATEAU QU'ON A SOUS LES YEUX.
+ *
+ * « lignes A–O » etait ecrit en dur : sur la super grille, les lettres vont
+ * jusqu'a U, et l'exemple donne dans les parametres decrivait un plateau qui
+ * n'etait pas celui de la partie.
+ *
+ * Sur l'accueil, et sur une grille infinie ou les regles portent des nombres
+ * signes plutot que des lettres, on nomme le plateau du commerce : c'est la
+ * reference des deux ecoles.
+ */
+function peuplerReperes(): void {
+  const b = !$("join").hidden || !configRecue || cfg.bornes === null ? 7 : cfg.bornes;
+  const derniere = String.fromCharCode(65 + b * 2);
+  $("p-reperes-titre").textContent = t2("Repères du plateau {n}×{n}", { n: b * 2 + 1 });
+  $("p-reperes-fr").textContent = t2("lignes A–{z}", { z: derniere });
+  $("p-reperes-en").textContent = t2("colonnes A–{z}", { z: derniere });
 }
 
 // La langue ne vit pas dans `prefs`, qui se relit apres coup : elle vit dans
@@ -5019,7 +5057,7 @@ function accrocheStar(l: Langue): string[] {
 }
 
 /** Le filtre en cours. Il ne trie que la liste deja recue : aucun aller-retour. */
-let filtre: "tous" | "bornee" | "infinie" | "attente" = "tous";
+let filtre: "tous" | "bornee" | "super" | "infinie" | "attente" = "tous";
 
 /**
  * Montre-t-on les salons des AUTRES langues ?
@@ -5608,10 +5646,20 @@ function langueDuSalon(s: ResumeSalon): Langue {
   return dictionnaire(s.config.dictionnaire).langue;
 }
 
+/** La super grille se reconnait a son demi-cote : dix cases, donc 21x21. */
+const SUPER_BORNES = 10;
+function estSuper(c: ResumeSalon["config"]): boolean {
+  return c.bornes === SUPER_BORNES;
+}
+
 /** Le filtre s'applique a tous les salons, la grille mondiale comprise. */
 function retenu(s: ResumeSalon): boolean {
   if (!toutesLangues && langueDuSalon(s) !== langue()) return false;
-  if (filtre === "bornee") return s.config.bornes !== null;
+  // « 15x15 » attrape tous les plateaux bornes SAUF la super grille, qui a sa
+  // puce a elle. Un plateau d'une autre taille -- le serveur en accepte, meme
+  // si rien ne les propose -- reste ainsi visible quelque part.
+  if (filtre === "bornee") return s.config.bornes !== null && !estSuper(s.config);
+  if (filtre === "super") return estSuper(s.config);
   if (filtre === "infinie") return s.config.bornes === null;
   if (filtre === "attente") return s.coups === 0;
   return true;
@@ -5712,8 +5760,8 @@ function peindreFiltres(): void {
   const barre = $("filtres");
   barre.replaceChildren();
   const puces: [typeof filtre, string][] = [
-    ["tous", t("Tous")], ["bornee", "15×15"], ["infinie", t("Infinie")],
-    ["attente", t("En attente")],
+    ["tous", t("Tous")], ["bornee", "15×15"], ["super", "21×21"],
+    ["infinie", t("Infinie")], ["attente", t("En attente")],
   ];
   for (const [cle, texte] of puces) {
     const b = el("button", "puce", texte) as HTMLButtonElement;
@@ -5722,15 +5770,26 @@ function peindreFiltres(): void {
     b.addEventListener("click", () => { filtre = cle; peindreAccueil(); });
     barre.appendChild(b);
   }
-  // LES AUTRES LANGUES SE MONTRENT, ELLES NE SE CHOISISSENT PAS. Ce n'est pas
-  // une puce de plus dans la meme serie -- les quatre premieres s'excluent,
-  // celle-ci s'ajoute a n'importe laquelle.
-  const autres = el("button", "puce langues", t("Toutes les langues")) as HTMLButtonElement;
-  autres.type = "button";
-  autres.setAttribute("aria-pressed", String(toutesLangues));
-  autres.title = t("Montrer aussi les salons des autres langues");
-  autres.addEventListener("click", () => { toutesLangues = !toutesLangues; peindreAccueil(); });
-  barre.appendChild(autres);
+
+  // LA LANGUE EST UN AUTRE AXE, DONC UN AUTRE GROUPE.
+  //
+  // « Tous » et « Toutes les langues » cote a cote dans la meme rangee se
+  // lisaient comme deux reglages concurrents, alors que le premier ne parle que
+  // de la forme de la grille. Un trait les separe, et la langue se choisit
+  // entre deux puces qui s'excluent : la sienne, ou toutes.
+  barre.appendChild(el("span", "coupure"));
+  const langues: [boolean, string, string][] = [
+    [false, langue() === "en" ? "EN" : "FR", t("Ne montrer que les salons de votre langue")],
+    [true, t("Toutes les langues"), t("Montrer aussi les salons des autres langues")],
+  ];
+  for (const [valeur, texte, quoi] of langues) {
+    const b = el("button", "puce", texte) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(toutesLangues === valeur));
+    b.title = quoi;
+    b.addEventListener("click", () => { toutesLangues = valeur; peindreAccueil(); });
+    barre.appendChild(b);
+  }
   if (pseudo() === "") return;
   const creer = el("button", "creer-bar", t("Créer un salon")) as HTMLButtonElement;
   creer.type = "button";
@@ -5781,7 +5840,10 @@ function carteSalon(s: ResumeSalon): HTMLElement {
 
   const vue = el("span", "vue");
   const infinie = s.config.bornes === null;
-  vue.appendChild(el("span", `vignette ${infinie ? "infinie" : "bornee"}`));
+  // La super grille a sa vignette a elle : c'est la seule qui montre du vert,
+  // et le vert est justement ce qu'elle a de plus que les autres.
+  const quelle = infinie ? "infinie" : estSuper(s.config) ? "super" : "bornee";
+  vue.appendChild(el("span", `vignette ${quelle}`));
   vue.appendChild(el("span", "badge", courtDeLaGrille(s.config.bornes)));
 
   // Le createur peut retirer son salon -- sauf s'il est permanent : des
@@ -6113,13 +6175,17 @@ function avertirSiExplosif(): void {
 function peuplerGrille(): void {
   for (const b of $("r-grille").querySelectorAll("button")) {
     const v = (b as HTMLElement).dataset["v"]!;
-    b.setAttribute("aria-pressed", String(v === "infinie" ? cBornes === null : cBornes !== null));
+    const choisi = v === "infinie" ? cBornes === null
+      : v === "super" ? cBornes === SUPER_BORNES
+      : cBornes !== null && cBornes !== SUPER_BORNES;
+    b.setAttribute("aria-pressed", String(choisi));
   }
 }
 
 for (const b of $("r-grille").querySelectorAll("button")) {
   b.addEventListener("click", () => {
-    cBornes = (b as HTMLElement).dataset["v"] === "infinie" ? null : 7;
+    const v = (b as HTMLElement).dataset["v"];
+    cBornes = v === "infinie" ? null : v === "super" ? SUPER_BORNES : 7;
     peuplerGrille();
     // Chaque grille a son tirage naturel : les probabilites ponderees ne
     // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
@@ -6306,15 +6372,18 @@ function peuplerPioche(): void {
 }
 
 /**
- * Le lexique, en une ligne.
+ * Le lexique, en une ligne : son nom, puis sa langue.
  *
- * CHOISIR LE LEXIQUE, C'EST CHOISIR LA LANGUE DE LA PARTIE. Le nom de la langue
- * passe donc avant celui du dictionnaire : on cherche « English » bien avant de
- * savoir ce qu'est un EEL 22.
+ * LE NOM D'ABORD. C'est lui qu'on cherche -- on vient chercher le CSW, pas
+ * « l'anglais » -- et la liste se lit alors comme une colonne de noms alignes
+ * plutot que comme deux « English » suivis d'un troisieme.
  *
- * Un menu deroulant plutot qu'une rangee de boutons : il y aura bientot quatre
- * lexiques, et une rangee qui grandit a chaque ajout mangerait la moitie du
- * panneau pour un reglage qu'on touche une fois.
+ * Un tiret simple les separe, et non un cadratin : le cadratin est la marque de
+ * ce qu'on n'a pas ecrit soi-meme.
+ *
+ * Un menu deroulant plutot qu'une rangee de boutons : quatre lexiques, et une
+ * rangee qui grandit a chaque ajout mangerait la moitie du panneau pour un
+ * reglage qu'on touche une fois.
  */
 function peuplerDico(): void {
   const menu = $("r-dico") as HTMLSelectElement;
@@ -6322,7 +6391,7 @@ function peuplerDico(): void {
   for (const d of tousLesDictionnaires()) {
     const o = document.createElement("option");
     o.value = d.id;
-    o.textContent = `${d.langue === "en" ? "English" : "Français"} — ${d.nom}`;
+    o.textContent = `${d.nom} - ${d.langue === "en" ? "English" : "Français"}`;
     o.title = t(d.detail);
     menu.appendChild(o);
   }
@@ -6378,6 +6447,12 @@ function appliquerLeModeDeReglages(): void {
   $("r-primes-bloc").hidden = !avance;
   $("r-format-bloc").hidden = avance;
   $("r-nombres-bloc").hidden = !avance && cFormat !== "perso";
+  // LA SUPER GRILLE SE MONTRE QUAND MEME SI L'ON Y JOUE. Cacher le reglage que
+  // la partie en cours utilise laisserait le panneau sans aucun bouton allume,
+  // et le premier clic ailleurs changerait de plateau sans le dire.
+  for (const b of $("r-grille").querySelectorAll("button[data-avance]")) {
+    (b as HTMLElement).hidden = !avance && cBornes !== SUPER_BORNES;
+  }
   // Quinze secondes par coup, c'est un reglage de joueur aguerri : il coute
   // cher au serveur et ne laisse le temps de rien a qui decouvre.
   for (const b of $("r-chrono").querySelectorAll("button[data-avance]")) {
@@ -6514,6 +6589,113 @@ $("records-close").addEventListener("click", () => { $("voile-records").hidden =
 $("voile-records").addEventListener("click", (e) => {
   if (e.target === $("voile-records")) $("voile-records").hidden = true;
 });
+
+// -------------------------------------------------------- signaler un bug
+
+/**
+ * LE FORMULAIRE DES BUGS S'OUVRE DES DEUX COTES : du pied de l'accueil et du
+ * bandeau du salon. Un bug se rencontre en jouant, et quitter la partie pour
+ * aller le raconter, c'est perdre l'ecran qui le montre.
+ *
+ * IL NE DEMANDE PAS DE COMPTE. Celui qui bute sur un bug de la connexion est
+ * justement celui qui ne peut pas se connecter pour le dire.
+ */
+function contexteDuBug(): { salon: string; coup: number | null } {
+  // Sur l'accueil, il n'y a ni salon ni coup : `#join` decouvert dit qu'on y est.
+  if (!$("join").hidden) return { salon: "", coup: null };
+  return { salon: salonChoisi, coup: moveNumber + 1 };
+}
+
+/**
+ * Ce qui part avec le texte, ecrit en toutes lettres sous le champ.
+ *
+ * Personne n'aime envoyer un formulaire sans savoir ce qu'il emporte -- et ce
+ * qu'il emporte est justement ce qui rend un rapport exploitable : sans le
+ * salon et le numero du coup, « le top etait faux » ne se verifie pas.
+ */
+function direCeQuiPart(): string {
+  const { salon, coup } = contexteDuBug();
+  const bouts = [t2("votre pseudo ({p})", { p: pseudo() === "" ? t("aucun") : pseudo() })];
+  if (salon !== "") bouts.push(t2("le salon ({s})", { s: salon }));
+  if (coup !== null) bouts.push(t2("le coup ({n})", { n: coup }));
+  bouts.push(t("votre navigateur"));
+  return t2("Partent avec : {liste}.", { liste: bouts.join(", ") });
+}
+
+function ouvrirLesBugs(): void {
+  $("bug-error").hidden = true;
+  $("bug-merci").hidden = true;
+  $("bug-champs").hidden = false;
+  const envoyer = $("bug-envoyer") as HTMLButtonElement;
+  envoyer.disabled = false;
+  envoyer.hidden = false;
+  ($("bug-texte") as HTMLTextAreaElement).value = "";
+  // L'adresse du compte est deja connue : la retaper n'apprendrait rien.
+  ($("bug-mail") as HTMLInputElement).value = moiCompte?.email ?? "";
+  $("bug-quoi").textContent = direCeQuiPart();
+  $("voile-bug").hidden = false;
+  ($("bug-texte") as HTMLTextAreaElement).focus();
+}
+
+function fermerLesBugs(): void {
+  $("voile-bug").hidden = true;
+}
+
+$("bug-accueil").addEventListener("click", ouvrirLesBugs);
+$("bug-jeu").addEventListener("click", ouvrirLesBugs);
+$("bug-close").addEventListener("click", fermerLesBugs);
+$("voile-bug").addEventListener("click", (e) => {
+  if (e.target === $("voile-bug")) fermerLesBugs();
+});
+
+$("form-bug").addEventListener("submit", (e) => {
+  e.preventDefault();
+  void envoyerLeBug();
+});
+
+async function envoyerLeBug(): Promise<void> {
+  const texte = ($("bug-texte") as HTMLTextAreaElement).value.trim();
+  if (texte === "") {
+    $("bug-error").textContent = t("Décrivez ce qui ne va pas");
+    $("bug-error").hidden = false;
+    ($("bug-texte") as HTMLTextAreaElement).focus();
+    return;
+  }
+  const envoyer = $("bug-envoyer") as HTMLButtonElement;
+  envoyer.disabled = true;
+  $("bug-error").hidden = true;
+  const { salon, coup } = contexteDuBug();
+  try {
+    const r = await fetch("/api/bug", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        texte,
+        email: ($("bug-mail") as HTMLInputElement).value.trim(),
+        pseudo: pseudo(), salon, coup,
+        langue: langue(), agent: navigator.userAgent,
+        version: String(__COMPILE_A__),
+      }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      $("bug-error").textContent = d.erreur ?? t("Envoi impossible, réessayez");
+      $("bug-error").hidden = false;
+      envoyer.disabled = false;
+      return;
+    }
+  } catch {
+    $("bug-error").textContent = t("Serveur injoignable");
+    $("bug-error").hidden = false;
+    envoyer.disabled = false;
+    return;
+  }
+  // LE FORMULAIRE CEDE LA PLACE AU REMERCIEMENT : les champs disparaissent, le
+  // bouton d'envoi aussi. Il ne reste qu'a refermer, et rien ne part deux fois.
+  $("bug-champs").hidden = true;
+  envoyer.hidden = true;
+  $("bug-merci").hidden = false;
+}
 
 /** On peut refermer le voile sans se nommer : le site reste ouvert. */
 $("renoncer").addEventListener("click", () => {
