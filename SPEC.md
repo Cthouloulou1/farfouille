@@ -775,6 +775,12 @@ caramel de bord recouvrait le trait.
 Mesuré au pixel sur les quatre bords : 4 px partout, et le fond passe directement
 à la bordure puis à la case, sans teinte intermédiaire.
 
+**Les repères s'arrêtent avant le bord.** Le rectangle vert qui allume la
+colonne et la ligne du curseur est peint **après** le trait, et le rognait d'un
+pixel : sous le curseur — c'est-à-dire exactement là où l'œil regarde — le bord
+paraissait plus fin qu'ailleurs. L'épaisseur est maintenant écrite une fois et
+lue deux, par le tracé du bord et par les repères, qui s'arrêtent net avant lui.
+
 ### Le plateau borné ne colle plus au bas de l'écran
 
 On centrait le plateau dans ce qui restait **sous** une bande de repères de
@@ -1035,16 +1041,18 @@ Un bouton discret dans le **pied de l'accueil** et un autre dans le **bandeau du
 salon** : un bug se rencontre en jouant, et quitter la partie pour aller le
 raconter, c'est perdre l'écran qui le montre.
 
-La fenêtre demande deux choses : « Décrivez ce qui ne va pas », et une adresse
-mail **facultative**, pour qu'on puisse répondre. **Aucun compte n'est
-demandé** : celui qui bute sur un bug de la connexion est justement celui qui ne
-peut pas se connecter pour le dire.
+**La fenêtre tient en trois lignes.** Un titre qui est la consigne elle-même —
+« Décrivez ce qui ne va pas », *Describe what's wrong* — un grand champ, un
+champ « Mail, facultatif », et les deux boutons. Rien d'autre : un formulaire de
+bug qu'on lit avant de le remplir est un formulaire qu'on ne remplit pas.
 
-**Ce qui part avec le texte est écrit en toutes lettres sous le champ** — le
-pseudo, le salon, le numéro du coup, le navigateur. Personne n'aime envoyer un
-formulaire sans savoir ce qu'il emporte, et ce qu'il emporte est justement ce
-qui rend un rapport exploitable : sans le salon et le numéro du coup, « le top
-était faux » ne se vérifie pas. **L'adresse IP n'y est pas** : elle n'apprend
+**Aucun compte n'est demandé** : celui qui bute sur un bug de la connexion est
+justement celui qui ne peut pas se connecter pour le dire.
+
+**Le contexte part sans se montrer** — le pseudo, le salon, le numéro du coup,
+le navigateur. C'est ce qui rend un rapport exploitable : sans le salon et le
+numéro du coup, « le top était faux » ne se vérifie pas. Il figure dans le
+rapport reçu, pas dans la fenêtre. **L'adresse IP n'y est pas** : elle n'apprend
 rien sur un bug, et elle transformerait un fichier de rapports en fichier de
 joueurs.
 
@@ -2054,11 +2062,25 @@ plateau du commerce n'a de sens que borné, le pavage infini que sans bord, et l
 super grille demande deux jeux de caramels. Appliquer relance une partie neuve
 dans le salon — l'ancienne est archivée, jamais effacée.
 
-Le **tirage des lettres** offre trois choix : probabilités pondérées, sac du jeu
-classique, et le même sans fin. Le troisième est réservé aux grilles infinies :
-sur un plateau fermé la partie s'arrête avant qu'il ait à se recharger. Le
-nombre affiché suit le lexique **et la grille** — 102 en français, 100 en
+Le **tirage des lettres** offre trois choix, dans cet ordre : **sac du jeu
+classique**, le même **sans fin**, puis les **probabilités pondérées**. Le sac
+vient en tête parce que c'est le choix ordinaire ; les probabilités ferment la
+rangée parce que c'est l'option exotique — une pioche qui ne s'épuise jamais —
+et elles l'ouvraient comme si c'était l'inverse.
+
+Le nombre affiché suit le lexique **et la grille** — 102 en français, 100 en
 anglais, et le double sur la super grille.
+
+**Deux pioches sur un plateau fermé demandent un avertissement**, parce qu'elles
+lui retirent sa fin : rien n'arrête alors la partie tant qu'un coup reste
+jouable, et un plateau se bouche beaucoup plus lentement qu'un sac ne se vide.
+Le panneau le dit, en nommant la grille choisie :
+
+```
+Attention : probabilités pondérées sur une grille 21×21.
+Il n'y a pas de limite de lettres tirées : la partie ne s'arrête
+que lorsque aucun coup n'est jouable, et elle sera très longue.
+```
 
 ### La grille 15×15
 
@@ -2304,18 +2326,17 @@ sept vraies lettres cela ne se joue pas. Exiger deux voyelles et deux consonnes
 reviendrait à servir un tirage confortable à qui tient déjà les deux caramels
 les plus utiles du jeu.
 
-| | tirage ordinaire | double joker |
+| | tirage ordinaire, joker simple compris | double joker |
 |---|---|---|
-| **coups 1 à 15** | 2 voyelles et 2 consonnes à partir de 7 caramels | **1 voyelle et 1 consonne**, quelle que soit la taille |
+| **coups 1 à 15** | 2 voyelles et 2 consonnes à partir de 7 caramels, jokers compris | **1 voyelle et 1 consonne**, quelle que soit la taille |
 | **coup 16 et après** | 1 de chaque, et seulement sur un sac qui s'épuise | **aucune règle** |
 
 Passé le coup 15, cinq voyelles et deux jokers passent, cinq consonnes et deux
 jokers aussi. C'est justement l'intérêt de la variante.
 
-> **La règle est écrite, pas déduite de la taille du tirage.** En « 7 sur 7 » le
-> sac ne distribue que cinq lettres, si bien que la règle ordinaire tombait déjà
-> d'elle-même à une voyelle et une consonne — mais en **« 7 sur 9 »** il en
-> distribue sept, et le deux-et-deux revenait sans qu'on l'ait voulu.
+**La partie joker ordinaire, elle, garde le deux-et-deux** : un joker et six
+lettres font un tirage de sept. Ce sont bien deux modes distincts, et non deux
+crans du même réglage.
 
 Elle vaut sur **les deux pioches**. Le relâchement du sac fini existe parce que
 le sac s'épuise ; celui-ci existe parce que deux jokers rendent tout jouable, ce
@@ -2323,11 +2344,10 @@ qui ne dépend pas de la pioche. `COUP_RELACHEMENT` a donc quitté `sac.ts` pour
 `bag.ts`, où vivent déjà les politiques de rejet : deux règles s'en servent
 maintenant, pour deux raisons différentes.
 
-**Les deux interrupteurs se commandent.** « Double joker » allume aussi « Partie
-joker » — deux jokers par coup, c'est une partie joker, et laisser le premier
-éteint pendant que le second brille demanderait au joueur de deviner lequel
-commande l'autre. Éteindre l'un ramène à un joker par tirage plutôt qu'à zéro :
-on ne retire qu'un cran.
+**Les deux interrupteurs s'excluent.** « Partie joker » et « double joker » sont
+deux modes voisins mais distincts — on tire **un** joker dans l'un et **deux**
+dans l'autre. Allumer le second n'allume donc pas le premier, et allumer l'un
+éteint l'autre. Rallumer celui qui brille éteint les jokers tout court.
 
 `check_double.ts` vérifie les deux réglages ensemble : le compte du sac tombe
 juste à chaque instant — sac plus chevalet plus grille plus réserve égale 204 —
@@ -2343,6 +2363,17 @@ contenir quatre lettres, et la pioche boucle sans fin.
 
 La convention retenue : **2 voyelles et 2 consonnes à partir de 7 caramels, une
 seule de chaque en dessous.** Rien ne change pour le tirage classique.
+
+**Le seuil se lit sur le tirage ENTIER, jokers compris** — pas sur le nombre de
+lettres que le sac distribue. En partie joker le sac n'en donne que six, le
+joker faisant la septième : le tirage reste un tirage de sept, et la règle y
+exige deux voyelles et deux consonnes comme partout ailleurs.
+
+> Le seuil se déduisait de la longueur du tirage servi. La partie joker tombait
+> donc à **une** voyelle et une consonne sans que personne l'ait voulu — un
+> tirage confortable offert à qui tenait déjà le caramel le plus utile du jeu.
+> Les jokers eux-mêmes ne comptent ni comme voyelle ni comme consonne ; ils ne
+> comptent que dans la taille.
 
 **Sur un sac qui s'épuise, la règle se relâche à partir du coup 16** : les quinze
 premiers tirages exigent 2 et 2, ensuite une seule voyelle et une seule consonne

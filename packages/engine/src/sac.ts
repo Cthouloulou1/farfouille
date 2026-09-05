@@ -8,7 +8,8 @@
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
 import {
-  COUP_RELACHEMENT, regleDuDoubleJoker, type DrawResult, type RejectPolicy,
+  COUP_RELACHEMENT, regleOrdinaire, regleDuDoubleJoker,
+  type DrawResult, type RejectPolicy,
 } from "./bag.ts";
 
 import { mulberry32, mulberryDepuis, type Alea } from "./rng.ts";
@@ -32,20 +33,19 @@ export function politiqueSacFini(
   coup: () => number,
   /** Le sac s'epuise-t-il ? Seul un sac fini a droit au relachement. */
   sEpuise: () => boolean = () => true,
-  /** Deux jokers accompagnent-ils chaque tirage ? Voir `regleDuDoubleJoker`. */
-  doubleJoker: () => boolean = () => false,
+  /**
+   * Combien de jokers accompagnent le tirage sans sortir du sac. Ils comptent
+   * dans la TAILLE du tirage -- un joker et six lettres font un tirage de sept,
+   * qui exige deux voyelles et deux consonnes -- et deux d'entre eux changent
+   * la regle du tout au tout.
+   */
+  jokersAuTirage: () => number = () => 0,
 ): RejectPolicy {
   return (rack) => {
-    if (doubleJoker()) return regleDuDoubleJoker(rack, coup());
+    const jokers = jokersAuTirage();
+    if (jokers >= 2) return regleDuDoubleJoker(rack, coup());
     const relache = sEpuise() && coup() >= COUP_RELACHEMENT;
-    const exige = relache ? 1 : (rack.length >= 7 ? 2 : 1);
-    if (rack.length < 2) return false;
-    let v = 0, c = 0;
-    for (const ch of rack) {
-      if (isVowel(ch)) v++;
-      else if (isConsonant(ch)) c++;
-    }
-    return v < exige || c < exige;
+    return regleOrdinaire(rack, rack.length + jokers, relache);
   };
 }
 
@@ -100,14 +100,17 @@ export class SacFini implements Pioche {
   /** Nombre de rechargements, pour les statistiques et les tests. */
   rechargements = 0;
   /**
-   * Deux jokers accompagnent chaque tirage ? La regle de rejet change alors du
-   * tout au tout (voir `regleDuDoubleJoker`).
+   * Combien de jokers accompagnent chaque tirage sans sortir du sac.
+   *
+   * Ils ne sont pas piochables -- la partie les tient a part -- mais la regle de
+   * rejet a besoin de les connaitre : ils comptent dans la TAILLE du tirage, et
+   * deux d'entre eux changent la regle du tout au tout.
    *
    * Pose APRES la construction, comme `recharge` : la politique par defaut le
    * lit a chaque tirage plutot qu'une fois pour toutes, et la copie du sac le
    * retrouve sans avoir a se faire passer une politique toute faite.
    */
-  doubleJoker = false;
+  jokersAuTirage = 0;
   /** Caramels restants, une entree par exemplaire. */
   private caramels: string[] = [];
   /** Numero du tirage en cours, pour le relachement de la regle de rejet. */
@@ -125,7 +128,8 @@ export class SacFini implements Pioche {
     // `recharge` est pose APRES la construction : la politique le lit donc a
     // chaque tirage plutot qu'une fois pour toutes.
     this.reject = reject
-      ?? politiqueSacFini(() => this.coup, () => !this.recharge, () => this.doubleJoker);
+      ?? politiqueSacFini(
+        () => this.coup, () => !this.recharge, () => this.jokersAuTirage);
     this.distribution = distribution;
     this.remplir();
   }
@@ -295,7 +299,7 @@ export class SacFini implements Pioche {
     copie.coup = this.coup;
     copie.recharge = this.recharge;
     copie.rechargements = this.rechargements;
-    copie.doubleJoker = this.doubleJoker;
+    copie.jokersAuTirage = this.jokersAuTirage;
     return copie;
   }
 

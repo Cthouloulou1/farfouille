@@ -71,8 +71,27 @@ export interface DrawResult {
  */
 export type RejectPolicy = (rack: readonly string[]) => boolean;
 
-export const strictRejectPolicy: RejectPolicy = (rack) => {
-  const exige = rack.length >= 7 ? 2 : 1;
+/**
+ * LA REGLE DE REJET ORDINAIRE. Voir SPEC.md §16.
+ *
+ * Deux voyelles et deux consonnes a partir de sept caramels, une seule de
+ * chaque en dessous. `relache` ramene l'exigence a une de chaque, quelle que
+ * soit la taille : c'est le relachement du sac qui s'epuise.
+ *
+ * `taille` EST LE TIRAGE ENTIER, JOKERS COMPRIS -- pas le nombre de lettres que
+ * le sac distribue. En partie joker le sac n'en donne que six, le joker faisant
+ * la septieme : le tirage reste un tirage de sept, et la regle doit y exiger
+ * deux voyelles et deux consonnes comme partout ailleurs. Deduire le seuil du
+ * seul nombre de lettres tirees faisait tomber la partie joker a une de chaque,
+ * sans que personne l'ait voulu.
+ *
+ * Les jokers eux-memes ne comptent ni comme voyelle ni comme consonne : ils ne
+ * sont pas dans `rack`, et ils ne seraient de toute facon ni l'un ni l'autre.
+ */
+export function regleOrdinaire(
+  rack: readonly string[], taille = rack.length, relache = false,
+): boolean {
+  const exige = relache ? 1 : (taille >= 7 ? 2 : 1);
   if (rack.length < 2) return false;
   let v = 0, c = 0;
   for (const ch of rack) {
@@ -80,7 +99,10 @@ export const strictRejectPolicy: RejectPolicy = (rack) => {
     else if (isConsonant(ch)) c++;
   }
   return v < exige || c < exige;
-};
+}
+
+/** La regle ordinaire sur un tirage sans joker, ou tout est dans le rack. */
+export const strictRejectPolicy: RejectPolicy = (rack) => regleOrdinaire(rack);
 
 /**
  * LE COUP OU LES REGLES DE TIRAGE SE RELACHENT. Voir SPEC.md §16.
@@ -148,13 +170,16 @@ export class Bag {
   /** Numero du tirage en cours, pour la regle du double joker. */
   private coup = 0;
   /**
-   * Deux jokers accompagnent chaque tirage ? La regle de rejet change alors du
-   * tout au tout (voir `regleDuDoubleJoker`).
+   * Combien de jokers accompagnent chaque tirage, en plus des lettres tirees.
    *
-   * Pose APRES la construction : la politique par defaut le lit a chaque
-   * tirage plutot qu'une fois pour toutes.
+   * Ils ne sortent pas d'ici -- la partie les tient a part -- mais la regle de
+   * rejet a besoin de les connaitre : ils comptent dans la TAILLE du tirage, et
+   * deux d'entre eux changent la regle du tout au tout.
+   *
+   * Pose APRES la construction : la politique par defaut le lit a chaque tirage
+   * plutot qu'une fois pour toutes.
    */
-  doubleJoker = false;
+  jokersAuTirage = 0;
 
   constructor(
     cfg: BagConfig, random: Alea,
@@ -163,9 +188,10 @@ export class Bag {
     this.cfg = cfg;
     this.random = random;
     this.rejetFourni = reject !== undefined;
-    this.reject = reject ?? ((rack) => this.doubleJoker
+    this.reject = reject ?? ((rack) => this.jokersAuTirage >= 2
       ? regleDuDoubleJoker(rack, this.coup)
-      : strictRejectPolicy(rack));
+      // Rien ne s'epuise ici : la regle stricte vaut du premier coup au dernier.
+      : regleOrdinaire(rack, rack.length + this.jokersAuTirage));
     this.tirage = tirage;
     this.letters = [...Object.keys(cfg.weights), BLANK];
     this.base = [...Object.values(cfg.weights), cfg.blankWeight];
@@ -264,7 +290,7 @@ export class Bag {
     );
     copie.k = [...this.k];
     copie.coup = this.coup;
-    copie.doubleJoker = this.doubleJoker;
+    copie.jokersAuTirage = this.jokersAuTirage;
     return copie;
   }
 

@@ -991,18 +991,18 @@ export class Game {
     const parTirage = Math.max(1, this.cfg.tirage - this.jokersDuTirage);
     const alea = mulberry32(moveSeed(this.seed, 0));
 
-    // DEUX JOKERS CHANGENT LA REGLE DE REJET, quelle que soit la pioche : cinq
-    // consonnes et deux jokers se jouent tres bien, et exiger des voyelles
-    // reviendrait a servir un tirage confortable a qui tient deja les deux
-    // caramels les plus utiles du jeu (SPEC.md §16).
-    const deuxJokers = this.jokersDuTirage >= 2;
+    // LA PIOCHE DOIT CONNAITRE LES JOKERS DU TIRAGE, meme si elle ne les
+    // distribue pas. Ils comptent dans la TAILLE du tirage -- un joker et six
+    // lettres font un tirage de sept, qui exige deux voyelles et deux consonnes
+    // comme partout ailleurs -- et deux d'entre eux changent la regle du tout
+    // au tout (SPEC.md §16).
     if (this.cfg.pioche === "probabilites") {
       const ponderee: BagConfig = {
         weights: lexique.poids, blankWeight: lexique.poidsJoker,
         alpha: 0.08, cap: 4, maxBlanks: 2,
       };
       const sac = new Bag(ponderee, alea, undefined, parTirage);
-      sac.doubleJoker = deuxJokers;
+      sac.jokersAuTirage = this.jokersDuTirage;
       this.bag = sac;
     } else {
       const sansJoker = this.cfg.joker
@@ -1010,7 +1010,7 @@ export class Game {
         : distribution;
       const sac = new SacFini(sansJoker, alea, parTirage);
       sac.recharge = this.cfg.pioche === "sac102boucle";
-      sac.doubleJoker = deuxJokers;
+      sac.jokersAuTirage = this.jokersDuTirage;
       this.bag = sac;
     }
 

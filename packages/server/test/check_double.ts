@@ -220,7 +220,7 @@ console.log("\nLa regle de rejet du double joker\n");
   // double joker, ou plus rien n'est exige.
   const sansVoyelle = [..."BCDFGHJ"];
   const ordinaire30 = politiqueSacFini(() => 30, () => true);
-  const double30 = politiqueSacFini(() => 30, () => true, () => true);
+  const double30 = politiqueSacFini(() => 30, () => true, () => 2);
   verifie("sans double joker, sept consonnes restent refusees au coup 30",
     ordinaire30(sansVoyelle) === true);
   verifie("en double joker, elles passent au coup 30",
@@ -230,11 +230,22 @@ console.log("\nLa regle de rejet du double joker\n");
   // voulu -- au coup 1, la regle ordinaire refuse un tirage a une seule voyelle.
   const uneVoyelle = [..."BCDFGHA"];
   const ordinaire1 = politiqueSacFini(() => 1, () => true);
-  const double1 = politiqueSacFini(() => 1, () => true, () => true);
+  const double1 = politiqueSacFini(() => 1, () => true, () => 2);
   verifie("sans double joker, sept lettres a une voyelle sont refusees",
     ordinaire1(uneVoyelle) === true, "il en faut deux");
   verifie("en double joker, elles passent", double1(uneVoyelle) === false,
     "une voyelle suffit");
+
+  // UN JOKER ET SIX LETTRES FONT UN TIRAGE DE SEPT. La regle y exige donc deux
+  // voyelles et deux consonnes, comme sur un tirage sans joker -- le seuil se
+  // lit sur le tirage entier, pas sur ce que le sac distribue.
+  const sixLettres = [..."BCDFGA"];
+  const avecUnJoker = politiqueSacFini(() => 1, () => true, () => 1);
+  const sixSeules = politiqueSacFini(() => 1, () => true, () => 0);
+  verifie("un joker et six lettres : deux voyelles exigees",
+    avecUnJoker(sixLettres) === true, "le tirage fait sept");
+  verifie("six lettres et rien d'autre : une seule suffit",
+    sixSeules(sixLettres) === false, "le tirage fait six");
 }
 
 console.log("\nLes tirages servis suivent la regle\n");

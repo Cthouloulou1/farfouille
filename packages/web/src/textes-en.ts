@@ -63,21 +63,14 @@ export const EN: Readonly<Record<string, string>> = {
 
   // -------------------------------------------------- signaler un bug
   "Signaler un bug": "Report a bug",
-  "Décrivez ce qui ne va pas": "Describe what went wrong",
+  "Décrivez ce qui ne va pas": "Describe what's wrong",
   "Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez":
     "What you were doing, what happened, what you expected",
-  "Votre mail, si vous voulez une réponse": "Your email, if you want an answer",
-  "Facultatif": "Optional",
+  "Mail, facultatif": "Email, optional",
   // « Envoyer » est deja traduit plus bas, avec le chat.
   "Le rapport est bien arrivé. Merci.": "The report came through. Thank you.",
   "Envoi impossible, réessayez": "Could not send, try again",
   "Serveur injoignable": "Server unreachable",
-  "Partent avec : {liste}.": "Sent along: {liste}.",
-  "votre pseudo ({p})": "your name ({p})",
-  "le salon ({s})": "the room ({s})",
-  "le coup ({n})": "move {n}",
-  "votre navigateur": "your browser",
-  "aucun": "none",
 
   "Continuer": "Continue",
   "Plus tard": "Later",
@@ -90,7 +83,7 @@ export const EN: Readonly<Record<string, string>> = {
   "DICO": "LEXI",
   "Grille": "Board",
   "Normale": "Standard",
-  "Super": "Super",
+  "Super grille": "Super board",
   "Le plateau 21×21, avec ses mots et ses lettres comptent quadruple":
     "The 21×21 board, with its quadruple word and letter squares",
   "Infinie": "Infinite",
@@ -366,6 +359,10 @@ export const EN: Readonly<Record<string, string>> = {
   "ça risque de lagger au bout d'un moment.": "it will start to lag after a while.",
   "Attention : sac sans fin sur une grille {c}×{c}.":
     "Warning: endless bag on a {c}×{c} board.",
+  "Attention : probabilités pondérées sur une grille {c}×{c}.":
+    "Warning: weighted probabilities on a {c}×{c} board.",
+  "Il n'y a pas de limite de lettres tirées : la partie ne s'arrête que lorsque":
+    "There is no limit on the letters drawn: the game only ends when no move",
   "Le sac se recharge indéfiniment : la partie ne s'arrête que lorsque":
     "The bag refills forever: the game only ends when no move",
   "aucun coup n'est jouable, et elle sera très longue.":

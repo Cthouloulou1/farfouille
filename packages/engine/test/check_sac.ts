@@ -62,7 +62,12 @@ console.log("\nFin de partie -- la convention\n");
     ["le Y seul, en main", {}, ["Y"], true],
     ["consonnes seules avec le Y", { B: 2, T: 1, Y: 1 }, [], false],
     ["consonnes seules sans le Y", { B: 2, T: 1 }, [], true],
-    ["un joker traine", { A: 3, "?": 1 }, [], false],
+    // LES JOKERS DOIVENT ETRE JOUES (SPEC.md §11). Tant qu'il en reste un, ou
+    // qu'il soit -- dans le sac ou au chevalet -- il peut fournir la lettre qui
+    // manque, et la partie continue. La regle vaut pour toute partie a sac
+    // fini, joker ou non.
+    ["un joker traine dans le sac", { A: 3, "?": 1 }, [], false],
+    ["un joker traine au chevalet", { A: 3 }, ["?"], false],
     ["voyelles et consonnes", { A: 2, B: 2 }, [], false],
     ["le reliquat compte aussi", { A: 3 }, ["B", "T"], false],
     ["reliquat de voyelles seulement", { A: 3 }, ["E"], true],

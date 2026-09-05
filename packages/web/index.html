@@ -699,7 +699,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pseudo textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Ce qui part avec le rapport, ecrit en toutes lettres : personne n'aime
    envoyer un formulaire sans savoir ce qu'il emporte. */
-.bug-quoi { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-faint); }
+/* Le titre porte la consigne elle-meme : un peu plus petit que les autres
+   voiles, ou il ne s'agit que d'un mot ou deux. */
+.bug-boite h2 { font-size: 22px; }
+.bug-boite textarea { margin-top: 18px; }
+.bug-boite input { margin-top: 10px; }
 .bug-merci { margin: 14px 0 0; font-size: 14px; color: var(--accent); }
 #bug-champs[hidden], .bug-merci[hidden] { display: none; }
 .pseudo .valider { width: 100%; margin-top: 16px; padding: 13px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 15px; font-weight: 500; }
@@ -1090,14 +1094,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    justement celui qui ne peut pas se connecter pour le dire. -->
 <div class="voile" id="voile-bug" hidden>
   <form class="pseudo bug-boite" id="form-bug" autocomplete="off">
-    <h2>Signaler un bug</h2>
+    <h2>Décrivez ce qui ne va pas</h2>
     <div id="bug-champs">
-      <p>Décrivez ce qui ne va pas</p>
       <textarea id="bug-texte" rows="6" maxlength="4000"
                 placeholder="Ce que vous faisiez, ce qui s'est passé, ce que vous attendiez"></textarea>
-      <span class="etiquette">Votre mail, si vous voulez une réponse</span>
-      <input id="bug-mail" type="email" maxlength="254" placeholder="Facultatif" autocomplete="email">
-      <p class="bug-quoi" id="bug-quoi"></p>
+      <input id="bug-mail" type="email" maxlength="254" placeholder="Mail, facultatif" autocomplete="email">
     </div>
     <!-- LA FENETRE NE SE REFERME PAS TOUTE SEULE APRES L'ENVOI. Un formulaire
          qui disparait laisse un doute, et le doute fait renvoyer le meme
@@ -1314,7 +1315,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="choix" id="r-grille">
           <button type="button" data-v="15">Normale</button>
           <button type="button" data-v="super" data-avance
-                  title="Le plateau 21×21, avec ses mots et ses lettres comptent quadruple">Super</button>
+                  title="Le plateau 21×21, avec ses mots et ses lettres comptent quadruple">Super grille</button>
           <button type="button" data-v="infinie">Infinie</button>
         </div>
       </div>
@@ -1401,10 +1402,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
       <div class="reglage" id="r-pioche-bloc">
         <label>Tirage des lettres</label>
+        <!-- LE SAC D'ABORD. « Probabilites ponderees » est l'option exotique --
+             une pioche qui ne s'epuise jamais -- et elle ouvrait la rangee comme
+             si c'etait le choix ordinaire. -->
         <div class="choix" id="r-pioche">
-          <button type="button" data-v="probabilites">Probabilités pondérées</button>
           <button type="button" data-v="sac102"></button>
           <button type="button" data-v="sac102boucle"></button>
+          <button type="button" data-v="probabilites">Probabilités pondérées</button>
         </div>
       </div>
 

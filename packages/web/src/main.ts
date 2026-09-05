@@ -293,6 +293,15 @@ function resize() {
 const REGLE_BORNEE = 26;
 /** Air laisse autour de l'ensemble plateau + etiquettes. */
 const MARGE_BORNEE = 8;
+/**
+ * Epaisseur du trait qui borde un plateau borne, en pixels.
+ *
+ * Elle est ecrite une fois et lue deux : par le trace du bord, et par les
+ * reperes, qui doivent s'arreter AVANT lui. Le rectangle vert du repere allume
+ * etait peint apres le bord et le rognait d'un pixel : le trait paraissait plus
+ * fin sous la colonne et la ligne du curseur, exactement la ou l'oeil regarde.
+ */
+const BORD_PLATEAU = 3;
 
 /**
  * Cadre le plateau borne, ETIQUETTES COMPRISES.
@@ -1042,7 +1051,7 @@ function draw() {
   //
   // Trace en DERNIER, apres les caramels : un caramel de bord le recouvrait.
   if (b !== null) {
-    const E = 3;
+    const E = BORD_PLATEAU;
     const x0 = eX(-b), y0 = eY(-b), x1 = eX(b + 1), y1 = eY(b + 1);
     ctx.fillStyle = C.bord;
     ctx.fillRect(x0 - E, y0 - E, x1 - x0 + E * 2, E + 1);
@@ -1091,7 +1100,8 @@ function reglesCollees(
     const cx = ox + x * cell + cell / 2, cy = g0y - R / 2;
     if (on) {
       ctx.fillStyle = C.abg!;
-      ctx.fillRect(ox + x * cell + 1, g0y - R + 1, cell - 2, R - 3);
+      // La hauteur s'arrete au bord du plateau : le trait garde son epaisseur.
+      ctx.fillRect(ox + x * cell + 1, g0y - R + 1, cell - 2, R - BORD_PLATEAU - 1);
     }
     ctx.fillStyle = on ? C.accent! : passe ? C.mark! : C.faint!;
     ctx.fillText(nomColonne(x, b), cx, cy);
@@ -1102,7 +1112,7 @@ function reglesCollees(
     const cx = g0x - R / 2, cy = oy + y * cell + cell / 2;
     if (on) {
       ctx.fillStyle = C.abg!;
-      ctx.fillRect(g0x - R + 1, oy + y * cell + 1, R - 3, cell - 2);
+      ctx.fillRect(g0x - R + 1, oy + y * cell + 1, R - BORD_PLATEAU - 1, cell - 2);
     }
     ctx.fillStyle = on ? C.accent! : passe ? C.mark! : C.faint!;
     ctx.fillText(nomLigne(y, b), cx, cy);
@@ -6181,6 +6191,20 @@ function avertirSiExplosif(): void {
     return;
   }
 
+  // LES PROBABILITES PONDEREES NE S'EPUISENT PAS. Sur une grille sans bord
+  // c'est leur raison d'etre ; sur un plateau ferme, c'est un piege : rien
+  // n'arrete la partie tant qu'un coup reste jouable, et un plateau se bouche
+  // beaucoup plus lentement qu'un sac ne se vide.
+  if (cBornes !== null && cPioche === "probabilites") {
+    boite.innerHTML =
+      `<b>${t2("Attention : probabilités pondérées sur une grille {c}×{c}.",
+        { c: cBornes * 2 + 1 })}</b><br>` +
+      t("Il n'y a pas de limite de lettres tirées : la partie ne s'arrête que lorsque") + " " +
+      t("aucun coup n'est jouable, et elle sera très longue.");
+    boite.hidden = false;
+    return;
+  }
+
   // LA GRILLE INFINIE N'EST DANGEREUSE QUE SI ELLE DURE. Le cout croit avec le
   // nombre de coups joues : une partie qui s'arrete a cent coups ne l'atteint
   // jamais, meme a quinze lettres. L'avertissement ne vaut donc que pour une
@@ -6460,34 +6484,32 @@ for (const b of $("r-format").querySelectorAll("button")) {
 }
 
 /**
- * Les deux interrupteurs du joker.
+ * Les deux interrupteurs du joker, QUI S'EXCLUENT.
  *
- * « Double joker » ALLUME AUSSI « Partie joker » : deux jokers par coup, c'est
- * une partie joker, et laisser le premier eteint pendant que le second brille
- * demanderait au joueur de deviner lequel commande l'autre. Eteindre l'un
- * ramene a un joker par tirage plutot qu'a zero -- on ne retire qu'un cran.
+ * « Partie joker » et « double joker » sont deux modes de jeu voisins mais
+ * distincts : on tire UN joker dans l'un et DEUX dans l'autre. Allumer le
+ * second n'allume donc pas le premier -- ce ne sont pas deux crans du meme
+ * reglage -- et allumer l'un eteint l'autre. Rallumer celui qui brille eteint
+ * les jokers tout court.
  */
 function peuplerJoker(): void {
-  $("r-joker").setAttribute("aria-pressed", String(cJoker));
+  $("r-joker").setAttribute("aria-pressed", String(cJoker && cJokers === 1));
   $("r-joker2").setAttribute("aria-pressed", String(cJoker && cJokers === 2));
 }
 
-$("r-joker").addEventListener("click", () => {
-  cJoker = !cJoker;
-  if (!cJoker) cJokers = 1;
+/** Zero, un ou deux jokers par tirage. Un clic sur le mode allume choisit zero. */
+function choisirLesJokers(combien: number): void {
+  const deja = cJoker && cJokers === combien;
+  cJoker = !deja;
+  cJokers = deja ? 1 : combien;
   peuplerJoker();
+  // Eteindre le double joker en fenetre simple l'y fait disparaitre : il n'y
+  // figurait que parce qu'il etait allume.
   appliquerLeModeDeReglages();
-});
+}
 
-$("r-joker2").addEventListener("click", () => {
-  const deja = cJoker && cJokers === 2;
-  cJokers = deja ? 1 : 2;
-  if (!deja) cJoker = true;
-  peuplerJoker();
-  // L'eteindre en fenetre simple le fait disparaitre : il n'y figurait que
-  // parce qu'il etait allume.
-  appliquerLeModeDeReglages();
-});
+$("r-joker").addEventListener("click", () => choisirLesJokers(1));
+$("r-joker2").addEventListener("click", () => choisirLesJokers(2));
 
 /**
  * Montre la fenetre simple ou la fenetre complete.
@@ -6673,22 +6695,6 @@ function contexteDuBug(): { salon: string; coup: number | null } {
   return { salon: salonChoisi, coup: moveNumber + 1 };
 }
 
-/**
- * Ce qui part avec le texte, ecrit en toutes lettres sous le champ.
- *
- * Personne n'aime envoyer un formulaire sans savoir ce qu'il emporte -- et ce
- * qu'il emporte est justement ce qui rend un rapport exploitable : sans le
- * salon et le numero du coup, « le top etait faux » ne se verifie pas.
- */
-function direCeQuiPart(): string {
-  const { salon, coup } = contexteDuBug();
-  const bouts = [t2("votre pseudo ({p})", { p: pseudo() === "" ? t("aucun") : pseudo() })];
-  if (salon !== "") bouts.push(t2("le salon ({s})", { s: salon }));
-  if (coup !== null) bouts.push(t2("le coup ({n})", { n: coup }));
-  bouts.push(t("votre navigateur"));
-  return t2("Partent avec : {liste}.", { liste: bouts.join(", ") });
-}
-
 function ouvrirLesBugs(): void {
   $("bug-error").hidden = true;
   $("bug-merci").hidden = true;
@@ -6699,7 +6705,6 @@ function ouvrirLesBugs(): void {
   ($("bug-texte") as HTMLTextAreaElement).value = "";
   // L'adresse du compte est deja connue : la retaper n'apprendrait rien.
   ($("bug-mail") as HTMLInputElement).value = moiCompte?.email ?? "";
-  $("bug-quoi").textContent = direCeQuiPart();
   $("voile-bug").hidden = false;
   ($("bug-texte") as HTMLTextAreaElement).focus();
 }
