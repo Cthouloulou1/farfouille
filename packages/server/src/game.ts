@@ -39,6 +39,7 @@ import {
 } from "../../engine/src/config.ts";
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
+import { chacha20 } from "./rngSecurise.ts";
 import { resolveTypedWord, PLAY_MESSAGE, type PlayError } from "../../engine/src/play.ts";
 import { noteCoup, type Dir } from "../../engine/src/coords.ts";
 import { dawgPath } from "../../engine/src/paths.ts";
@@ -456,6 +457,16 @@ export class Game {
   /** Combien de paliers sous le top cette partie garde. Voir `paliersParDefaut`. */
   private paliersGardes = PALIERS_D_AVANT;
   seed = "";
+  /**
+   * L'algorithme qui tire les lettres de CETTE partie, fige a la creation.
+   *
+   * "mulberry32" pour toute partie d'avant ChaCha20 : la changer en cours de
+   * route desynchroniserait le sac au prochain redemarrage, qui rejoue tout
+   * le journal depuis la graine (voir `demarrer`). Les parties neuves recoivent
+   * "chacha20", pense pour resister a un joueur qui observerait ses propres
+   * tirages (voir `rngSecurise.ts`).
+   */
+  rngAlgo: "mulberry32" | "chacha20" = "mulberry32";
 
   moves: PlayedMove[] = [];
   players: Record<string, number> = {};
@@ -936,7 +947,10 @@ export class Game {
    */
   private demarrerLeSolveur(): void {
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData: { layout: this.layout, seed: this.seed, config: serialiser(this.cfg) },
+      workerData: {
+        layout: this.layout, seed: this.seed, config: serialiser(this.cfg),
+        rngAlgo: this.rngAlgo,
+      },
     });
     this.worker.on("message", (m: any) => {
       if (m.t !== "solved" && m.t !== "paliers" && m.t !== "avancee") return;
@@ -986,6 +1000,11 @@ export class Game {
     this.paliersGardes = typeof entete?.["paliers"] === "number"
       ? (entete["paliers"] as number)
       : dejaCommencee ? PALIERS_D_AVANT : paliersParDefaut(this.cfg);
+    // Une partie deja commencee, meme migree d'un instantane sans le champ,
+    // a forcement tire ses lettres avec mulberry32 : lui seul existait alors.
+    this.rngAlgo = typeof entete?.["rng"] === "string"
+      ? (entete["rng"] as "mulberry32" | "chacha20")
+      : dejaCommencee ? "mulberry32" : "chacha20";
 
     // Le journal commence par l'entete de la grille : graine, pavage, date.
     // Sans lui on ne saurait pas rejouer la partie a partir du seul journal.
@@ -993,7 +1012,7 @@ export class Game {
       this.append({
         t: "grille", gameId: this.gameId, layout: this.layout,
         seed: this.seed, createdAt: this.createdAt, config: serialiser(this.cfg),
-        paliers: this.paliersGardes,
+        paliers: this.paliersGardes, rng: this.rngAlgo,
       });
       // Migration : une partie qui n'avait qu'un instantane se voit dotee d'un
       // journal complet, retroactivement.
@@ -1028,7 +1047,9 @@ export class Game {
     // AU MOINS UNE VRAIE LETTRE AU TIRAGE. Un chevalet fait de jokers seuls ne
     // se joue pas, et le sac n'a plus rien a donner.
     const parTirage = Math.max(1, this.cfg.tirage - this.jokersDuTirage);
-    const alea = mulberry32(moveSeed(this.seed, 0));
+    const alea = this.rngAlgo === "chacha20"
+      ? chacha20(this.seed)
+      : mulberry32(moveSeed(this.seed, 0));
 
     // LA PIOCHE DOIT CONNAITRE LES JOKERS DU TIRAGE, meme si elle ne les
     // distribue pas. Ils comptent dans la TAILLE du tirage -- un joker et six

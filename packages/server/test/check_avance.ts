@@ -28,8 +28,16 @@ import { setLayout } from "../../engine/src/bonus.ts";
 import { Board } from "../../engine/src/board.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
 import { generateMoves, pickTop } from "../../engine/src/movegen.ts";
-import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
+import { mulberry32, moveSeed, type Alea } from "../../engine/src/rng.ts";
+import { chacha20 } from "../src/rngSecurise.ts";
 import { DAWG_PATH, GADDAG_PATH } from "../../engine/src/paths.ts";
+
+/** La meme graine que celle du sac de `jeu`, pour departager ses isotops. */
+function aleaDuCoup(jeu: Game, n: number): Alea {
+  return jeu.rngAlgo === "chacha20"
+    ? chacha20(`${jeu.seed}:${n}`)
+    : mulberry32(moveSeed(jeu.seed, n));
+}
 
 const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
 const ID = "avance-test";
@@ -88,7 +96,7 @@ const plateau = new Board(dawg, cfg);
 let faux = 0, premierFaux = "";
 for (const m of g.moves) {
   const gen = generateMoves(plateau, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
-  const top = pickTop(gen.moves, mulberry32(moveSeed(g.seed, m.n)), cfg.joker);
+  const top = pickTop(gen.moves, aleaDuCoup(g, m.n), cfg.joker);
   const attendu = top === null ? null : top.top;
   const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
     && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;
@@ -179,7 +187,7 @@ const plateauJ = new Board(dawg, cfgJ);
 let fauxJ = 0, premierFauxJ = "";
 for (const m of j.moves) {
   const gen = generateMoves(plateauJ, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
-  const top = pickTop(gen.moves, mulberry32(moveSeed(j.seed, m.n)), cfgJ.joker);
+  const top = pickTop(gen.moves, aleaDuCoup(j, m.n), cfgJ.joker);
   const attendu = top === null ? null : top.top;
   const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
     && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;

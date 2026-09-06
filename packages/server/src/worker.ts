@@ -15,13 +15,20 @@ import { Board } from "../../engine/src/board.ts";
 import { generateMoves, pickTop } from "../../engine/src/movegen.ts";
 import { setLayout, type LayoutName } from "../../engine/src/bonus.ts";
 import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
-import { mulberry32, moveSeed } from "../../engine/src/rng.ts";
+import { mulberry32, moveSeed, type Alea } from "../../engine/src/rng.ts";
+import { chacha20 } from "./rngSecurise.ts";
 import { dawgPath, gaddagPath } from "../../engine/src/paths.ts";
 import type { Placement } from "../../engine/src/board.ts";
 
-const { layout, seed, config } = workerData as {
+const { layout, seed, config, rngAlgo } = workerData as {
   layout: LayoutName; seed: string; config: ConfigSerialisee;
+  rngAlgo: "mulberry32" | "chacha20";
 };
+
+/** La meme graine que celle du sac de la partie, pour departager ses isotops. */
+function aleaDuCoup(n: number): Alea {
+  return rngAlgo === "chacha20" ? chacha20(`${seed}:${n}`) : mulberry32(moveSeed(seed, n));
+}
 setLayout(layout);
 
 // Le solveur lit le lexique de SA partie. Un salon anglais et un salon
@@ -128,9 +135,7 @@ parentPort!.on(
   }
   const t0 = performance.now();
   const gen = generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
-  const top = pickTop(
-    gen.moves, mulberry32(moveSeed(seed, msg.moveNumber)), board.cfg.joker,
-  );
+  const top = pickTop(gen.moves, aleaDuCoup(msg.moveNumber), board.cfg.joker);
   const result = top === null ? null : {
     top: top.top,
     bestScore: top.bestScore,

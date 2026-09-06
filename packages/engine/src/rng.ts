@@ -7,19 +7,19 @@
  */
 
 /**
- * Un tirage aleatoire qu'on peut ARRETER ET REPRENDRE.
+ * Un tirage aleatoire qu'on peut DUPLIQUER en cours de route.
  *
- * Toute la memoire de mulberry32 tient dans un entier de 32 bits. L'exposer
- * permet de dupliquer une suite en cours : c'est ce qui rend une pioche
- * copiable, et donc ce qui permet de simuler les coups a venir sans toucher
- * a la vraie partie (SPEC.md §17).
+ * `cloner` rend une pioche copiable, et donc ce qui permet de simuler les
+ * coups a venir sans toucher a la vraie partie (SPEC.md §17). Chaque
+ * implementation porte sa propre facon de se copier -- mulberry32 tient tout
+ * dans un entier 32 bits, le generateur cryptographique de
+ * `server/src/rngSecurise.ts` a besoin de davantage -- si bien que rien ici
+ * n'expose la nature de cet etat.
  */
 export interface Alea {
   (): number;
-  /** L'etat courant du generateur. */
-  etat(): number;
-  /** Le repose la ou il etait. */
-  poser(a: number): void;
+  /** Une copie independante, qui tirera exactement la meme suite a partir d'ici. */
+  cloner(): Alea;
 }
 
 /** mulberry32 : petit, rapide, sequence identique partout. */
@@ -31,16 +31,8 @@ export function mulberry32(seed: number): Alea {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   } as Alea;
-  suivant.etat = () => a;
-  suivant.poser = (v: number) => { a = v | 0; };
+  suivant.cloner = () => mulberry32(a);
   return suivant;
-}
-
-/** Un second generateur, pose exactement la ou en est le premier. */
-export function mulberryDepuis(source: Alea): Alea {
-  const jumeau = mulberry32(0);
-  jumeau.poser(source.etat());
-  return jumeau;
 }
 
 /** cyrb53, replie sur 32 bits : hache une chaine en graine. */

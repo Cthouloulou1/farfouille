@@ -14,7 +14,7 @@
  * le W ressuscite (1 tirage sur 158 au lieu de 1 sur 270).
  */
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
-import { mulberryDepuis, type Alea } from "./rng.ts";
+import type { Alea } from "./rng.ts";
 
 export const RACK_SIZE = 7;
 
@@ -289,7 +289,7 @@ export class Bag {
     // la pioche a laquelle elle appartient, et la copier telle quelle lierait
     // le double a l'original. Une politique venue du dehors, si.
     const copie = new Bag(
-      this.cfg, mulberryDepuis(this.random),
+      this.cfg, this.random.cloner(),
       this.rejetFourni ? this.reject : undefined, this.tirage,
     );
     copie.k = [...this.k];

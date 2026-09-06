@@ -12,7 +12,7 @@ import {
   type DrawResult, type RejectPolicy,
 } from "./bag.ts";
 
-import { mulberry32, mulberryDepuis, type Alea } from "./rng.ts";
+import { mulberry32, type Alea } from "./rng.ts";
 
 /**
  * Le seuil de relachement se relit d'ici : c'est la regle du sac fini qui l'a
@@ -310,7 +310,7 @@ export class SacFini implements Pioche {
    */
   cloner(): SacFini {
     const copie = new SacFini(
-      this.distribution, mulberryDepuis(this.random), this.tirage,
+      this.distribution, this.random.cloner(), this.tirage,
       this.rejetFourni ? this.reject : undefined,
     );
     copie.caramels = [...this.caramels];
