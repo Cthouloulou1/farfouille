@@ -782,6 +782,28 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .etat-mail .verifiee { color: var(--accent); }
 .etat-mail .attente { color: var(--mark); }
 .etat-mail button { margin-left: 10px; padding: 4px 10px; font-size: 12.5px; }
+
+/* LE SOLVEUR PREND PLUS DE LARGEUR QUE LE PROFIL : c'est un outil de lecture,
+   les listes de mots ont besoin de place plutot que d'une colonne etroite. */
+.solveur { max-width: 960px; margin: 0 auto; }
+.solveur-tete { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
+.solveur-tete h1 { margin: 0 auto 0 0; font-size: 20px; font-weight: 600; }
+.solveur-corps { display: flex; flex-direction: column; gap: 12px; padding: 20px 0 4px; }
+#sv-mot { font-family: var(--mono); font-size: 22px; letter-spacing: .04em; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); }
+#sv-mot:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#sv-mot.sv-valide { color: var(--accent); }
+#sv-mot.sv-invalide { color: var(--warn); }
+.solveur-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
+.solveur-aide { margin: 0; min-height: 1.3em; font-size: 13px; color: var(--ink-faint); }
+.solveur-aide.avert { color: var(--warn); }
+.solveur-resultats { border-top: 1px solid var(--rule); padding-top: 14px; }
+.sv-stats { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-faint); }
+.sv-liste { display: flex; flex-direction: column; gap: 1px; font-family: var(--mono); font-size: 14.5px; }
+.sv-ligne { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px; border-radius: 4px; }
+.sv-ligne:hover { background: var(--hover); }
+.sv-code { flex: none; width: 40px; text-align: right; color: var(--ink-faint); font-size: 13px; }
+.sv-mot-txt .sv-joker { color: var(--mark); font-weight: 600; }
+.sv-plus { margin-top: 10px; font-size: 13px; color: var(--ink-faint); }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
@@ -971,6 +993,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <!-- SIGNALER UN BUG SE FAIT DEPUIS LE PIED DE PAGE : c'est la qu'on va
          chercher ce genre de porte, et elle ne dispute la place a rien. -->
     <div class="pied">
+      <button type="button" class="lien-pied" id="solveur-accueil">Solveur</button>
       <button type="button" class="lien-pied" id="bug-accueil">Signaler un bug</button>
       <span id="pied-total"></span>
     </div>
@@ -1029,6 +1052,32 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <button type="button" class="lien" id="perso-admin" hidden>Demandes de vérification</button>
       <button type="button" class="lien" id="perso-sortir">Se déconnecter</button>
       <button type="button" class="valider" id="perso-close">Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- LE SOLVEUR EST UNE PAGE, comme le profil : hors partie, joignable
+       depuis le pied du mur de salons. Aucun rapport avec la partie en cours
+       -- pendant une partie a plusieurs, cette page reste hors d'atteinte. -->
+  <div class="corps solveur" id="corps-solveur" hidden>
+    <div class="solveur-tete">
+      <h1>Solveur</h1>
+      <select id="sv-dico" title="Lexique"></select>
+    </div>
+    <div class="solveur-corps">
+      <input id="sv-mot" type="text" placeholder="mot ou tirage" autocomplete="off"
+             spellcheck="false" maxlength="24" aria-label="Mot ou tirage">
+      <div class="solveur-boutons">
+        <button type="button" id="sv-solutions">Solutions</button>
+        <button type="button" id="sv-benjamins">Benjamins</button>
+        <button type="button" id="sv-rallonges-avant">Rallonges avant</button>
+        <button type="button" id="sv-rallonges-arriere">Rallonges arrière</button>
+        <button type="button" id="sv-superbenjamins">Superbenjamins</button>
+        <button type="button" id="sv-formables">Mots formables</button>
+      </div>
+      <p class="solveur-aide" id="sv-aide"></p>
+      <div class="solveur-resultats" id="sv-resultats">
+        <p class="none">Tapez un mot ou un tirage, puis choisissez une recherche.</p>
+      </div>
     </div>
   </div>
 
