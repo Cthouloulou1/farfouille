@@ -4947,6 +4947,12 @@ function connect() {
       // liste de solutions renvoie a une grille qui vient peut-etre de changer
       // de taille.
       if (rejeu !== null) fermerLeRejeu();
+      // CES DEUX CACHES SONT INDEXES PAR NUMERO DE COUP, PAS PAR PARTIE. Sans
+      // ce menage, rouvrir le rejeu sur le coup 7 de la partie neuve renvoyait
+      // le plateau et les solutions du coup 7 de la partie qu'on vient de
+      // quitter -- memes numeros, partie differente.
+      paliersRecus.clear();
+      plateauRejeu = null;
       cfg = m.config ? deserialiser(m.config) : cfg;
       tiles = m.tiles ?? [];
       history = [];
@@ -6937,6 +6943,7 @@ async function rejoindre(id: string): Promise<void> {
   tops = {};
   // La memoire du rejeu appartient a la partie qu'on quitte.
   paliersRecus.clear();
+  plateauRejeu = null;
   flairEnCours = 0;
   nonTrouves = 0;
   gerant = null;
