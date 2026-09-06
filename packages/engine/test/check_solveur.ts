@@ -6,8 +6,8 @@
 import { loadDict } from "../src/dictionary_node.ts";
 import { DAWG_PATH } from "../src/paths.ts";
 import {
-  analyserSaisie, benjamins, estUnMotAvecJokers, motsFormables, rallongesArriere,
-  rallongesAvant, solutions, squelette, superBenjamins,
+  analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE,
+  motsFormables, rallongesArriere, rallongesAvant, solutions, squelette, superBenjamins,
 } from "../src/solveur.ts";
 
 const dawg = loadDict(DAWG_PATH);
@@ -41,15 +41,20 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
     liste[0] === "ANCRAGE" && liste[liste.length - 1] === "VITRAGE");
 }
 
-// --- Rallonges : comprennent les benjamins, triees par ajout croissant ---
+// --- Rallonges : comprennent les benjamins, triees par ajout croissant, MAIS
+//     jamais le mot lui-meme (l'ensemble vide n'est pas une rallonge) ---
 {
   const av = rallongesAvant(dawg, "RAGE");
   const croissant = av.resultats.every((c, i) => i === 0
     || (c.mot.length - 4) >= (av.resultats[i - 1]!.mot.length - 4));
   verifie("rallongesAvant(RAGE) triee par ajout croissant", croissant);
-  verifie("rallongesAvant(RAGE) contient RAGE lui-meme", av.resultats.some((c) => c.mot === "RAGE"));
+  verifie("rallongesAvant(RAGE) ne contient PAS RAGE lui-meme", !av.resultats.some((c) => c.mot === "RAGE"));
   verifie("rallongesAvant(RAGE) contient les benjamins",
     av.resultats.some((c) => c.mot === "ANCRAGE") && av.resultats.some((c) => c.mot === "VITRAGE"));
+
+  const arCourt = rallongesArriere(dawg, "PARENT");
+  verifie("rallongesArriere(PARENT) ne contient PAS PARENT lui-meme",
+    !arCourt.resultats.some((c) => c.mot === "PARENT"));
 }
 {
   const ar = rallongesArriere(dawg, "CHATTER");
@@ -71,7 +76,7 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
     eg(mots(yins), ["POLYINSATURE", "POLYINSATUREE", "POLYINSATUREES", "POLYINSATURES"]));
 }
 
-// --- Squelettes : *, ! ---
+// --- Squelettes : *, . ---
 {
   const po = squelette(dawg, "PO*IL");
   console.log(`  PO*IL = ${mots(po).join(", ")}`);
@@ -86,28 +91,28 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
   verifie("P*O*IL ne contient rien d'inattendu", mots(ppo).every((m) => attenduPPO.includes(m)),
     mots(ppo).filter((m) => !attenduPPO.includes(m)).join(", "));
 
-  const man = squelette(dawg, "MAN!GER");
-  console.log(`  MAN!GER = ${mots(man).join(", ")}`);
-  verifie("MAN!GER = MANAGER, MANEGER", eg(mots(man), ["MANAGER", "MANEGER"]));
+  const man = squelette(dawg, "MAN.GER");
+  console.log(`  MAN.GER = ${mots(man).join(", ")}`);
+  verifie("MAN.GER = MANAGER, MANEGER", eg(mots(man), ["MANAGER", "MANEGER"]));
 }
 
 // --- Equivalences squelette <-> boutons ---
 {
   const a = mots(rallongesAvant(dawg, "RAGE"));
-  const b = mots(squelette(dawg, "*RAGE"));
-  verifie("*MOT == rallongesAvant(MOT)", eg(a, b));
+  const b = mots(squelette(dawg, ".*RAGE"));
+  verifie(".*MOT == rallongesAvant(MOT)", eg(a, b));
 
   const c = mots(rallongesArriere(dawg, "CHAT"));
-  const d = mots(squelette(dawg, "CHAT*"));
-  verifie("MOT* == rallongesArriere(MOT)", eg(c, d));
+  const d = mots(squelette(dawg, "CHAT.*"));
+  verifie("MOT.* == rallongesArriere(MOT)", eg(c, d));
 
   const e = mots(benjamins(dawg, "RAGE"));
-  const f = mots(squelette(dawg, "!!!RAGE"));
-  verifie("!!!MOT == benjamins(MOT)", eg(e, f));
+  const f = mots(squelette(dawg, "...RAGE"));
+  verifie("...MOT == benjamins(MOT)", eg(e, f));
 
   const g = mots(superBenjamins(dawg, "TOLES"));
-  const h = mots(squelette(dawg, "!*TOLES!*"));
-  verifie("!*MOT!* == superBenjamins(MOT)", eg(g, h));
+  const h = mots(squelette(dawg, ".*TOLES.*"));
+  verifie(".*MOT.* == superBenjamins(MOT)", eg(g, h));
 }
 
 // --- Mots formables et Solutions, jokers compris ---
@@ -128,13 +133,21 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
     eg(mots(s), dix.map((c) => c.mot).sort()));
 }
 
-// --- Mode de saisie ---
+// --- Mode de saisie : longueur et nombre de jokers plafonnes ---
 verifie("analyserSaisie(RAGE) = tirage", analyserSaisie("RAGE") === "tirage");
 verifie("analyserSaisie(RA?E) = tirage", analyserSaisie("RA?E") === "tirage");
 verifie("analyserSaisie(*RAGE) = squelette", analyserSaisie("*RAGE") === "squelette");
 verifie("analyserSaisie(RA?E*) = invalide (joker + squelette)", analyserSaisie("RA?E*") === "invalide");
 verifie("analyserSaisie(vide) = vide", analyserSaisie("") === "vide");
 verifie("analyserSaisie(minuscule) = invalide", analyserSaisie("rage") === "invalide");
+verifie(`analyserSaisie(${LONGUEUR_MAX_SAISIE} lettres) = tirage`,
+  analyserSaisie("A".repeat(LONGUEUR_MAX_SAISIE)) === "tirage");
+verifie(`analyserSaisie(${LONGUEUR_MAX_SAISIE + 1} lettres) = invalide (trop long)`,
+  analyserSaisie("A".repeat(LONGUEUR_MAX_SAISIE + 1)) === "invalide");
+verifie(`analyserSaisie(${JOKERS_MAX} jokers) = tirage`,
+  analyserSaisie("?".repeat(JOKERS_MAX)) === "tirage");
+verifie(`analyserSaisie(${JOKERS_MAX + 1} jokers) = invalide (trop de jokers)`,
+  analyserSaisie("?".repeat(JOKERS_MAX + 1)) === "invalide");
 
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);
 process.exit(echecs === 0 ? 0 : 1);

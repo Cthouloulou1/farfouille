@@ -789,11 +789,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .solveur-tete { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
 .solveur-tete h1 { margin: 0 auto 0 0; font-size: 20px; font-weight: 600; }
 .solveur-corps { display: flex; flex-direction: column; gap: 12px; padding: 20px 0 4px; }
-#sv-mot { font-family: var(--mono); font-size: 22px; letter-spacing: .04em; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); }
-#sv-mot:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-#sv-mot.sv-valide { color: var(--accent); }
-#sv-mot.sv-invalide { color: var(--warn); }
+.sv-champ { font-family: var(--mono); font-size: 22px; letter-spacing: .04em; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.sv-champ:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sv-champ.sv-valide { color: var(--accent); }
+.sv-champ.sv-invalide { color: var(--warn); }
 .solveur-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
+.solveur-boutons button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 500; }
 .solveur-aide { margin: 0; min-height: 1.3em; font-size: 13px; color: var(--ink-faint); }
 .solveur-aide.avert { color: var(--warn); }
 .solveur-resultats { border-top: 1px solid var(--rule); padding-top: 14px; }
@@ -801,9 +802,33 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sv-liste { display: flex; flex-direction: column; gap: 1px; font-family: var(--mono); font-size: 14.5px; }
 .sv-ligne { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px; border-radius: 4px; }
 .sv-ligne:hover { background: var(--hover); }
-.sv-code { flex: none; width: 40px; text-align: right; color: var(--ink-faint); font-size: 13px; }
+/* LE CODE DES JOKERS N'A PAS DE LARGEUR FIXE : sur beaucoup de jokers (jusqu'a
+   12), une largeur figee laissait le texte deborder PAR-DESSUS le mot voisin
+   au lieu de le repousser -- `min-width` cede la place, `nowrap` l'empeche de
+   passer a la ligne au milieu. */
+.sv-code { flex: none; min-width: 34px; text-align: right; color: var(--ink-faint); font-size: 13px; white-space: nowrap; }
 .sv-mot-txt .sv-joker { color: var(--mark); font-weight: 600; }
 .sv-plus { margin-top: 10px; font-size: 13px; color: var(--ink-faint); }
+
+/* LE MUR DE SALONS OUVRE LE MINI SOLVEUR DEPUIS SA COLONNE DE DROITE. */
+.droite-tete { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+
+/* LE MINI SOLVEUR FLOTTE AU-DESSUS DU MUR, ET SE DEPLACE A LA MAIN. Une
+   position fixe au depart, pres de la colonne de droite -- la poignee prend
+   le relais des qu'on la saisit. */
+.solveur-mini { position: fixed; top: 84px; right: 24px; width: 340px; max-height: min(640px, calc(100vh - 110px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; }
+.solveur-mini[hidden] { display: none; }
+.solveur-mini-poignee { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--nuit); color: var(--nuit-ink); border-radius: 8px 8px 0 0; cursor: move; user-select: none; }
+.solveur-mini-poignee span { font-size: 13.5px; font-weight: 500; }
+.solveur-mini-fermer { padding: 2px 8px; font-size: 13px; background: none; border: 0; color: var(--nuit-faint); }
+.solveur-mini-fermer:hover { color: #FFFFFF; border-color: transparent; }
+.solveur-mini-corps { display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto; }
+.solveur-mini-ligne { display: flex; gap: 8px; }
+.solveur-mini-ligne .sv-champ { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; }
+.solveur-mini-ligne select { flex: none; max-width: 108px; font-size: 11px; padding: 8px 6px; }
+.solveur-boutons-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.solveur-boutons-mini button { padding: 6px 3px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.solveur-resultats-mini { max-height: 320px; overflow-y: auto; font-size: 13px; }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
@@ -988,12 +1013,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="join-error" id="c-error" hidden></div>
     <div class="mur" id="mur">
       <div class="vedette" id="vedette"></div>
-      <div class="droite"><div class="rouleau" id="salons"><div class="none">chargement…</div></div></div>
+      <div class="droite">
+        <div class="droite-tete"><button type="button" class="lien" id="ouvrir-solveur-mini">Solveur</button></div>
+        <div class="rouleau" id="salons"><div class="none">chargement…</div></div>
+      </div>
     </div>
     <!-- SIGNALER UN BUG SE FAIT DEPUIS LE PIED DE PAGE : c'est la qu'on va
          chercher ce genre de porte, et elle ne dispute la place a rien. -->
     <div class="pied">
-      <button type="button" class="lien-pied" id="solveur-accueil">Solveur</button>
       <button type="button" class="lien-pied" id="bug-accueil">Signaler un bug</button>
       <span id="pied-total"></span>
     </div>
@@ -1064,18 +1091,47 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <select id="sv-dico" title="Lexique"></select>
     </div>
     <div class="solveur-corps">
-      <input id="sv-mot" type="text" placeholder="mot ou tirage" autocomplete="off"
-             spellcheck="false" maxlength="24" aria-label="Mot ou tirage">
+      <input id="sv-mot" class="sv-champ" type="text" autocomplete="off"
+             spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
       <div class="solveur-boutons">
         <button type="button" id="sv-solutions">Solutions</button>
+        <button type="button" id="sv-formables">Mots formables</button>
         <button type="button" id="sv-benjamins">Benjamins</button>
         <button type="button" id="sv-rallonges-avant">Rallonges avant</button>
         <button type="button" id="sv-rallonges-arriere">Rallonges arrière</button>
         <button type="button" id="sv-superbenjamins">Superbenjamins</button>
-        <button type="button" id="sv-formables">Mots formables</button>
       </div>
       <p class="solveur-aide" id="sv-aide"></p>
       <div class="solveur-resultats" id="sv-resultats">
+        <p class="none">Tapez un mot ou un tirage, puis choisissez une recherche.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- LE MINI SOLVEUR : une fenetre flottante, deplacable, ouverte depuis le
+       mur de salons. Meme moteur que la page, en plus petit et plus rapide --
+       les listes y restent tronquees, la page reste le bon endroit pour tout
+       voir. Vit dans #join : elle se cache avec le reste hors du mur. -->
+  <div class="solveur-mini" id="solveur-mini" hidden>
+    <div class="solveur-mini-poignee" id="svm-poignee">
+      <span>Solveur</span>
+      <button type="button" class="solveur-mini-fermer" id="svm-fermer" aria-label="Fermer">✕</button>
+    </div>
+    <div class="solveur-mini-corps">
+      <div class="solveur-mini-ligne">
+        <input id="svm-mot" class="sv-champ" type="text" autocomplete="off" spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
+        <select id="svm-dico" title="Lexique"></select>
+      </div>
+      <div class="solveur-boutons solveur-boutons-mini">
+        <button type="button" id="svm-solutions">Solutions</button>
+        <button type="button" id="svm-formables">Mots formables</button>
+        <button type="button" id="svm-benjamins">Benjamins</button>
+        <button type="button" id="svm-rallonges-avant">Rallonges avant</button>
+        <button type="button" id="svm-rallonges-arriere">Rallonges arrière</button>
+        <button type="button" id="svm-superbenjamins">Superbenjamins</button>
+      </div>
+      <p class="solveur-aide" id="svm-aide"></p>
+      <div class="solveur-resultats solveur-resultats-mini" id="svm-resultats">
         <p class="none">Tapez un mot ou un tirage, puis choisissez une recherche.</p>
       </div>
     </div>

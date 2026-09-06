@@ -16,8 +16,8 @@ import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tailleDuSac, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import {
-  analyserSaisie, benjamins, estUnMotAvecJokers, motsFormables, rallongesArriere,
-  rallongesAvant, solutions as motsSolutions, squelette, superBenjamins,
+  analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
+  rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette, superBenjamins,
   type Correspondance, type ResultatRecherche,
 } from "../../engine/src/solveur.ts";
 import {
@@ -5302,9 +5302,10 @@ function ouvrirLeSolveur(pousser = true): void {
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
   $("join").hidden = false;
+  fermerLeSolveurMini();
   if (pousser) window.history.pushState({ page: "solveur" }, "", "?page=solveur");
-  peuplerLeDicoDuSolveur();
-  ($("sv-mot") as HTMLInputElement).focus();
+  void solveurPage.peuplerDico();
+  solveurPage.focaliser();
 }
 
 /** Referme le solveur et rend la place au mur de salons. */
@@ -5324,181 +5325,293 @@ addEventListener("popstate", () => {
 });
 
 // --- Le solveur : anagrammes, mots formables, extensions, squelettes. ---
+//
+// DEUX INSTANCES, LE MEME MOTEUR : la page (toute la liste, jamais tronquee)
+// et le mini solveur flottant du mur de salons (une liste courte, un outil
+// rapide). `creerSolveur` porte tout le cablage une seule fois ; seuls les
+// identifiants d'elements et la troncature different d'une instance a l'autre.
 
-/** Le lexique choisi pour le solveur -- independant de celui d'une partie. */
-let svDict: Dict | undefined;
-let svDictId = "";
+type SvCle = "solutions" | "formables" | "benjamins" | "rallongesAvant" | "rallongesArriere" | "superbenjamins";
 
-function motDuSolveur(): string {
-  return ($("sv-mot") as HTMLInputElement).value;
+interface SvConfig {
+  mot: string; dico: string; aide: string; resultats: string;
+  boutons: Record<SvCle, string>;
+  /** `null` : la liste entiere, sans troncature -- c'est la page. */
+  troncature: number | null;
 }
 
-/** Remplit le menu une seule fois, puis choisit le lexique de la langue du site. */
-async function peuplerLeDicoDuSolveur(): Promise<void> {
-  const menu = $("sv-dico") as HTMLSelectElement;
-  if (menu.options.length === 0) {
-    for (const d of tousLesDictionnaires()) {
-      const o = document.createElement("option");
-      o.value = d.id;
-      o.textContent = `${d.nom} - ${d.langue === "en" ? "English" : "Français"}`;
-      o.title = t(d.detail);
-      menu.appendChild(o);
+const SV_CLES: SvCle[] = [
+  "solutions", "formables", "benjamins", "rallongesAvant", "rallongesArriere", "superbenjamins",
+];
+
+/** Au-dela, poser la liste entiere d'un coup se sent -- voir peindreResultats. */
+const SV_SEUIL_CONFIRMATION = 20_000;
+
+function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focaliser: () => void } {
+  let dict: Dict | undefined;
+  let dictId = "";
+  /** Le dernier bouton clique : reste enfonce, et se relance tant qu'on retape. */
+  let modeActif: SvCle | null = null;
+
+  const champ = () => $(cfg.mot) as HTMLInputElement;
+  const bouton = (cle: SvCle) => $(cfg.boutons[cle]) as HTMLButtonElement;
+
+  function peindreLesBoutonsActifs(): void {
+    for (const cle of SV_CLES) bouton(cle).setAttribute("aria-pressed", String(cle === modeActif));
+  }
+
+  function messageInvalide(saisie: string): string {
+    if (saisie.length > LONGUEUR_MAX_SAISIE) return t2("{n} caractères au maximum.", { n: LONGUEUR_MAX_SAISIE });
+    if (/[*.]/.test(saisie) && saisie.includes(BLANK)) {
+      return t("Un joker (?) et un squelette (* ou .) ne se mélangent pas.");
+    }
+    if (saisie.includes(BLANK) && [...saisie].filter((c) => c === BLANK).length > JOKERS_MAX) {
+      return t2("{n} jokers au maximum.", { n: JOKERS_MAX });
+    }
+    return t("Lettres, jokers (?) ou squelette (* et .) uniquement.");
+  }
+
+  /** Rouge/vert en direct, et quels boutons ont un sens pour ce qui est tape. */
+  function peindreEtat(): void {
+    const input = champ();
+    const saisie = input.value;
+    const mode = analyserSaisie(saisie);
+    input.classList.remove("sv-valide", "sv-invalide");
+    const aide = $(cfg.aide);
+    aide.classList.remove("avert");
+    aide.textContent = "";
+
+    for (const cle of SV_CLES) {
+      bouton(cle).disabled = cle === "solutions" ? (mode !== "tirage" && mode !== "squelette") : mode !== "tirage";
+    }
+
+    if (mode === "invalide") {
+      aide.classList.add("avert");
+      aide.textContent = messageInvalide(saisie);
+    } else if (mode === "squelette") {
+      aide.textContent = t("Squelette : seul le bouton Solutions s'applique.");
+    } else if (mode !== "vide" && dict !== undefined) {
+      input.classList.add(estUnMotAvecJokers(dict, saisie) ? "sv-valide" : "sv-invalide");
     }
   }
-  if (svDictId === "") svDictId = DICO_PAR_LANGUE[langue()];
-  menu.value = svDictId;
-  await svChoisirLeDico(svDictId);
+
+  function executer(cle: SvCle, refocus: boolean): void {
+    if (dict === undefined) return;
+    const mot = champ().value;
+    const mode = analyserSaisie(mot);
+    let r: ResultatRecherche | null = null;
+    let avecCode = false;
+    if (cle === "solutions") {
+      if (mode === "tirage") r = motsSolutions(dict, mot);
+      else if (mode === "squelette") r = squelette(dict, mot);
+      if (r !== null) r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
+    } else if (mode === "tirage") {
+      if (cle === "formables") {
+        r = motsFormables(dict, mot);
+        r.resultats.sort((a, b) => b.mot.length - a.mot.length || a.mot.localeCompare(b.mot));
+        avecCode = true;
+      } else {
+        const fn = cle === "benjamins" ? benjamins
+          : cle === "rallongesAvant" ? rallongesAvant
+          : cle === "rallongesArriere" ? rallongesArriere : superBenjamins;
+        r = fn(dict, mot);
+      }
+    }
+    if (r === null) return;
+    modeActif = cle;
+    peindreLesBoutonsActifs();
+    peindreResultats(r, avecCode);
+    if (refocus) { champ().focus(); champ().select(); }
+  }
+
+  /** Une ligne de resultat : le code des jokers (facultatif), le mot colore. */
+  function svLigneHTML(c: Correspondance, avecCode: boolean): string {
+    const joker = new Set(c.jokers);
+    let motHTML = "";
+    let i = 0;
+    while (i < c.mot.length) {
+      const dansJoker = joker.has(i);
+      let j = i;
+      while (j < c.mot.length && joker.has(j) === dansJoker) j++;
+      const segment = c.mot.slice(i, j);
+      motHTML += dansJoker ? `<span class="sv-joker">${segment}</span>` : segment;
+      i = j;
+    }
+    const code = avecCode ? `<span class="sv-code">${c.jokers.map((k) => c.mot[k]).sort().join("")}</span>` : "";
+    return `<div class="sv-ligne">${code}<span class="sv-mot-txt">${motHTML}</span></div>`;
+  }
+
+  /**
+   * Construit toute la liste en une seule chaine plutot que par appendChild
+   * repetes : sur des dizaines de milliers de lignes (peu de jokers, motif
+   * tres permissif) c'est la difference entre un instant et un geste qui bloque
+   * l'onglet. `c.mot` ne contient jamais que des lettres A-Z venues du
+   * dictionnaire -- rien a echapper.
+   */
+  function peindreResultats(r: ResultatRecherche, avecCode: boolean, forcer = false): void {
+    const boite = $(cfg.resultats);
+    const compte = r.resultats.length;
+    let ligneStats = t2("{n} résultat{s}", { n: compte, s: compte > 1 ? "s" : "" });
+    if (r.stats.limiteAtteinte) ligneStats += ` - ${t("calcul interrompu, affinez la recherche")}`;
+
+    if (compte === 0) {
+      boite.innerHTML = `<p class="sv-stats">${ligneStats}</p><p class="none">${t("Aucun résultat.")}</p>`;
+      return;
+    }
+
+    // SANS TRONCATURE (la page), une liste de plusieurs centaines de milliers
+    // de mots (beaucoup de jokers, rien qui les contraint) bloquerait l'onglet
+    // une poignee de secondes en la posant d'un coup -- mesure : 340 000
+    // lignes, environ 4 s. Au-dela du seuil, on demande avant de le faire.
+    if (cfg.troncature === null && compte > SV_SEUIL_CONFIRMATION && !forcer) {
+      boite.innerHTML = `<p class="sv-stats">${ligneStats}</p>`
+        + `<p class="sv-plus">${t("Liste très longue : l'afficher en entier peut bloquer la page un instant.")}</p>`;
+      const bouton = document.createElement("button");
+      bouton.type = "button";
+      bouton.textContent = t("Afficher quand même");
+      bouton.addEventListener("click", () => peindreResultats(r, avecCode, true));
+      boite.appendChild(bouton);
+      return;
+    }
+
+    const limite = cfg.troncature ?? compte;
+    const visibles = r.resultats.slice(0, limite);
+    const lignes = visibles.map((c) => svLigneHTML(c, avecCode)).join("");
+    const reste = compte - visibles.length;
+    const plus = reste > 0 ? `<p class="sv-plus">${t2("et {n} de plus.", { n: reste })}</p>` : "";
+    boite.innerHTML = `<p class="sv-stats">${ligneStats}</p><div class="sv-liste">${lignes}</div>${plus}`;
+  }
+
+  /**
+   * Majuscules, caracteres valides seulement, et au plus JOKERS_MAX jokers --
+   * les jokers en trop sont retires, jamais les lettres autour. La position du
+   * curseur suit : on normalise le prefixe d'avant-frappe de la meme facon, ce
+   * qui donne exactement ce qu'il devient dans le texte normalise en entier.
+   */
+  function normaliser(brut: string): string {
+    let jokers = 0;
+    return brut.toUpperCase().replace(/[^A-Z?*.]/g, "").split("").filter((c) => {
+      if (c !== BLANK) return true;
+      jokers++;
+      return jokers <= JOKERS_MAX;
+    }).join("").slice(0, LONGUEUR_MAX_SAISIE);
+  }
+
+  function surSaisie(): void {
+    peindreEtat();
+    if (modeActif === null) return;
+    if (bouton(modeActif).disabled) { modeActif = null; peindreLesBoutonsActifs(); return; }
+    executer(modeActif, false);
+  }
+
+  const input = champ();
+  input.addEventListener("input", () => {
+    const brut = input.value;
+    const curseurAvant = input.selectionStart ?? brut.length;
+    const net = normaliser(brut);
+    if (net !== brut) {
+      const prefixeNet = normaliser(brut.slice(0, curseurAvant));
+      input.value = net;
+      input.setSelectionRange(prefixeNet.length, prefixeNet.length);
+    }
+    surSaisie();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") bouton("solutions").click();
+  });
+  for (const cle of SV_CLES) bouton(cle).addEventListener("click", () => executer(cle, true));
+
+  const menu = $(cfg.dico) as HTMLSelectElement;
+  async function choisirDico(id: string): Promise<void> {
+    dictId = id;
+    dict = await lexiquePour(id);
+    peindreEtat();
+    if (modeActif !== null) executer(modeActif, false);
+  }
+  menu.addEventListener("change", () => void choisirDico(menu.value));
+
+  /** Remplit le menu une seule fois, puis choisit le lexique de la langue du site. */
+  async function peuplerDico(): Promise<void> {
+    if (menu.options.length === 0) {
+      for (const d of tousLesDictionnaires()) {
+        const o = document.createElement("option");
+        o.value = d.id;
+        o.textContent = `${d.nom} - ${d.langue === "en" ? "English" : "Français"}`;
+        o.title = t(d.detail);
+        menu.appendChild(o);
+      }
+    }
+    if (dictId === "") dictId = DICO_PAR_LANGUE[langue()];
+    menu.value = dictId;
+    await choisirDico(dictId);
+  }
+
+  return { peuplerDico, focaliser: () => { champ().focus(); champ().select(); } };
 }
 
-async function svChoisirLeDico(id: string): Promise<void> {
-  svDictId = id;
-  svDict = await lexiquePour(id);
-  peindreLEtatDeLaSaisie();
-}
+const solveurPage = creerSolveur({
+  mot: "sv-mot", dico: "sv-dico", aide: "sv-aide", resultats: "sv-resultats",
+  boutons: {
+    solutions: "sv-solutions", formables: "sv-formables", benjamins: "sv-benjamins",
+    rallongesAvant: "sv-rallonges-avant", rallongesArriere: "sv-rallonges-arriere",
+    superbenjamins: "sv-superbenjamins",
+  },
+  troncature: null,
+});
 
-($("sv-dico") as HTMLSelectElement).addEventListener("change", () => {
-  void svChoisirLeDico(($("sv-dico") as HTMLSelectElement).value);
+const solveurMini = creerSolveur({
+  mot: "svm-mot", dico: "svm-dico", aide: "svm-aide", resultats: "svm-resultats",
+  boutons: {
+    solutions: "svm-solutions", formables: "svm-formables", benjamins: "svm-benjamins",
+    rallongesAvant: "svm-rallonges-avant", rallongesArriere: "svm-rallonges-arriere",
+    superbenjamins: "svm-superbenjamins",
+  },
+  troncature: 100,
 });
 
 /**
- * En squelette, seul Solutions s'applique : les autres boutons ont deja leur
- * equivalent ecrit en squelette (*MOT, MOT*, !!!MOT, !*MOT!*), les garder
- * actifs pesterait pour rien de plus.
+ * Le mini solveur : une fenetre flottante dans le mur de salons, deplacable a
+ * la souris comme au doigt. Position de depart pres de la colonne de droite ;
+ * une fois saisie, elle suit le pointeur (`left`/`top`), plus `right`.
  */
-const SV_BOUTONS_TIRAGE = [
-  "sv-benjamins", "sv-rallonges-avant", "sv-rallonges-arriere", "sv-superbenjamins", "sv-formables",
-];
-
-/** Rouge/vert en direct, et quels boutons ont un sens pour ce qui est tape. */
-function peindreLEtatDeLaSaisie(): void {
-  const input = $("sv-mot") as HTMLInputElement;
-  const saisie = input.value;
-  const mode = analyserSaisie(saisie);
-  input.classList.remove("sv-valide", "sv-invalide");
-  const aide = $("sv-aide");
-  aide.classList.remove("avert");
-  aide.textContent = "";
-
-  for (const id of SV_BOUTONS_TIRAGE) ($(id) as HTMLButtonElement).disabled = mode !== "tirage";
-  ($("sv-solutions") as HTMLButtonElement).disabled = mode !== "tirage" && mode !== "squelette";
-
-  if (mode === "invalide") {
-    aide.classList.add("avert");
-    aide.textContent = saisie.includes(BLANK) && /[*!]/.test(saisie)
-      ? t("Un joker (?) et un squelette (* ou !) ne se mélangent pas.")
-      : t("Lettres, jokers (?) ou squelette (* et !) uniquement.");
-    return;
-  }
-  if (mode === "squelette") {
-    aide.textContent = t("Squelette : seul le bouton Solutions s'applique.");
-    return;
-  }
-  if (mode === "vide" || svDict === undefined) return;
-  input.classList.add(estUnMotAvecJokers(svDict, saisie) ? "sv-valide" : "sv-invalide");
+let miniOuvert = false;
+function ouvrirLeSolveurMini(): void {
+  $("solveur-mini").hidden = false;
+  miniOuvert = true;
+  void solveurMini.peuplerDico();
+  solveurMini.focaliser();
 }
-
-($("sv-mot") as HTMLInputElement).addEventListener("input", () => {
-  const input = $("sv-mot") as HTMLInputElement;
-  const brut = input.value;
-  const curseurAvant = input.selectionStart ?? brut.length;
-  const net = brut.toUpperCase().replace(/[^A-Z?*!]/g, "");
-  if (net !== brut) {
-    const prefixeNet = brut.slice(0, curseurAvant).toUpperCase().replace(/[^A-Z?*!]/g, "");
-    input.value = net;
-    input.setSelectionRange(prefixeNet.length, prefixeNet.length);
-  }
-  peindreLEtatDeLaSaisie();
+function fermerLeSolveurMini(): void {
+  $("solveur-mini").hidden = true;
+  miniOuvert = false;
+}
+$("ouvrir-solveur-mini").addEventListener("click", () => {
+  if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
 });
+$("svm-fermer").addEventListener("click", fermerLeSolveurMini);
 
-($("sv-mot") as HTMLInputElement).addEventListener("keydown", (e) => {
-  if (e.key === "Enter") $("sv-solutions").click();
-});
-
-const SV_TRONCATURE = 100;
-
-/** `avecCode` : le prefixe qui dit quelles lettres sont venues d'un joker. */
-function peindreLesResultatsDuSolveur(r: ResultatRecherche, avecCode: boolean): void {
-  const boite = $("sv-resultats");
-  boite.replaceChildren();
-
-  let ligneStats = t2("{n} résultat{s} - {ms} ms", {
-    n: r.resultats.length,
-    s: r.resultats.length > 1 ? "s" : "",
-    ms: r.stats.ms < 1 ? "< 1" : String(Math.round(r.stats.ms)),
+(() => {
+  const poignee = $("svm-poignee");
+  const fenetre = $("solveur-mini");
+  let dx = 0, dy = 0, enCours = false;
+  poignee.addEventListener("pointerdown", (e) => {
+    enCours = true;
+    const r = fenetre.getBoundingClientRect();
+    dx = e.clientX - r.left;
+    dy = e.clientY - r.top;
+    fenetre.style.right = "auto";
+    poignee.setPointerCapture(e.pointerId);
   });
-  if (r.stats.limiteAtteinte) ligneStats += ` - ${t("calcul interrompu, affinez la recherche")}`;
-  boite.appendChild(el("p", "sv-stats", ligneStats));
-
-  if (r.resultats.length === 0) {
-    boite.appendChild(el("p", "none", t("Aucun résultat.")));
-    return;
-  }
-
-  const liste = el("div", "sv-liste");
-  const visibles = r.resultats.slice(0, SV_TRONCATURE);
-  for (const c of visibles) liste.appendChild(svLigne(c, avecCode));
-  boite.appendChild(liste);
-
-  const reste = r.resultats.length - visibles.length;
-  if (reste > 0) boite.appendChild(el("p", "sv-plus", t2("et {n} de plus.", { n: reste })));
-}
-
-/** Une ligne de resultat : le code des jokers (facultatif), puis le mot colore. */
-function svLigne(c: Correspondance, avecCode: boolean): HTMLElement {
-  const ligne = el("div", "sv-ligne");
-  if (avecCode) {
-    const lettres = c.jokers.map((i) => c.mot[i]).sort().join("");
-    ligne.appendChild(el("span", "sv-code", lettres));
-  }
-  const mot = el("span", "sv-mot-txt");
-  const joker = new Set(c.jokers);
-  for (let i = 0; i < c.mot.length; i++) {
-    const s = document.createElement("span");
-    if (joker.has(i)) s.className = "sv-joker";
-    s.textContent = c.mot[i]!;
-    mot.appendChild(s);
-  }
-  ligne.appendChild(mot);
-  return ligne;
-}
-
-$("sv-solutions").addEventListener("click", () => {
-  if (svDict === undefined) return;
-  const saisie = motDuSolveur();
-  const mode = analyserSaisie(saisie);
-  if (mode === "tirage") {
-    const r = motsSolutions(svDict, saisie);
-    r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
-    peindreLesResultatsDuSolveur(r, false);
-  } else if (mode === "squelette") {
-    const r = squelette(svDict, saisie);
-    r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
-    peindreLesResultatsDuSolveur(r, false);
-  }
-});
-
-/** Benjamins, rallonges, superbenjamins : memes conditions, meme cablage. */
-function svBrancherExtension(id: string, fn: (dict: Dict, mot: string) => ResultatRecherche): void {
-  $(id).addEventListener("click", () => {
-    if (svDict === undefined) return;
-    const saisie = motDuSolveur();
-    if (analyserSaisie(saisie) !== "tirage") return;
-    peindreLesResultatsDuSolveur(fn(svDict, saisie), false);
+  poignee.addEventListener("pointermove", (e) => {
+    if (!enCours) return;
+    const marge = 8;
+    const x = Math.min(Math.max(e.clientX - dx, marge), window.innerWidth - marge - fenetre.offsetWidth);
+    const y = Math.min(Math.max(e.clientY - dy, marge), window.innerHeight - marge - 40);
+    fenetre.style.left = `${x}px`;
+    fenetre.style.top = `${y}px`;
   });
-}
-svBrancherExtension("sv-benjamins", benjamins);
-svBrancherExtension("sv-rallonges-avant", rallongesAvant);
-svBrancherExtension("sv-rallonges-arriere", rallongesArriere);
-svBrancherExtension("sv-superbenjamins", superBenjamins);
-
-$("sv-formables").addEventListener("click", () => {
-  if (svDict === undefined) return;
-  const saisie = motDuSolveur();
-  if (analyserSaisie(saisie) !== "tirage") return;
-  const r = motsFormables(svDict, saisie);
-  r.resultats.sort((a, b) => b.mot.length - a.mot.length || a.mot.localeCompare(b.mot));
-  peindreLesResultatsDuSolveur(r, true);
-});
+  poignee.addEventListener("pointerup", (e) => { enCours = false; poignee.releasePointerCapture(e.pointerId); });
+})();
 
 /** Les trois etats de la verification, et ce qu'on peut en faire. */
 function peindreLaVerification(): void {
@@ -5977,6 +6090,11 @@ function demanderLePseudo(ou: string | null): void {
 function peindreCompte(): void {
   const boite = $("compte");
   boite.replaceChildren();
+
+  const solveur = el("button", "records", "Solveur") as HTMLButtonElement;
+  solveur.type = "button";
+  solveur.addEventListener("click", () => ouvrirLeSolveur());
+  boite.appendChild(solveur);
 
   const records = el("button", "records", "Records") as HTMLButtonElement;
   records.type = "button";
@@ -6929,8 +7047,6 @@ $("site-nom").addEventListener("click", () => {
   if ($("join").hidden) quitterSalon();
 });
 
-$("solveur-accueil").addEventListener("click", () => ouvrirLeSolveur());
-
 /** Le panneau des records se referme par son bouton comme par son voile. */
 $("records-close").addEventListener("click", () => { $("voile-records").hidden = true; });
 $("voile-records").addEventListener("click", (e) => {
@@ -7194,6 +7310,7 @@ async function rejoindre(id: string): Promise<void> {
   paintRack();
   paintSide();
   $("join").hidden = true;
+  fermerLeSolveurMini();
 
   await fermerConnexion();
 

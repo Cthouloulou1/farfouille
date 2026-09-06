@@ -13,7 +13,7 @@
  *
  * DEUX FAMILLES DE RECHERCHE, DEUX ALGORITHMES :
  *   - un squelette (position par position : lettre fixe, "*" = un tronçon
- *     connexe quelconque, "!" = une lettre libre) explore le DAWG en suivant
+ *     connexe quelconque, "." = une lettre libre) explore le DAWG en suivant
  *     le motif ;
  *   - un tirage (un sac de lettres, plus des jokers, sans ordre impose)
  *     explore le DAWG en consommant le sac.
@@ -67,7 +67,7 @@ function* aretesDe(dict: Dict, node: number): Generator<{ code: number; cible: n
   }
 }
 
-// --- Squelettes : lettre fixe, "*" (tronçon quelconque, vide compris), "!" (une lettre libre) ---
+// --- Squelettes : lettre fixe, "*" (tronçon quelconque, vide compris), "." (une lettre libre) ---
 
 function explorerSquelette(
   dict: Dict, motif: string, onTrouve: (mot: string, jokers: number[]) => boolean,
@@ -93,7 +93,7 @@ function explorerSquelette(
       }
       return true;
     }
-    if (c === "!") {
+    if (c === ".") {
       for (const a of aretesDe(dict, node)) {
         if (!rec(pi + 1, a.cible, a.terminal, chemin + letterOf(a.code), [...jokers, chemin.length])) return false;
       }
@@ -133,7 +133,7 @@ export function squeletteExiste(dict: Dict, motif: string): boolean {
 export function estUnMotAvecJokers(dict: Dict, saisie: string): boolean {
   if (saisie.length === 0) return false;
   if (!saisie.includes(BLANK)) return dict.contains(saisie);
-  return squeletteExiste(dict, saisie.split(BLANK).join("!"));
+  return squeletteExiste(dict, saisie.split(BLANK).join("."));
 }
 
 // --- Tirages : un sac de lettres (jokers compris), n'importe quel ordre ---
@@ -224,22 +224,26 @@ export function solutions(dict: Dict, tirage: string): ResultatRecherche {
 
 /** Ajoute exactement trois lettres devant le mot tape. */
 export function benjamins(dict: Dict, mot: string): ResultatRecherche {
-  return trieParAjoutCroissant(squelette(dict, "!!!" + mot), mot.length);
+  return trieParAjoutCroissant(squelette(dict, "..." + mot), mot.length);
 }
 
-/** Tous les mots qui finissent par le mot tape -- benjamins compris. */
+/**
+ * Tous les mots qui finissent par le mot tape, AU MOINS UNE LETTRE AJOUTEE --
+ * le mot tape lui-meme ne compte pas comme sa propre rallonge (".*", pas "*" :
+ * une lettre libre puis un tronçon quelconque, jamais rien du tout).
+ */
 export function rallongesAvant(dict: Dict, mot: string): ResultatRecherche {
-  return trieParAjoutCroissant(squelette(dict, "*" + mot), mot.length);
+  return trieParAjoutCroissant(squelette(dict, ".*" + mot), mot.length);
 }
 
-/** Tous les mots qui commencent par le mot tape. */
+/** Tous les mots qui commencent par le mot tape, au moins une lettre ajoutee. */
 export function rallongesArriere(dict: Dict, mot: string): ResultatRecherche {
-  return trieParAjoutCroissant(squelette(dict, mot + "*"), mot.length);
+  return trieParAjoutCroissant(squelette(dict, mot + ".*"), mot.length);
 }
 
 /** Le mot tape strictement CONTENU : au moins une lettre avant ET apres. */
 export function superBenjamins(dict: Dict, mot: string): ResultatRecherche {
-  return trieParAjoutCroissant(squelette(dict, "!*" + mot + "!*"), mot.length);
+  return trieParAjoutCroissant(squelette(dict, ".*" + mot + ".*"), mot.length);
 }
 
 function trieParAjoutCroissant(r: ResultatRecherche, longueurBase: number): ResultatRecherche {
@@ -252,19 +256,32 @@ function trieParAjoutCroissant(r: ResultatRecherche, longueurBase: number): Resu
 
 export type ModeSaisie = "vide" | "tirage" | "squelette" | "invalide";
 
-const CARACTERES_VALIDES = /^[A-Z?*!]*$/;
+const CARACTERES_VALIDES = /^[A-Z?*.]*$/;
+
+/** L'ODS s'arrete a 15 lettres, la grille non -- mais la saisie, elle, oui. */
+export const LONGUEUR_MAX_SAISIE = 15;
+
+/**
+ * Au-dela, motsFormables/solutions restent rapides (le calcul suit la taille
+ * du dictionnaire, pas le nombre de jokers) mais la liste devient enorme --
+ * voir [[solveur-de-recherche]]. Un plafond raisonnable evite d'afficher le
+ * dictionnaire entier.
+ */
+export const JOKERS_MAX = 12;
 
 /**
  * Un joker et un symbole de squelette ne se melangent jamais dans la meme
  * saisie : "?" veut dire "une lettre du tirage, laquelle on ne sait pas
- * encore", "!" veut dire "une lettre du dictionnaire, n'importe laquelle" --
+ * encore", "." veut dire "une lettre du dictionnaire, n'importe laquelle" --
  * deux questions differentes, qui ne se repondent pas ensemble.
  */
 export function analyserSaisie(saisie: string): ModeSaisie {
   if (saisie.length === 0) return "vide";
+  if (saisie.length > LONGUEUR_MAX_SAISIE) return "invalide";
   if (!CARACTERES_VALIDES.test(saisie)) return "invalide";
-  const aSquelette = saisie.includes("*") || saisie.includes("!");
+  const aSquelette = saisie.includes("*") || saisie.includes(".");
   const aJoker = saisie.includes(BLANK);
   if (aSquelette && aJoker) return "invalide";
+  if (aJoker && [...saisie].filter((c) => c === BLANK).length > JOKERS_MAX) return "invalide";
   return aSquelette ? "squelette" : "tirage";
 }
