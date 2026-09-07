@@ -246,7 +246,16 @@ export function superBenjamins(dict: Dict, mot: string): ResultatRecherche {
   return trieParAjoutCroissant(squelette(dict, ".*" + mot + ".*"), mot.length);
 }
 
+/**
+ * Trie par ajout croissant, et NE COLORE RIEN : le squelette sous-jacent
+ * marque comme joker la seule lettre libre qui commence le "*" (BenjaminS ->
+ * SUPERchampion aurait son S d'une autre couleur mais pas le reste de SUPER),
+ * ce qui ne veut rien dire ici -- il n'y a pas de joker, seulement des lettres
+ * ajoutees. Deux issues se valaient (tout colorer, ou rien) ; rien est plus
+ * simple et n'invente pas une convention de plus.
+ */
 function trieParAjoutCroissant(r: ResultatRecherche, longueurBase: number): ResultatRecherche {
+  for (const c of r.resultats) c.jokers = [];
   r.resultats.sort((a, b) => (a.mot.length - longueurBase) - (b.mot.length - longueurBase)
     || a.mot.localeCompare(b.mot));
   return r;

@@ -2062,6 +2062,15 @@ function paintSide() {
   const enGroupe = !duplicate && monde.size > 1;
   $("rb-neg-wrap").hidden = rejeu !== null || enGroupe
     || (monScore === 0 && monNegatif === 0);
+  // LE SOLVEUR NE S'UTILISE QU'EN SOLO : a plusieurs, ce serait presque
+  // tenter les joueurs a tricher. « Seul » se compte sur la partie entiere
+  // (voir le commentaire de `monde` ci-dessus), pas seulement sur cet instant.
+  // JAMAIS SUR UN SALON STAR (`salonPermanent`, sans proprietaire) : la
+  // grille mondiale n'est jamais vraiment "seul", elle attend simplement le
+  // prochain joueur.
+  const soloEtHorsStar = monde.size <= 1 && !salonPermanent;
+  $("solveur-jeu").hidden = !soloEtHorsStar;
+  if (!soloEtHorsStar) fermerLeSolveurMini();
   $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
   paintCurrent();
 
@@ -4743,7 +4752,7 @@ function applyState(s: {
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   lancementA?: number;
-  gerant?: string | null;
+  gerant?: string | null; proprietaire?: string | null;
   tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
@@ -4778,6 +4787,7 @@ function applyState(s: {
   // Les manettes changent de mains sans qu'on se reconnecte : le bouton des
   // reglages suit l'etat, pas le seul message d'accueil.
   gerant = s.gerant ?? null;
+  if (s.proprietaire !== undefined) salonPermanent = s.proprietaire === null;
   permanent = s.permanent === true;
   // UNE GRILLE PERMANENTE NE SE REREGLE PAS. Relancer, c'est archiver la partie
   // en cours et en ouvrir une neuve : sur une grille d'etude qui porte onze
@@ -5334,10 +5344,16 @@ addEventListener("popstate", () => {
 type SvCle = "solutions" | "formables" | "benjamins" | "rallongesAvant" | "rallongesArriere" | "superbenjamins";
 
 interface SvConfig {
-  mot: string; dico: string; aide: string; resultats: string;
+  mot: string; aide: string; resultats: string;
   boutons: Record<SvCle, string>;
   /** `null` : la liste entiere, sans troncature -- c'est la page. */
   troncature: number | null;
+  /**
+   * L'id d'un `<select>` de lexique, ou `null` pour suivre celui DE LA
+   * PARTIE (la variable globale `dict`) -- le mini solveur, ouvert dans un
+   * salon qui a deja le sien, n'a rien a proposer.
+   */
+  dico: string | null;
 }
 
 const SV_CLES: SvCle[] = [
@@ -5347,14 +5363,29 @@ const SV_CLES: SvCle[] = [
 /** Au-dela, poser la liste entiere d'un coup se sent -- voir peindreResultats. */
 const SV_SEUIL_CONFIRMATION = 20_000;
 
+/**
+ * 1 a 6, rangee du haut ou pave numerique, pour lancer la recherche du meme
+ * numero sans lacher le clavier. `e.code` et non `e.key` : la touche au-dessus
+ * du A vaut "Digit1" quel que soit ce qu'elle tape -- "1" en QWERTY, "&" en
+ * AZERTY. Aucun chiffre ne s'ecrit dans cette barre, la touche est donc libre.
+ */
+const SV_RACCOURCIS: Readonly<Record<string, number>> = {
+  Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 5,
+  Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4, Numpad6: 5,
+};
+
 function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focaliser: () => void } {
-  let dict: Dict | undefined;
-  let dictId = "";
+  /** Son propre lexique choisi (page), inutilise quand cfg.dico est `null`. */
+  let dictPropre: Dict | undefined;
+  let dictPropreId = "";
   /** Le dernier bouton clique : reste enfonce, et se relance tant qu'on retape. */
   let modeActif: SvCle | null = null;
 
   const champ = () => $(cfg.mot) as HTMLInputElement;
   const bouton = (cle: SvCle) => $(cfg.boutons[cle]) as HTMLButtonElement;
+  // Suit `dict`, la variable globale du client (le lexique de la partie en
+  // cours), quand cfg.dico est `null` -- sinon son propre choix.
+  const dictActif = (): Dict | undefined => (cfg.dico === null ? dict : dictPropre);
 
   function peindreLesBoutonsActifs(): void {
     for (const cle of SV_CLES) bouton(cle).setAttribute("aria-pressed", String(cle === modeActif));
@@ -5390,31 +5421,35 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
       aide.textContent = messageInvalide(saisie);
     } else if (mode === "squelette") {
       aide.textContent = t("Squelette : seul le bouton Solutions s'applique.");
-    } else if (mode !== "vide" && dict !== undefined) {
-      input.classList.add(estUnMotAvecJokers(dict, saisie) ? "sv-valide" : "sv-invalide");
+    } else if (mode !== "vide" && !saisie.includes(BLANK) && dictActif() !== undefined) {
+      // UN JOKER DIT QU'ON NE TAPE PLUS UN MOT, MAIS UNE RECHERCHE : le
+      // rouge/vert ne repond qu'a « ce mot precis existe-t-il ? », question
+      // qui n'a plus de sens des qu'une lettre reste a deviner.
+      input.classList.add(estUnMotAvecJokers(dictActif()!, saisie) ? "sv-valide" : "sv-invalide");
     }
   }
 
   function executer(cle: SvCle, refocus: boolean): void {
-    if (dict === undefined) return;
+    const d = dictActif();
+    if (d === undefined) return;
     const mot = champ().value;
     const mode = analyserSaisie(mot);
     let r: ResultatRecherche | null = null;
     let avecCode = false;
     if (cle === "solutions") {
-      if (mode === "tirage") r = motsSolutions(dict, mot);
-      else if (mode === "squelette") r = squelette(dict, mot);
+      if (mode === "tirage") r = motsSolutions(d, mot);
+      else if (mode === "squelette") r = squelette(d, mot);
       if (r !== null) r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
     } else if (mode === "tirage") {
       if (cle === "formables") {
-        r = motsFormables(dict, mot);
+        r = motsFormables(d, mot);
         r.resultats.sort((a, b) => b.mot.length - a.mot.length || a.mot.localeCompare(b.mot));
         avecCode = true;
       } else {
         const fn = cle === "benjamins" ? benjamins
           : cle === "rallongesAvant" ? rallongesAvant
           : cle === "rallongesArriere" ? rallongesArriere : superBenjamins;
-        r = fn(dict, mot);
+        r = fn(d, mot);
       }
     }
     if (r === null) return;
@@ -5517,21 +5552,27 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     surSaisie();
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") bouton("solutions").click();
+    if (e.key === "Enter") { bouton("solutions").click(); return; }
+    const idx = SV_RACCOURCIS[e.code];
+    if (idx !== undefined) { e.preventDefault(); bouton(SV_CLES[idx]!).click(); }
   });
   for (const cle of SV_CLES) bouton(cle).addEventListener("click", () => executer(cle, true));
 
-  const menu = $(cfg.dico) as HTMLSelectElement;
   async function choisirDico(id: string): Promise<void> {
-    dictId = id;
-    dict = await lexiquePour(id);
+    dictPropreId = id;
+    dictPropre = await lexiquePour(id);
     peindreEtat();
     if (modeActif !== null) executer(modeActif, false);
   }
-  menu.addEventListener("change", () => void choisirDico(menu.value));
 
-  /** Remplit le menu une seule fois, puis choisit le lexique de la langue du site. */
+  /**
+   * Remplit le menu une seule fois puis choisit le lexique de la langue du
+   * site (cfg.dico non nul), ou suit tout de suite le lexique de la partie
+   * (cfg.dico nul, deja charge par le client a ce stade).
+   */
   async function peuplerDico(): Promise<void> {
+    if (cfg.dico === null) { peindreEtat(); if (modeActif !== null) executer(modeActif, false); return; }
+    const menu = $(cfg.dico) as HTMLSelectElement;
     if (menu.options.length === 0) {
       for (const d of tousLesDictionnaires()) {
         const o = document.createElement("option");
@@ -5540,10 +5581,11 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
         o.title = t(d.detail);
         menu.appendChild(o);
       }
+      menu.addEventListener("change", () => void choisirDico(menu.value));
     }
-    if (dictId === "") dictId = DICO_PAR_LANGUE[langue()];
-    menu.value = dictId;
-    await choisirDico(dictId);
+    if (dictPropreId === "") dictPropreId = DICO_PAR_LANGUE[langue()];
+    menu.value = dictPropreId;
+    await choisirDico(dictPropreId);
   }
 
   return { peuplerDico, focaliser: () => { champ().focus(); champ().select(); } };
@@ -5560,7 +5602,7 @@ const solveurPage = creerSolveur({
 });
 
 const solveurMini = creerSolveur({
-  mot: "svm-mot", dico: "svm-dico", aide: "svm-aide", resultats: "svm-resultats",
+  mot: "svm-mot", dico: null, aide: "svm-aide", resultats: "svm-resultats",
   boutons: {
     solutions: "svm-solutions", formables: "svm-formables", benjamins: "svm-benjamins",
     rallongesAvant: "svm-rallonges-avant", rallongesArriere: "svm-rallonges-arriere",
@@ -5570,9 +5612,9 @@ const solveurMini = creerSolveur({
 });
 
 /**
- * Le mini solveur : une fenetre flottante dans le mur de salons, deplacable a
- * la souris comme au doigt. Position de depart pres de la colonne de droite ;
- * une fois saisie, elle suit le pointeur (`left`/`top`), plus `right`.
+ * Le mini solveur : une fenetre flottante DANS UN SALON, deplacable a la
+ * souris comme au doigt. Position de depart en haut a droite ; une fois
+ * saisie, elle suit le pointeur (`left`/`top`), plus `right`.
  */
 let miniOuvert = false;
 function ouvrirLeSolveurMini(): void {
@@ -5585,7 +5627,7 @@ function fermerLeSolveurMini(): void {
   $("solveur-mini").hidden = true;
   miniOuvert = false;
 }
-$("ouvrir-solveur-mini").addEventListener("click", () => {
+$("solveur-jeu").addEventListener("click", () => {
   if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
 });
 $("svm-fermer").addEventListener("click", fermerLeSolveurMini);
@@ -5593,8 +5635,13 @@ $("svm-fermer").addEventListener("click", fermerLeSolveurMini);
 (() => {
   const poignee = $("svm-poignee");
   const fenetre = $("solveur-mini");
+  const fermer = $("svm-fermer");
   let dx = 0, dy = 0, enCours = false;
   poignee.addEventListener("pointerdown", (e) => {
+    // Le bouton de fermeture est DANS la poignee : sans ce garde-fou, la
+    // capture du pointeur pour le glisser-deposer prenait le pas sur son
+    // propre clic, et la croix ne fermait plus rien.
+    if (e.target === fermer || fermer.contains(e.target as Node)) return;
     enCours = true;
     const r = fenetre.getBoundingClientRect();
     dx = e.clientX - r.left;
@@ -6091,7 +6138,7 @@ function peindreCompte(): void {
   const boite = $("compte");
   boite.replaceChildren();
 
-  const solveur = el("button", "records", "Solveur") as HTMLButtonElement;
+  const solveur = el("button", "records", t("Anagrammeur")) as HTMLButtonElement;
   solveur.type = "button";
   solveur.addEventListener("click", () => ouvrirLeSolveur());
   boite.appendChild(solveur);

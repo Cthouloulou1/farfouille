@@ -795,6 +795,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sv-champ.sv-invalide { color: var(--warn); }
 .solveur-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
 .solveur-boutons button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+/* LE NUMERO RAPPELLE LE RACCOURCI (1 A 6, chiffres ou pave numerique) sans
+   dominer le libelle : plus petit, plus pale, colle au mot qu'il sert. */
+.sv-numero { margin-left: 5px; font-size: .82em; color: var(--ink-faint); }
+.solveur-boutons button[aria-pressed="true"] .sv-numero { color: var(--accent); }
 .solveur-aide { margin: 0; min-height: 1.3em; font-size: 13px; color: var(--ink-faint); }
 .solveur-aide.avert { color: var(--warn); }
 .solveur-resultats { border-top: 1px solid var(--rule); padding-top: 14px; }
@@ -810,25 +814,31 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sv-mot-txt .sv-joker { color: var(--mark); font-weight: 600; }
 .sv-plus { margin-top: 10px; font-size: 13px; color: var(--ink-faint); }
 
-/* LE MUR DE SALONS OUVRE LE MINI SOLVEUR DEPUIS SA COLONNE DE DROITE. */
-.droite-tete { display: flex; justify-content: flex-end; margin-bottom: 10px; }
-
-/* LE MINI SOLVEUR FLOTTE AU-DESSUS DU MUR, ET SE DEPLACE A LA MAIN. Une
-   position fixe au depart, pres de la colonne de droite -- la poignee prend
-   le relais des qu'on la saisit. */
-.solveur-mini { position: fixed; top: 84px; right: 24px; width: 340px; max-height: min(640px, calc(100vh - 110px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; }
+/* LE MINI SOLVEUR FLOTTE AU-DESSUS DE LA PARTIE, SE DEPLACE A LA MAIN (la
+   poignee) ET SE REDIMENSIONNE A LA MAIN (le coin, `resize` natif -- pas
+   besoin de reinventer une prise en JS). `overflow: hidden` sur la boite
+   elle-meme est ce qui rend `resize` possible ; le defilement reel vit plus
+   bas, sur les resultats. */
+.solveur-mini { position: fixed; top: 84px; right: 24px; width: 340px; height: 460px; min-width: 300px; min-height: 280px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; resize: both; overflow: hidden; }
 .solveur-mini[hidden] { display: none; }
 .solveur-mini-poignee { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--nuit); color: var(--nuit-ink); border-radius: 8px 8px 0 0; cursor: move; user-select: none; }
 .solveur-mini-poignee span { font-size: 13.5px; font-weight: 500; }
 .solveur-mini-fermer { padding: 2px 8px; font-size: 13px; background: none; border: 0; color: var(--nuit-faint); }
 .solveur-mini-fermer:hover { color: #FFFFFF; border-color: transparent; }
-.solveur-mini-corps { display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto; }
-.solveur-mini-ligne { display: flex; gap: 8px; }
-.solveur-mini-ligne .sv-champ { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; }
-.solveur-mini-ligne select { flex: none; max-width: 108px; font-size: 11px; padding: 8px 6px; }
-.solveur-boutons-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.solveur-mini-corps { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.solveur-mini-corps .sv-champ { font-size: 16px; padding: 8px 10px; }
+.solveur-boutons-mini { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .solveur-boutons-mini button { padding: 6px 3px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.solveur-resultats-mini { max-height: 320px; overflow-y: auto; font-size: 13px; }
+.solveur-boutons-mini .sv-numero { margin-left: 3px; }
+.solveur-mini-corps .solveur-aide { flex: none; }
+/* LES RESULTATS PRENNENT TOUT CE QUI RESTE : agrandir la fenetre agrandit la
+   liste, pas seulement les marges autour. */
+.solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 13px; }
+/* PLUSIEURS RESULTATS PAR LIGNE : sur 340 px de large, une liste posee un mot
+   par ligne se lit surtout en hauteur. Un flux qui enchaine et retourne a la
+   ligne quand il n'y a plus de place utilise la largeur, comme du texte. */
+.solveur-resultats-mini .sv-liste { display: flex; flex-flow: row wrap; gap: 3px 16px; }
+.solveur-resultats-mini .sv-ligne { padding: 2px 4px; }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }
@@ -1013,10 +1023,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="join-error" id="c-error" hidden></div>
     <div class="mur" id="mur">
       <div class="vedette" id="vedette"></div>
-      <div class="droite">
-        <div class="droite-tete"><button type="button" class="lien" id="ouvrir-solveur-mini">Solveur</button></div>
-        <div class="rouleau" id="salons"><div class="none">chargement…</div></div>
-      </div>
+      <div class="droite"><div class="rouleau" id="salons"><div class="none">chargement…</div></div></div>
     </div>
     <!-- SIGNALER UN BUG SE FAIT DEPUIS LE PIED DE PAGE : c'est la qu'on va
          chercher ce genre de porte, et elle ne dispute la place a rien. -->
@@ -1087,53 +1094,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
        -- pendant une partie a plusieurs, cette page reste hors d'atteinte. -->
   <div class="corps solveur" id="corps-solveur" hidden>
     <div class="solveur-tete">
-      <h1>Solveur</h1>
+      <h1>Anagrammeur</h1>
       <select id="sv-dico" title="Lexique"></select>
     </div>
     <div class="solveur-corps">
       <input id="sv-mot" class="sv-champ" type="text" autocomplete="off"
              spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
       <div class="solveur-boutons">
-        <button type="button" id="sv-solutions">Solutions</button>
-        <button type="button" id="sv-formables">Mots formables</button>
-        <button type="button" id="sv-benjamins">Benjamins</button>
-        <button type="button" id="sv-rallonges-avant">Rallonges avant</button>
-        <button type="button" id="sv-rallonges-arriere">Rallonges arrière</button>
-        <button type="button" id="sv-superbenjamins">Superbenjamins</button>
+        <button type="button" id="sv-solutions">Solutions<span class="sv-numero">(1)</span></button>
+        <button type="button" id="sv-formables">Mots formables<span class="sv-numero">(2)</span></button>
+        <button type="button" id="sv-benjamins">Benjamins<span class="sv-numero">(3)</span></button>
+        <button type="button" id="sv-rallonges-avant">Rallonges avant<span class="sv-numero">(4)</span></button>
+        <button type="button" id="sv-rallonges-arriere">Rallonges arrière<span class="sv-numero">(5)</span></button>
+        <button type="button" id="sv-superbenjamins">Superbenjamins<span class="sv-numero">(6)</span></button>
       </div>
       <p class="solveur-aide" id="sv-aide"></p>
-      <div class="solveur-resultats" id="sv-resultats">
-        <p class="none">Tapez un mot ou un tirage, puis choisissez une recherche.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- LE MINI SOLVEUR : une fenetre flottante, deplacable, ouverte depuis le
-       mur de salons. Meme moteur que la page, en plus petit et plus rapide --
-       les listes y restent tronquees, la page reste le bon endroit pour tout
-       voir. Vit dans #join : elle se cache avec le reste hors du mur. -->
-  <div class="solveur-mini" id="solveur-mini" hidden>
-    <div class="solveur-mini-poignee" id="svm-poignee">
-      <span>Solveur</span>
-      <button type="button" class="solveur-mini-fermer" id="svm-fermer" aria-label="Fermer">✕</button>
-    </div>
-    <div class="solveur-mini-corps">
-      <div class="solveur-mini-ligne">
-        <input id="svm-mot" class="sv-champ" type="text" autocomplete="off" spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
-        <select id="svm-dico" title="Lexique"></select>
-      </div>
-      <div class="solveur-boutons solveur-boutons-mini">
-        <button type="button" id="svm-solutions">Solutions</button>
-        <button type="button" id="svm-formables">Mots formables</button>
-        <button type="button" id="svm-benjamins">Benjamins</button>
-        <button type="button" id="svm-rallonges-avant">Rallonges avant</button>
-        <button type="button" id="svm-rallonges-arriere">Rallonges arrière</button>
-        <button type="button" id="svm-superbenjamins">Superbenjamins</button>
-      </div>
-      <p class="solveur-aide" id="svm-aide"></p>
-      <div class="solveur-resultats solveur-resultats-mini" id="svm-resultats">
-        <p class="none">Tapez un mot ou un tirage, puis choisissez une recherche.</p>
-      </div>
+      <div class="solveur-resultats" id="sv-resultats"></div>
     </div>
   </div>
 
@@ -1239,6 +1215,35 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
+<!-- LE MINI SOLVEUR : une fenetre flottante et deplacable, ouverte DANS UN
+     SALON, en solo seulement (SPEC : inutilisable a plusieurs, ce serait
+     tenter la triche). Meme moteur que la page, en plus petit et plus rapide
+     -- les listes y restent tronquees, la page reste le bon endroit pour tout
+     voir. Elle suit le lexique DE LA PARTIE, sans menu : un salon en a deja
+     un, en choisir un autre n'aurait aucun sens.
+
+     ELLE VIT A LA RACINE, ET NON DANS #join : #join se masque en entrant
+     dans un salon, et c'est justement la qu'elle doit pouvoir s'ouvrir. -->
+<div class="solveur-mini" id="solveur-mini" hidden>
+  <div class="solveur-mini-poignee" id="svm-poignee">
+    <span>Anagrammeur</span>
+    <button type="button" class="solveur-mini-fermer" id="svm-fermer" aria-label="Fermer">✕</button>
+  </div>
+  <div class="solveur-mini-corps">
+    <input id="svm-mot" class="sv-champ" type="text" autocomplete="off" spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
+    <div class="solveur-boutons solveur-boutons-mini">
+      <button type="button" id="svm-solutions">Solutions<span class="sv-numero">(1)</span></button>
+      <button type="button" id="svm-formables">Mots formables<span class="sv-numero">(2)</span></button>
+      <button type="button" id="svm-benjamins">Benjamins<span class="sv-numero">(3)</span></button>
+      <button type="button" id="svm-rallonges-avant">Rallonges avant<span class="sv-numero">(4)</span></button>
+      <button type="button" id="svm-rallonges-arriere">Rallonges arrière<span class="sv-numero">(5)</span></button>
+      <button type="button" id="svm-superbenjamins">Superbenjamins<span class="sv-numero">(6)</span></button>
+    </div>
+    <p class="solveur-aide" id="svm-aide"></p>
+    <div class="solveur-resultats solveur-resultats-mini" id="svm-resultats"></div>
+  </div>
+</div>
+
 <div class="bar">
   <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
   <div class="who">
@@ -1321,6 +1326,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
             <button type="button" data-z="-1" title="réduire le texte du panneau" aria-label="réduire le texte du panneau">A−</button>
             <button type="button" data-z="1" title="agrandir le texte du panneau" aria-label="agrandir le texte du panneau">A+</button>
           </span>
+          <!-- Cache des qu'on n'est plus seul sur cette partie : voir paintSide(). -->
+          <button id="solveur-jeu" class="icon" title="Anagrammeur" aria-label="Anagrammeur" hidden>
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <circle cx="6.7" cy="6.7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M9.8 9.8 13.3 13.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+          </button>
           <button id="rm-open" class="icon" title="Feuille de route" aria-label="Feuille de route">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
               <path d="M2.5 2.5h11v11h-11z" fill="none" stroke="currentColor" stroke-width="1.2"/>

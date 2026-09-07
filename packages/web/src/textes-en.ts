@@ -222,6 +222,12 @@ export const EN: Readonly<Record<string, string>> = {
   ", sinon les réglages n'auront aucun effet.":
     ", otherwise the settings will have no effect.",
 
+  // ---------------------------------------------------------- anagrammeur
+  "Anagrammeur": "Anagrammer",
+  "Mots formables": "Playable words",
+  "Rallonges avant": "Prefixes",
+  "Rallonges arrière": "Suffixes",
+
   // =====================================================================
   //  CE QUE LE CODE ECRIT
   //
@@ -368,6 +374,23 @@ export const EN: Readonly<Record<string, string>> = {
     "The bag refills forever: the game only ends when no move",
   "aucun coup n'est jouable, et elle sera très longue.":
     "can be played at all, and it will be very long.",
+
+  // ---------------------------------------------------------- anagrammeur
+  "{n} caractères au maximum.": "{n} characters at most.",
+  "{n} jokers au maximum.": "{n} blanks at most.",
+  "Un joker (?) et un squelette (* ou .) ne se mélangent pas.":
+    "A blank (?) and a skeleton (* or .) don't mix.",
+  "Lettres, jokers (?) ou squelette (* et .) uniquement.":
+    "Letters, blanks (?) or a skeleton (* and .) only.",
+  "Squelette : seul le bouton Solutions s'applique.":
+    "Skeleton: only the Solutions button applies.",
+  "{n} résultat{s}": "{n} result{s}",
+  "Aucun résultat.": "No result.",
+  "calcul interrompu, affinez la recherche": "calculation stopped, narrow the search",
+  "et {n} de plus.": "and {n} more.",
+  "Liste très longue : l'afficher en entier peut bloquer la page un instant.":
+    "Very long list: showing it all can freeze the page for a moment.",
+  "Afficher quand même": "Show anyway",
 
   // -------------------------------------------- messages venus du serveur
   "Ce salon a été supprimé": "This room has been deleted",

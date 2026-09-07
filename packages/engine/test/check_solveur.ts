@@ -39,6 +39,8 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
     `${r.resultats.length} mots`);
   verifie("benjamins(RAGE) commence par ANCRAGE et finit par VITRAGE",
     liste[0] === "ANCRAGE" && liste[liste.length - 1] === "VITRAGE");
+  verifie("benjamins(RAGE) ne colore rien (pas de joker ici)",
+    r.resultats.every((c) => c.jokers.length === 0));
 }
 
 // --- Rallonges : comprennent les benjamins, triees par ajout croissant, MAIS
