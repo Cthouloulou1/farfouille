@@ -220,7 +220,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
    pose le trait DERRIERE la lettre, pour qu'il la borde sans la manger. */
 .decompte { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: Archivo, system-ui, sans-serif; font-weight: 700; font-size: clamp(130px, 32vh, 300px); line-height: 1; color: var(--accent); -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 4px 30px var(--shadow); pointer-events: none; }
 .decompte[hidden] { display: none; }
-.fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; text-align: center; letter-spacing: .04em; }
+.fin { color: var(--warn); background: var(--warn-bg); font-weight: 500; font-size: 16px; text-align: center; letter-spacing: .04em; }
 .fin[hidden] { display: none; }
 .journal { flex: none; border-top: 1px solid var(--rule); padding: 8px 15px 8px; }
 .journal[hidden] { display: none; }
@@ -376,7 +376,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    redit donc au meme niveau de precision. */
 #rejeu-wrap, #rejouer-wrap { display: flex; justify-content: center; }
 #rejeu-wrap[hidden], #rejouer-wrap[hidden] { display: none; }
-#rejouer { color: var(--accent); border-color: var(--accent); }
+/* « REVOIR LA PARTIE » PREND LE TRAITEMENT « PORTE » DU CHEVALET DE FIN
+   (`.chevalet-fin` ci-dessus) : tout le bloc se clique, s'allume en vert au
+   survol, et porte son raccourci en toutes lettres -- Rejouer reste, pour
+   l'instant, un bouton de taille modeste et sans couleur particuliere. */
+.rejeu-declencheur { width: 100%; padding: 12px 10px; font-size: 16px; font-weight: 500; color: var(--accent); background: transparent; border: 1px solid var(--accent); border-radius: 5px; cursor: pointer; transition: background .12s, border-color .12s; }
+.rejeu-declencheur:hover { background: var(--accent-bg); }
+.rejeu-declencheur i { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: .7em; color: var(--ink-faint); }
 /* Cinq colonnes, largeurs fixes sauf le mot : numero, mot, score, temps, coeur.
    Le temps a de quoi tenir sur une ligne ("12 min 05" au plus large). */
 /* LA COLONNE DU TEMPS TIENT SON PLUS LONG CONTENU. A cinquante-quatre
@@ -864,8 +870,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LES RESULTATS PRENNENT TOUT CE QUI RESTE : agrandir la fenetre agrandit la
    liste, pas seulement les marges autour. `overflow-x: hidden` en secours :
    la largeur des colonnes se calcule en JS (voir peindreResultats), mais rien
-   ne doit jamais faire apparaitre une barre de defilement laterale. */
-.solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; font-size: 13px; }
+   ne doit jamais faire apparaitre une barre de defilement laterale.
+   `scrollbar-gutter: stable` REserve la place de la barre verticale MEME
+   quand elle n'est pas encore montree : sans ca, la largeur utilisable
+   changeait au moment ou une liste devenait assez longue pour en avoir
+   besoin, et la derniere colonne se retrouvait chevauchee par la barre. */
+.solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; font-size: 13px; }
 /* UNE GRILLE, PAS UN FLUX : le flux (flex-wrap) alignait chaque ligne sur son
    propre contenu, ce qui donnait des colonnes en escalier des que les mots
    n'avaient pas la meme longueur. Des colonnes alignent les mots les uns sous
@@ -1341,11 +1351,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button id="lancer">Lancer la partie</button>
       </div>
       <div class="block fin" id="fin" hidden>Partie terminée</div>
+      <div class="block" id="rejeu-wrap" hidden>
+        <button id="rejeu-open" class="rejeu-declencheur">Revoir la partie <i>(Ctrl+E)</i></button>
+      </div>
       <div class="block" id="rejouer-wrap" hidden>
         <button id="rejouer">Rejouer</button>
-      </div>
-      <div class="block" id="rejeu-wrap" hidden>
-        <button id="rejeu-open">Revoir la partie</button>
       </div>
       <div class="block">
         <div class="word none" id="cur-word">—</div>

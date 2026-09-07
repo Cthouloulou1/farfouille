@@ -4218,6 +4218,16 @@ addEventListener("keydown", (e) => {
     if (!$("rejeu-wrap").hidden && rejeu === null) voirLeCoup(1);
     return;
   }
+  // CTRL+G OUVRE (OU FERME) LE MINI ANAGRAMMEUR -- E etait deja pris par le
+  // rejeu ci-dessus. Meme garde-fou que le bouton lui-meme : cache des qu'on
+  // est plusieurs sur une partie en cours, ou sur un salon star (voir
+  // paintSide()) -- le raccourci ne fait rien de plus que simuler ce clic.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "g" || e.key === "G")) {
+    if ($("solveur-jeu").hidden) return;
+    e.preventDefault();
+    if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
+    return;
+  }
   // CTRL+A RANGE LE CHEVALET, comme sur le logiciel historique. Le navigateur
   // s'en sert pour tout selectionner, mais nous sommes hors de toute zone de
   // saisie -- celles-ci ont rendu la main plus haut -- et il n'y a ici rien a
@@ -4746,6 +4756,17 @@ setInterval(() => {
 
 // ---------------------------------------------------------------- reseau
 
+/**
+ * Les lettres d'un reliquat, triees comme cote serveur (`restantDuSac`) :
+ * alphabetique, jokers a la fin. Sert a fondre le chevalet non joue dans le
+ * reliquat une fois la partie close (voir `applyState`).
+ */
+function trierReliquat(lettres: string): string {
+  const reelles = [...lettres].filter((c) => c !== BLANK).sort();
+  const jokers = [...lettres].filter((c) => c === BLANK);
+  return reelles.join("") + jokers.join("");
+}
+
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; verifies?: string[];
@@ -4778,7 +4799,14 @@ function applyState(s: {
   // recentre tout : la grille sursaute. Sa presence ne depend donc plus de son
   // CONTENU -- qui change a chaque coup et finit vide -- mais de la variante,
   // qui ne change pas de la partie.
-  const sac = s.sac ?? "";
+  // UNE PARTIE CLOSE MONTRE TOUT CE QUI N'A JAMAIS ETE JOUE, PAS SEULEMENT LE
+  // SAC. Le chevalet peut porter des lettres encore quand la partie s'arrete
+  // (plus une voyelle a jouer, par exemple) -- ce ne sont plus des lettres
+  // privees a ce moment-la, la partie est finie pour tout le monde. Les
+  // fondre dans le reliquat les rend visibles au meme endroit que le reste.
+  // `s.finie`, PAS LA VARIABLE `finie` : celle-ci ne sera mise a jour que plus
+  // bas dans cette meme fonction, donc encore perimee ici.
+  const sac = s.finie === true && s.rack ? trierReliquat((s.sac ?? "") + s.rack) : (s.sac ?? "");
   $("rb-dico").textContent = dictionnaire(cfg.dictionnaire).nom;
   $("sac").hidden = cfg.pioche === "probabilites";
   $("sac").textContent = sac;
@@ -4796,6 +4824,13 @@ function applyState(s: {
   // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
   $("reglages-open").hidden = gerant !== me || permanent;
+  // LE DEPART D'UNE PARTIE FERME LE MINI ANAGRAMMEUR, MEME EN SOLO : passe le
+  // moment de s'en servir sans arriere-pensee, une fois que ca part pour de
+  // bon (ou que le decompte l'annonce) on range l'outil, comme un reflexe
+  // avant de jouer. Capture AVANT reaffectation, pour comparer un vrai avant/
+  // apres plutot que la valeur qu'on est en train de poser.
+  const lancementAvant = lancementA;
+  const demarreeAvant = demarree;
   decompteJusqua = s.decompteJusqua ?? 0;
   lancementA = s.lancementA ?? 0;
   // LANCER, C'EST LE GESTE DU JOUR DU LANCEMENT. Une grille permanente
@@ -4804,6 +4839,12 @@ function applyState(s: {
   $("lancer-wrap").hidden = !(permanent && s.demarree === false
     && moiCompte?.admin === true && lancementA === 0);
   demarree = s.demarree !== false;
+  // SOIT LE DECOMPTE COMMENCE (`lancementA` part de zero), SOIT LA PARTIE
+  // DEMARRE D'UN COUP SANS DECOMPTE (`demarree` passe a vrai directement) --
+  // le plus precoce des deux ferme la fenetre.
+  if ((lancementA !== 0 && lancementAvant === 0) || (demarree && !demarreeAvant)) {
+    fermerLeSolveurMini();
+  }
   coupsMax = s.coupsMax ?? null;
   dureeMax = s.dureeMax ?? null;
   debutDeLaPartie = s.debutDeLaPartie ?? 0;
@@ -5691,7 +5732,12 @@ function ouvrirLeSolveurMini(): void {
   miniOuvert = true;
   $("solveur-jeu").setAttribute("aria-pressed", "true");
   void solveurMini.peuplerDico();
-  solveurMini.focaliser();
+  // LE FOCUS ATTEND LA PROCHAINE IMAGE : demande dans le meme instant que le
+  // demasquage, `.focus()` faisait defiler la page vers l'ancienne position
+  // (hors ecran, a gauche) que le navigateur avait encore en memoire -- un
+  // flash visible le tout premier appui. Un tour de boucle suffit a laisser
+  // la mise en page se poser avant de deplacer le focus.
+  requestAnimationFrame(() => solveurMini.focaliser());
 }
 function fermerLeSolveurMini(): void {
   $("solveur-mini").hidden = true;
