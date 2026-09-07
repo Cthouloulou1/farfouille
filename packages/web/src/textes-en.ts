@@ -385,6 +385,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Squelette : seul le bouton Solutions s'applique.":
     "Skeleton: only the Solutions button applies.",
   "{n} résultat{s}": "{n} result{s}",
+  "{n} lettres": "{n} letters",
   "Aucun résultat.": "No result.",
   "calcul interrompu, affinez la recherche": "calculation stopped, narrow the search",
   "et {n} de plus.": "and {n} more.",

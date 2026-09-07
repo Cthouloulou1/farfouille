@@ -813,32 +813,42 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sv-code { flex: none; min-width: 34px; text-align: right; color: var(--ink-faint); font-size: 13px; white-space: nowrap; }
 .sv-mot-txt .sv-joker { color: var(--mark); font-weight: 600; }
 .sv-plus { margin-top: 10px; font-size: 13px; color: var(--ink-faint); }
+/* LE SEPARATEUR DE LONGUEUR : discret, mais assez marque pour dire "nouveau
+   groupe" d'un coup d'oeil en descendant une longue liste de mots formables. */
+.sv-longueur { margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--rule); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+.sv-longueur:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* LE MINI SOLVEUR FLOTTE AU-DESSUS DE LA PARTIE, SE DEPLACE A LA MAIN (la
    poignee) ET SE REDIMENSIONNE A LA MAIN (le coin, `resize` natif -- pas
    besoin de reinventer une prise en JS). `overflow: hidden` sur la boite
    elle-meme est ce qui rend `resize` possible ; le defilement reel vit plus
-   bas, sur les resultats. */
-.solveur-mini { position: fixed; top: 84px; right: 24px; width: 340px; height: 460px; min-width: 300px; min-height: 280px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; resize: both; overflow: hidden; }
+   bas, sur les resultats. Plus grande par defaut : Zulu la voulait ainsi. */
+.solveur-mini { position: fixed; top: 64px; right: 24px; width: 460px; height: 620px; min-width: 340px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; resize: both; overflow: hidden; }
 .solveur-mini[hidden] { display: none; }
 .solveur-mini-poignee { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--nuit); color: var(--nuit-ink); border-radius: 8px 8px 0 0; cursor: move; user-select: none; }
 .solveur-mini-poignee span { font-size: 13.5px; font-weight: 500; }
 .solveur-mini-fermer { padding: 2px 8px; font-size: 13px; background: none; border: 0; color: var(--nuit-faint); }
 .solveur-mini-fermer:hover { color: #FFFFFF; border-color: transparent; }
 .solveur-mini-corps { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-.solveur-mini-corps .sv-champ { font-size: 16px; padding: 8px 10px; }
-.solveur-boutons-mini { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.solveur-boutons-mini button { padding: 6px 3px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.solveur-boutons-mini .sv-numero { margin-left: 3px; }
+.solveur-mini-corps .sv-champ { font-size: 17px; padding: 9px 11px; }
+.solveur-boutons-mini { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+/* PLUS GRANDS ET EN GRAS DE BASE : demande directe, pas seulement au survol
+   ou une fois selectionnes -- ce sont les boutons les plus utilises de la
+   fenetre, ils doivent se lire sans effort. */
+.solveur-boutons-mini button { padding: 10px 6px; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.solveur-boutons-mini .sv-numero { margin-left: 3px; font-weight: 500; }
 .solveur-mini-corps .solveur-aide { flex: none; }
 /* LES RESULTATS PRENNENT TOUT CE QUI RESTE : agrandir la fenetre agrandit la
    liste, pas seulement les marges autour. */
 .solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 13px; }
-/* PLUSIEURS RESULTATS PAR LIGNE : sur 340 px de large, une liste posee un mot
-   par ligne se lit surtout en hauteur. Un flux qui enchaine et retourne a la
-   ligne quand il n'y a plus de place utilise la largeur, comme du texte. */
-.solveur-resultats-mini .sv-liste { display: flex; flex-flow: row wrap; gap: 3px 16px; }
+/* UNE GRILLE, PAS UN FLUX : le flux (flex-wrap) alignait chaque ligne sur son
+   propre contenu, ce qui donnait des colonnes en escalier des que les mots
+   n'avaient pas la meme longueur. Des colonnes de largeur fixe, autant qu'il
+   en tient, alignent les mots les uns sous les autres -- y compris le code
+   des jokers, qui fait partie de la meme cellule et grandit avec elle. */
+.solveur-resultats-mini .sv-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 3px 4px; }
 .solveur-resultats-mini .sv-ligne { padding: 2px 4px; }
+.solveur-resultats-mini .sv-longueur { grid-column: 1 / -1; }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .demande { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); }

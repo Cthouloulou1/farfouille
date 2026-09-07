@@ -5511,7 +5511,18 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
 
     const limite = cfg.troncature ?? compte;
     const visibles = r.resultats.slice(0, limite);
-    const lignes = visibles.map((c) => svLigneHTML(c, avecCode)).join("");
+    // UN SEPARATEUR A CHAQUE CHANGEMENT DE LONGUEUR : sur les mots formables
+    // (et les rallonges), une liste triee par longueur mais sans repere reste
+    // un mur de mots ou l'on perd sa place en descendant.
+    let lignes = "";
+    let longueurPrecedente = -1;
+    for (const c of visibles) {
+      if (c.mot.length !== longueurPrecedente) {
+        longueurPrecedente = c.mot.length;
+        lignes += `<div class="sv-longueur">${t2("{n} lettres", { n: c.mot.length })}</div>`;
+      }
+      lignes += svLigneHTML(c, avecCode);
+    }
     const reste = compte - visibles.length;
     const plus = reste > 0 ? `<p class="sv-plus">${t2("et {n} de plus.", { n: reste })}</p>` : "";
     boite.innerHTML = `<p class="sv-stats">${ligneStats}</p><div class="sv-liste">${lignes}</div>${plus}`;
