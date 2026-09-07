@@ -435,6 +435,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .chat-in input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); }
 .chat-in input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chat-in button { flex: none; padding: 5px 9px; }
+/* L'ENTREE DE L'ANAGRAMMEUR, JUSTE AU-DESSUS D'« ENVOYER » : vide quand le
+   bouton est cache (voir paintSide()), elle ne prend alors aucune place. */
+.chat-outils { display: flex; justify-content: flex-end; padding: 0 12px; }
+.solveur-declencheur { margin-top: 8px; padding: 8px 20px; font-family: "Baloo 2", Archivo, sans-serif; font-size: 21px; font-weight: 800; line-height: 1; border: 2px solid var(--accent); border-radius: 6px; background: var(--accent-bg); color: var(--accent); box-shadow: 0 2px 8px var(--shadow); }
+.solveur-declencheur:hover { background: var(--accent); color: #FFFFFF; }
+.solveur-declencheur[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
+.solveur-declencheur[hidden] { display: none; }
 
 .roadmap { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
 .roadmap[hidden] { display: none; }
@@ -799,6 +806,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    dominer le libelle : plus petit, plus pale, colle au mot qu'il sert. */
 .sv-numero { margin-left: 5px; font-size: .82em; color: var(--ink-faint); }
 .solveur-boutons button[aria-pressed="true"] .sv-numero { color: var(--accent); }
+/* SUPERBENJAMINS EST LE SEUL LIBELLE A DEBORDER : un cran de moins pour qu'il
+   se lise en entier plutot que de se faire couper par l'ellipse. */
+.sv-label-petit { font-size: .87em; }
 .solveur-aide { margin: 0; min-height: 1.3em; font-size: 13px; color: var(--ink-faint); }
 .solveur-aide.avert { color: var(--warn); }
 .solveur-resultats { border-top: 1px solid var(--rule); padding-top: 14px; }
@@ -822,32 +832,47 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    poignee) ET SE REDIMENSIONNE A LA MAIN (le coin, `resize` natif -- pas
    besoin de reinventer une prise en JS). `overflow: hidden` sur la boite
    elle-meme est ce qui rend `resize` possible ; le defilement reel vit plus
-   bas, sur les resultats. Plus grande par defaut : Zulu la voulait ainsi. */
-.solveur-mini { position: fixed; top: 64px; right: 24px; width: 460px; height: 620px; min-width: 340px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; resize: both; overflow: hidden; }
+   bas, sur les resultats. Plus grande par defaut : Zulu la voulait ainsi.
+   ANCREE EN BAS A DROITE, AU-DESSUS DE SON ICONE (voir `.solveur-declencheur`
+   dans le chat) : on peut la refermer d'un clic au meme endroit qu'on l'a
+   ouverte. `bottom`/`right` fixes font grandir la fenetre vers le haut quand
+   on l'agrandit depuis le coin -- l'icone, en dessous, ne bouge jamais. */
+.solveur-mini { position: fixed; bottom: 96px; right: 24px; width: 460px; height: 560px; min-width: 340px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 112px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 25; resize: both; overflow: hidden; }
 .solveur-mini[hidden] { display: none; }
 .solveur-mini-poignee { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--nuit); color: var(--nuit-ink); border-radius: 8px 8px 0 0; cursor: move; user-select: none; }
 .solveur-mini-poignee span { font-size: 13.5px; font-weight: 500; }
-.solveur-mini-fermer { padding: 2px 8px; font-size: 13px; background: none; border: 0; color: var(--nuit-faint); }
-.solveur-mini-fermer:hover { color: #FFFFFF; border-color: transparent; }
+/* UN GROS BOUTON AUTOUR DE LA CROIX : plus facile a viser qu'un simple
+   caractere, avec un contour qui se voit au survol. */
+.solveur-mini-fermer { padding: 6px 12px; font-size: 17px; line-height: 1; background: none; border: 1px solid transparent; border-radius: 5px; color: var(--nuit-faint); }
+.solveur-mini-fermer:hover { color: #FFFFFF; border-color: var(--nuit-faint); background: color-mix(in srgb, #FFFFFF 12%, transparent); }
 .solveur-mini-corps { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .solveur-mini-corps .sv-champ { font-size: 17px; padding: 9px 11px; }
 .solveur-boutons-mini { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 /* PLUS GRANDS ET EN GRAS DE BASE : demande directe, pas seulement au survol
    ou une fois selectionnes -- ce sont les boutons les plus utilises de la
-   fenetre, ils doivent se lire sans effort. */
-.solveur-boutons-mini button { padding: 10px 6px; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   fenetre, ils doivent se lire sans effort. Contour plus marque pour la
+   meme raison : ils se reperent d'un coup d'oeil. */
+.solveur-boutons-mini button { padding: 10px 6px; font-size: 13px; font-weight: 700; border-width: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .solveur-boutons-mini .sv-numero { margin-left: 3px; font-weight: 500; }
 .solveur-mini-corps .solveur-aide { flex: none; }
 /* LES RESULTATS PRENNENT TOUT CE QUI RESTE : agrandir la fenetre agrandit la
-   liste, pas seulement les marges autour. */
-.solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 13px; }
+   liste, pas seulement les marges autour. `overflow-x: hidden` en secours :
+   la largeur des colonnes se calcule en JS (voir peindreResultats), mais rien
+   ne doit jamais faire apparaitre une barre de defilement laterale. */
+.solveur-resultats-mini { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; font-size: 13px; }
 /* UNE GRILLE, PAS UN FLUX : le flux (flex-wrap) alignait chaque ligne sur son
    propre contenu, ce qui donnait des colonnes en escalier des que les mots
-   n'avaient pas la meme longueur. Des colonnes de largeur fixe, autant qu'il
-   en tient, alignent les mots les uns sous les autres -- y compris le code
-   des jokers, qui fait partie de la meme cellule et grandit avec elle. */
+   n'avaient pas la meme longueur. Des colonnes alignent les mots les uns sous
+   les autres -- y compris le code des jokers, qui fait partie de la meme
+   cellule et grandit avec elle. LA LARGEUR MINIMALE DE COLONNE (`minmax`)
+   N'EST PLUS FIXE ICI : avec beaucoup de jokers, un code de 12 lettres ne
+   tenait plus dans 122px et debordait. `peindreResultats` pose plutot une
+   largeur en `ch` calculee sur le plus long resultat de CETTE recherche --
+   2 colonnes, ou 1 seule si meme ca deborde, selon ce qui tient. */
 .solveur-resultats-mini .sv-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 3px 4px; }
-.solveur-resultats-mini .sv-ligne { padding: 2px 4px; }
+/* MOINS DE MARGE A GAUCHE POUR GAGNER DE LA PLACE : le panneau est etroit,
+   chaque pixel compte plus ici que sur la page. */
+.solveur-resultats-mini .sv-ligne { padding: 2px 4px 2px 0; gap: 6px; }
 .solveur-resultats-mini .sv-longueur { grid-column: 1 / -1; }
 .admin-boite { width: min(620px, 94vw); }
 .demandes { max-height: 44vh; overflow-y: auto; margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -1111,12 +1136,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <input id="sv-mot" class="sv-champ" type="text" autocomplete="off"
              spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
       <div class="solveur-boutons">
-        <button type="button" id="sv-solutions">Solutions<span class="sv-numero">(1)</span></button>
-        <button type="button" id="sv-formables">Mots formables<span class="sv-numero">(2)</span></button>
-        <button type="button" id="sv-benjamins">Benjamins<span class="sv-numero">(3)</span></button>
-        <button type="button" id="sv-rallonges-avant">Rallonges avant<span class="sv-numero">(4)</span></button>
-        <button type="button" id="sv-rallonges-arriere">Rallonges arrière<span class="sv-numero">(5)</span></button>
-        <button type="button" id="sv-superbenjamins">Superbenjamins<span class="sv-numero">(6)</span></button>
+        <button type="button" id="sv-solutions"><span class="sv-label">Solutions</span><span class="sv-numero">1</span></button>
+        <button type="button" id="sv-formables"><span class="sv-label">Mots formables</span><span class="sv-numero">2</span></button>
+        <button type="button" id="sv-benjamins"><span class="sv-label">Benjamins</span><span class="sv-numero">3</span></button>
+        <button type="button" id="sv-rallonges-avant"><span class="sv-label">Préfixes</span><span class="sv-numero">4</span></button>
+        <button type="button" id="sv-rallonges-arriere"><span class="sv-label">Suffixes</span><span class="sv-numero">5</span></button>
+        <button type="button" id="sv-superbenjamins"><span class="sv-label sv-label-petit">Superbenjamins</span><span class="sv-numero">6</span></button>
       </div>
       <p class="solveur-aide" id="sv-aide"></p>
       <div class="solveur-resultats" id="sv-resultats"></div>
@@ -1242,12 +1267,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="solveur-mini-corps">
     <input id="svm-mot" class="sv-champ" type="text" autocomplete="off" spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
     <div class="solveur-boutons solveur-boutons-mini">
-      <button type="button" id="svm-solutions">Solutions<span class="sv-numero">(1)</span></button>
-      <button type="button" id="svm-formables">Mots formables<span class="sv-numero">(2)</span></button>
-      <button type="button" id="svm-benjamins">Benjamins<span class="sv-numero">(3)</span></button>
-      <button type="button" id="svm-rallonges-avant">Rallonges avant<span class="sv-numero">(4)</span></button>
-      <button type="button" id="svm-rallonges-arriere">Rallonges arrière<span class="sv-numero">(5)</span></button>
-      <button type="button" id="svm-superbenjamins">Superbenjamins<span class="sv-numero">(6)</span></button>
+      <button type="button" id="svm-solutions"><span class="sv-label">Solutions</span><span class="sv-numero">1</span></button>
+      <button type="button" id="svm-formables"><span class="sv-label">Mots formables</span><span class="sv-numero">2</span></button>
+      <button type="button" id="svm-benjamins"><span class="sv-label">Benjamins</span><span class="sv-numero">3</span></button>
+      <button type="button" id="svm-rallonges-avant"><span class="sv-label">Préfixes</span><span class="sv-numero">4</span></button>
+      <button type="button" id="svm-rallonges-arriere"><span class="sv-label">Suffixes</span><span class="sv-numero">5</span></button>
+      <button type="button" id="svm-superbenjamins"><span class="sv-label sv-label-petit">Superbenjamins</span><span class="sv-numero">6</span></button>
     </div>
     <p class="solveur-aide" id="svm-aide"></p>
     <div class="solveur-resultats solveur-resultats-mini" id="svm-resultats"></div>
@@ -1336,13 +1361,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
             <button type="button" data-z="-1" title="réduire le texte du panneau" aria-label="réduire le texte du panneau">A−</button>
             <button type="button" data-z="1" title="agrandir le texte du panneau" aria-label="agrandir le texte du panneau">A+</button>
           </span>
-          <!-- Cache des qu'on n'est plus seul sur cette partie : voir paintSide(). -->
-          <button id="solveur-jeu" class="icon" title="Anagrammeur" aria-label="Anagrammeur" hidden>
-            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-              <circle cx="6.7" cy="6.7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.2"/>
-              <path d="M9.8 9.8 13.3 13.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            </svg>
-          </button>
           <button id="rm-open" class="icon" title="Feuille de route" aria-label="Feuille de route">
             <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
               <path d="M2.5 2.5h11v11h-11z" fill="none" stroke="currentColor" stroke-width="1.2"/>
@@ -1411,6 +1429,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="chat">
       <h2>Chat</h2>
       <div id="chat-log"></div>
+      <!-- Cache des qu'on n'est plus disponible pour cette partie : voir paintSide(). -->
+      <div class="chat-outils">
+        <button type="button" id="solveur-jeu" class="solveur-declencheur" title="Anagrammeur" aria-label="Anagrammeur" hidden>A</button>
+      </div>
       <div class="chat-in">
         <input id="chat-text" maxlength="400" placeholder="Message…" autocomplete="off">
         <button id="chat-cell" title="Partager la case du curseur">Case</button>

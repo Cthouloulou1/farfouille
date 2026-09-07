@@ -225,8 +225,7 @@ export const EN: Readonly<Record<string, string>> = {
   // ---------------------------------------------------------- anagrammeur
   "Anagrammeur": "Anagrammer",
   "Mots formables": "Playable words",
-  "Rallonges avant": "Prefixes",
-  "Rallonges arrière": "Suffixes",
+  "Préfixes": "Prefixes",
 
   // =====================================================================
   //  CE QUE LE CODE ECRIT

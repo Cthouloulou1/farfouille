@@ -2062,13 +2062,15 @@ function paintSide() {
   const enGroupe = !duplicate && monde.size > 1;
   $("rb-neg-wrap").hidden = rejeu !== null || enGroupe
     || (monScore === 0 && monNegatif === 0);
-  // LE SOLVEUR NE S'UTILISE QU'EN SOLO : a plusieurs, ce serait presque
-  // tenter les joueurs a tricher. « Seul » se compte sur la partie entiere
-  // (voir le commentaire de `monde` ci-dessus), pas seulement sur cet instant.
+  // LE SOLVEUR NE S'UTILISE PAS PENDANT UNE PARTIE A PLUSIEURS : ce serait
+  // presque tenter les joueurs a tricher. « Seul » se compte sur la partie
+  // entiere (voir le commentaire de `monde` ci-dessus), pas seulement sur cet
+  // instant. AVANT LE DEBUT ET UNE FOIS LA PARTIE CLOSE, plus personne n'a
+  // d'avantage a en tirer -- disponible meme si on n'a jamais ete seul.
   // JAMAIS SUR UN SALON STAR (`salonPermanent`, sans proprietaire) : la
   // grille mondiale n'est jamais vraiment "seul", elle attend simplement le
-  // prochain joueur.
-  const soloEtHorsStar = monde.size <= 1 && !salonPermanent;
+  // prochain joueur, et ne se ferme ni ne se termine jamais.
+  const soloEtHorsStar = !salonPermanent && (monde.size <= 1 || finie || !demarree);
   $("solveur-jeu").hidden = !soloEtHorsStar;
   if (!soloEtHorsStar) fermerLeSolveurMini();
   $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
@@ -5374,7 +5376,7 @@ const SV_RACCOURCIS: Readonly<Record<string, number>> = {
   Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4, Numpad6: 5,
 };
 
-function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focaliser: () => void } {
+function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focaliser: () => void; vider: () => void } {
   /** Son propre lexique choisi (page), inutilise quand cfg.dico est `null`. */
   let dictPropre: Dict | undefined;
   let dictPropreId = "";
@@ -5514,18 +5516,31 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     // UN SEPARATEUR A CHAQUE CHANGEMENT DE LONGUEUR : sur les mots formables
     // (et les rallonges), une liste triee par longueur mais sans repere reste
     // un mur de mots ou l'on perd sa place en descendant.
+    //
+    // LA LARGEUR DE COLONNE (mini solveur) SE MESURE EN CARACTERES, PAS EN
+    // PIXELS : avec beaucoup de jokers, le code (une lettre par joker) peut
+    // depasser la largeur fixe qu'on posait avant, et deborder par-dessus le
+    // mot voisin -- ou forcer une barre de defilement laterale. `ch` colle a
+    // la police a chiffres fixes (`--mono`) : sur ce resultat precis, jamais
+    // trop court, jamais trop large. Peu de place -> 2 colonnes, ou 1 seule
+    // si meme ca ne tient pas -- c'est `auto-fill` qui en decide, pas nous.
     let lignes = "";
     let longueurPrecedente = -1;
+    let pluslongue = 0;
     for (const c of visibles) {
       if (c.mot.length !== longueurPrecedente) {
         longueurPrecedente = c.mot.length;
         lignes += `<div class="sv-longueur">${t2("{n} lettres", { n: c.mot.length })}</div>`;
       }
       lignes += svLigneHTML(c, avecCode);
+      const largeur = c.mot.length + (avecCode ? c.jokers.length : 0);
+      if (largeur > pluslongue) pluslongue = largeur;
     }
+    const colonne = Math.max(pluslongue + 3, 10);
     const reste = compte - visibles.length;
     const plus = reste > 0 ? `<p class="sv-plus">${t2("et {n} de plus.", { n: reste })}</p>` : "";
-    boite.innerHTML = `<p class="sv-stats">${ligneStats}</p><div class="sv-liste">${lignes}</div>${plus}`;
+    boite.innerHTML = `<p class="sv-stats">${ligneStats}</p>`
+      + `<div class="sv-liste" style="grid-template-columns: repeat(auto-fill, minmax(${colonne}ch, 1fr))">${lignes}</div>${plus}`;
   }
 
   /**
@@ -5546,7 +5561,15 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
   function surSaisie(): void {
     peindreEtat();
     if (modeActif === null) return;
-    if (bouton(modeActif).disabled) { modeActif = null; peindreLesBoutonsActifs(); return; }
+    // EN DIRECT, JUSQU'AU CHAMP VIDE : effacer tout le tirage (tout selectionner,
+    // Suppr) desactive le bouton actif sans jamais reappeler `executer` -- sans
+    // ce vidage, les anciens resultats restaient affiches, perimes.
+    if (bouton(modeActif).disabled) {
+      modeActif = null;
+      peindreLesBoutonsActifs();
+      $(cfg.resultats).innerHTML = "";
+      return;
+    }
     executer(modeActif, false);
   }
 
@@ -5599,7 +5622,16 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     await choisirDico(dictPropreId);
   }
 
-  return { peuplerDico, focaliser: () => { champ().focus(); champ().select(); } };
+  /** Remet a zero la saisie, les resultats et le bouton actif -- la fermeture. */
+  function vider(): void {
+    champ().value = "";
+    modeActif = null;
+    peindreLesBoutonsActifs();
+    $(cfg.resultats).innerHTML = "";
+    peindreEtat();
+  }
+
+  return { peuplerDico, focaliser: () => { champ().focus(); champ().select(); }, vider };
 }
 
 const solveurPage = creerSolveur({
@@ -5624,24 +5656,42 @@ const solveurMini = creerSolveur({
 
 /**
  * Le mini solveur : une fenetre flottante DANS UN SALON, deplacable a la
- * souris comme au doigt. Position de depart en haut a droite ; une fois
- * saisie, elle suit le pointeur (`left`/`top`), plus `right`.
+ * souris comme au doigt. Position de depart en bas a droite, au-dessus de son
+ * icone ; une fois saisie, elle suit le pointeur (`left`/`top`).
  */
 let miniOuvert = false;
 function ouvrirLeSolveurMini(): void {
   $("solveur-mini").hidden = false;
   miniOuvert = true;
+  $("solveur-jeu").setAttribute("aria-pressed", "true");
   void solveurMini.peuplerDico();
   solveurMini.focaliser();
 }
 function fermerLeSolveurMini(): void {
   $("solveur-mini").hidden = true;
   miniOuvert = false;
+  $("solveur-jeu").setAttribute("aria-pressed", "false");
+  // VIDE A LA FERMETURE : ni la saisie ni les resultats ne doivent survivre
+  // d'une ouverture a l'autre.
+  solveurMini.vider();
+  // ET REMISE A LA POSITION DE DEPART : sans ca, un ancien `left`/`top` pose
+  // par un glisser-deposer (voir plus bas) pouvait rouvrir la fenetre hors du
+  // champ de vision, par exemple apres un redimensionnement de la fenetre du
+  // navigateur entre-temps.
+  const fenetre = $("solveur-mini") as HTMLElement;
+  fenetre.style.left = "";
+  fenetre.style.top = "";
+  fenetre.style.right = "";
 }
 $("solveur-jeu").addEventListener("click", () => {
   if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
 });
 $("svm-fermer").addEventListener("click", fermerLeSolveurMini);
+// ECHAP FERME LE MINI SOLVEUR, D'OU QU'ON Y AIT CLIQUE (champ, bouton...) --
+// capte sur le conteneur entier plutot que sur chaque element un par un.
+$("solveur-mini").addEventListener("keydown", (e) => {
+  if ((e as KeyboardEvent).key === "Escape") { e.stopPropagation(); fermerLeSolveurMini(); }
+});
 
 (() => {
   const poignee = $("svm-poignee");
