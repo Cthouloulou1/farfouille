@@ -5445,7 +5445,13 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     } else if (mode === "tirage") {
       if (cle === "formables") {
         r = motsFormables(d, mot);
-        r.resultats.sort((a, b) => b.mot.length - a.mot.length || a.mot.localeCompare(b.mot));
+        // TRIE PAR CODE DE JOKER, PAS PAR MOT : a longueur egale, deux
+        // anagrammes (memes lettres, dont les memes jokers) partagent le
+        // meme code -- les regrouper les fait apparaitre cote a cote,
+        // plutot que dispersees par ordre alphabetique du mot lui-meme.
+        r.resultats.sort((a, b) => b.mot.length - a.mot.length
+          || codeJoker(a).localeCompare(codeJoker(b))
+          || a.mot.localeCompare(b.mot));
         avecCode = true;
       } else {
         const fn = cle === "benjamins" ? benjamins
@@ -5461,6 +5467,11 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     if (refocus) { champ().focus(); champ().select(); }
   }
 
+  /** Les lettres jouees par les jokers, dans l'ordre alphabetique. */
+  function codeJoker(c: Correspondance): string {
+    return c.jokers.map((k) => c.mot[k]).sort().join("");
+  }
+
   /** Une ligne de resultat : le code des jokers (facultatif), le mot colore. */
   function svLigneHTML(c: Correspondance, avecCode: boolean): string {
     const joker = new Set(c.jokers);
@@ -5474,7 +5485,7 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
       motHTML += dansJoker ? `<span class="sv-joker">${segment}</span>` : segment;
       i = j;
     }
-    const code = avecCode ? `<span class="sv-code">${c.jokers.map((k) => c.mot[k]).sort().join("")}</span>` : "";
+    const code = avecCode ? `<span class="sv-code">${codeJoker(c)}</span>` : "";
     return `<div class="sv-ligne">${code}<span class="sv-mot-txt">${motHTML}</span></div>`;
   }
 
@@ -5492,7 +5503,7 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     if (r.stats.limiteAtteinte) ligneStats += ` - ${t("calcul interrompu, affinez la recherche")}`;
 
     if (compte === 0) {
-      boite.innerHTML = `<p class="sv-stats">${ligneStats}</p><p class="none">${t("Aucun résultat.")}</p>`;
+      boite.innerHTML = `<p class="none">${t("Aucun résultat.")}</p>`;
       return;
     }
 
@@ -5513,9 +5524,12 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
 
     const limite = cfg.troncature ?? compte;
     const visibles = r.resultats.slice(0, limite);
-    // UN SEPARATEUR A CHAQUE CHANGEMENT DE LONGUEUR : sur les mots formables
-    // (et les rallonges), une liste triee par longueur mais sans repere reste
-    // un mur de mots ou l'on perd sa place en descendant.
+    // UN EN-TETE A CHAQUE CHANGEMENT DE LONGUEUR, AVEC SON PROPRE COMPTE : sur
+    // les mots formables (et les rallonges), une liste triee par longueur mais
+    // sans repere reste un mur de mots ou l'on perd sa place en descendant.
+    // Le compte GLOBAL a disparu d'au-dessus de la liste (Zulu le trouvait de
+    // trop) au profit d'un compte PAR GROUPE, colle au "N LETTRES" qu'il
+    // qualifie : `8 LETTRES - 17 résultats`.
     //
     // LA LARGEUR DE COLONNE (mini solveur) SE MESURE EN CARACTERES, PAS EN
     // PIXELS : avec beaucoup de jokers, le code (une lettre par joker) peut
@@ -5525,22 +5539,34 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     // trop court, jamais trop large. Peu de place -> 2 colonnes, ou 1 seule
     // si meme ca ne tient pas -- c'est `auto-fill` qui en decide, pas nous.
     let lignes = "";
-    let longueurPrecedente = -1;
+    let longueurCourante = -1;
+    let bufferGroupe = "";
+    let compteGroupe = 0;
     let pluslongue = 0;
+    const clore = () => {
+      if (compteGroupe === 0) return;
+      const entete = t2("{n} résultat{s}", { n: compteGroupe, s: compteGroupe > 1 ? "s" : "" });
+      lignes += `<div class="sv-longueur">${t2("{n} lettres", { n: longueurCourante })} - ${entete}</div>${bufferGroupe}`;
+    };
     for (const c of visibles) {
-      if (c.mot.length !== longueurPrecedente) {
-        longueurPrecedente = c.mot.length;
-        lignes += `<div class="sv-longueur">${t2("{n} lettres", { n: c.mot.length })}</div>`;
+      if (c.mot.length !== longueurCourante) {
+        clore();
+        longueurCourante = c.mot.length;
+        bufferGroupe = "";
+        compteGroupe = 0;
       }
-      lignes += svLigneHTML(c, avecCode);
+      bufferGroupe += svLigneHTML(c, avecCode);
+      compteGroupe++;
       const largeur = c.mot.length + (avecCode ? c.jokers.length : 0);
       if (largeur > pluslongue) pluslongue = largeur;
     }
-    const colonne = Math.max(pluslongue + 3, 10);
+    clore();
     const reste = compte - visibles.length;
     const plus = reste > 0 ? `<p class="sv-plus">${t2("et {n} de plus.", { n: reste })}</p>` : "";
-    boite.innerHTML = `<p class="sv-stats">${ligneStats}</p>`
-      + `<div class="sv-liste" style="grid-template-columns: repeat(auto-fill, minmax(${colonne}ch, 1fr))">${lignes}</div>${plus}`;
+    const avert = r.stats.limiteAtteinte
+      ? `<p class="sv-stats">${t("calcul interrompu, affinez la recherche")}</p>` : "";
+    boite.innerHTML = avert
+      + `<div class="sv-liste" style="grid-template-columns: repeat(auto-fill, minmax(${Math.max(pluslongue + 3, 10)}ch, 1fr))">${lignes}</div>${plus}`;
   }
 
   /**

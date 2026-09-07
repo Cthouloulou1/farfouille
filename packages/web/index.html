@@ -811,16 +811,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sv-label-petit { font-size: .87em; }
 .solveur-aide { margin: 0; min-height: 1.3em; font-size: 13px; color: var(--ink-faint); }
 .solveur-aide.avert { color: var(--warn); }
-.solveur-resultats { border-top: 1px solid var(--rule); padding-top: 14px; }
+/* PLUS DE TRAIT NI DE MARGE AU-DESSUS : le premier en-tete de longueur doit
+   suivre l'aide de tres pres, pas flotter derriere une ligne de separation
+   qui n'a plus de compte global a introduire (voir peindreResultats). */
+.solveur-resultats { border-top: 0; padding-top: 2px; }
 .sv-stats { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-faint); }
 .sv-liste { display: flex; flex-direction: column; gap: 1px; font-family: var(--mono); font-size: 14.5px; }
-.sv-ligne { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px; border-radius: 4px; }
+.sv-ligne { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px 3px 0; border-radius: 4px; }
 .sv-ligne:hover { background: var(--hover); }
 /* LE CODE DES JOKERS N'A PAS DE LARGEUR FIXE : sur beaucoup de jokers (jusqu'a
    12), une largeur figee laissait le texte deborder PAR-DESSUS le mot voisin
    au lieu de le repousser -- `min-width` cede la place, `nowrap` l'empeche de
-   passer a la ligne au milieu. */
-.sv-code { flex: none; min-width: 34px; text-align: right; color: var(--ink-faint); font-size: 13px; white-space: nowrap; }
+   passer a la ligne au milieu. ALIGNE A GAUCHE (pas a droite) pour tomber
+   juste sous le chiffre du "N LETTRES" qui introduit le groupe -- avec le
+   padding gauche de `.sv-ligne` retire ci-dessus, les deux partagent le
+   meme bord. */
+.sv-code { flex: none; text-align: left; color: var(--ink-faint); font-size: 13px; white-space: nowrap; }
 .sv-mot-txt .sv-joker { color: var(--mark); font-weight: 600; }
 .sv-plus { margin-top: 10px; font-size: 13px; color: var(--ink-faint); }
 /* LE SEPARATEUR DE LONGUEUR : discret, mais assez marque pour dire "nouveau
