@@ -4140,7 +4140,7 @@ tableau.
 |---|---|
 | **partie terminée** | une partie abandonnée n'a pas de temps total |
 | **grille bornée** : 15×15 ou super grille 21×21 | une grille sans fin n'a pas de fin, donc pas de record |
-| **sac du commerce** — 102 caramels en français, 100 en anglais, deux exemplaires sur la super grille | les probabilités pondérées ne s'épuisent pas : la même 7 sur 7 fait **22 coups au sac et 48 à 55 en probabilités**. Ce ne sont pas deux parties d'une même catégorie, ce sont deux jeux |
+| **sac du commerce** — 102 caramels en français, 100 en anglais, deux exemplaires sur la super grille | ni les probabilités pondérées, **ni le sac qui se recharge** : ce qui ne s'épuise pas n'a pas de fin naturelle. La même 7 sur 7 fait **22 coups au sac et 48 à 55 en probabilités**. Ce ne sont pas deux parties d'une même catégorie, ce sont deux jeux |
 | **primes de farfouilles inchangées** | elles sont réglables ; une table bricolée donne des cumuls incomparables |
 | **aucune borne en coups ni en durée** | la partie va au bout de son sac, sans quoi on comparerait des parties tronquées |
 | **mode topping** | le duplicate ne se termine pas sur un top trouvé |
@@ -4261,9 +4261,14 @@ partie dont un n'a rien trouvé, et l'on n'en lit que deux. Au-delà de trois no
 on compte au lieu d'énumérer — « 5 joueurs » — et la liste complète est dans
 l'infobulle, comme la feuille de route le fait déjà (§10).
 
-**Il faut un compte pour être nommé.** Un pseudo nu est reprenable par n'importe
-qui : un record signé d'un pseudo n'est attribuable à personne. Une partie jouée
-avec des invités reste valable et se lit « alice, bob + 2 invités ».
+**Un invité est nommé, et dit comme tel.** Un pseudo nu est reprenable par
+n'importe qui : un record signé d'un pseudo n'est attribuable à personne. Le
+taire ne rendrait service à personne pour autant — c'est bien quelqu'un qui a
+joué, et une ligne sans nom ne se lit pas. Le nom figure donc, avec la mention
+qui dit ce qu'il vaut : « alice, bob *(invité)* ».
+
+C'est la mention qui porte la garantie, pas le nom : un compte engage une
+identité, un pseudo n'engage rien.
 
 **Le nombre de coups varie, et c'est une part de chance.** Mesuré sur le disque :
 une 7 sur 7 complète en 15×15 fait **19 à 26 coups**, 22 le plus souvent. Une
@@ -4469,6 +4474,23 @@ qu'un tableau affiche : catégorie, lexique et sa version, grille, chrono, date,
 joueurs et ce que chacun a trouvé, temps, coups, cumul, farfouilles, négatif, et
 le détail coup par coup — le mot, ses isotops, trouvé ou non, par qui, en combien
 de temps, et si quelqu'un a soumis quelque chose.
+
+**Il ne double pas le journal des parties.** Chaque partie garde le sien, comme
+toujours, terminée ou non : c'est lui qui fait foi, c'est lui qu'on rejoue. Le
+journal des records n'enregistre pas une partie, il enregistre **ce qui la rend
+comparable aux autres**, et seulement pour celles qui peuvent l'être.
+
+**Une manche valide y entre qu'elle soit topée ou non**, et il le faut : un mot
+raté n'existe que dans une partie qui ne l'a pas été. N'écrire que les parties
+topées laisserait le tableau des mots ratés vide pour toujours, et les tableaux
+au négatif de la seconde page avec lui.
+
+C'est donc à la **lecture** que le partage se fait, pas à l'écriture :
+
+| ce qui entre au journal | ce qui entre dans un classement |
+|---|---|
+| réglages d'une catégorie, partie terminée par son sac, au moins un joueur actif | **topée** pour les classements de vitesse et les tableaux annexes |
+| | **non topée** pour les meilleurs négatifs, et pour les mots ratés |
 
 **Aucun tableau n'ouvre un fichier de partie.** Les fichiers de partie ne servent
 qu'au rejeu. C'est ce qui permet à une ligne de record de rester lisible même si

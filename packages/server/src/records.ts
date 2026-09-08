@@ -106,10 +106,17 @@ export interface Manche {
   farfouilles: number;
   topee: boolean;
   negatif: number;
-  /** Ceux qui ont trouve au moins un top ET ont un compte. */
-  joueurs: { nom: string; tops: number }[];
-  /** Combien de joueurs SANS compte ont trouve au moins un top. */
-  invites: number;
+  /**
+   * Ceux qui ont trouve au moins un top, du plus gros compte de tops au plus
+   * petit. `invite` dit que ce nom n'est adosse a aucun compte.
+   *
+   * UN INVITE EST NOMME, ET DIT COMME TEL. Un pseudo nu est reprenable par
+   * n'importe qui : un record signe d'un pseudo n'est attribuable a personne.
+   * Le taire ne rendrait service a personne pour autant -- c'est bien quelqu'un
+   * qui a joue, et une ligne sans nom ne se lit pas. C'est la mention qui porte
+   * la garantie, pas le nom.
+   */
+  joueurs: { nom: string; tops: number; invite: boolean }[];
   /** L'unique joueur a avoir trouve tous les tops, ou `null`. */
   solo: string | null;
   /** Le detail, pour les mots rates et les tableaux annexes. */
@@ -293,15 +300,12 @@ class Observation {
     // plus dure que l'autre.
     const solo = topee && tops.size === 1 ? [...tops.keys()][0]! : null;
 
-    // Il faut un compte pour etre nomme : un pseudo nu est reprenable par
-    // n'importe qui, et un record signe d'un pseudo n'est attribuable a
-    // personne. Les autres sont comptes, pas nommes.
-    const joueurs: Manche["joueurs"] = [];
-    let invites = 0;
-    for (const [nom, n] of [...tops].sort((a, b) => b[1] - a[1])) {
-      if (compte(nom) !== undefined) joueurs.push({ nom, tops: n });
-      else invites++;
-    }
+    // Le compte se lit au moment ou la manche s'enregistre, et il est fige la :
+    // ouvrir un compte demain sous le pseudo qu'un invite portait hier ne doit
+    // pas lui faire heriter de ses records.
+    const joueurs: Manche["joueurs"] = [...tops]
+      .sort((a, b) => b[1] - a[1])
+      .map(([nom, n]) => ({ nom, tops: n, invite: compte(nom) === undefined }));
 
     const cfg = this.partie.cfg;
     return {
@@ -321,7 +325,6 @@ class Observation {
       topee,
       negatif: this.vus.reduce((a, c) => a + c.negatif, 0),
       joueurs,
-      invites,
       solo,
       vus: this.vus,
     };
@@ -345,7 +348,7 @@ export function observer(partie: Game): void {
     if (!ouvert) ouvrirLesRecords();
     manches.push(m);
     inscrire({ t: "manche", ...m });
-    const qui = [...m.joueurs.map((j) => j.nom), ...(m.invites > 0 ? [`${m.invites} invité(s)`] : [])];
+    const qui = m.joueurs.map((j) => j.invite ? `${j.nom} (invité)` : j.nom);
     console.log(
       `[records] ${m.categorie} · ${m.coups} coups en ${(m.temps / 1000).toFixed(2)} s · ` +
       `${m.topee ? "topée" : `négatif ${m.negatif}`} · ${qui.join(", ") || "personne"}`,

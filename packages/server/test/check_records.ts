@@ -168,8 +168,10 @@ nettoyer(ID);
   verifie("elle est topee", m?.topee === true);
   verifie("son negatif est nul", m?.negatif === 0, String(m?.negatif));
   verifie("elle est solo", m?.solo === "alice", m?.solo ?? "personne");
-  verifie("alice n'a pas de compte, elle est comptee sans etre nommee",
-    m?.joueurs.length === 0 && m?.invites === 1, `${m?.invites} invite(s)`);
+  verifie("alice est nommee, et dite invitee",
+    m?.joueurs.length === 1 && m?.joueurs[0]?.nom === "alice"
+    && m?.joueurs[0]?.invite === true,
+    m?.joueurs.map((j) => `${j.nom}${j.invite ? " (invité)" : ""} ×${j.tops}`).join(", ") ?? "personne");
   verifie("le temps est la somme des coups",
     m?.temps === g.moves.reduce((a, c) => a + Math.max(0, c.ms), 0), `${m?.temps} ms`);
   verifie("le cumul est celui de la partie",
