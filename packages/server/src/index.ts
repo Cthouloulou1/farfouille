@@ -26,6 +26,7 @@ import {
   avec, avecDictionnaire, configParDefaut, deserialiser, serialiser,
   type ConfigPartie,
 } from "../../engine/src/config.ts";
+import { estPartieNormale } from "../../engine/src/categories.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
@@ -95,6 +96,24 @@ function nomDeLaGrille(bornes: number | null): string {
 
 /** Le temps par coup le plus court qu'un joueur puisse demander, en secondes. */
 const CHRONO_MINIMUM = 15;
+
+/**
+ * LE PLANCHER S'ABAISSE LA OU SE JOUE UN RECORD. Voir SPEC.md §23.
+ *
+ * Un chrono court coute au SERVEUR, pas au joueur : chaque coup demande un
+ * calcul de top complet, et quinze secondes par coup font deja quatre calculs
+ * par minute et par salon. D'ou le plancher.
+ *
+ * Sur la configuration exacte de la partie normale -- 15x15, 7 sur 7, sans
+ * joker, sac du commerce, primes intactes, sans borne -- il descend a une
+ * seconde. C'est la, et seulement la, qu'un record de chrono se joue ; le
+ * refuser reviendrait a ouvrir un tableau que personne ne peut remplir.
+ *
+ * Ce que ca coute, mesure : le premier top d'une 15x15 vide demande 17 ms, et
+ * les coups suivants, sur une grille plus contrainte, ne coutent pas
+ * davantage. Un coup par seconde tient largement.
+ */
+const CHRONO_MINIMUM_RECORD = 1;
 
 /**
  * Parties du disque a rouvrir DANS UN SALON, separees par des virgules.
@@ -1233,18 +1252,7 @@ wss.on("connection", (ws, req) => {
         : Math.max(10, Math.min(86400, Math.round(Number(msg.dureeMax))));
       let chrono = msg.chrono === null || msg.chrono === undefined ? null
         : Math.max(1, Math.min(3600, Math.round(Number(msg.chrono))));
-      // UN CHRONO TRES COURT COUTE CHER AU SERVEUR, PAS AU JOUEUR : chaque coup
-      // demande un calcul de top complet, et quinze secondes par coup, c'est
-      // deja quatre calculs par minute et par salon. L'administration garde la
-      // main pour ses essais.
       const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
-      if (!estAdmin && chrono !== null && chrono < CHRONO_MINIMUM) {
-        send(ws, {
-          t: "result", ok: false,
-          message: `Le temps par coup ne descend pas sous ${CHRONO_MINIMUM} secondes`,
-        });
-        return;
-      }
       // Sans chrono, un coup de duplicate ne se terminerait jamais : c'est
       // l'echeance qui le clot, pas la decouverte du top.
       if (mode === "duplicate" && chrono === null) chrono = 60;
@@ -1294,7 +1302,7 @@ wss.on("connection", (ws, req) => {
       // leur poser un terme en donnerait DEUX, et la partie s'arreterait au
       // premier atteint sans qu'on sache lequel. Ces deux-la n'en ont pas.
       const sansTerme = bornes !== null || pioch === "sac102";
-      const archives = await relancer(s, avec(avecDictionnaire(base, dico), {
+      const voulue = avec(avecDictionnaire(base, dico), {
         tirage, jouables, joker, jokersParCoup,
         pioche: pioch, sacs,
         bornes, pavage, pavageNom, mode, decompte,
@@ -1302,7 +1310,27 @@ wss.on("connection", (ws, req) => {
         dureeMax: !sansTerme && Number.isFinite(dureeMax as number) ? dureeMax : null,
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
-      }));
+      });
+      // UN CHRONO TRES COURT COUTE CHER AU SERVEUR, PAS AU JOUEUR : chaque coup
+      // demande un calcul de top complet, et quinze secondes par coup, c'est
+      // deja quatre calculs par minute et par salon. L'administration garde la
+      // main pour ses essais.
+      //
+      // LE PLANCHER S'ABAISSE SUR LA PARTIE NORMALE, et sur elle seule : c'est
+      // la que se joue le record de chrono (SPEC.md §23). Le controle se fait
+      // donc ICI, sur la configuration entiere, et non sur le chrono seul --
+      // il ne se decide pas sans savoir quelle grille et quel format
+      // l'accompagnent.
+      const plancher = estPartieNormale(voulue) ? CHRONO_MINIMUM_RECORD : CHRONO_MINIMUM;
+      if (!estAdmin && voulue.chrono !== null && voulue.chrono < plancher) {
+        send(ws, {
+          t: "result", ok: false,
+          message: `Le temps par coup ne descend pas sous ${plancher} seconde`
+            + `${plancher > 1 ? "s" : ""}`,
+        });
+        return;
+      }
+      const archives = await relancer(s, voulue);
       surveiller(s);
       // La partie neuve nait endormie ET ignorante de qui est la : on lui rend
       // les deux, sinon le duplicate ne compterait personne sur son premier coup.

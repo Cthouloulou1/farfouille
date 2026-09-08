@@ -4234,8 +4234,10 @@ tableau : une case à cocher qui ne garde que ces manches-là.
 
 ### Le tableau
 
-Cent lignes au plus, la plus rapide en tête. Deux temps égaux se départagent par
-la **date** : celui qui l'a fait le premier passe devant.
+Cent lignes au plus, la plus rapide en tête. **Deux temps égaux au centième près
+sont ex æquo** : ils portent le même rang, et le rang suivant saute d'autant —
+deux premiers, puis un troisième. Départager au millième deux performances que
+rien ne distingue à l'affichage serait un classement inventé.
 
 | colonne | contenu |
 |---|---|
@@ -4306,9 +4308,21 @@ par l'échéance afficherait sinon le cumul du générateur, pas celui d'une tab
 Mesuré sur le disque : le cumul d'une partie normale tourne autour de **800 à
 980 points**. Le tableau a de la marge des deux côtés.
 
-> **Le chrono ne descend pas sous quinze secondes** pour qui n'est pas de
-> l'administration (§16). Le tableau des chronos butera donc sur 15 s tant que ce
-> plancher n'aura pas bougé.
+#### Le plancher du chrono s'abaisse là où se joue un record
+
+Le chrono ne descend pas sous **quinze secondes** pour qui n'est pas de
+l'administration (§16) : chaque coup coûte un calcul de top complet, et un chrono
+court multiplie ce coût par salon.
+
+**Sauf sur la configuration exacte de la partie normale** — 15×15, 7 sur 7, sans
+joker, sac du commerce, primes intactes, sans borne — où le plancher descend à
+**une seconde**. C'est là, et seulement là, qu'un record de chrono se joue ; le
+refuser reviendrait à ouvrir un tableau que personne ne peut remplir.
+
+Ce que ça coûte, mesuré : le premier top d'une 15×15 vide demande **17 ms**, et
+les coups suivants, sur une grille plus contrainte, ne coûtent pas davantage. Un
+coup par seconde tient largement. Le plancher de quinze secondes reste pour tout
+le reste, où la grille peut être bien plus grande.
 
 ### Les mots ratés
 
@@ -4362,8 +4376,13 @@ Six parties en topping, à la suite, sans reprendre son souffle :
 | 6 | 8 sur 8 joker |
 
 Un bouton **Montante** dans les réglages avancés, sous « Double joker ». Il fige
-le format, le joker et les bornes — c'est la suite qui les impose — et ne laisse
-réglables que le chrono, le lexique et la grille.
+le format et le joker — c'est la suite qui les impose — et ne laisse réglables que
+le chrono, le lexique et la grille.
+
+**Sur les deux grilles bornées, jamais sur la grille sans fin.** Le concept est le
+même en 15×15 et sur la super grille : six formats, dans l'ordre, jusqu'au bout du
+sac. Une grille sans fin n'a pas de bout, donc pas d'étape suivante — le bouton y
+est éteint.
 
 **Le temps et le négatif sont ceux de la montante entière**, pas de l'étape en
 cours. C'est le total qui s'affiche, et c'est le total qui fait le record.
@@ -4381,9 +4400,10 @@ suite, l'étape courante, et les cumuls.
 
 #### Le coup raté, et le droit de recommencer
 
-Dès qu'un coup est raté, **le total passe au rouge** et un bouton apparaît :
-recommencer la partie en cours. Il relance une partie neuve **du même type** — on
-rate à la 7 sur 8, on repart à la 7 sur 8 — et non la montante entière.
+Dès qu'un coup est raté, **le total passe au rouge** et un bouton apparaît chez
+**l'hôte du salon** — lui seul : recommencer l'étape ratée. Il relance une partie
+neuve **du même type** — on rate à la 7 sur 8, on repart à la 7 sur 8 — et non la
+montante entière.
 
 Ce qui se passe alors :
 
@@ -4400,7 +4420,20 @@ plus que la patience.
 Qui ne recommence pas continue : la montante s'achève, le rouge reste jusqu'au
 bout, et elle ne concourt qu'au négatif.
 
-Le bouton disparaît quand l'étape se termine. Une étape close ne se reprend plus.
+**Le bouton désigne l'étape la plus ancienne qui porte encore un coup raté.** La
+montante y repart, et tout ce qui a été joué depuis est abandonné : son temps
+reste au compteur, son négatif s'efface avec le reste.
+
+**Il vit une étape, et une seule.** Raté au milieu d'une 7 sur 8, il reste jusqu'à
+la fin de cette 7 sur 8 puis disparaît. Mais un raté **au dernier coup** clôt
+l'étape sur-le-champ, sans laisser le temps de cliquer : le bouton apparaît alors
+dans l'étape **suivante**, et il propose toujours de rejouer l'étape ratée. On
+rate le dernier coup de la 7 sur 7 joker, la 7 sur 8 démarre, et c'est un bouton
+« rejouer la 7 sur 7 joker » qui s'y affiche.
+
+Une fois cette fenêtre passée, l'étape est close et ne se reprend plus. Sans quoi
+on pourrait remonter toute la montante depuis sa dernière étape, et la suite
+n'aurait plus d'ordre.
 
 #### L'étape suivante est prête avant qu'on en ait besoin
 
@@ -4496,8 +4529,7 @@ pas une ligne d'un fichier en ajout seul :
 
 | Sujet | Question |
 |---|---|
-| La montante sur la super grille | Écrit pour l'instant : 15×15 seulement. Six étapes sur un plateau de 441 cases font une séance entière, et personne n'a encore joué la première. |
-| Le plancher de quinze secondes | Le tableau des chronos ne descendra pas plus bas tant qu'il tiendra. Le baisser coûte au serveur un calcul de top complet par coup et par salon, pas au joueur. |
+| Le bouton de reprise et les ratés qui s'accumulent | Il vit une étape. Rater au dernier coup de deux étapes de suite laisse donc le premier raté derrière soi. Écrit ainsi faute d'un cas réel ; à revoir quand une montante aura été jouée. |
 | Une mise à jour de lexique | Les records passés ont été établis contre un autre lexique. La colonne le dit ; faut-il pour autant repartir de zéro, ou faire coexister deux listes ? |
 | Le classement des joueurs | Écarté pour l'instant : afficher un pourcentage de tops trouvés change la façon dont on joue, et pas dans le bon sens. |
 | Le ping | Il départage structurellement des coups trouvés à quelques dixièmes près (§8), et un tableau de records en fait un enjeu. Non résolu. |

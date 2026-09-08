@@ -149,6 +149,16 @@ export interface PlayedMove {
   jokers?: { sortis: string[]; restes: number };
 }
 
+/**
+ * Pourquoi une partie s'est arretee. Voir SPEC.md §16 et §23.
+ *
+ * `sac`        le sac et les reliquats ne composent plus de tirage jouable ;
+ * `coups`      le nombre de coups regle est atteint ;
+ * `duree`      la duree reglee est ecoulee ;
+ * `injouable`  assez de tirages de suite sans le moindre coup possible.
+ */
+export type RaisonDeFin = "sac" | "coups" | "duree" | "injouable";
+
 export interface ChatMessage {
   at: number;
   who: string;
@@ -357,6 +367,29 @@ export class Game {
   readonly cfg: ConfigPartie;
   /** La partie est terminee : le sac ne permet plus de jouer (SPEC.md §16). */
   finie = false;
+  /**
+   * Pourquoi elle s'est arretee, et `null` tant qu'elle tourne.
+   *
+   * LE JOURNAL NE DISAIT PAS QU'UNE PARTIE ETAIT FINIE. Il porte la grille, les
+   * coups, le chat et les « j'aime » ; `finie` se recalculait au demarrage en
+   * rejouant le sac entier. Tout ce qui lit un journal sans embarquer le moteur
+   * -- un outil, un lecteur de rejeu, une verification de sauvegarde -- etait
+   * donc incapable de distinguer une partie complete d'une partie abandonnee :
+   * sur les parties du disque, « 26 coups » peut vouloir dire les deux.
+   *
+   * Une ligne de plus, ecrite une seule fois, et la question ne se repose plus
+   * (SPEC.md §23).
+   */
+  raisonDeLaFin: RaisonDeFin | null = null;
+  /**
+   * La fin est deja au journal : ne pas l'y ecrire une seconde fois.
+   *
+   * Une partie close qu'on rouvre redecouvre sa fin -- `deal` refait le meme
+   * constat sur le meme sac. Sans ce drapeau, son journal recevrait une ligne
+   * de fin par demarrage du serveur, et une manche de plus au tableau des
+   * records a chaque fois.
+   */
+  private finAuJournal = false;
   /**
    * Jokers encore disponibles, en partie joker. Ils ne sont PAS dans le sac :
    * ils vivent au tirage, et n'en sortent que le jour ou aucune vraie lettre ne
@@ -648,6 +681,7 @@ export class Game {
   private listeners: (() => void)[] = [];
   private surCoup: ((m: PlayedMove) => void)[] = [];
   private surChat: ((m: ChatMessage) => void)[] = [];
+  private surFin: ((raison: RaisonDeFin) => void)[] = [];
 
   constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
     this.gameId = gameId;
@@ -754,6 +788,7 @@ export class Game {
     this.listeners = [];
     this.surCoup = [];
     this.surChat = [];
+    this.surFin = [];
     if (this.worker !== undefined) await this.worker.terminate();
   }
 
@@ -920,6 +955,36 @@ export class Game {
   }
 
   onChange(fn: () => void): void { this.listeners.push(fn); }
+
+  /**
+   * Prevenu UNE FOIS, quand la partie s'arrete.
+   *
+   * C'est de la que part l'enregistrement d'une manche au journal des records
+   * (SPEC.md §23) : le salon a observe la partie du premier coup au dernier, et
+   * c'est ici qu'il en tire sa ligne.
+   *
+   * Une partie deja terminee qu'on rouvre ne rappelle personne : sa fin a ete
+   * annoncee le jour ou elle est arrivee, et la reannoncer ferait naitre un
+   * second record pour la meme partie a chaque demarrage du serveur.
+   */
+  onFin(fn: (raison: RaisonDeFin) => void): void { this.surFin.push(fn); }
+
+  /**
+   * Arrete la partie, et l'ecrit au journal.
+   *
+   * IDEMPOTENT, et il le faut : au redemarrage d'un serveur, la relecture du
+   * journal repose la grille telle qu'elle etait, puis `deal` redecouvre que
+   * le sac est vide et voudrait conclure une seconde fois. Le journal en
+   * porterait une ligne de fin par demarrage.
+   */
+  private terminer(raison: RaisonDeFin): void {
+    this.finie = true;
+    if (this.raisonDeLaFin === null) this.raisonDeLaFin = raison;
+    if (this.finAuJournal) return;
+    this.finAuJournal = true;
+    this.append({ t: "fin", at: Date.now(), raison, coups: this.moves.length });
+    for (const f of this.surFin) f(raison);
+  }
 
   /**
    * Prevenu a chaque coup pose, QUELLE QUE SOIT SON ORIGINE.
@@ -1200,6 +1265,19 @@ export class Game {
         delete m.tiers;
         out.moves.push(m);
         byNumber.set(m.n, m);
+      } else if (ev["t"] === "fin") {
+        // La partie s'est arretee, et le journal le dit. On le retient pour ne
+        // pas le redire : `deal` va redecouvrir la meme fin dans un instant.
+        // Une partie d'avant cet evenement n'en porte pas, et sa fin sera donc
+        // annoncee -- une fois -- au premier demarrage qui la constate.
+        //
+        // ON NE MARQUE PAS LA PARTIE FINIE ICI, et c'est important : `reveiller`
+        // renonce a distribuer quand elle l'est, or c'est justement `deal` qui
+        // rend au reliquat les lettres restees en main a l'arret. Le poser des
+        // la relecture faisait disparaitre ces lettres-la du compte -- une 15x15
+        // rouverte perdait un caramel de son reliquat.
+        this.finAuJournal = true;
+        this.raisonDeLaFin = (ev["raison"] as RaisonDeFin) ?? "sac";
       } else if (ev["t"] === "chat") {
         out.chat.push(ev["msg"] as ChatMessage);
       } else if (ev["t"] === "like") {
@@ -1330,7 +1408,7 @@ export class Game {
     // jokers soient poses. Voir `jokersTousPoses`.
     const plusRienATirer = this.bag.estFinie(this.reliquat) && this.jokersTousPoses();
     if (assezJoue || assezDure || plusRienATirer) {
-      this.finie = true;
+      this.terminer(assezJoue ? "coups" : assezDure ? "duree" : "sac");
       this.solving = false;
       this.canonicalTop = null;
       // Les coups prets ne seront jamais servis : la partie s'arrete ici.
@@ -1481,7 +1559,7 @@ export class Game {
       if (injouables + 1 >= plafond) {
         console.log(`[partie] terminee apres ${this.moves.length} coups ` +
           `(${plafond} tirages de suite sans un seul coup jouable)`);
-        this.finie = true;
+        this.terminer("injouable");
         this.rack = "";
         this.rackNotation = "";
         this.bestScore = -1;
