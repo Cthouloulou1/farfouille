@@ -617,6 +617,46 @@ export class Game {
   }
   /** DUPLICATE : qui etait present quand le tirage est tombe. */
   private participants = new Set<string>();
+
+  /**
+   * QUI A SOUMIS UN MOT SUR LE COUP EN COURS, valide ou non. Voir SPEC.md §23.
+   *
+   * C'est ce qui distingue une table qui cherche d'un onglet reste ouvert. Le
+   * journal ne le dit pas et ne le dira pas : en topping il n'ecrit que le
+   * gagnant du coup, et un coup rate n'y ecrit personne. Une partie ou cinq
+   * joueurs cherchent et une partie ou cinq onglets defilent tout seuls y
+   * laissent exactement la meme trace.
+   *
+   * PAS `propositions`, QUI NE SUFFIT PAS. Elle ne retient que les solutions
+   * VALIDES : un joueur qui n'a propose que des mots inexistants a cherche
+   * autant qu'un autre, et n'y figure pas. Ce qu'on veut compter, c'est
+   * l'essai, pas sa reussite.
+   *
+   * EN MEMOIRE SEULEMENT, et remise a zero a chaque tirage : elle ne pese que
+   * le nombre de joueurs presents, meme au vingt-sept-millieme coup d'une
+   * grille sans fin.
+   */
+  private essais = new Set<string>();
+
+  /** Qui a soumis un mot sur le coup en cours. */
+  get actifsDuCoup(): string[] { return [...this.essais]; }
+  /** Qui etait la quand le tirage est tombe. */
+  get participantsDuCoup(): string[] { return [...this.participants]; }
+  /**
+   * Les mots du palier du top : le top et tous ses isotops.
+   *
+   * Disponible MEME sur une partie qui ne garde aucun palier -- une grille
+   * bornee n'en ecrit pas au journal (§21) -- parce que le solveur les calcule
+   * de toute facon pour departager le top. C'est ce qui permet a un coup rate
+   * de compter comme rate pour chacun de ses isotops (§23), sans quoi seul le
+   * mot tire au sort par le logiciel figurerait au tableau.
+   *
+   * Ne vaut que pendant le coup en cours : le tirage suivant la remet a zero.
+   */
+  get isotopsDuCoup(): string[] {
+    return [...new Set(this.tiers[0]?.moves.map((m) => m[0]) ?? [])];
+  }
+
   solving = false;
 
   /**
@@ -1447,6 +1487,7 @@ export class Game {
       : this.reliquat;
     // Nouveau coup : les propositions repartent a zero, et on fige QUI est la.
     this.propositions.clear();
+    this.essais.clear();
     this.participants = new Set(this.presents);
     const draw = this.bag.draw(reliquatSansJoker);
     const jokers = BLANK.repeat(servis);
@@ -1930,6 +1971,9 @@ export class Game {
     if (this.solving || this.canonicalTop === null) {
       return { ok: false, message: "le coup n'est pas encore prêt" };
     }
+    // CE JOUEUR CHERCHE, et c'est note avant meme de savoir si son mot existe :
+    // un essai refuse reste un essai. Voir `essais`.
+    this.essais.add(player);
     const r = resolveTypedWord(this.board, this.dawg, dir, x, y, typed.toUpperCase(), this.rack);
     if (!r.ok) {
       // Le rappel de la variante vaut mieux qu'un « trop de caramels » sec :

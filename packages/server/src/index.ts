@@ -27,6 +27,7 @@ import {
   type ConfigPartie,
 } from "../../engine/src/config.ts";
 import { estPartieNormale } from "../../engine/src/categories.ts";
+import { observer, ouvrirLesRecords } from "./records.ts";
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
@@ -420,6 +421,11 @@ function surveiller(s: Salon): void {
   }));
   // Le moteur parle aussi : la liste des trouveurs du duplicate vient de lui.
   s.partie.onChat((m) => broadcast(s.id, { t: "said", msg: m }));
+  // LE SALON OBSERVE SA PROPRE PARTIE (SPEC.md §23). Sans effet si ses reglages
+  // ne peuvent porter aucun record -- une grille sans fin, un duplicate, un sac
+  // qui ne s'epuise pas. C'est ici, et nulle part ailleurs, que se decide ce
+  // qui entrera au tableau.
+  observer(s.partie);
 }
 
 // ---------------------------------------------------------------- ouverture
@@ -1453,6 +1459,7 @@ http.listen(PORT, () => {
   console.log(`  Pour ouvrir aux autres :  cloudflared tunnel --url http://localhost:${PORT}`);
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');
   lireLesComptes();
+  ouvrirLesRecords();
   void assurerLesAdmins(ADMINS, ADMIN_MDP);
 
   console.log(`
