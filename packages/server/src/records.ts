@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 import type { Game, PlayedMove, RaisonDeFin } from "./game.ts";
 import { compte } from "./comptes.ts";
 import {
-  categorieDesReglages, grilleDeBornes, type Categorie, type Grille,
+  categorie, categorieDesReglages, grilleDeBornes, type Categorie, type Grille,
 } from "../../engine/src/categories.ts";
 import { dawgPath } from "../../engine/src/paths.ts";
 
@@ -354,4 +354,272 @@ export function observer(partie: Game): void {
       `${m.topee ? "topée" : `négatif ${m.negatif}`} · ${qui.join(", ") || "personne"}`,
     );
   });
+}
+
+// ------------------------------------------------------------ les classements
+
+/**
+ * Ce qu'une ligne de tableau montre. C'est la manche AMPUTEE de ce qui ne
+ * regarde pas les clients : sa graine, et le detail de ses coups.
+ */
+export interface LigneDeRecord {
+  /**
+   * Le rang, avec les ex aequo.
+   *
+   * DEUX TEMPS EGAUX AU CENTIEME PRES SONT EX AEQUO : ils portent le meme rang,
+   * et le rang suivant saute d'autant -- deux premiers, puis un troisieme.
+   * Departager au millieme deux performances que rien ne distingue a
+   * l'affichage serait un classement invente.
+   */
+  rang: number;
+  partie: string;
+  at: number;
+  categorie: string;
+  grille: Grille;
+  lexique: string;
+  empreinte: string;
+  chrono: number | null;
+  coups: number;
+  temps: number;
+  cumul: number;
+  farfouilles: number;
+  topee: boolean;
+  negatif: number;
+  joueurs: { nom: string; tops: number; invite: boolean }[];
+  solo: string | null;
+}
+
+function pourLAffichage(m: Manche, rang: number): LigneDeRecord {
+  // La graine et le detail des coups ne sortent pas : l'une dirait comment
+  // rejouer les tirages, l'autre pese autant que tout le reste.
+  const { graine: _g, vus: _v, ...reste } = m;
+  return { rang, ...reste };
+}
+
+export interface Filtre {
+  categorie: string;
+  grille?: Grille;
+  lexique?: string;
+  /** Ne garder que les manches ou un seul joueur a tout trouve. */
+  solo?: boolean;
+}
+
+/** Cent lignes : ce qu'un tableau montre, et pas une de plus. */
+export const LIGNES_PAR_TABLEAU = 100;
+
+/** Les manches d'une categorie, sans les classer. */
+function retenues(f: Filtre): Manche[] {
+  const cat = categorie(f.categorie);
+  // « Partie normale solo » n'est pas une configuration : une manche porte la
+  // categorie de BASE, et le solo se lit dans son resultat. L'onglet solo et la
+  // case a cocher passent donc par le meme chemin.
+  const base = cat?.solo === true ? "normale" : f.categorie;
+  const seulement = cat?.solo === true || f.solo === true;
+  return manchesValides().filter((m) =>
+    m.categorie === base
+    && (f.grille === undefined || m.grille === f.grille)
+    && (f.lexique === undefined || m.lexique === f.lexique)
+    && (!seulement || m.solo !== null));
+}
+
+/** Le temps au centieme : c'est a cette precision que deux manches sont egales. */
+const auCentieme = (ms: number): number => Math.round(ms / 10);
+
+/**
+ * Pose les rangs sur une liste DEJA TRIEE, en respectant les ex aequo.
+ *
+ * `egales` dit ce qui rend deux lignes indiscernables. Deux manches qui le sont
+ * portent le meme rang, et la suivante saute d'autant.
+ */
+function ranger(
+  triees: Manche[], egales: (a: Manche, b: Manche) => boolean,
+): LigneDeRecord[] {
+  const out: LigneDeRecord[] = [];
+  let rang = 0;
+  for (let i = 0; i < triees.length; i++) {
+    const m = triees[i]!;
+    const avant = triees[i - 1];
+    if (avant === undefined || !egales(avant, m)) rang = i + 1;
+    out.push(pourLAffichage(m, rang));
+  }
+  return out;
+}
+
+/**
+ * Le classement de vitesse : les parties topees, la plus rapide en tete.
+ *
+ * Seules les parties TOPEES y figurent. Une partie presque topee ne se compare
+ * a rien : il faudrait dire ce que « presque » vaut.
+ */
+export function classementDeVitesse(f: Filtre): LigneDeRecord[] {
+  const triees = retenues(f)
+    .filter((m) => m.topee)
+    .sort((a, b) => auCentieme(a.temps) - auCentieme(b.temps) || a.at - b.at);
+  return ranger(triees, (a, b) => auCentieme(a.temps) === auCentieme(b.temps))
+    .slice(0, LIGNES_PAR_TABLEAU);
+}
+
+/**
+ * Les meilleurs negatifs, pour completer un tableau qui n'a pas cent parties
+ * topees. Voir SPEC.md §23 : a partir de 10 sur 10, elles sont rares.
+ *
+ * Un negatif nul serait une partie topee : elles sont deja au-dessus et ne se
+ * repetent pas ici.
+ */
+export function classementAuNegatif(f: Filtre, place = LIGNES_PAR_TABLEAU): LigneDeRecord[] {
+  if (place <= 0) return [];
+  const triees = retenues(f)
+    .filter((m) => !m.topee)
+    .sort((a, b) => a.negatif - b.negatif || auCentieme(a.temps) - auCentieme(b.temps));
+  return ranger(triees, (a, b) => a.negatif === b.negatif).slice(0, place);
+}
+
+/** Un tableau complet : les topees, puis les negatifs s'il reste de la place. */
+export function tableau(f: Filtre): { topees: LigneDeRecord[]; negatifs: LigneDeRecord[] } {
+  const topees = classementDeVitesse(f);
+  return {
+    topees,
+    negatifs: classementAuNegatif(f, LIGNES_PAR_TABLEAU - topees.length),
+  };
+}
+
+// -------------------------------------------------------- les tableaux annexes
+
+/** Ce que les tableaux annexes classent. Voir SPEC.md §23. */
+export type Annexe =
+  | "chrono" | "chere" | "pasChere" | "courte" | "longue"
+  | "farfouilles" | "peuDeFarfouilles";
+
+/**
+ * Les tableaux annexes portent sur des parties TOPEES elles aussi. Une partie
+ * entierement revelee par l'echeance afficherait sinon le cumul du generateur,
+ * pas celui d'une table.
+ */
+export function annexe(quoi: Annexe, f: Filtre): LigneDeRecord[] {
+  const topees = retenues(f).filter((m) => m.topee);
+  // Un chrono infini n'est pas un chrono serre : il ne concourt pas au tableau
+  // qui classe la contrainte de temps.
+  const base = quoi === "chrono" ? topees.filter((m) => m.chrono !== null) : topees;
+  const cle = (m: Manche): number => {
+    switch (quoi) {
+      case "chrono": return m.chrono ?? Infinity;
+      case "chere": return -m.cumul;
+      case "pasChere": return m.cumul;
+      case "courte": return m.coups;
+      case "longue": return -m.coups;
+      case "farfouilles": return -m.farfouilles;
+      case "peuDeFarfouilles": return m.farfouilles;
+    }
+  };
+  const triees = [...base].sort((a, b) => cle(a) - cle(b) || a.at - b.at);
+  return ranger(triees, (a, b) => cle(a) === cle(b)).slice(0, LIGNES_PAR_TABLEAU);
+}
+
+/** Un coup, pas une partie : le mot, ses points, et d'ou il vient. */
+export interface LigneDeCoup {
+  rang: number;
+  mot: string;
+  score: number;
+  partie: string;
+  categorie: string;
+  lexique: string;
+  at: number;
+  par: string | null;
+}
+
+/** Le coup le plus cher, ou le moins cher, sur les parties topees. */
+export function coupsExtremes(f: Filtre, sens: "cher" | "pasCher"): LigneDeCoup[] {
+  const coups: LigneDeCoup[] = [];
+  for (const m of retenues(f).filter((x) => x.topee)) {
+    for (const c of m.vus) {
+      coups.push({
+        rang: 0, mot: c.mots[0] ?? "", score: c.score,
+        partie: m.partie, categorie: m.categorie, lexique: m.lexique,
+        at: m.at, par: c.par,
+      });
+    }
+  }
+  coups.sort((a, b) => sens === "cher" ? b.score - a.score : a.score - b.score);
+  let rang = 0;
+  return coups.slice(0, LIGNES_PAR_TABLEAU).map((c, i, tout) => {
+    if (i === 0 || tout[i - 1]!.score !== c.score) rang = i + 1;
+    return { ...c, rang };
+  });
+}
+
+// ---------------------------------------------------------------- les mots
+
+export interface LigneDeMot {
+  rang: number;
+  mot: string;
+  /** Combien de fois ce mot est sorti en top, isotops compris. */
+  fois: number;
+  trouves: number;
+  rates: number;
+  /** Part des fois ou il a ete trouve, en pourcentage a une decimale. */
+  part: number;
+}
+
+/**
+ * Le compte des mots, sur les coups QUI ONT ETE CHERCHES.
+ *
+ * Un coup ne compte que si au moins un joueur a soumis un mot sur ce coup-la.
+ * Pas dans la partie : sur le coup. Un joueur qui ne trouve pas le top ne reste
+ * pas les bras croises, il joue autre chose ; ne rien soumettre du tout, c'est
+ * ne pas etre la.
+ *
+ * UN COUP RATE RATE TOUS SES ISOTOPS. Le mot retenu par le logiciel est tire au
+ * sort parmi les coups au meilleur score : le mettre seul au tableau serait un
+ * accident de tirage au sort. Trouver le top par n'importe lequel d'entre eux,
+ * c'est les avoir tous trouves.
+ *
+ * LE LEXIQUE EST OBLIGATOIRE : deux lexiques n'ont pas les memes mots, et les
+ * melanger ferait un tableau qui ne veut rien dire.
+ */
+function compterLesMots(
+  lexique: string, longueur?: number,
+): Map<string, { fois: number; trouves: number }> {
+  const vu = new Map<string, { fois: number; trouves: number }>();
+  for (const m of manchesValides()) {
+    if (m.lexique !== lexique) continue;
+    for (const c of m.vus) {
+      if (!c.actif) continue;
+      const trouve = c.par !== null;
+      for (const mot of c.mots) {
+        if (longueur !== undefined && mot.length !== longueur) continue;
+        let e = vu.get(mot);
+        if (e === undefined) { e = { fois: 0, trouves: 0 }; vu.set(mot, e); }
+        e.fois++;
+        if (trouve) e.trouves++;
+      }
+    }
+  }
+  return vu;
+}
+
+function classerLesMots(
+  vu: Map<string, { fois: number; trouves: number }>,
+  cle: (e: { fois: number; trouves: number }) => number,
+): LigneDeMot[] {
+  const lignes = [...vu].map(([mot, e]) => ({
+    rang: 0, mot, fois: e.fois, trouves: e.trouves,
+    rates: e.fois - e.trouves,
+    part: e.fois === 0 ? 0 : Math.round((e.trouves / e.fois) * 1000) / 10,
+  }));
+  lignes.sort((a, b) => cle(b) - cle(a) || a.mot.localeCompare(b.mot));
+  let rang = 0;
+  return lignes.slice(0, LIGNES_PAR_TABLEAU).map((l, i, tout) => {
+    if (i === 0 || cle(tout[i - 1]!) !== cle(l)) rang = i + 1;
+    return { ...l, rang };
+  });
+}
+
+/** Les mots les plus rates. `longueur` restreint au tableau de cette longueur. */
+export function motsRates(lexique: string, longueur?: number): LigneDeMot[] {
+  return classerLesMots(compterLesMots(lexique, longueur), (e) => e.fois - e.trouves);
+}
+
+/** Les mots les plus trouves : le tableau symetrique. */
+export function motsTrouves(lexique: string, longueur?: number): LigneDeMot[] {
+  return classerLesMots(compterLesMots(lexique, longueur), (e) => e.trouves);
 }

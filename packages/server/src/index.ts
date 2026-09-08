@@ -26,8 +26,16 @@ import {
   avec, avecDictionnaire, configParDefaut, deserialiser, serialiser,
   type ConfigPartie,
 } from "../../engine/src/config.ts";
-import { estPartieNormale } from "../../engine/src/categories.ts";
-import { observer, ouvrirLesRecords } from "./records.ts";
+import { categorie, estPartieNormale } from "../../engine/src/categories.ts";
+import {
+  annexe, coupsExtremes, motsRates, motsTrouves, observer, ouvrirLesRecords, tableau,
+  type Annexe,
+} from "./records.ts";
+
+/** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
+const ANNEXES: readonly Annexe[] = [
+  "chrono", "chere", "pasChere", "courte", "longue", "farfouilles", "peuDeFarfouilles",
+];
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
@@ -645,8 +653,76 @@ async function corpsJson(req: IncomingMessage): Promise<any> {
   return JSON.parse(Buffer.concat(morceaux).toString("utf8"));
 }
 
+/**
+ * Les parametres de la requete. `url` a deja perdu sa partie interrogative,
+ * qui est justement ce que les tableaux de records lisent.
+ */
+function parametres(req: IncomingMessage): URLSearchParams {
+  const q = (req.url ?? "").indexOf("?");
+  return new URLSearchParams(q === -1 ? "" : (req.url ?? "").slice(q + 1));
+}
+
 const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = (req.url ?? "/").split("?")[0]!;
+
+  // -------------------------------------------------------------- les records
+  //
+  // TROIS POINTS D'ENTREE, ET AUCUN N'OUVRE UN FICHIER DE PARTIE (SPEC.md §23).
+  // Tout se lit dans le journal des records, relu en memoire au demarrage. Ils
+  // sont PUBLICS : un tableau de records se consulte sans compte et sans etre
+  // dans un salon.
+  if (url === "/api/records" && req.method === "GET") {
+    const p = parametres(req);
+    const cat = p.get("categorie") ?? "normale";
+    if (categorie(cat) === undefined) { json(res, 404, { message: "catégorie inconnue" }); return; }
+    json(res, 200, tableau({
+      categorie: cat,
+      grille: p.get("grille") === "super" ? "super"
+        : p.get("grille") === "normale" ? "normale" : undefined,
+      lexique: dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : undefined,
+      solo: p.get("solo") === "1",
+    }));
+    return;
+  }
+
+  if (url === "/api/records/annexe" && req.method === "GET") {
+    const p = parametres(req);
+    const cat = p.get("categorie") ?? "normale";
+    if (categorie(cat) === undefined) { json(res, 404, { message: "catégorie inconnue" }); return; }
+    const filtre = {
+      categorie: cat,
+      grille: p.get("grille") === "super" ? "super" as const
+        : p.get("grille") === "normale" ? "normale" as const : undefined,
+      lexique: dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : undefined,
+    };
+    const quoi = p.get("quoi") ?? "chrono";
+    // Le coup le plus cher et le moins cher classent des COUPS, pas des
+    // parties : ils n'ont pas les memes colonnes, et se demandent donc a part.
+    if (quoi === "cher" || quoi === "pasCher") {
+      json(res, 200, { coups: coupsExtremes(filtre, quoi) });
+      return;
+    }
+    if (!ANNEXES.includes(quoi as Annexe)) {
+      json(res, 404, { message: "tableau inconnu" });
+      return;
+    }
+    json(res, 200, { lignes: annexe(quoi as Annexe, filtre) });
+    return;
+  }
+
+  if (url === "/api/records/mots" && req.method === "GET") {
+    const p = parametres(req);
+    // Le lexique n'est pas optionnel : deux lexiques n'ont pas les memes mots,
+    // et les melanger ferait un tableau qui ne veut rien dire.
+    const lexique = dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : DICO_PAR_DEFAUT;
+    const brute = Number(p.get("longueur"));
+    const longueur = Number.isInteger(brute) && brute >= 2 && brute <= 15 ? brute : undefined;
+    const lignes = p.get("sens") === "trouves"
+      ? motsTrouves(lexique, longueur)
+      : motsRates(lexique, longueur);
+    json(res, 200, { lexique, longueur: longueur ?? null, lignes });
+    return;
+  }
 
   if (url === "/api/salons" && req.method === "GET") {
     json(res, 200, {
