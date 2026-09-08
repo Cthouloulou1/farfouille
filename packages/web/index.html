@@ -725,7 +725,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pseudo .valider { width: 100%; margin-top: 16px; padding: 13px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 15px; font-weight: 500; }
 .pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
 .pseudo .renoncer { display: block; margin: 14px auto 0; font-size: 13px; padding: 5px 11px; }
-.records-boite { width: min(480px, 94vw); }
 /* Deux boutons plutot que deux onglets : on voit d'un coup ce qu'on peut
    faire, sans avoir a lire une phrase pour comprendre lequel est actif. */
 .bascules { display: flex; gap: 8px; margin: 18px 0 18px; }
@@ -926,9 +925,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .moi .pastille { margin: 0; background: transparent; color: var(--nuit-accent); padding: 0; }
 .moi .avatar { overflow: hidden; padding: 0; box-shadow: inset 0 0 0 1px var(--nuit-rule); }
 .moi .avatar canvas { display: block; width: 100%; height: 100%; }
-.records-boite .soon { margin: 18px 0 24px; font-family: "Baloo 2", Archivo, sans-serif; font-weight: 600; font-size: 34px; color: var(--ink-soft); text-align: center; }
-.records-boite .soon sup { font-size: .42em; vertical-align: super; }
-.records-boite b { font-weight: 500; color: var(--ink); }
 .creer .apres, .rg-corps .apres { margin: 12px 0 0; font-size: .8em; color: var(--ink-faint); line-height: 1.45; }
 #panel-rejeu { flex: 1; max-height: none; display: flex; flex-direction: column; min-height: 0; }
 #panel-rejeu[hidden] { display: none; }
@@ -1078,6 +1074,104 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .choix button[aria-pressed="true"] em { color: var(--accent); }
 .choix[hidden] { display: none; }
 
+/* ------------------------------------------------------------- LES RECORDS
+   Voir SPEC.md §23.
+
+   TROIS RANGEES DE CHOIX, DE PLUS EN PLUS DISCRETES. La categorie est ce qui
+   decide de tout : ses onglets sont pleins, sombres, et se voient de loin. Ce
+   qui la decline -- grille, lexique, solo -- vient dessous, en puces, sous une
+   etiquette qui dit de quoi il s'agit. La vue vient en dernier, en onglets
+   soulignes : elle ne change pas de quoi on parle, seulement ce qu'on regarde
+   du meme sujet. */
+.records-page { padding-top: 14px; }
+
+.rc-categories { display: flex; flex-wrap: wrap; gap: 6px; }
+.rc-categories button { padding: 8px 15px; border: 1px solid transparent; border-radius: 5px; background: var(--field); color: var(--ink-soft); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+.rc-categories button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); border-color: transparent; }
+.rc-categories button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+/* Le bouton qui fait passer aux grands formats se detache du reste : ce n'est
+   pas une categorie de plus, c'est un autre jeu de categories. */
+.rc-categories .rc-page { margin-left: auto; background: none; border-color: var(--rule); color: var(--ink-faint); font-weight: 400; }
+.rc-categories .rc-page:hover { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+
+.rc-declinaisons { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; padding: 12px 14px; background: var(--field); border-radius: 6px; }
+.rc-groupe { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rc-groupe > label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); }
+.rc-choix { display: flex; flex-wrap: wrap; gap: 5px; }
+.rc-choix button { padding: 6px 13px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; white-space: nowrap; }
+.rc-choix button:hover:not([aria-pressed="true"]) { color: var(--ink); border-color: var(--field-line); background: var(--hover); }
+.rc-choix button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.rc-longueurs button { min-width: 34px; padding: 6px 8px; justify-content: center; font-variant-numeric: tabular-nums; }
+.rc-seconde { margin-top: 8px; }
+/* `display: flex` l'emporte sur l'attribut `hidden` : sans ces trois
+   lignes, les choix d'une vue restent affiches sous celle d'a cote. */
+.rc-categories[hidden], .rc-declinaisons[hidden], .rc-groupe[hidden] { display: none; }
+
+.rc-barre { display: flex; align-items: flex-end; gap: 14px; margin-top: 16px; border-bottom: 1px solid var(--rule); }
+.rc-vues { display: flex; gap: 18px; }
+.rc-vues button { padding: 6px 0 8px; background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; font-size: 13.5px; color: var(--ink-faint); }
+.rc-vues button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.rc-vues button:hover:not([aria-pressed="true"]) { color: var(--ink-soft); border-color: transparent; }
+.rc-regles { margin: 0 0 6px auto; padding: 6px 13px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.rc-regles:hover { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+
+/* LE TABLEAU. Il defile de son cote quand il est trop large -- la page, elle,
+   ne defile jamais lateralement. */
+.rc-tableau { margin-top: 4px; overflow-x: auto; }
+.rc-tableau table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.rc-tableau th { padding: 9px 10px; text-align: right; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.rc-tableau th.g, .rc-tableau td.g { text-align: left; }
+.rc-tableau th.c, .rc-tableau td.c { text-align: center; }
+/* La colonne qui fait le classement se voit : « la plus chere » et « la plus
+   courte » montrent les memes colonnes, et rien ne disait laquelle decide. */
+.rc-tableau th.tri { color: var(--ink); }
+.rc-tableau .rc-tri { margin-left: 4px; font-size: 9px; color: var(--accent); }
+/* Une ligne sur deux se teinte : c'est ce qui permet de suivre une ligne du
+   rang jusqu'au dernier chiffre sans se tromper de rangee. */
+.rc-tableau tbody tr:nth-child(odd) { background: var(--field); }
+.rc-tableau tbody tr:hover { background: var(--hover); }
+.rc-tableau td { padding: 8px 10px; text-align: right; color: var(--ink-soft); white-space: nowrap; }
+.rc-tableau td.g { text-align: left; }
+.rc-tableau td.fort { color: var(--ink); font-weight: 500; }
+
+/* LE RANG. Les trois premiers portent un jeton plutot qu'un chiffre : c'est ce
+   qui fait qu'un tableau de records se lit comme un podium et non comme une
+   liste. Les ex aequo portent le meme, et c'est voulu. */
+.rc-tableau td.rang { width: 44px; text-align: center; color: var(--ink-faint); }
+.rc-jeton { display: inline-block; width: 20px; height: 20px; border-radius: 50%; line-height: 20px; font-size: 10.5px; font-weight: 600; color: #3B2E12; }
+.rc-jeton.or { background: linear-gradient(160deg, #F2D07A, #C9A227); }
+.rc-jeton.argent { background: linear-gradient(160deg, #DDE2E4, #A8B0B4); }
+.rc-jeton.bronze { background: linear-gradient(160deg, #E0B08A, #A9713F); color: #3A2314; }
+
+/* LES JOUEURS, chacun de sa couleur. Elle se derive du nom : rien a
+   enregistrer, et le meme joueur garde la sienne d'un tableau a l'autre. */
+.rc-joueurs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 24em; white-space: normal; }
+.rc-joueur { display: inline-flex; align-items: baseline; gap: 4px; font-weight: 500; }
+.rc-joueur .pastille-couleur { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
+.rc-joueur i { font-style: normal; font-size: .82em; color: var(--ink-faint); font-weight: 400; }
+.rc-tableau td .rc-de-plus { color: var(--ink-faint); font-weight: 400; }
+
+.rc-tableau .rc-outil { padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12px; }
+.rc-tableau .rc-outil:hover:not(:disabled) { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+.rc-tableau .rc-outil:disabled { opacity: .45; }
+
+/* LE BLOC DES NEGATIFS. Il se distingue de ce qui est au-dessus, sans quoi on
+   lirait un classement de vitesse ou il n'y en a pas. */
+.rc-coupure td { padding: 16px 10px 6px; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); background: var(--ground); }
+.rc-tableau tbody tr.rc-coupure:hover { background: var(--ground); }
+.rc-vide { padding: 34px 4px; color: var(--ink-faint); font-size: 13.5px; }
+.rc-pied { margin-top: 12px; font-size: 12px; color: var(--ink-faint); }
+
+.rc-regles-boite { width: min(560px, 94vw); }
+.rc-regles-boite p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); }
+.rc-regles-boite b { font-weight: 500; color: var(--ink); }
+.rc-regles-boite i { font-style: normal; color: var(--ink-faint); }
+
+@media (max-width: 720px) {
+  .rc-declinaisons { gap: 14px; }
+  .rc-joueurs { max-width: 12em; }
+}
+
 @media (max-width: 900px) { .side { display: none; } }
 </style>
 </head>
@@ -1193,13 +1287,107 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     </div>
   </div>
 
-  <!-- LES RECORDS N'EXISTENT PAS ENCORE (SPEC.md §16, « en reserve »), mais le
-       bouton, lui, existe : il dit ce qui viendra, et la place est prise. -->
-  <div class="voile" id="voile-records" hidden>
-    <div class="pseudo records-boite">
-      <h2>Records</h2>
-      <p class="soon">Soon<sup>tm</sup></p>
-      <button class="valider" id="records-close" type="button">Fermer</button>
+  <!-- LES RECORDS SONT UNE PAGE, comme le profil et l'anagrammeur : ils
+       partagent le bandeau de l'accueil et prennent toute la largeur. Voir
+       SPEC.md §23.
+
+       TROIS RANGEES AVANT LE TABLEAU, et c'est l'ordre qui les explique : la
+       categorie d'abord, puisqu'elle decide de tout ; ce qui la decline
+       ensuite -- grille, lexique, solo ; la vue en dernier, qui ne change que
+       ce qu'on regarde. -->
+  <div class="corps records-page" id="corps-records" hidden>
+    <div class="rc-categories" id="rc-categories"></div>
+
+    <div class="rc-declinaisons">
+      <div class="rc-groupe">
+        <label>Grille</label>
+        <div class="rc-choix" id="rc-grille">
+          <button type="button" data-v="normale">Normale</button>
+          <button type="button" data-v="super">Super grille</button>
+        </div>
+      </div>
+      <div class="rc-groupe">
+        <label>Lexique</label>
+        <div class="rc-choix" id="rc-lexique"></div>
+      </div>
+      <div class="rc-groupe">
+        <label>Joueurs</label>
+        <div class="rc-choix" id="rc-solo">
+          <button type="button" data-v="tous">Tous</button>
+          <button type="button" data-v="solo">Solo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rc-barre">
+      <div class="rc-vues" id="rc-vues">
+        <button type="button" data-v="classement">Classement</button>
+        <button type="button" data-v="annexes">Tableaux annexes</button>
+        <button type="button" data-v="mots">Mots</button>
+      </div>
+      <button type="button" class="rc-regles" id="rc-regles">Ce qui compte</button>
+    </div>
+
+    <!-- Le second rang de choix : il ne parait que dans les vues qui en ont
+         un. Les annexes choisissent leur tableau, les mots leur longueur. -->
+    <div class="rc-declinaisons rc-seconde" id="rc-annexes" hidden>
+      <div class="rc-groupe">
+        <label>Tableau</label>
+        <div class="rc-choix" id="rc-annexe">
+          <button type="button" data-v="chrono">Chrono le plus serré</button>
+          <button type="button" data-v="chere">La plus chère</button>
+          <button type="button" data-v="pasChere">La moins chère</button>
+          <button type="button" data-v="courte">La plus courte</button>
+          <button type="button" data-v="longue">La plus longue</button>
+          <button type="button" data-v="farfouilles">Le plus de farfouilles</button>
+          <button type="button" data-v="peuDeFarfouilles">Le moins de farfouilles</button>
+          <button type="button" data-v="cher">Le coup le plus cher</button>
+          <button type="button" data-v="pasCher">Le coup le moins cher</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rc-declinaisons rc-seconde" id="rc-mots" hidden>
+      <div class="rc-groupe">
+        <label>Sens</label>
+        <div class="rc-choix" id="rc-sens">
+          <button type="button" data-v="rates">Les plus ratés</button>
+          <button type="button" data-v="trouves">Les plus trouvés</button>
+        </div>
+      </div>
+      <div class="rc-groupe">
+        <label>Longueur</label>
+        <div class="rc-choix rc-longueurs" id="rc-longueur"></div>
+      </div>
+    </div>
+
+    <div class="rc-tableau" id="rc-tableau"></div>
+
+    <div class="rc-pied">
+      <span id="rc-compte"></span>
+    </div>
+  </div>
+
+  <!-- CE QUI COMPTE : la regle, en clair, a cote du tableau qu'elle explique.
+       Un classement dont on ne sait pas ce qu'il exige n'apprend rien. -->
+  <div class="voile" id="voile-regles" hidden>
+    <div class="pseudo rc-regles-boite">
+      <h2>Ce qui compte</h2>
+      <p>Une partie entre au classement de vitesse si <b>tous ses coups ont été
+         trouvés</b>. Un seul coup manqué, et elle ne concourt plus qu'au négatif.</p>
+      <p>Elle doit être <b>terminée par son sac</b>, jouée en topping sur une
+         grille bornée, avec le sac du commerce et les primes de farfouilles
+         intactes. Ni grille sans fin, ni pioche qui ne s'épuise pas, ni nombre
+         de coups imposé.</p>
+      <p><b>Au moins un joueur doit avoir cherché.</b> Une partie que personne
+         n'a jouée n'entre nulle part.</p>
+      <p>Pour être cité, il faut avoir <b>trouvé au moins un top</b>. Un joueur
+         sans compte est nommé, avec la mention <i>(invité)</i> : c'est la
+         mention qui porte la garantie, pas le nom.</p>
+      <p><b>Solo</b> veut dire qu'un seul joueur a trouvé tous les tops, pas
+         qu'il était seul dans le salon.</p>
+      <p>Deux temps égaux au centième sont <b>ex æquo</b>.</p>
+      <button class="valider" id="regles-close" type="button">Fermer</button>
     </div>
   </div>
 

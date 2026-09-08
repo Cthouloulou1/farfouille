@@ -15,6 +15,7 @@ import {
 import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tailleDuSac, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
+import { CATEGORIES } from "../../engine/src/categories.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
   plusDeJokers, rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette,
@@ -4137,7 +4138,7 @@ addEventListener("keydown", (e) => {
     if (!$("voile-joueur").hidden) { $("voile-joueur").hidden = true; return; }
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
     if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
-    if (!$("voile-records").hidden) { $("voile-records").hidden = true; return; }
+    if (!$("voile-regles").hidden) { $("voile-regles").hidden = true; return; }
     if (!$("voile").hidden) { destination = null; $("voile").hidden = true; }
     return;
   }
@@ -5297,6 +5298,7 @@ function peindreOngletsDuCompte(): void {
  */
 function ouvrirLeProfil(pousser = true): void {
   if (moiCompte === null) { ouvrirLeCompte(); return; }
+  $("corps-records").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
   ($("mdp-ancien") as HTMLInputElement).value = "";
@@ -5335,6 +5337,7 @@ function fermerLeProfil(pousser = true): void {
  * seulement, jamais a plusieurs) reste a construire.
  */
 function ouvrirLeSolveur(pousser = true): void {
+  $("corps-records").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
   $("join").hidden = false;
@@ -5360,8 +5363,10 @@ addEventListener("popstate", () => {
   const page = new URLSearchParams(location.search).get("page");
   if (page === "compte" && moiCompte !== null) { ouvrirLeProfil(false); return; }
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
+  if (page === "records") { ouvrirLesRecords(false); return; }
   fermerLeProfil(false);
   fermerLeSolveur(false);
+  fermerLesRecords(false);
 });
 
 // --- Le solveur : anagrammes, mots formables, extensions, squelettes. ---
@@ -6385,7 +6390,7 @@ function peindreCompte(): void {
 
   const records = el("button", "records", "Records") as HTMLButtonElement;
   records.type = "button";
-  records.addEventListener("click", () => { $("voile-records").hidden = false; });
+  records.addEventListener("click", () => ouvrirLesRecords());
   boite.appendChild(records);
 
   const moi = pseudo();
@@ -7331,13 +7336,14 @@ $("quitter").addEventListener("click", quitterSalon);
 $("site-nom").addEventListener("click", () => {
   if (!$("corps-profil").hidden) { fermerLeProfil(); return; }
   if (!$("corps-solveur").hidden) { fermerLeSolveur(); return; }
+  if (!$("corps-records").hidden) { fermerLesRecords(); return; }
   if ($("join").hidden) quitterSalon();
 });
 
-/** Le panneau des records se referme par son bouton comme par son voile. */
-$("records-close").addEventListener("click", () => { $("voile-records").hidden = true; });
-$("voile-records").addEventListener("click", (e) => {
-  if (e.target === $("voile-records")) $("voile-records").hidden = true;
+/** Le rappel de la regle se referme par son bouton comme par son voile. */
+$("regles-close").addEventListener("click", () => { $("voile-regles").hidden = true; });
+$("voile-regles").addEventListener("click", (e) => {
+  if (e.target === $("voile-regles")) $("voile-regles").hidden = true;
 });
 
 // -------------------------------------------------------- signaler un bug
@@ -7678,3 +7684,537 @@ void lireLeCompte().then(() => {
 if (salonChoisi !== "") allerA(salonChoisi);
 
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw());
+
+// ---------------------------------------------------------- LA PAGE DES RECORDS
+//
+// Voir SPEC.md §23. Une page, comme le profil et l'anagrammeur : elle partage
+// le bandeau de l'accueil, prend toute la largeur, et porte son adresse --
+// `?page=records` -- pour qu'on puisse y revenir et en ressortir par le bouton
+// « precedent » du navigateur.
+//
+// ELLE NE LIT QUE LE JOURNAL DES RECORDS. Aucun de ses trois points d'entree
+// n'ouvre un fichier de partie : une ligne reste lisible meme si la partie
+// qu'elle designe a disparu du disque.
+
+interface LigneDeRecord {
+  rang: number;
+  partie: string;
+  at: number;
+  categorie: string;
+  grille: string;
+  lexique: string;
+  empreinte: string;
+  chrono: number | null;
+  coups: number;
+  temps: number;
+  cumul: number;
+  farfouilles: number;
+  topee: boolean;
+  negatif: number;
+  joueurs: { nom: string; tops: number; invite: boolean }[];
+  solo: string | null;
+}
+
+interface LigneDeCoup {
+  rang: number; mot: string; score: number; partie: string;
+  categorie: string; lexique: string; at: number; par: string | null;
+}
+
+interface LigneDeMot {
+  rang: number; mot: string; fois: number; trouves: number; rates: number; part: number;
+}
+
+type VueDesRecords = "classement" | "annexes" | "mots";
+
+let rcCategorie = "normale";
+let rcPageDeCategories: 1 | 2 = 1;
+let rcGrille: "normale" | "super" = "normale";
+let rcLexique = DICO_PAR_DEFAUT;
+let rcSolo = false;
+let rcVue: VueDesRecords = "classement";
+let rcAnnexe = "chrono";
+let rcSens: "rates" | "trouves" = "rates";
+/** `null` : toutes les longueurs confondues. */
+let rcLongueur: number | null = null;
+/** Ce qu'on attend en ce moment : une reponse en retard ne repeint pas. */
+let rcDemande = 0;
+
+/**
+ * La couleur d'un joueur, derivee de son nom.
+ *
+ * RIEN A ENREGISTRER, et le meme joueur garde la sienne d'un tableau a
+ * l'autre, d'une partie a l'autre, sans que personne n'ait a la choisir.
+ *
+ * La clarte suit le theme : une teinte lisible sur fond clair disparait sur
+ * fond de nuit, et l'inverse.
+ */
+function couleurDuJoueur(nom: string): string {
+  let h = 0;
+  for (let i = 0; i < nom.length; i++) h = (h * 31 + nom.charCodeAt(i)) % 360;
+  return themeSombre() ? `hsl(${h} 58% 66%)` : `hsl(${h} 52% 38%)`;
+}
+
+/** Un temps de partie, au centieme : une performance se mesure (SPEC.md §16). */
+function tempsDeManche(ms: number): string {
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(2)} s`;
+  const m = Math.floor(s / 60);
+  const reste = s - m * 60;
+  return `${m} min ${reste < 10 ? "0" : ""}${reste.toFixed(2)} s`;
+}
+
+/** Le temps d'un coup : la meme precision, sans les minutes. */
+const tempsParCoup = (ms: number, coups: number): string =>
+  coups === 0 ? "—" : `${(ms / coups / 1000).toFixed(2)} s`;
+
+function dateDeManche(at: number): string {
+  return new Date(at).toLocaleDateString(langue() === "en" ? "en-GB" : "fr-FR",
+    { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Le chrono d'une partie, ou « Infini » quand elle n'en avait pas. */
+function chronoDeManche(c: number | null): string {
+  if (c === null) return t("Infini");
+  if (c % 60 === 0 && c >= 60) return `${c / 60} min`;
+  return `${c} s`;
+}
+
+/**
+ * La cellule des joueurs : chacun de sa couleur, l'invite dit comme tel.
+ *
+ * AU-DELA DE TROIS NOMS ON COMPTE AU LIEU D'ENUMERER, comme la feuille de
+ * route le fait deja (SPEC.md §10) : six pseudos bout a bout debordent, et une
+ * ligne qui se chevauche ne se lit plus du tout. La liste entiere reste dans
+ * l'infobulle.
+ */
+function cellulesDesJoueurs(joueurs: LigneDeRecord["joueurs"]): HTMLElement {
+  const boite = el("div", "rc-joueurs");
+  if (joueurs.length === 0) {
+    boite.appendChild(el("span", "rc-de-plus", "—"));
+    return boite;
+  }
+  for (const j of joueurs.slice(0, 3)) {
+    const un = el("span", "rc-joueur");
+    const point = el("span", "pastille-couleur");
+    point.style.background = couleurDuJoueur(j.nom);
+    un.appendChild(point);
+    const nom = el("span", "", j.nom);
+    nom.style.color = couleurDuJoueur(j.nom);
+    un.appendChild(nom);
+    if (j.invite) un.appendChild(el("i", "", t("(invité)")));
+    boite.appendChild(un);
+  }
+  if (joueurs.length > 3) {
+    boite.appendChild(el("span", "rc-de-plus", `+${joueurs.length - 3}`));
+  }
+  boite.title = joueurs
+    .map((j) => `${j.nom}${j.invite ? ` ${t("(invité)")}` : ""} · ${j.tops}`)
+    .join("\n");
+  return boite;
+}
+
+/**
+ * La cellule du rang : un jeton pour les trois premiers, un chiffre ensuite.
+ *
+ * LE JETON NE VAUT QUE POUR UN PODIUM DE JOUEURS. Un tableau de mots classe des
+ * mots, pas des gens, et ses ex aequo sont nombreux : quatre disques d'or l'un
+ * sous l'autre ne disent plus rien. Le bloc des negatifs non plus n'a pas de
+ * podium -- c'est ce qui vient sous le podium.
+ */
+function celluleDuRang(rang: number, podium = true): HTMLElement {
+  const td = el("td", "rang");
+  if (podium && rang <= 3) {
+    const j = el("span", `rc-jeton ${rang === 1 ? "or" : rang === 2 ? "argent" : "bronze"}`,
+      String(rang));
+    td.appendChild(j);
+  } else {
+    td.textContent = String(rang);
+  }
+  return td;
+}
+
+/**
+ * L'entete d'un tableau. `tri` nomme la colonne QUI FAIT LE CLASSEMENT.
+ *
+ * Sans elle, un tableau annexe ne dit pas sur quoi il est trie : « la plus
+ * chere » et « la plus courte » montrent les memes colonnes, et rien ne dit
+ * laquelle decide de l'ordre.
+ */
+function tete(
+  colonnes: { texte: string; classe?: string }[], tri = "",
+): HTMLElement {
+  const thead = el("thead");
+  const tr = el("tr");
+  for (const c of colonnes) {
+    const th = el("th", c.classe ?? "", c.texte);
+    if (tri !== "" && c.texte === tri) {
+      th.classList.add("tri");
+      th.appendChild(el("span", "rc-tri", "▾"));
+    }
+    tr.appendChild(th);
+  }
+  thead.appendChild(tr);
+  return thead;
+}
+
+function tableauVide(quoi: string): HTMLElement {
+  return el("div", "rc-vide", quoi);
+}
+
+/**
+ * Les deux outils de fin de ligne : la feuille de route, et le rejeu.
+ *
+ * DESACTIVES TANT QUE LE LECTEUR DE PARTIE ARCHIVEE N'EXISTE PAS. Le rejeu ne
+ * fonctionne aujourd'hui que dans un salon ouvert, et une partie citee par un
+ * record est un fichier inerte. Les boutons sont la, a leur place, et disent
+ * pourquoi ils ne repondent pas encore.
+ */
+function outilsDeLigne(): HTMLElement[] {
+  const feuille = el("button", "rc-outil", t("Feuille")) as HTMLButtonElement;
+  const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
+  for (const b of [feuille, revoir]) {
+    b.type = "button";
+    b.disabled = true;
+    b.title = t("Le rejeu d'une partie archivée reste à construire");
+  }
+  return [feuille, revoir];
+}
+
+/**
+ * Une ligne de partie : les colonnes demandees, dans cet ordre.
+ *
+ * UN SEUL JEU DE COLONNES POUR LES DEUX BLOCS. La colonne du negatif ne parait
+ * que si le tableau en compte au moins une, et vaut alors « — » sur les parties
+ * topees -- leur negatif est nul par definition, et une colonne de zeros
+ * n'apprend rien. Inserer une cellule dans les seules lignes du bas decalait
+ * tout le reste sous une entete qui ne bougeait pas.
+ */
+function ligneDePartie(
+  l: LigneDeRecord, opts: { negatif?: boolean; farfouilles?: boolean } = {},
+): HTMLElement {
+  const tr = el("tr");
+  tr.appendChild(celluleDuRang(l.rang, l.topee));
+
+  const joueurs = el("td", "g");
+  joueurs.appendChild(cellulesDesJoueurs(l.joueurs));
+  tr.appendChild(joueurs);
+
+  tr.appendChild(el("td", "fort", tempsDeManche(l.temps)));
+  if (opts.negatif === true) {
+    const neg = el("td", l.topee ? "" : "fort", l.topee ? "—" : `+${l.negatif}`);
+    tr.appendChild(neg);
+  }
+  tr.appendChild(el("td", "", chronoDeManche(l.chrono)));
+  tr.appendChild(el("td", "", String(l.coups)));
+  tr.appendChild(el("td", "", tempsParCoup(l.temps, l.coups)));
+  tr.appendChild(el("td", "", String(l.cumul)));
+  if (opts.farfouilles === true) tr.appendChild(el("td", "", String(l.farfouilles)));
+  tr.appendChild(el("td", "", dateDeManche(l.at)));
+
+  const lex = el("td", "", nomCourtDuDico(l.lexique));
+  lex.title = t2("Empreinte du lexique : {e}", { e: l.empreinte });
+  tr.appendChild(lex);
+
+  const outils = el("td", "c");
+  for (const b of outilsDeLigne()) outils.appendChild(b);
+  tr.appendChild(outils);
+  return tr;
+}
+
+/** Le nom court d'un lexique, tel que les reglages l'ecrivent. */
+function nomCourtDuDico(id: string): string {
+  return tousLesDictionnaires().find((d) => d.id === id)?.nom ?? id;
+}
+
+function rendreLeClassement(d: { topees: LigneDeRecord[]; negatifs: LigneDeRecord[] }): void {
+  const boite = $("rc-tableau");
+  if (d.topees.length === 0 && d.negatifs.length === 0) {
+    boite.replaceChildren(tableauVide(t("Aucune partie enregistrée dans cette catégorie.")));
+    $("rc-compte").textContent = "";
+    return;
+  }
+  const avecNegatif = d.negatifs.length > 0;
+  const colonnes = [
+    { texte: "#" }, { texte: t("Joueurs"), classe: "g" }, { texte: t("Temps") },
+    ...(avecNegatif ? [{ texte: t("Négatif") }] : []),
+    { texte: t("Chrono") }, { texte: t("Coups") }, { texte: t("Temps / coup") },
+    { texte: t("Cumul") }, { texte: t("Date") }, { texte: t("Lexique") },
+    { texte: "", classe: "c" },
+  ];
+  const table = el("table");
+  table.appendChild(tete(colonnes, t("Temps")));
+  const corps = el("tbody");
+  for (const l of d.topees) corps.appendChild(ligneDePartie(l, { negatif: avecNegatif }));
+  if (avecNegatif) {
+    // LE BLOC DES NEGATIFS SE DISTINGUE DE CE QUI EST AU-DESSUS, sans quoi on
+    // lirait un classement de vitesse la ou il n'y en a pas.
+    const coupure = el("tr", "rc-coupure");
+    const td = el("td", "", t("Parties non topées, du plus petit négatif")) as HTMLTableCellElement;
+    td.colSpan = colonnes.length;
+    coupure.appendChild(td);
+    corps.appendChild(coupure);
+    for (const l of d.negatifs) corps.appendChild(ligneDePartie(l, { negatif: true }));
+  }
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+  const total = d.topees.length + d.negatifs.length;
+  $("rc-compte").textContent = t2(total > 1 ? "{n} parties au tableau" : "{n} partie au tableau", { n: total });
+}
+
+function rendreLesAnnexes(lignes: LigneDeRecord[]): void {
+  const boite = $("rc-tableau");
+  if (lignes.length === 0) {
+    boite.replaceChildren(tableauVide(t("Aucune partie topée dans cette catégorie.")));
+    $("rc-compte").textContent = "";
+    return;
+  }
+  const triPar: Record<string, string> = {
+    chrono: t("Chrono"), chere: t("Cumul"), pasChere: t("Cumul"),
+    courte: t("Coups"), longue: t("Coups"),
+    farfouilles: t("Farfouilles"), peuDeFarfouilles: t("Farfouilles"),
+  };
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: "#" }, { texte: t("Joueurs"), classe: "g" }, { texte: t("Temps") },
+    { texte: t("Chrono") }, { texte: t("Coups") }, { texte: t("Temps / coup") },
+    { texte: t("Cumul") }, { texte: t("Farfouilles") }, { texte: t("Date") },
+    { texte: t("Lexique") }, { texte: "", classe: "c" },
+  ], triPar[rcAnnexe] ?? ""));
+  const corps = el("tbody");
+  for (const l of lignes) corps.appendChild(ligneDePartie(l, { farfouilles: true }));
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+  $("rc-compte").textContent = t2(lignes.length > 1 ? "{n} parties au tableau" : "{n} partie au tableau", { n: lignes.length });
+}
+
+function rendreLesCoups(coups: LigneDeCoup[]): void {
+  const boite = $("rc-tableau");
+  if (coups.length === 0) {
+    boite.replaceChildren(tableauVide(t("Aucun coup enregistré dans cette catégorie.")));
+    $("rc-compte").textContent = "";
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: "#" }, { texte: t("Mot"), classe: "g" }, { texte: t("Points") },
+    { texte: t("Trouvé par"), classe: "g" }, { texte: t("Date") }, { texte: t("Lexique") },
+  ], t("Points")));
+  const corps = el("tbody");
+  for (const c of coups) {
+    const tr = el("tr");
+    tr.appendChild(celluleDuRang(c.rang));
+    tr.appendChild(el("td", "g fort", c.mot));
+    tr.appendChild(el("td", "fort", String(c.score)));
+    const par = el("td", "g");
+    if (c.par === null) par.appendChild(el("span", "rc-de-plus", t("non trouvé")));
+    else par.appendChild(cellulesDesJoueurs([{ nom: c.par, tops: 1, invite: false }]));
+    tr.appendChild(par);
+    tr.appendChild(el("td", "", dateDeManche(c.at)));
+    tr.appendChild(el("td", "", nomCourtDuDico(c.lexique)));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+  $("rc-compte").textContent = t2(coups.length > 1 ? "{n} coups au tableau" : "{n} coup au tableau", { n: coups.length });
+}
+
+function rendreLesMots(lignes: LigneDeMot[]): void {
+  const boite = $("rc-tableau");
+  if (lignes.length === 0) {
+    boite.replaceChildren(tableauVide(t("Aucun mot compté pour l'instant.")));
+    $("rc-compte").textContent = "";
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: "#" }, { texte: t("Mot"), classe: "g" }, { texte: t("Sorti en top") },
+    { texte: t("Trouvé") }, { texte: t("Raté") }, { texte: t("Part trouvée") },
+  ], rcSens === "trouves" ? t("Trouvé") : t("Raté")));
+  const corps = el("tbody");
+  for (const l of lignes) {
+    const tr = el("tr");
+    tr.appendChild(celluleDuRang(l.rang, false));
+    tr.appendChild(el("td", "g fort", l.mot));
+    tr.appendChild(el("td", "", String(l.fois)));
+    tr.appendChild(el("td", "", String(l.trouves)));
+    tr.appendChild(el("td", "fort", String(l.rates)));
+    tr.appendChild(el("td", "", `${l.part} %`));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+  $("rc-compte").textContent = t2(lignes.length > 1 ? "{n} mots au tableau" : "{n} mot au tableau", { n: lignes.length });
+}
+
+/** Va chercher ce que la vue courante demande, et le peint. */
+async function chargerLesRecords(): Promise<void> {
+  const mien = ++rcDemande;
+  $("rc-tableau").replaceChildren(tableauVide(t("chargement…")));
+  const base = `categorie=${encodeURIComponent(rcCategorie)}`
+    + `&grille=${rcGrille}&lexique=${encodeURIComponent(rcLexique)}`;
+  let url: string;
+  if (rcVue === "mots") {
+    url = `/api/records/mots?lexique=${encodeURIComponent(rcLexique)}&sens=${rcSens}`
+      + (rcLongueur === null ? "" : `&longueur=${rcLongueur}`);
+  } else if (rcVue === "annexes") {
+    url = `/api/records/annexe?${base}&quoi=${rcAnnexe}`;
+  } else {
+    url = `/api/records?${base}${rcSolo ? "&solo=1" : ""}`;
+  }
+  let data: any;
+  try {
+    data = await (await fetch(url)).json();
+  } catch {
+    if (mien !== rcDemande) return;
+    $("rc-tableau").replaceChildren(tableauVide(t("serveur injoignable")));
+    return;
+  }
+  // Une reponse en retard ne repeint pas : on a change d'onglet entre-temps.
+  if (mien !== rcDemande) return;
+  if (rcVue === "mots") rendreLesMots(data.lignes ?? []);
+  else if (rcVue === "annexes") {
+    if (data.coups !== undefined) rendreLesCoups(data.coups);
+    else rendreLesAnnexes(data.lignes ?? []);
+  } else rendreLeClassement({ topees: data.topees ?? [], negatifs: data.negatifs ?? [] });
+}
+
+function peindreLesCategories(): void {
+  const boite = $("rc-categories");
+  boite.replaceChildren();
+  for (const c of CATEGORIES.filter((x) => x.page === rcPageDeCategories)) {
+    const b = el("button", "", t(c.nom)) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(c.id === rcCategorie));
+    // LA MONTANTE N'EST PAS ENCORE JOUABLE : son onglet existe, il dit ce qui
+    // viendra, et il ne ment pas en affichant un tableau vide comme les autres.
+    b.addEventListener("click", () => {
+      rcCategorie = c.id;
+      peindreLesCategories();
+      void chargerLesRecords();
+    });
+    boite.appendChild(b);
+  }
+  const page = el("button", "rc-page",
+    rcPageDeCategories === 1 ? t("Grands formats") : t("Formats courants")) as HTMLButtonElement;
+  page.type = "button";
+  page.title = rcPageDeCategories === 1
+    ? t("De 10 sur 10 à 15 sur 15") : t("De la partie normale au 7, 8 et 9");
+  page.addEventListener("click", () => {
+    rcPageDeCategories = rcPageDeCategories === 1 ? 2 : 1;
+    const premiere = CATEGORIES.find((x) => x.page === rcPageDeCategories);
+    if (premiere !== undefined) rcCategorie = premiere.id;
+    peindreLesCategories();
+    void chargerLesRecords();
+  });
+  boite.appendChild(page);
+}
+
+/** Pose l'etat presse sur un groupe de boutons a valeur. */
+function presser(id: string, valeur: string): void {
+  for (const b of $(id).querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === valeur));
+  }
+}
+
+function peindreLesDeclinaisons(): void {
+  presser("rc-grille", rcGrille);
+  presser("rc-solo", rcSolo ? "solo" : "tous");
+  presser("rc-annexe", rcAnnexe);
+  presser("rc-sens", rcSens);
+  presser("rc-longueur", rcLongueur === null ? "toutes" : String(rcLongueur));
+  presser("rc-vues", rcVue);
+  // Les mots ne dependent ni de la categorie ni de la grille : ce sont les
+  // memes mots partout. Leurs choix propres remplacent donc ceux du haut.
+  $("rc-annexes").hidden = rcVue !== "annexes";
+  $("rc-mots").hidden = rcVue !== "mots";
+  const surLesMots = rcVue === "mots";
+  $("rc-categories").hidden = surLesMots;
+  ($("rc-grille").parentElement as HTMLElement).hidden = surLesMots;
+  ($("rc-solo").parentElement as HTMLElement).hidden = surLesMots;
+}
+
+/** Les lexiques, en puces : quatre, et l'on veut les voir tous d'un coup. */
+function peindreLesLexiques(): void {
+  const boite = $("rc-lexique");
+  boite.replaceChildren();
+  for (const d of tousLesDictionnaires()) {
+    const b = el("button", "", d.nom) as HTMLButtonElement;
+    b.type = "button";
+    b.dataset["v"] = d.id;
+    b.title = d.detail;
+    b.setAttribute("aria-pressed", String(d.id === rcLexique));
+    b.addEventListener("click", () => {
+      rcLexique = d.id;
+      peindreLesLexiques();
+      void chargerLesRecords();
+    });
+    boite.appendChild(b);
+  }
+}
+
+/** Les longueurs de mots : toutes, puis deux a quinze lettres. */
+function peindreLesLongueurs(): void {
+  const boite = $("rc-longueur");
+  if (boite.childElementCount > 0) return;
+  const faire = (valeur: string, texte: string): void => {
+    const b = el("button", "", texte) as HTMLButtonElement;
+    b.type = "button";
+    b.dataset["v"] = valeur;
+    b.addEventListener("click", () => {
+      rcLongueur = valeur === "toutes" ? null : Number(valeur);
+      peindreLesDeclinaisons();
+      void chargerLesRecords();
+    });
+    boite.appendChild(b);
+  };
+  faire("toutes", t("Toutes"));
+  for (let n = 2; n <= 15; n++) faire(String(n), String(n));
+}
+
+/**
+ * Les records : une page hors partie, publique, sans compte a demander.
+ *
+ * Joignable depuis le bandeau, en partie comme a l'accueil -- mais la partie
+ * n'est pas quittee pour autant : le bouton du bandeau n'existe qu'a
+ * l'accueil, ou il n'y a rien a interrompre.
+ */
+function ouvrirLesRecords(pousser = true): void {
+  $("corps-salons").hidden = true;
+  $("corps-profil").hidden = true;
+  $("corps-solveur").hidden = true;
+  $("corps-records").hidden = false;
+  $("join").hidden = false;
+  peindreLesCategories();
+  peindreLesLexiques();
+  peindreLesLongueurs();
+  peindreLesDeclinaisons();
+  void chargerLesRecords();
+  if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
+}
+
+function fermerLesRecords(pousser = true): void {
+  $("corps-records").hidden = true;
+  $("corps-salons").hidden = false;
+  // On ne garde pas cent lignes derriere une page fermee : masquee, la table
+  // continue de peser sur le document, comme la liste de l'anagrammeur.
+  $("rc-tableau").replaceChildren();
+  if (pousser) window.history.pushState({ page: "salons" }, "", location.pathname);
+}
+
+for (const [id, poser] of [
+  ["rc-grille", (v: string) => { rcGrille = v === "super" ? "super" : "normale"; }],
+  ["rc-solo", (v: string) => { rcSolo = v === "solo"; }],
+  ["rc-annexe", (v: string) => { rcAnnexe = v; }],
+  ["rc-sens", (v: string) => { rcSens = v === "trouves" ? "trouves" : "rates"; }],
+  ["rc-vues", (v: string) => { rcVue = v as VueDesRecords; }],
+] as [string, (v: string) => void][]) {
+  $(id).addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button") as HTMLElement | null;
+    if (b === null || b.dataset["v"] === undefined) return;
+    poser(b.dataset["v"]);
+    peindreLesDeclinaisons();
+    void chargerLesRecords();
+  });
+}
+
+$("rc-regles").addEventListener("click", () => { $("voile-regles").hidden = false; });
