@@ -225,6 +225,8 @@ export const EN: Readonly<Record<string, string>> = {
   // ---------------------------------------------------------- anagrammeur
   "Anagrammeur": "Anagrammer",
   "Mots formables": "Playable words",
+  // Le nombre de jokers ajoutes n'est pas connu d'avance : c'est le X.
+  "+X jokers": "+X blanks",
   "Préfixes": "Prefixes",
 
   // =====================================================================

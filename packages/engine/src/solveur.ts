@@ -220,6 +220,38 @@ export function solutions(dict: Dict, tirage: string): ResultatRecherche {
   return motsFormables(dict, tirage, tirage.length);
 }
 
+/**
+ * Tous les mots qui emploient TOUT le tirage plus un joker, puis deux, puis
+ * trois, jusqu'a la longueur maximale d'une saisie.
+ *
+ * C'est « Solutions » repete sur MOT?, MOT??, MOT???... : un mot rendu ici
+ * contient donc toujours l'integralite des lettres tapees, et les lettres
+ * ajoutees sont marquees comme jokers -- de quoi lire d'un coup d'oeil ce
+ * qu'il faudrait trouver en plus.
+ *
+ * Les longueurs sortent DEJA CROISSANTES, et l'ordre alphabetique regne a
+ * l'interieur de chacune : la boucle va du plus petit ajout au plus grand, et
+ * rien n'a besoin d'etre retrie ensuite -- ce qui compte quand la reponse se
+ * chiffre en centaines de milliers de mots (un tirage d'une seule lettre).
+ */
+export function plusDeJokers(dict: Dict, tirage: string,
+  longueurMax = LONGUEUR_MAX_SAISIE): ResultatRecherche {
+  const t0 = maintenant();
+  const resultats: Correspondance[] = [];
+  let operations = 0;
+  let limiteAtteinte = false;
+  for (let ajout = 1; tirage.length + ajout <= longueurMax; ajout++) {
+    const r = solutions(dict, tirage + BLANK.repeat(ajout));
+    r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
+    // Pas de `push(...r.resultats)` : l'etalement passe la liste en arguments,
+    // et une pile d'appel n'en prend pas des centaines de milliers.
+    for (const c of r.resultats) resultats.push(c);
+    operations += r.stats.operations;
+    limiteAtteinte ||= r.stats.limiteAtteinte;
+  }
+  return { resultats, stats: { ms: maintenant() - t0, operations, limiteAtteinte } };
+}
+
 // --- Extensions d'un mot : cas particuliers d'un squelette ---
 
 /** Ajoute exactement trois lettres devant le mot tape. */

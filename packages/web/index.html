@@ -798,16 +798,34 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 /* LE SOLVEUR PREND PLUS DE LARGEUR QUE LE PROFIL : c'est un outil de lecture,
    les listes de mots ont besoin de place plutot que d'une colonne etroite. */
-.solveur { max-width: 960px; margin: 0 auto; }
+.solveur { max-width: 1000px; margin: 0 auto; }
 .solveur-tete { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
 .solveur-tete h1 { margin: 0 auto 0 0; font-size: 20px; font-weight: 600; }
-.solveur-corps { display: flex; flex-direction: column; gap: 12px; padding: 20px 0 4px; }
+/* DEUX COLONNES AU MILIEU DE L'ECRAN : les commandes tiennent une largeur
+   fixe a gauche, les reponses prennent tout le reste a droite. `minmax(0,1fr)`
+   et non `1fr` : une liste de mots a chasse fixe pousserait sinon la colonne
+   au-dela de sa part et deborderait la page. */
+.solveur-corps { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 26px; padding: 20px 0 4px; align-items: start; }
+.solveur-gauche { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; }
+/* Sous 900px, une colonne : la liste passe sous les boutons plutot que de se
+   serrer a cote d'eux. */
+@media (max-width: 900px) {
+  .solveur-corps { grid-template-columns: minmax(0, 1fr); }
+  .solveur-gauche { position: static; }
+  .solveur-corps .solveur-resultats { max-height: none; }
+}
 .sv-champ { font-family: var(--mono); font-size: 22px; letter-spacing: .04em; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); color: var(--ink); }
 .sv-champ:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .sv-champ.sv-valide { color: var(--accent); }
 .sv-champ.sv-invalide { color: var(--warn); }
 .solveur-boutons { display: flex; flex-wrap: wrap; gap: 8px; }
-.solveur-boutons button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+/* LES BOUTONS DE LA PAGE : empiles, pleine largeur de leur colonne, le libelle
+   a gauche et son chiffre a droite. Gros, noirs et gras : ce sont les
+   commandes de la page, elles se lisent avant tout le reste. La fenetre
+   flottante garde les siens, plus petits, dans leur grille de trois. */
+.solveur-corps .solveur-boutons { flex-direction: column; flex-wrap: nowrap; gap: 7px; }
+.solveur-corps .solveur-boutons button { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.solveur-boutons button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 700; }
 /* LE NUMERO RAPPELLE LE RACCOURCI (1 A 6, chiffres ou pave numerique) sans
    dominer le libelle : plus petit, plus pale, colle au mot qu'il sert. */
 .sv-numero { margin-left: 5px; font-size: .82em; color: var(--ink-faint); }
@@ -821,6 +839,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    suivre l'aide de tres pres, pas flotter derriere une ligne de separation
    qui n'a plus de compte global a introduire (voir peindreResultats). */
 .solveur-resultats { border-top: 0; padding-top: 2px; }
+/* LA COLONNE DES REPONSES DEFILE CHEZ ELLE, sans emporter les boutons hors de
+   vue. La hauteur est une estimation du reste de l'ecran : si le bandeau du
+   haut passe a deux lignes, la page defile un peu, et rien ne casse. */
+.solveur-corps .solveur-resultats { max-height: calc(100vh - 210px); overflow-y: auto; scrollbar-gutter: stable; }
 .sv-stats { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-faint); }
 .sv-liste { display: flex; flex-direction: column; gap: 1px; font-family: var(--mono); font-size: 14.5px; }
 .sv-ligne { display: flex; align-items: baseline; gap: 10px; padding: 3px 6px 3px 0; border-radius: 4px; }
@@ -1148,18 +1170,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <h1>Anagrammeur</h1>
       <select id="sv-dico" title="Lexique"></select>
     </div>
+    <!-- DEUX COLONNES : les commandes a gauche, les reponses a droite, et les
+         deux au milieu de l'ecran plutot que collees aux bords. La colonne de
+         gauche a de la place sous ses boutons pour le texte de presentation
+         qui viendra. -->
     <div class="solveur-corps">
-      <input id="sv-mot" class="sv-champ" type="text" autocomplete="off"
-             spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
-      <div class="solveur-boutons">
-        <button type="button" id="sv-solutions"><span class="sv-label">Solutions</span><span class="sv-numero">1</span></button>
-        <button type="button" id="sv-formables"><span class="sv-label">Mots formables</span><span class="sv-numero">2</span></button>
-        <button type="button" id="sv-benjamins"><span class="sv-label">Benjamins</span><span class="sv-numero">3</span></button>
-        <button type="button" id="sv-rallonges-avant"><span class="sv-label">Préfixes</span><span class="sv-numero">4</span></button>
-        <button type="button" id="sv-rallonges-arriere"><span class="sv-label">Suffixes</span><span class="sv-numero">5</span></button>
-        <button type="button" id="sv-superbenjamins"><span class="sv-label sv-label-petit">Superbenjamins</span><span class="sv-numero">6</span></button>
+      <div class="solveur-gauche">
+        <input id="sv-mot" class="sv-champ" type="text" autocomplete="off"
+               spellcheck="false" maxlength="15" aria-label="Mot ou tirage">
+        <div class="solveur-boutons">
+          <button type="button" id="sv-solutions"><span class="sv-label">Solutions</span><span class="sv-numero">1</span></button>
+          <button type="button" id="sv-formables"><span class="sv-label">Mots formables</span><span class="sv-numero">2</span></button>
+          <button type="button" id="sv-jokers"><span class="sv-label">+X jokers</span><span class="sv-numero">3</span></button>
+          <button type="button" id="sv-benjamins"><span class="sv-label">Benjamins</span><span class="sv-numero">4</span></button>
+          <button type="button" id="sv-rallonges-avant"><span class="sv-label">Préfixes</span><span class="sv-numero">5</span></button>
+          <button type="button" id="sv-rallonges-arriere"><span class="sv-label">Suffixes</span><span class="sv-numero">6</span></button>
+          <button type="button" id="sv-superbenjamins"><span class="sv-label">Superbenjamins</span><span class="sv-numero">7</span></button>
+        </div>
+        <p class="solveur-aide" id="sv-aide"></p>
       </div>
-      <p class="solveur-aide" id="sv-aide"></p>
       <div class="solveur-resultats" id="sv-resultats"></div>
     </div>
   </div>

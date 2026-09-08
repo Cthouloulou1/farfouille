@@ -7,7 +7,8 @@ import { loadDict } from "../src/dictionary_node.ts";
 import { DAWG_PATH } from "../src/paths.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE,
-  motsFormables, rallongesArriere, rallongesAvant, solutions, squelette, superBenjamins,
+  motsFormables, plusDeJokers, rallongesArriere, rallongesAvant, solutions, squelette,
+  superBenjamins,
 } from "../src/solveur.ts";
 
 const dawg = loadDict(DAWG_PATH);
@@ -133,6 +134,32 @@ verifie("ZZZ n'est pas un mot", !estUnMotAvecJokers(dawg, "ZZZ"));
   const s = solutions(dawg, "AABEFRST??");
   verifie("solutions(AABEFRST??) = les mots de 10 lettres de motsFormables",
     eg(mots(s), dix.map((c) => c.mot).sort()));
+}
+
+// --- +X jokers : Solutions sur MOT?, MOT??, ... jusqu'a 15 lettres ---
+{
+  const r = plusDeJokers(dawg, "CHAMPION");
+  const liste = r.resultats.map((c) => c.mot);
+  console.log(`  plusDeJokers(CHAMPION) = ${r.resultats.length} mots, ${r.stats.ms.toFixed(0)} ms`);
+  console.log(`    ${liste.slice(0, 8).join(", ")}...`);
+  verifie("plusDeJokers(CHAMPION) contient CHAMPIONNE et SUPERCHAMPIONS",
+    liste.includes("CHAMPIONNE") && liste.includes("SUPERCHAMPIONS"));
+  verifie("plusDeJokers(CHAMPION) ne rend jamais le mot tape lui-meme",
+    !liste.includes("CHAMPION"));
+  verifie("plusDeJokers(CHAMPION) va de 9 a 15 lettres",
+    r.resultats.every((c) => c.mot.length >= 9 && c.mot.length <= 15));
+  verifie("plusDeJokers(CHAMPION) sort par longueur croissante",
+    r.resultats.every((c, i) => i === 0 || r.resultats[i - 1]!.mot.length <= c.mot.length));
+  verifie("plusDeJokers(CHAMPION) est alphabetique a longueur egale",
+    r.resultats.every((c, i) => i === 0
+      || r.resultats[i - 1]!.mot.length !== c.mot.length
+      || r.resultats[i - 1]!.mot.localeCompare(c.mot) <= 0));
+  // Chaque mot garde les huit lettres tapees, et ne marque en joker QUE ce qui
+  // a ete ajoute : c'est ce qui se colore a l'ecran.
+  verifie("plusDeJokers(CHAMPION) marque exactement les lettres ajoutees",
+    r.resultats.every((c) => c.jokers.length === c.mot.length - "CHAMPION".length));
+  verifie("plusDeJokers sur une saisie deja au maximum ne rend rien",
+    plusDeJokers(dawg, "A".repeat(LONGUEUR_MAX_SAISIE)).resultats.length === 0);
 }
 
 // --- Mode de saisie : longueur et nombre de jokers plafonnes ---

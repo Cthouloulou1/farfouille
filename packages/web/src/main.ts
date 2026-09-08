@@ -17,7 +17,8 @@ import {
 } from "../../engine/src/dictionnaires.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
-  rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette, superBenjamins,
+  plusDeJokers, rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette,
+  superBenjamins,
   type Correspondance, type ResultatRecherche,
 } from "../../engine/src/solveur.ts";
 import {
@@ -5370,11 +5371,18 @@ addEventListener("popstate", () => {
 // rapide). `creerSolveur` porte tout le cablage une seule fois ; seuls les
 // identifiants d'elements et la troncature different d'une instance a l'autre.
 
-type SvCle = "solutions" | "formables" | "benjamins" | "rallongesAvant" | "rallongesArriere" | "superbenjamins";
+type SvCle = "solutions" | "formables" | "jokers" | "benjamins" | "rallongesAvant"
+  | "rallongesArriere" | "superbenjamins";
 
 interface SvConfig {
   mot: string; aide: string; resultats: string;
-  boutons: Record<SvCle, string>;
+  /**
+   * Les boutons de CETTE instance, dans l'ordre de `SV_CLES`. La page les a
+   * tous ; la fenetre flottante en montre moins, et se numerote alors sur les
+   * siens -- ses six boutons portent 1 a 6, sans trou la ou la page en a un
+   * de plus.
+   */
+  boutons: Partial<Record<SvCle, string>>;
   /** `null` : la liste entiere, sans troncature -- c'est la page. */
   troncature: number | null;
   /**
@@ -5386,7 +5394,8 @@ interface SvConfig {
 }
 
 const SV_CLES: SvCle[] = [
-  "solutions", "formables", "benjamins", "rallongesAvant", "rallongesArriere", "superbenjamins",
+  "solutions", "formables", "jokers", "benjamins", "rallongesAvant", "rallongesArriere",
+  "superbenjamins",
 ];
 
 /** Au-dela, poser la liste entiere d'un coup se sent -- voir peindreResultats. */
@@ -5400,14 +5409,17 @@ const SV_SEUIL_CONFIRMATION = 20_000;
 const SV_FENETRE_LONGUEUR = 5;
 
 /**
- * 1 a 6, rangee du haut ou pave numerique, pour lancer la recherche du meme
+ * 1 a 7, rangee du haut ou pave numerique, pour lancer la recherche du meme
  * numero sans lacher le clavier. `e.code` et non `e.key` : la touche au-dessus
  * du A vaut "Digit1" quel que soit ce qu'elle tape -- "1" en QWERTY, "&" en
  * AZERTY. Aucun chiffre ne s'ecrit dans cette barre, la touche est donc libre.
+ *
+ * Le rang compte pour L'INSTANCE : la fenetre flottante n'a pas le bouton des
+ * jokers, ses six boutons se numerotent donc 1 a 6 sans sauter le 3.
  */
 const SV_RACCOURCIS: Readonly<Record<string, number>> = {
-  Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 5,
-  Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4, Numpad6: 5,
+  Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4, Digit6: 5, Digit7: 6,
+  Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4, Numpad6: 5, Numpad7: 6,
 };
 
 function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focaliser: () => void; vider: () => void } {
@@ -5417,14 +5429,17 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
   /** Le dernier bouton clique : reste enfonce, et se relance tant qu'on retape. */
   let modeActif: SvCle | null = null;
 
+  /** Les recherches que CETTE instance propose, dans l'ordre de ses boutons. */
+  const mesCles = SV_CLES.filter((cle) => cfg.boutons[cle] !== undefined);
+
   const champ = () => $(cfg.mot) as HTMLInputElement;
-  const bouton = (cle: SvCle) => $(cfg.boutons[cle]) as HTMLButtonElement;
+  const bouton = (cle: SvCle) => $(cfg.boutons[cle]!) as HTMLButtonElement;
   // Suit `dict`, la variable globale du client (le lexique de la partie en
   // cours), quand cfg.dico est `null` -- sinon son propre choix.
   const dictActif = (): Dict | undefined => (cfg.dico === null ? dict : dictPropre);
 
   function peindreLesBoutonsActifs(): void {
-    for (const cle of SV_CLES) bouton(cle).setAttribute("aria-pressed", String(cle === modeActif));
+    for (const cle of mesCles) bouton(cle).setAttribute("aria-pressed", String(cle === modeActif));
   }
 
   function messageInvalide(saisie: string): string {
@@ -5448,7 +5463,7 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     aide.classList.remove("avert");
     aide.textContent = "";
 
-    for (const cle of SV_CLES) {
+    for (const cle of mesCles) {
       bouton(cle).disabled = cle === "solutions" ? (mode !== "tirage" && mode !== "squelette") : mode !== "tirage";
     }
 
@@ -5515,6 +5530,13 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
           r = serre.r;
           masques = serre.masques;
         }
+      } else if (cle === "jokers") {
+        // « Solutions » sur MOT?, MOT??, MOT???... : le moteur rend deja les
+        // longueurs croissantes et l'alphabetique a l'interieur de chacune, il
+        // n'y a rien a retrier. Les lettres ajoutees se colorent (elles sont
+        // marquees comme jokers) ; pas de colonne de code, elles se lisent
+        // dans le mot.
+        r = plusDeJokers(d, mot);
       } else {
         const fn = cle === "benjamins" ? benjamins
           : cle === "rallongesAvant" ? rallongesAvant
@@ -5721,9 +5743,10 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { bouton("solutions").click(); return; }
     const idx = SV_RACCOURCIS[e.code];
-    if (idx !== undefined) { e.preventDefault(); bouton(SV_CLES[idx]!).click(); }
+    const cle = idx === undefined ? undefined : mesCles[idx];
+    if (cle !== undefined) { e.preventDefault(); bouton(cle).click(); }
   });
-  for (const cle of SV_CLES) bouton(cle).addEventListener("click", () => executer(cle, true));
+  for (const cle of mesCles) bouton(cle).addEventListener("click", () => executer(cle, true));
 
   async function choisirDico(id: string): Promise<void> {
     dictPropreId = id;
@@ -5770,7 +5793,8 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
 const solveurPage = creerSolveur({
   mot: "sv-mot", dico: "sv-dico", aide: "sv-aide", resultats: "sv-resultats",
   boutons: {
-    solutions: "sv-solutions", formables: "sv-formables", benjamins: "sv-benjamins",
+    solutions: "sv-solutions", formables: "sv-formables", jokers: "sv-jokers",
+    benjamins: "sv-benjamins",
     rallongesAvant: "sv-rallonges-avant", rallongesArriere: "sv-rallonges-arriere",
     superbenjamins: "sv-superbenjamins",
   },
