@@ -1756,7 +1756,8 @@ pas un outil.
 | **Lien direct dans la partie** | Entrer dans la grille permanente depuis un lien, en se nommant sur place. |
 | **La grille 21×21** | Une « super grille », avec son propre motif de primes. Les cases restent à donner. |
 | **Les dictionnaires dérivés** | Le *clabbers* (tout anagramme d'un mot du dictionnaire est admis) et le *crabb* (tout mot **contenu** dans un mot est admis : `GF` par `STAGFLATION`). Ce ne sont pas des modes de jeu mais des **langues** : ils se branchent là où se branche l'anglais. Plus tard, le *barbc* (anagrammes du crabb) et le *labber* (crabb du clabbers) — deux ensembles distincts, contre l'intuition. |
-| **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. |
+| **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. **En arbitrage, il se choisit à la main** (§22). |
+| **Le mode arbitrage** | Un duplicate dont les tirages sont saisis et non tirés, conduit par le gérant du salon : arbitrer un tournoi, préparer une partie, ou saisir une partie jouée sur papier. Spécifié au §22, avec le **top des tops** qui l'accompagne et sert aussi en rejeu. |
 | **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. |
 
 ### Vu, pas expliqué
@@ -3851,3 +3852,148 @@ que la partie revient entière :
 `check_paliers.ts` vérifie qu'un seul palier est écrit par coup, qu'une grille
 sans fin n'a pas d'annexe, qu'une grille bornée en a une, et que les sous-tops
 relus après un redémarrage sont exactement ceux qui avaient été écrits.
+
+---
+
+## 22. Le mode arbitrage
+
+Un duplicate de tournoi ne se joue pas comme un duplicate en ligne : les lettres
+sortent d'un sac en tissu, quelqu'un les annonce, et la feuille de match fait
+foi. Le logiciel n'y tire rien, il **enregistre**.
+
+Le même outil sert à trois usages qui ne demandent rien de plus l'un que
+l'autre : arbitrer une partie sur place, **préparer** une partie à l'avance en
+choisissant ses tirages, et **saisir** après coup une partie jouée sur papier.
+
+### « Infini » n'a pas de sens en duplicate, ce bouton sert donc à autre chose
+
+Un coup de duplicate sans chrono ne se terminerait jamais : le réglage est déjà
+ramené à 60 s, au même endroit deux fois, côté serveur et côté client. Le bouton
+« Infini » de la section *Temps par coup* est donc, en duplicate, du décor mort.
+
+**En duplicate, cette place devient une bascule « Mode entraînement / tournoi ».**
+Le temps par coup se choisit comme d'habitude ; ailleurs qu'en duplicate,
+« Infini » garde son sens et son bouton.
+
+### L'arbitre est le gérant, les autres regardent
+
+**Un seul joueur conduit la partie : celui qui a créé le salon.** Les autres la
+voient se construire, sans pouvoir agir dessus — ni proposer un mot, ni valider,
+ni toucher au chrono.
+
+La raison est celle du tournoi : la référence est la feuille de match, et le
+logiciel doit avoir exactement une voix. Deux personnes qui saisiraient des
+tirages sur la même partie ne se départageraient par rien.
+
+### Le tirage se saisit, il ne se tire pas
+
+La colonne de droite prend la place du panneau habituel et demande les lettres du
+coup.
+
+- **Le reliquat est déjà là.** S'il reste `ENR` à l'issue du coup précédent, le
+  champ s'ouvre sur `ENR+` et l'arbitre complète. C'est la notation du serveur,
+  celle qui s'écrit déjà au journal (§4).
+- **Le sac se montre, et se vide.** Chaque lettre saisie s'éteint dans le sac
+  affiché. C'est ce qui permet de voir qu'on a saisi un huitième E alors que le
+  jeu n'en a que quinze.
+- **Un bouton tire au hasard**, pour préparer une partie seul sans sac sous la
+  main.
+- **« Rejet »** vide le champ : le reliquat repart au sac et sept lettres neuves
+  se tirent. C'est le geste du tireur qui n'a pas assez de consonnes ou de
+  voyelles, et il n'a pas besoin d'être autre chose qu'un champ qu'on efface.
+- **Un tirage dont rien ne se joue le dit.** Le serveur connaît déjà ce cas : il
+  rend les lettres au sac et repioche, jusqu'à un plafond (§16). En arbitrage il
+  ne repioche pas, il affiche « aucune solution » et attend un autre tirage pour
+  **le même coup**.
+
+### Le chrono part à la main
+
+Le temps ne démarre pas quand le tirage est validé, mais quand l'arbitre le
+lance. En tournoi le tirage est annoncé, répété, parfois épelé, avant que
+personne ne cherche.
+
+### Le top se choisit parmi ses isotops
+
+Le tirage validé, le coup s'affiche comme en rejeu : tous les coups jouables,
+par paliers. **L'arbitre choisit lequel des isotops est joué.**
+
+C'est une première réponse à une question laissée ouverte (§13, « Le choix de
+l'isotop joué ») : hors arbitrage il reste tiré au sort, faute d'une raison
+établie de préférer `BODIES` à `BOIDES` ; en arbitrage, un humain décide, et
+c'est de toute façon ainsi que ça se passe à une table.
+
+### Revenir à un coup
+
+On se trompe en saisissant sept lettres, et il faut pouvoir défaire. **Revenir au
+coup X met de côté les coups X et suivants**, et un bouton « Rétablir la partie »
+les remet. Tant qu'on n'a rien saisi d'autre, le retour est sans conséquence.
+
+**Saisir au coup X un tirage différent bifurque, et ce qui était de côté est
+perdu.** La partie n'a plus d'autre suite que la nouvelle : il n'y a pas deux
+parties à tenir, ni à choisir entre elles plus tard.
+
+Cela ne contredit pas le journal en ajout seul (§11) : **rien n'est retiré du
+fichier.** Le retour est un événement, la bifurcation en est un autre. Ce qui
+disparaît est la *partie*, pas sa trace — une partie qui a bifurqué se relit
+donc encore telle qu'elle était avant, ce qui est exactement ce qu'on veut d'un
+arbitrage contesté.
+
+### Le top des tops
+
+Quatre outils, et ils ne sont pas réservés à l'arbitrage : les mêmes servent en
+**rejeu**, quand on regarde une partie finie.
+
+| | pool de lettres | emprise |
+|---|---|---|
+| avec le reliquat | le sac **et** les lettres en main | toute la grille |
+| sans le reliquat | le sac seul | toute la grille |
+| avec le reliquat, sur une portion | le sac **et** les lettres en main | un rectangle choisi |
+| sans le reliquat, sur une portion | le sac seul | un rectangle choisi |
+
+Aucun des quatre n'invente de lettre : le pool est ce qui existe encore. C'est ce
+qui rend la réponse utile pour préparer un duplicate — « que peut-il encore
+tomber ici », et non « que tomberait-il avec un jeu neuf ».
+
+**« Les 1000 meilleurs » n'est pas un nombre exact, et c'est mieux ainsi.** Le
+générateur raisonne en paliers entiers et ne tronque jamais un palier (§10) : la
+réponse est les coups qui tiennent sous mille, coupés à une frontière de palier.
+Sur `?AEILRT` un seul palier compte 254 coups ; en afficher 100 sans dire que les
+autres existent ne renseignerait sur rien.
+
+Mesuré sur une **grille vide**, pavage classique, le pool tenant lieu de sac par
+un exemplaire de chaque lettre :
+
+| pool | plafond à 1 000 | sans plafond |
+|---|---|---|
+| 26 lettres, sans joker | 887 coups, 16 paliers, **230 ms** | 144 437 coups, 465 ms |
+| 26 lettres + les 2 jokers | 874 coups, 15 paliers, **5,7 s** | 379 981 coups, 14,3 s |
+
+Le meilleur coup y vaut 144 points dans les quatre cas. **Ce sont les jokers qui
+coûtent**, d'un facteur vingt-cinq, et c'est le même constat qu'au §15.
+
+Deux pièces manquent au moteur, toutes deux petites :
+
+1. **Un plafond sur le nombre de lettres posées en un coup.** Il est aujourd'hui
+   implicite : un vrai tirage fait sept lettres. Avec le sac entier pour pool, le
+   générateur construit des coups de douze ou quinze lettres — faux, puisqu'un
+   coup ne pose jamais plus qu'un chevalet, et c'est là que part le temps. Le
+   poser corrige le modèle **et** rend son mordant à l'élagage : les mesures
+   ci-dessus sont donc un majorant.
+2. **La restriction à un rectangle.** `generateMoves` boucle sur des ancrages ;
+   les filtrer sur une emprise est naturel.
+
+**Ce calcul est un calcul de serveur.** La génération de coups a besoin du
+GADDAG (4 Mo), et le navigateur ne télécharge que le DAWG (453 Ko) pour
+l'anagrammeur (§7). Le serveur, lui, a déjà le GADDAG chargé, déjà un fil de
+calcul par salon (§16) et déjà un plafond contre la force brute.
+
+Pour l'affichage, la liste du rejeu — mot, case, score — est faite pour ça et
+défile déjà.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| L'emprise du rectangle | Un coup doit-il tenir **entièrement** dans le rectangle, ou seulement le **toucher** ? Les deux ensembles diffèrent beaucoup, et l'usage n'est pas le même : préparer une case précise, ou balayer un coin de grille. |
+| Les spectateurs et le tirage | Voient-ils les lettres dès la saisie, ou seulement au départ du chrono ? En tournoi le tirage est public, mais un entraînement à distance n'a pas les mêmes usages. |
+| Le chat en arbitrage | Il reste ouvert, ou il se ferme avec le reste de l'interaction ? |
