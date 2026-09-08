@@ -1750,7 +1750,7 @@ pas un outil.
 | Sujet | Pourquoi |
 |---|---|
 | **Comptes optionnels** (mail + argon2id, vérification) | Le pseudo n'est unique que parmi les connectés, et le contrôle de suppression par pseudo est un **garde-fou, pas une frontière de sécurité**. |
-| **Statistiques et records du site** | Les parties entièrement topées les plus rapides, par exemple. |
+| **Statistiques et records du site** | Les parties entièrement topées les plus rapides, leurs catégories, les mots les plus ratés, et la **montante** qui enchaîne six parties. Spécifié au §23. |
 | **Nom de domaine et mise en ligne** | |
 | **Version anglaise** | Dictionnaire NWL, interface, et **repères anglais** — déjà écrits (§3), aujourd'hui derrière un réglage manuel qui devra suivre la langue du site. |
 | **Lien direct dans la partie** | Entrer dans la grille permanente depuis un lien, en se nommant sur place. |
@@ -1758,7 +1758,7 @@ pas un outil.
 | **Les dictionnaires dérivés** | Le *clabbers* (tout anagramme d'un mot du dictionnaire est admis) et le *crabb* (tout mot **contenu** dans un mot est admis : `GF` par `STAGFLATION`). Ce ne sont pas des modes de jeu mais des **langues** : ils se branchent là où se branche l'anglais. Plus tard, le *barbc* (anagrammes du crabb) et le *labber* (crabb du clabbers) — deux ensembles distincts, contre l'intuition. |
 | **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. **En arbitrage, il se choisit à la main** (§22). |
 | **Le mode arbitrage** | Un duplicate dont les tirages sont saisis et non tirés, conduit par le gérant du salon : arbitrer un tournoi, préparer une partie, ou saisir une partie jouée sur papier. Spécifié au §22, avec le **top des tops** qui l'accompagne et sert aussi en rejeu. |
-| **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. |
+| **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. Le compteur qui les départage est spécifié au §23. |
 
 ### Vu, pas expliqué
 
@@ -4103,3 +4103,401 @@ demande, c'est que quatre choses apprennent qu'un coup peut être abandonné :
 |---|---|
 | Le coup qui dépasse de l'emprise | L'emprise dit quelles cases on interroge. Un coup qui **commence** dans le rectangle et en **sort** compte-t-il ? Le prendre rend la restriction molle ; l'écarter interdit de voir ce qu'un coin prépare vraiment. Écrit pour l'instant : le coup doit tenir entièrement dans l'emprise. |
 | Neuf ou dix lettres | Le plafond est posé à neuf. Le passer à dix n'a pas été mesuré, et le coût ne croît pas linéairement. |
+
+---
+
+## 23. Les records
+
+Le §16 les avait mis en réserve en trois lignes. Cette section les tranche.
+
+Un record dit une chose et une seule : **cette partie a été entièrement topée,
+et voilà en combien de temps**. Tout le reste — les catégories, les axes, les
+tableaux annexes — n'est que la façon de comparer ce qui est comparable.
+
+### Une partie topée, et rien d'autre
+
+Une partie est **topée** quand *tous* ses coups ont été trouvés par un joueur.
+Un seul coup clos par l'échéance, et la partie ne concourt plus.
+
+C'est brutal, et c'est voulu. Le top est la seule chose que le jeu mesure sans
+discussion : il est unique, il est calculé par le serveur, et le trouver ne se
+négocie pas. Un classement qui accepterait les parties presque topées devrait
+dire ce que « presque » vaut, et n'aurait plus de sens.
+
+> Cela rend le record **palpitant plutôt que probable** : une partie qui se joue
+> bien pendant vingt coups se perd au vingt-et-unième, et c'est ce qui donne du
+> prix aux lignes du tableau.
+
+### Ce qui fait une manche valide
+
+Un record se compare à d'autres records. Une variante qui change le nombre de
+coups, la valeur des lettres ou la fin de la partie ne se compare à rien. La
+configuration d'une manche est donc **figée**, et tout écart la disqualifie
+silencieusement — elle se joue normalement, elle n'entre simplement pas au
+tableau.
+
+| ce qui est exigé | pourquoi |
+|---|---|
+| **partie terminée** | une partie abandonnée n'a pas de temps total |
+| **grille bornée** : 15×15 ou super grille 21×21 | une grille sans fin n'a pas de fin, donc pas de record |
+| **sac du commerce** — 102 caramels en français, 100 en anglais, deux exemplaires sur la super grille | les probabilités pondérées ne s'épuisent pas : la même 7 sur 7 fait **22 coups au sac et 48 à 55 en probabilités**. Ce ne sont pas deux parties d'une même catégorie, ce sont deux jeux |
+| **primes de farfouilles inchangées** | elles sont réglables ; une table bricolée donne des cumuls incomparables |
+| **aucune borne en coups ni en durée** | la partie va au bout de son sac, sans quoi on comparerait des parties tronquées |
+| **mode topping** | le duplicate ne se termine pas sur un top trouvé |
+| **au moins un joueur actif** | voir plus bas |
+| **partie topée** | pour tous les classements de vitesse et pour les tableaux annexes |
+
+Ce qui reste **libre**, et figure en colonne plutôt qu'en condition : le
+**chrono**, le décompte de départ, le nombre de joueurs présents.
+
+Le pavage et le nombre de sacs ne sont pas dans la liste parce qu'ils **découlent
+déjà** de la grille : le serveur les impose, le client ne peut pas en demander
+d'autres (§16).
+
+### La validité se juge dans le salon, pas au journal
+
+Un onglet resté ouvert sur une partie chronométrée la fait défiler toute seule.
+Le journal ne verrait aucune différence avec une table de six joueurs qui
+cherchent : en topping, **seul le gagnant d'un coup y est écrit**, et un coup
+raté n'écrit personne.
+
+La tentation était d'ajouter deux champs à chaque coup de chaque partie. On ne
+le fait pas : ces champs ne serviraient qu'aux parties bornées et terminées, et
+le salon **sait déjà** ce qu'il faut savoir. Il regarde passer sa propre partie :
+
+- qui est **présent** au tirage de chaque coup ;
+- qui a **soumis au moins un mot** pendant ce coup.
+
+À la fin de la partie, il en tire une ligne, une seule, dans le journal des
+records. Le journal de la partie, lui, ne change pas.
+
+**Un serveur qui redémarre en cours de partie perd cette observation.** La partie
+cesse alors d'être éligible, et le salon le dit. C'est le prix de ne rien écrire
+par coup, et il est faible : une partie normale dure une vingtaine de coups.
+
+### La fin d'une partie s'écrit au journal
+
+Le journal porte `grille`, `coup`, `chat`, `like`, `servi` — rien qui dise qu'une
+partie est finie. `finie` se **recalcule** au démarrage en rejouant le sac
+entier. Tout ce qui lit un journal sans embarquer le moteur — un outil, un
+lecteur de rejeu, une vérification de sauvegarde — est donc incapable de
+distinguer une partie complète d'une partie abandonnée. Sur les 174 parties
+7 sur 7 du disque, « 26 coups » peut vouloir dire les deux.
+
+Un événement de plus, écrit une fois :
+
+```
+{ "t": "fin", "at": 1788126879592, "raison": "sac", "coups": 22 }
+```
+
+`raison` vaut `sac`, `coups`, `duree` ou `injouable`. Trois champs, une ligne par
+partie, et la question ne se repose plus.
+
+### Les catégories
+
+Une catégorie se nomme par ce qu'on pose sur ce qu'on tire : **X sur Y**. Le
+lexique, la grille et le fait de jouer seul sont des **axes**, pas des
+catégories : ils filtrent chacun des tableaux ci-dessous.
+
+**Première page.**
+
+| catégorie | X sur Y | joker |
+|---|---|---|
+| **Partie normale** | 7 sur 7 | non |
+| **Partie normale solo** | 7 sur 7 | non |
+| **Montante** | les six étapes, voir plus bas | |
+| **Joker** | 7 sur 7 | oui |
+| **7 sur 8** | 7 sur 8 | non |
+| **7 sur 8 joker** | 7 sur 8 | oui |
+| **7 et 8** | 8 sur 8 | non |
+| **7 et 8 joker** | 8 sur 8 | oui |
+| **7, 8 et 9** | 9 sur 9 | non |
+| **7, 8 et 9 joker** | 9 sur 9 | oui |
+
+**Seconde page** : de 10 sur 10 à 15 sur 15, chacune avec sa variante joker.
+Douze tableaux de plus, séparés parce qu'ils sont d'une autre nature — on y
+comptera les parties topées sur les doigts d'une main.
+
+La partie joker se joue à **un joker par tirage**. Le double joker n'a pas de
+catégorie : c'est une autre partie, et elle n'a pas encore de public.
+
+### Solo
+
+**Solo veut dire qu'un seul joueur a trouvé tous les tops**, pas qu'il était seul
+dans le salon. La définition se lit dans le résultat, elle ne demande rien à
+personne, et elle est plus dure que l'autre : être le seul à tout trouver pendant
+que cinq personnes cherchent est plus difficile que d'être seul à chercher.
+
+« Partie normale solo » a son propre onglet, parce que c'est la performance
+individuelle qui intéresse. Partout ailleurs, le solo est un **filtre** du
+tableau : une case à cocher qui ne garde que ces manches-là.
+
+### Le tableau
+
+Cent lignes au plus, la plus rapide en tête. Deux temps égaux se départagent par
+la **date** : celui qui l'a fait le premier passe devant.
+
+| colonne | contenu |
+|---|---|
+| **#** | le rang |
+| **Joueurs** | ceux qui ont trouvé au moins un top, à gauche, alignés |
+| **Temps** | le temps de la partie, au centième |
+| **Chrono** | le réglage de la partie, ou « Infini » |
+| **Date** | |
+| **Coups** | |
+| **Temps / coup** | le temps divisé par le nombre de coups |
+| **Lexique** | son nom et sa version |
+| **Feuille** | ouvre la feuille de route de cette partie |
+| **Revoir** | ouvre le rejeu de cette partie |
+
+**Le temps est celui du bandeau** : la somme des coups joués, celle qui se fige
+pendant que le serveur cherche (§16). Le temps de calcul du serveur n'appartient
+à personne et ne doit pénaliser personne.
+
+**Pour être cité, il faut avoir trouvé au moins un top.** Trois joueurs à la
+partie dont un n'a rien trouvé, et l'on n'en lit que deux. Au-delà de trois noms
+on compte au lieu d'énumérer — « 5 joueurs » — et la liste complète est dans
+l'infobulle, comme la feuille de route le fait déjà (§10).
+
+**Il faut un compte pour être nommé.** Un pseudo nu est reprenable par n'importe
+qui : un record signé d'un pseudo n'est attribuable à personne. Une partie jouée
+avec des invités reste valable et se lit « alice, bob + 2 invités ».
+
+**Le nombre de coups varie, et c'est une part de chance.** Mesuré sur le disque :
+une 7 sur 7 complète en 15×15 fait **19 à 26 coups**, 22 le plus souvent. Une
+partie courte est structurellement plus rapide. Le classement roi reste le temps
+total — c'est la performance qu'on raconte — mais la colonne **temps par coup**
+est là pour qui veut lire l'autre vérité.
+
+**Une couleur par joueur**, dans la colonne des noms et dans la feuille de route,
+pour qu'on voie d'un coup d'œil qui a trouvé quoi. Elle se dérive du nom, ne
+coûte rien à enregistrer, et **ne va pas sur les caramels du plateau** : une
+grille bariolée se lit moins bien qu'une grille unie.
+
+### Les tableaux de la seconde page se complètent au négatif
+
+À partir de 10 sur 10, une partie topée est rare. Un tableau à trois lignes
+n'apprend rien. Les manches topées occupent donc le haut du tableau, classées au
+temps ; s'il en manque pour faire cent, la suite est complétée par les **meilleurs
+négatifs**, dans un bloc visiblement séparé.
+
+Le **négatif d'une manche** est la somme, sur les coups non trouvés, de l'écart
+entre le top et la meilleure solution soumise — le score entier du top quand
+personne n'a rien soumis. Un négatif nul, c'est une partie topée : les deux
+classements se rejoignent par le haut.
+
+### Les tableaux annexes
+
+Ils portent sur des parties **topées** eux aussi. Une partie entièrement révélée
+par l'échéance afficherait sinon le cumul du générateur, pas celui d'une table.
+
+| tableau | ce qu'il classe |
+|---|---|
+| **Chrono de partie normale** | le chrono le plus serré tenu jusqu'au bout |
+| **La partie la plus chère** | le cumul le plus haut |
+| **La partie la moins chère** | le cumul le plus bas |
+| **La partie la plus courte** | le moins de coups |
+| **La partie la plus longue** | le plus de coups |
+| **Le plus de farfouilles** | |
+| **Le moins de farfouilles** | |
+| **Le coup le plus cher** | un coup, pas une partie : le mot, ses points, sa partie |
+| **Le coup le moins cher** | |
+
+Mesuré sur le disque : le cumul d'une partie normale tourne autour de **800 à
+980 points**. Le tableau a de la marge des deux côtés.
+
+> **Le chrono ne descend pas sous quinze secondes** pour qui n'est pas de
+> l'administration (§16). Le tableau des chronos butera donc sur 15 s tant que ce
+> plancher n'aura pas bougé.
+
+### Les mots ratés
+
+Un tableau des cent mots les plus ratés, et un tableau par longueur, de deux à
+quinze lettres. Chaque mot y porte **combien de fois il est sorti en top**,
+**combien de fois il a été trouvé**, et le pourcentage.
+
+**Un coup ne compte que si au moins un joueur a soumis un mot sur ce coup-là.**
+Pas dans la partie : sur le coup. Un joueur qui ne trouve pas le top ne reste pas
+les bras croisés, il joue autre chose ; ne rien soumettre du tout, c'est ne pas
+être là. C'est le seul filtre qui distingue un mot vraiment difficile d'un mot que
+personne ne regardait.
+
+**Un coup raté rate tous ses isotops.** Le mot retenu par le logiciel est tiré au
+sort parmi les coups au meilleur score (§5) : le mettre seul au tableau des ratés
+serait un accident de tirage au sort. Le coup compte donc pour **chacun** de ses
+isotops, en sortie comme en trouvaille — trouver le top par n'importe lequel
+d'entre eux, c'est les avoir tous trouvés.
+
+La liste des isotops est connue au moment où le coup se clôt : `pickTop` la
+calcule toujours, y compris sur une partie qui ne garde aucun palier. Le salon la
+retient avec le reste de son observation et l'écrit dans la ligne de la manche.
+
+**Le tableau symétrique existe aussi** : les mots les plus trouvés.
+
+### WU et QI
+
+Un compteur, valable pour le **lexique officiel du jeu francophone seulement** —
+`WU` n'existe pas en anglais — et un graphe des deux courbes dans le temps.
+
+Un point est compté quand le **top d'un coup est exactement `WU` ou `QI`**, et que
+ce coup a été **joué par un joueur**. Ni `WUS`, ni `QIS`, ni les collantes formées
+à côté d'un autre mot : ce sont d'autres mots.
+
+Ce compteur ne demande pas de manche valide. Il compte sur **toutes** les parties
+du site, en topping comme en duplicate, bornées ou non : c'est une curiosité, pas
+un classement. Elle prolonge le pari des équipes WU et QI (§13) — mesuré sur les
+16 632 premiers coups de `top-leger` : QI 48, WU 41.
+
+### La montante
+
+Six parties en topping, à la suite, sans reprendre son souffle :
+
+| étape | partie |
+|---|---|
+| 1 | 7 sur 7 |
+| 2 | 7 sur 7 joker |
+| 3 | 7 sur 8 |
+| 4 | 7 sur 8 joker |
+| 5 | 8 sur 8 |
+| 6 | 8 sur 8 joker |
+
+Un bouton **Montante** dans les réglages avancés, sous « Double joker ». Il fige
+le format, le joker et les bornes — c'est la suite qui les impose — et ne laisse
+réglables que le chrono, le lexique et la grille.
+
+**Le temps et le négatif sont ceux de la montante entière**, pas de l'étape en
+cours. C'est le total qui s'affiche, et c'est le total qui fait le record.
+
+**Une montante est une suite de parties, pas une partie.** Chaque étape garde son
+journal, sa graine, sa variante ; toutes portent le même identifiant de suite dans
+leur en-tête :
+
+```
+"montante": { "id": "…", "etape": 3, "essai": 2 }
+```
+
+Rien du modèle de partie ne change. Ce qui est nouveau vit dans le salon : la
+suite, l'étape courante, et les cumuls.
+
+#### Le coup raté, et le droit de recommencer
+
+Dès qu'un coup est raté, **le total passe au rouge** et un bouton apparaît :
+recommencer la partie en cours. Il relance une partie neuve **du même type** — on
+rate à la 7 sur 8, on repart à la 7 sur 8 — et non la montante entière.
+
+Ce qui se passe alors :
+
+- le **chrono ne s'arrête pas**. Le temps de la tentative abandonnée reste au
+  compteur ;
+- le **négatif de la tentative abandonnée est oublié**, et le rouge s'éteint avec
+  lui : la montante n'a plus de coup raté à son actif.
+
+**Le temps compte tout, le négatif ne compte que ce qui reste.** C'est ce qui rend
+le bouton honnête : recommencer est un choix qui a un prix. Sans ce prix, on
+recommencerait jusqu'à tomber sur une grille facile, et le tableau ne classerait
+plus que la patience.
+
+Qui ne recommence pas continue : la montante s'achève, le rouge reste jusqu'au
+bout, et elle ne concourt qu'au négatif.
+
+Le bouton disparaît quand l'étape se termine. Une étape close ne se reprend plus.
+
+#### L'étape suivante est prête avant qu'on en ait besoin
+
+Mesuré : monter un fil de calcul neuf et obtenir le premier top d'une 15×15 vide
+coûte **201 ms** — 41 ms pour démarrer le fil, 145 ms pour lire et reconstruire
+les deux lexiques, 17 ms de recherche. C'est ce que paie aujourd'hui **chaque
+relance de partie, dans chaque salon**, même quand le lexique ne change pas.
+
+Trois décisions, dont deux profitent à tout le monde et pas seulement à la
+montante :
+
+1. **Les lexiques chargés sont gardés**, indexés par fichier. Un salon qui relance
+   dix parties de suite dans le même lexique le lit une fois.
+2. **Le fil de calcul du salon est recyclé** d'une partie à la suivante quand le
+   lexique et le pavage ne changent pas. Il reçoit une configuration neuve et une
+   grille vide, au lieu d'être remplacé.
+3. **L'étape suivante est préparée d'avance.** Son premier tirage ne dépend que de
+   sa propre graine et d'une grille vide : il ne dépend **en rien** de la façon
+   dont l'étape en cours se termine. Il n'y a donc aucun « dernier coup » à
+   détecter — la préparation peut partir dès que l'étape commence, et la bascule
+   n'est plus qu'un échange.
+
+Rien ne fuit : la graine et le tirage préparés ne sortent pas du serveur, comme
+les coups d'avance du §17.
+
+### Le journal des records
+
+`data/records.journal.jsonl`, en ajout seul, `fsync` à chaque ligne, jamais
+réécrit — la même discipline que les parties, les salons et les comptes.
+
+Une ligne par manche valide, écrite quand la partie se termine. Elle porte tout ce
+qu'un tableau affiche : catégorie, lexique et sa version, grille, chrono, date,
+joueurs et ce que chacun a trouvé, temps, coups, cumul, farfouilles, négatif, et
+le détail coup par coup — le mot, ses isotops, trouvé ou non, par qui, en combien
+de temps, et si quelqu'un a soumis quelque chose.
+
+**Aucun tableau n'ouvre un fichier de partie.** Les fichiers de partie ne servent
+qu'au rejeu. C'est ce qui permet à une ligne de record de rester lisible même si
+sa partie a disparu du disque : on perd le rejeu, pas le record.
+
+Tous les classements se **dérivent en mémoire** de ce seul journal au démarrage.
+Le jour où il sera trop long à relire, il recevra un instantané périodique, comme
+les parties (§11) — pas avant.
+
+**Remettre les records à zéro, c'est archiver ce fichier.** Rien d'autre. Le
+lancement du site part d'un journal vide, et les parties déjà jouées ne sont pas
+reprises : elles ont servi à éprouver le moteur, pas à concourir.
+
+### Une partie citée ne s'efface pas
+
+Fermer un salon est le seul endroit du programme qui efface volontairement une
+partie (§16), et la règle y gagne une clause : **une partie citée au journal des
+records n'est jamais effacée**, quoi qu'il arrive à son salon.
+
+### Rejouer une partie archivée
+
+Le rejeu ne fonctionne aujourd'hui que dans un salon ouvert : il lui faut un
+`Game`, un fil de calcul et un verrou. Une partie archivée est un fichier inerte,
+et c'est précisément ce qu'une ligne de record désigne.
+
+**Le journal suffit.** Il porte la graine, la configuration, et pour chaque coup
+le tirage, le mot, sa direction, sa case, son score, qui l'a trouvé, en combien de
+temps et quels caramels étaient des jokers. Rejouer les placements dans l'ordre
+reconstruit la grille exacte (§11) : ni sac, ni solveur, ni verrou, ni fil.
+
+Un **lecteur de partie** en lecture seule sert donc la partie entière sur
+`/api/partie/<id>`, et le client l'affiche avec la feuille de route et le rejeu
+qu'il a déjà. C'est aussi ce qui donne un lien permanent par partie.
+
+Les **paliers** sont la seule chose que le journal d'une partie bornée ne porte
+pas : elle ne les garde pas, ils se refont en 19 ms (§10). Ils se recalculent à la
+demande, sur un fil partagé, exactement comme le rejeu en direct le fait déjà.
+
+> C'est un outil qui vaut au-delà des records : relire une partie enregistrée est
+> ce qui permet d'étudier son propre historique.
+
+### La triche, et ce qu'on en fait
+
+Un tableau de records rend un solveur attirant, et le §8 le dit déjà : la
+vérification ne l'empêche pas, elle la rend coûteuse.
+
+Ce qui est fait ici est modeste et suffit pour commencer : le temps de chaque coup
+est **déjà enregistré au centième**, et une manche dont les temps sont
+invraisemblables est **signalée**. L'administration peut alors l'**invalider**, et
+cette invalidation est elle-même un événement du journal des records — on n'efface
+pas une ligne d'un fichier en ajout seul :
+
+```
+{ "t": "invalide", "manche": "…", "par": "…", "raison": "…", "at": … }
+```
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| La montante sur la super grille | Écrit pour l'instant : 15×15 seulement. Six étapes sur un plateau de 441 cases font une séance entière, et personne n'a encore joué la première. |
+| Le plancher de quinze secondes | Le tableau des chronos ne descendra pas plus bas tant qu'il tiendra. Le baisser coûte au serveur un calcul de top complet par coup et par salon, pas au joueur. |
+| Une mise à jour de lexique | Les records passés ont été établis contre un autre lexique. La colonne le dit ; faut-il pour autant repartir de zéro, ou faire coexister deux listes ? |
+| Le classement des joueurs | Écarté pour l'instant : afficher un pourcentage de tops trouvés change la façon dont on joue, et pas dans le bon sens. |
+| Le ping | Il départage structurellement des coups trouvés à quelques dixièmes près (§8), et un tableau de records en fait un enjeu. Non résolu. |
