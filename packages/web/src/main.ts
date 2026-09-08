@@ -5822,11 +5822,15 @@ function ouvrirLeSolveurMini(): void {
   miniOuvert = true;
   $("solveur-jeu").setAttribute("aria-pressed", "true");
   void solveurMini.peuplerDico();
-  // LE FOCUS ATTEND LA PROCHAINE IMAGE : demande dans le meme instant que le
-  // demasquage, `.focus()` faisait defiler la page vers l'ancienne position
-  // (hors ecran, a gauche) que le navigateur avait encore en memoire -- un
-  // flash visible le tout premier appui. Un tour de boucle suffit a laisser
-  // la mise en page se poser avant de deplacer le focus.
+  // LE FOCUS ATTEND LA PROCHAINE IMAGE : `.focus()` demande au navigateur
+  // d'amener l'element dans le champ de vision, et le demander dans le meme
+  // instant que le demasquage le fait travailler sur une mise en page qui n'est
+  // pas encore posee. Un tour de boucle coute une image et enleve le doute.
+  //
+  // Ce n'est PAS ce qui causait le flash a gauche rapporte par Zulu : celui-la
+  // venait du glisser-deposer, qui lachait `right` sans avoir pose `left` (voir
+  // le `pointerdown` de la poignee, plus bas). Le report avait ete mal
+  // attribue ici.
   requestAnimationFrame(() => solveurMini.focaliser());
 }
 function fermerLeSolveurMini(): void {
@@ -5844,6 +5848,7 @@ function fermerLeSolveurMini(): void {
   fenetre.style.left = "";
   fenetre.style.top = "";
   fenetre.style.right = "";
+  fenetre.style.bottom = "";
 }
 $("solveur-jeu").addEventListener("click", () => {
   if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
@@ -5869,7 +5874,19 @@ $("solveur-mini").addEventListener("keydown", (e) => {
     const r = fenetre.getBoundingClientRect();
     dx = e.clientX - r.left;
     dy = e.clientY - r.top;
+    // LA FENETRE SE FIGE LA OU ELLE EST, AVANT DE LACHER SES ANCRAGES.
+    //
+    // Elle vit en bas a droite (`bottom`/`right` en CSS, `top`/`left` a `auto`).
+    // Lacher `right` sans avoir pose `left` la laissait une image ou deux SANS
+    // AUCUN REPERE HORIZONTAL : une boite `fixed` retombe alors sur sa position
+    // statique, contre le bord gauche de l'ecran, et c'est le premier
+    // `pointermove` qui la ramenait. D'ou le flash a gauche des qu'on
+    // l'attrapait. On pose donc sa position mesuree AVANT de retirer les
+    // ancrages du coin oppose : elle ne bouge pas d'un pixel.
+    fenetre.style.left = `${r.left}px`;
+    fenetre.style.top = `${r.top}px`;
     fenetre.style.right = "auto";
+    fenetre.style.bottom = "auto";
     poignee.setPointerCapture(e.pointerId);
   });
   poignee.addEventListener("pointermove", (e) => {
