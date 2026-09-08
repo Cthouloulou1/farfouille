@@ -3906,11 +3906,14 @@ coup.
   ne repioche pas, il affiche « aucune solution » et attend un autre tirage pour
   **le même coup**.
 
-### Le chrono part à la main
+### Le chrono est un outil, pas une règle
 
-Le temps ne démarre pas quand le tirage est validé, mais quand l'arbitre le
-lance. En tournoi le tirage est annoncé, répété, parfois épelé, avant que
-personne ne cherche.
+**Il est facultatif.** Le temps par coup se choisit comme dans n'importe quel
+duplicate, mais en arbitrage c'est un compte à rebours que le gérant lance s'il
+en veut un — typiquement pour une séance de club. Il vaut le temps choisi.
+
+Et il **ne part pas tout seul** à la validation du tirage : en tournoi le tirage
+est annoncé, répété, parfois épelé, avant que personne ne cherche.
 
 ### Le top se choisit parmi ses isotops
 
@@ -3982,6 +3985,57 @@ Deux pièces manquent au moteur, toutes deux petites :
 2. **La restriction à un rectangle.** `generateMoves` boucle sur des ancrages ;
    les filtrer sur une emprise est naturel.
 
+### Le plafond est celui de la partie, pas un chiffre à nous
+
+**Le nombre de lettres posées suit le réglage du salon.** Une partie normale
+cherche avec sept lettres, une partie « 6 sur 8 » avec six : le top des tops
+répond sur la partie qu'on joue, pas sur une partie idéale. C'est `jouables`
+(§16, « X sur Y ») qui décide, et rien d'autre.
+
+**Au-delà de neuf lettres posables, l'outil n'est pas proposé.** Une « 15 sur
+15 » sur super grille demanderait au serveur un travail sans rapport avec ce
+qu'il rend : le coût croît avec le nombre de lettres du pool comme avec leur
+liberté, et neuf est la limite qu'on se donne. Le bouton n'apparaît pas, plutôt
+que d'apparaître et de faire attendre.
+
+**Le sac doit être un vrai sac.** Les quatre outils demandent le sac de 102
+lettres ; sur une **pioche pondérée** (§4) il n'y a pas de reste à interroger,
+rien ne s'épuise, et « ce qui peut encore tomber » n'a pas de sens. L'outil n'y
+est pas proposé non plus.
+
+### Pas sur une grille sans fin, et c'est mesuré
+
+Le §15 mesure le générateur sur une grille permanente avec un **tirage de sept
+lettres** : médiane 297 ms et pic 4,3 s aux coups 451-500, le coût croissant
+d'environ 0,6 ms par coup déjà joué, sans borne.
+
+Le top des tops multiplie ce travail. Sur grille vide, passer d'un tirage de
+sept lettres au sac entier fait passer le calcul de 7 ms à 230 ms, soit un
+**facteur trente**. Et le pool contient **toujours les deux jokers** tant qu'ils
+n'ont pas été posés, alors qu'ils ne sortent qu'un tirage sur cent : le §15
+mesure un facteur onze pour un seul joker, et cette section un facteur
+vingt-cinq pour deux.
+
+Extrapolation — ce n'est pas une mesure — au coup 500 d'une grille sans fin :
+**de l'ordre de dix secondes en médiane, et des pics en minutes.** À dix mille
+coups, ce qui est le régime ordinaire de la grille mondiale, la question ne se
+pose plus.
+
+**L'outil est donc réservé aux grilles bornées**, 15×15 et super grille. Une
+grille sans fin garde ses trois autres colonnes et son anagrammeur.
+
+### Ce que ce plafond deviendrait dans une application installée
+
+La contrainte n'est pas celle du calcul, c'est celle du **serveur partagé** : une
+grille mondiale qui sert des dizaines de joueurs ne peut pas s'arrêter deux
+minutes parce que quelqu'un prépare un duplicate.
+
+Dans une **application installée sur l'ordinateur**, le GADDAG se charge sur
+place et le calcul se paie chez celui qui le demande. Les quatre outils
+n'auraient alors plus besoin d'aucun de ces plafonds : ni les neuf lettres, ni
+les grilles bornées, ni même les mille coups. C'est la bonne place pour cette
+fonction, et la version en ligne en garde une part bridée.
+
 **Ce calcul est un calcul de serveur.** La génération de coups a besoin du
 GADDAG (4 Mo), et le navigateur ne télécharge que le DAWG (453 Ko) pour
 l'anagrammeur (§7). Le serveur, lui, a déjà le GADDAG chargé, déjà un fil de
@@ -3990,10 +4044,62 @@ calcul par salon (§16) et déjà un plafond contre la force brute.
 Pour l'affichage, la liste du rejeu — mot, case, score — est faite pour ça et
 défile déjà.
 
+### L'emprise se dessine à la case entière
+
+On tire un rectangle sur la grille. **Toute case qu'il touche en fait partie**,
+même effleurée, et les cases intérieures aussi : on ne demande pas à la main de
+viser un bord de case. L'emprise est donc toujours un rectangle de cases pleines,
+jamais un rectangle de pixels.
+
+### Ce que voient les spectateurs
+
+Ils voient **la partie telle qu'elle est** et **le tirage une fois validé**. Les
+lettres en cours de saisie ne sortent pas de l'écran du gérant : un tirage qu'on
+est en train de taper n'est pas encore un tirage, et il peut être rejeté.
+
+**Le chat reste ouvert.** C'est le seul endroit où un spectateur a encore une
+voix, et il n'y a aucune raison de la lui retirer.
+
+### Qui entre dans un salon
+
+Deux réglages, dans les réglages avancés d'un salon. Ils ne servent pas qu'à
+l'arbitrage — un club qui veut jouer entre soi en a autant besoin — mais c'est
+l'arbitrage qui les rend nécessaires : « les autres regardent » suppose de
+pouvoir dire qui sont les autres.
+
+| Réglage | Effet |
+|---|---|
+| **Salon privé** | Personne n'entre. Le salon reste visible et sa grille se lit depuis le mur, mais le bouton de la rejoindre ne répond plus. |
+| **Observation seule** | On entre, on regarde, on ne joue pas. Aucune proposition n'est acceptée de qui n'est pas le gérant. |
+| └ **Les observateurs parlent** | Sous-réglage du précédent : le chat leur est ouvert, ou fermé. |
+
+Les trois se règlent indépendamment du mode arbitrage, et celui-ci n'en impose
+aucun : un arbitre qui veut un public bavard le garde.
+
+### Ce que coûte le retour à un coup
+
+Le modèle retenu plus haut — mise de côté, rétablissement, puis perte à la
+bifurcation — ne demande **aucune écriture qui ne soit un ajout**. Ce qu'il
+demande, c'est que quatre choses apprennent qu'un coup peut être abandonné :
+
+1. **La relecture.** Reconstruire la partie depuis le journal, c'est rejouer ses
+   coups ; il faut désormais sauter ceux qu'un retour a abandonnés. C'est le seul
+   endroit où la logique se complique vraiment.
+2. **L'instantané et l'annexe.** L'instantané est réécrit tous les vingt coups
+   et l'annexe des sous-tops est indexée par numéro de coup (§20, §21) : un coup
+   5 réécrit ne doit pas se voir servir les paliers de l'ancien coup 5.
+3. **Les spectateurs.** Le protocole ne sait aujourd'hui qu'**ajouter** un coup.
+   Il lui faut un message qui dit « oubliez les coups 5 et suivants », sans quoi
+   un écran resté ouvert garde une grille qui n'existe plus.
+4. **La numérotation.** Décidé : la nouvelle branche **reprend les numéros à
+   partir de X**. Une partie garde des coups 1 à N sans trou, et tout ce qui
+   affiche un numéro — feuille de route, annexe, « revenir au coup X » — continue
+   de dire vrai. Les coups abandonnés ne portent plus de numéro de partie, ils ne
+   sont qu'une trace au journal.
+
 ### Ce qui reste ouvert
 
 | Sujet | Question |
 |---|---|
-| L'emprise du rectangle | Un coup doit-il tenir **entièrement** dans le rectangle, ou seulement le **toucher** ? Les deux ensembles diffèrent beaucoup, et l'usage n'est pas le même : préparer une case précise, ou balayer un coin de grille. |
-| Les spectateurs et le tirage | Voient-ils les lettres dès la saisie, ou seulement au départ du chrono ? En tournoi le tirage est public, mais un entraînement à distance n'a pas les mêmes usages. |
-| Le chat en arbitrage | Il reste ouvert, ou il se ferme avec le reste de l'interaction ? |
+| Le coup qui dépasse de l'emprise | L'emprise dit quelles cases on interroge. Un coup qui **commence** dans le rectangle et en **sort** compte-t-il ? Le prendre rend la restriction molle ; l'écarter interdit de voir ce qu'un coin prépare vraiment. Écrit pour l'instant : le coup doit tenir entièrement dans l'emprise. |
+| Neuf ou dix lettres | Le plafond est posé à neuf. Le passer à dix n'a pas été mesuré, et le coût ne croît pas linéairement. |
