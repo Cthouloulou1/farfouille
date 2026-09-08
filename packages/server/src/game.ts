@@ -1335,6 +1335,19 @@ export class Game {
       this.canonicalTop = null;
       // Les coups prets ne seront jamais servis : la partie s'arrete ici.
       this.viderLAvance();
+      // LES LETTRES RESTEES EN MAIN REJOIGNENT LE RELIQUAT, comme sur l'autre
+      // sortie de deal() (aucun coup possible avec le tirage courant, un peu
+      // plus bas) : sans ce `rendre`, elles disparaissaient purement et
+      // simplement -- ni sur la grille, ni dans le sac -- des que la partie
+      // s'arretait alors qu'il en restait (plus de voyelle a jouer, nombre de
+      // coups ou duree atteinte). Le reliquat doit compter TOUT ce qui n'a
+      // jamais ete joue, pas seulement ce qui n'a jamais ete tire.
+      //
+      // `reliquat` ET NON `rack` : le tirage porte encore les lettres du coup
+      // qu'on vient de jouer, et les rendre toutes en inventait autant que le
+      // dernier mot en comptait.
+      this.bag.rendre(this.reliquat.filter((l) => l !== BLANK || !this.cfg.joker));
+      this.reliquat = [];
       // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
       // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
       // qui restent dans le sac ne sont pas piochés : ils ne serviront plus.

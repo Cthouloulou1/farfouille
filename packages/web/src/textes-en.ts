@@ -381,9 +381,9 @@ export const EN: Readonly<Record<string, string>> = {
     "A blank (?) and a skeleton (* or .) don't mix.",
   "Lettres, jokers (?) ou squelette (* et .) uniquement.":
     "Letters, blanks (?) or a skeleton (* and .) only.",
-  "Squelette : seul le bouton Solutions s'applique.":
-    "Skeleton: only the Solutions button applies.",
   "{n} résultat{s}": "{n} result{s}",
+  "{n} mot{s} masqué{s} : trop courts, ou sans une seule lettre du tirage.":
+    "{n} word{s} hidden: too short, or using no letter from the rack.",
   "{n} lettres": "{n} letters",
   "Aucun résultat.": "No result.",
   "calcul interrompu, affinez la recherche": "calculation stopped, narrow the search",

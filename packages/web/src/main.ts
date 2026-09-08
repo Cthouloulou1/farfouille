@@ -4756,17 +4756,6 @@ setInterval(() => {
 
 // ---------------------------------------------------------------- reseau
 
-/**
- * Les lettres d'un reliquat, triees comme cote serveur (`restantDuSac`) :
- * alphabetique, jokers a la fin. Sert a fondre le chevalet non joue dans le
- * reliquat une fois la partie close (voir `applyState`).
- */
-function trierReliquat(lettres: string): string {
-  const reelles = [...lettres].filter((c) => c !== BLANK).sort();
-  const jokers = [...lettres].filter((c) => c === BLANK);
-  return reelles.join("") + jokers.join("");
-}
-
 function applyState(s: {
   rack?: string; moveNumber: number; cumul: number; solving: boolean;
   players?: Record<string, number>; online?: string[]; verifies?: string[];
@@ -4799,14 +4788,7 @@ function applyState(s: {
   // recentre tout : la grille sursaute. Sa presence ne depend donc plus de son
   // CONTENU -- qui change a chaque coup et finit vide -- mais de la variante,
   // qui ne change pas de la partie.
-  // UNE PARTIE CLOSE MONTRE TOUT CE QUI N'A JAMAIS ETE JOUE, PAS SEULEMENT LE
-  // SAC. Le chevalet peut porter des lettres encore quand la partie s'arrete
-  // (plus une voyelle a jouer, par exemple) -- ce ne sont plus des lettres
-  // privees a ce moment-la, la partie est finie pour tout le monde. Les
-  // fondre dans le reliquat les rend visibles au meme endroit que le reste.
-  // `s.finie`, PAS LA VARIABLE `finie` : celle-ci ne sera mise a jour que plus
-  // bas dans cette meme fonction, donc encore perimee ici.
-  const sac = s.finie === true && s.rack ? trierReliquat((s.sac ?? "") + s.rack) : (s.sac ?? "");
+  const sac = s.sac ?? "";
   $("rb-dico").textContent = dictionnaire(cfg.dictionnaire).nom;
   $("sac").hidden = cfg.pioche === "probabilites";
   $("sac").textContent = sac;
@@ -5365,6 +5347,10 @@ function ouvrirLeSolveur(pousser = true): void {
 function fermerLeSolveur(pousser = true): void {
   $("corps-solveur").hidden = true;
   $("corps-salons").hidden = false;
+  // ON NE GARDE PAS UNE LISTE DE CENT MILLE LIGNES DERRIERE UNE PAGE FERMEE :
+  // masquee, elle continue de peser sur le document et le reste de l'interface
+  // trainait. La page se rouvre vide, comme la fenetre flottante.
+  solveurPage.vider();
   if (pousser) window.history.pushState({ page: "salons" }, "", location.pathname);
 }
 
@@ -5405,6 +5391,13 @@ const SV_CLES: SvCle[] = [
 
 /** Au-dela, poser la liste entiere d'un coup se sent -- voir peindreResultats. */
 const SV_SEUIL_CONFIRMATION = 20_000;
+
+/**
+ * Combien de longueurs sous le plus long mot la page garde, sur un tirage a
+ * jokers (voir `resserrerLesFormables`). Cinq : de quoi voir le sept-lettres,
+ * le six et leurs voisins immediats sans derouler tout le dictionnaire.
+ */
+const SV_FENETRE_LONGUEUR = 5;
 
 /**
  * 1 a 6, rangee du haut ou pave numerique, pour lancer la recherche du meme
@@ -5462,9 +5455,11 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     if (mode === "invalide") {
       aide.classList.add("avert");
       aide.textContent = messageInvalide(saisie);
-    } else if (mode === "squelette") {
-      aide.textContent = t("Squelette : seul le bouton Solutions s'applique.");
-    } else if (mode !== "vide" && !saisie.includes(BLANK) && dictActif() !== undefined) {
+      // `tirage` SEULEMENT, PAS « tout sauf vide » : un squelette n'est pas un
+      // mot, le chercher au dictionnaire tel quel le peindrait en rouge alors
+      // qu'il n'a rien d'incorrect. Il ne se colore donc ni d'un cote ni de
+      // l'autre, et ne dit plus rien non plus : la ligne d'aide reste vide.
+    } else if (mode === "tirage" && !saisie.includes(BLANK) && dictActif() !== undefined) {
       // UN JOKER DIT QU'ON NE TAPE PLUS UN MOT, MAIS UNE RECHERCHE : le
       // rouge/vert ne repond qu'a « ce mot precis existe-t-il ? », question
       // qui n'a plus de sens des qu'une lettre reste a deviner.
@@ -5479,10 +5474,28 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     const mode = analyserSaisie(mot);
     let r: ResultatRecherche | null = null;
     let avecCode = false;
+    let masques = 0;
     if (cle === "solutions") {
-      if (mode === "tirage") r = motsSolutions(d, mot);
-      else if (mode === "squelette") r = squelette(d, mot);
-      if (r !== null) r.resultats.sort((a, b) => a.mot.localeCompare(b.mot));
+      if (mode === "tirage") {
+        r = motsSolutions(d, mot);
+        // Un tirage rend tout le monde a la meme longueur : le tri par code de
+        // joker y range les anagrammes ensemble, comme aux mots formables. Le
+        // code s'AFFICHE alors, sinon l'ordre paraitrait tire au sort ; sans
+        // joker il n'y a rien a montrer et la colonne disparait.
+        r.resultats.sort((a, b) => a.mot.length - b.mot.length
+          || codeJoker(a).localeCompare(codeJoker(b))
+          || a.mot.localeCompare(b.mot));
+        avecCode = mot.includes(BLANK);
+      } else if (mode === "squelette") {
+        r = squelette(d, mot);
+        // LONGUEUR CROISSANTE PUIS ALPHABETIQUE, comme les rallonges. Le tri
+        // purement alphabetique melangeait les longueurs (ALUMINERAIENT entre
+        // ALUMINERAI et ALUMINERAIS), et les en-tetes « N LETTRES » revenaient
+        // trois fois dans la meme liste. Les lettres libres d'un squelette ne
+        // sont PAS des jokers : elles ne rangent rien.
+        r.resultats.sort((a, b) => a.mot.length - b.mot.length
+          || a.mot.localeCompare(b.mot));
+      }
     } else if (mode === "tirage") {
       if (cle === "formables") {
         r = motsFormables(d, mot);
@@ -5494,6 +5507,14 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
           || codeJoker(a).localeCompare(codeJoker(b))
           || a.mot.localeCompare(b.mot));
         avecCode = true;
+        // La page montre TOUT, et sur un tirage a jokers ce tout se compte en
+        // dizaines de milliers de mots dont les plus courts n'apprennent rien.
+        // La fenetre flottante, elle, s'arrete deja a cent lignes.
+        if (cfg.troncature === null) {
+          const serre = resserrerLesFormables(r, mot);
+          r = serre.r;
+          masques = serre.masques;
+        }
       } else {
         const fn = cle === "benjamins" ? benjamins
           : cle === "rallongesAvant" ? rallongesAvant
@@ -5504,8 +5525,37 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     if (r === null) return;
     modeActif = cle;
     peindreLesBoutonsActifs();
-    peindreResultats(r, avecCode);
+    peindreResultats(r, avecCode, false, masques);
     if (refocus) { champ().focus(); champ().select(); }
+  }
+
+  /**
+   * Les mots formables d'un tirage A JOKERS, resserres pour la page.
+   *
+   * Deux coupes, toutes deux sans regret :
+   * - **les mots trop courts** : plus de SV_FENETRE_LONGUEUR lettres sous le
+   *   plus long trouve, on ne lit plus une reponse au tirage mais une tranche
+   *   du dictionnaire ;
+   * - **les mots qui ne doivent RIEN au tirage** : toutes leurs lettres venant
+   *   des jokers, la liste y rend exactement tous les mots de cette longueur.
+   *   Zulu l'avait dit « les mots de N lettres quand il y a N jokers » : c'est
+   *   le meme cas, mais coupe sur la bonne mesure. Coupe par LONGUEUR, un mot
+   *   de six lettres qui emploie vraiment le A et le B d'un « AB?????? » s'en
+   *   allait avec les autres, et il manquait une longueur entiere au milieu de
+   *   la liste. La regle s'efface sur un tirage SANS aucune vraie lettre : tout
+   *   y vient des jokers, il ne resterait rien du tout.
+   */
+  function resserrerLesFormables(r: ResultatRecherche, tirage: string): {
+    r: ResultatRecherche; masques: number;
+  } {
+    const jokers = [...tirage].filter((c) => c === BLANK).length;
+    if (jokers === 0) return { r, masques: 0 };
+    const aDesLettres = jokers < tirage.length;
+    let plusLong = 0;
+    for (const c of r.resultats) if (c.mot.length > plusLong) plusLong = c.mot.length;
+    const gardes = r.resultats.filter((c) => c.mot.length >= plusLong - SV_FENETRE_LONGUEUR
+      && !(aDesLettres && c.jokers.length === c.mot.length));
+    return { r: { resultats: gardes, stats: r.stats }, masques: r.resultats.length - gardes.length };
   }
 
   /** Les lettres jouees par les jokers, dans l'ordre alphabetique. */
@@ -5537,14 +5587,22 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
    * l'onglet. `c.mot` ne contient jamais que des lettres A-Z venues du
    * dictionnaire -- rien a echapper.
    */
-  function peindreResultats(r: ResultatRecherche, avecCode: boolean, forcer = false): void {
+  function peindreResultats(r: ResultatRecherche, avecCode: boolean, forcer = false,
+    masques = 0): void {
     const boite = $(cfg.resultats);
     const compte = r.resultats.length;
     let ligneStats = t2("{n} résultat{s}", { n: compte, s: compte > 1 ? "s" : "" });
     if (r.stats.limiteAtteinte) ligneStats += ` - ${t("calcul interrompu, affinez la recherche")}`;
+    // CE QUI A ETE COUPE SE DIT. Une liste qui rétrécit sans un mot d'explication
+    // se lit comme un solveur qui oublie des mots -- et c'est la premiere chose
+    // qu'on vient nous signaler.
+    const coupes = masques > 0
+      ? `<p class="sv-plus">${t2("{n} mot{s} masqué{s} : trop courts, ou sans une seule lettre du tirage.",
+        { n: masques, s: masques > 1 ? "s" : "" })}</p>`
+      : "";
 
     if (compte === 0) {
-      boite.innerHTML = `<p class="none">${t("Aucun résultat.")}</p>`;
+      boite.innerHTML = `<p class="none">${t("Aucun résultat.")}</p>${coupes}`;
       return;
     }
 
@@ -5558,7 +5616,7 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
       const bouton = document.createElement("button");
       bouton.type = "button";
       bouton.textContent = t("Afficher quand même");
-      bouton.addEventListener("click", () => peindreResultats(r, avecCode, true));
+      bouton.addEventListener("click", () => peindreResultats(r, avecCode, true, masques));
       boite.appendChild(bouton);
       return;
     }
@@ -5583,7 +5641,8 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
     let longueurCourante = -1;
     let bufferGroupe = "";
     let compteGroupe = 0;
-    let pluslongue = 0;
+    let motMax = 0;
+    let codeMax = 0;
     const clore = () => {
       if (compteGroupe === 0) return;
       const entete = t2("{n} résultat{s}", { n: compteGroupe, s: compteGroupe > 1 ? "s" : "" });
@@ -5598,16 +5657,23 @@ function creerSolveur(cfg: SvConfig): { peuplerDico: () => Promise<void>; focali
       }
       bufferGroupe += svLigneHTML(c, avecCode);
       compteGroupe++;
-      const largeur = c.mot.length + (avecCode ? c.jokers.length : 0);
-      if (largeur > pluslongue) pluslongue = largeur;
+      if (c.mot.length > motMax) motMax = c.mot.length;
+      if (avecCode && c.jokers.length > codeMax) codeMax = c.jokers.length;
     }
     clore();
     const reste = compte - visibles.length;
     const plus = reste > 0 ? `<p class="sv-plus">${t2("et {n} de plus.", { n: reste })}</p>` : "";
     const avert = r.stats.limiteAtteinte
       ? `<p class="sv-stats">${t("calcul interrompu, affinez la recherche")}</p>` : "";
+    // LA COLONNE DU CODE A LA MEME LARGEUR POUR TOUTE LA LISTE, celle du code
+    // le plus long : sans elle, deux mots de meme longueur mais dont l'un
+    // demande un joker de plus commencaient a deux endroits differents, et la
+    // colonne des mots ondulait. La largeur des colonnes de la grille suit
+    // (code + mot), en `ch` puisque tout y est a chasse fixe.
+    const colonne = Math.max(codeMax + motMax + 3, 10);
     boite.innerHTML = avert
-      + `<div class="sv-liste" style="grid-template-columns: repeat(auto-fill, minmax(${Math.max(pluslongue + 3, 10)}ch, 1fr))">${lignes}</div>${plus}`;
+      + `<div class="sv-liste" style="--sv-code: ${codeMax}ch; `
+      + `grid-template-columns: repeat(auto-fill, minmax(${colonne}ch, 1fr))">${lignes}</div>${plus}${coupes}`;
   }
 
   /**
