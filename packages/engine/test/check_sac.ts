@@ -268,6 +268,51 @@ console.log("\nLe sac qui se recharge ne sert jamais un tirage incomplet\n");
     vueCourte ? "le cas a ete rencontre" : "JAMAIS RENCONTRE : le test n'eprouve rien");
 }
 
+console.log("\nLa derniere voyelle du sac finit dans le tirage\n");
+{
+  // LE CAS DE ZULU, en 7 et 8 joker : huit caramels au chevalet dont un joker,
+  // donc sept lettres tirees et une exigence de DEUX voyelles -- alors que le
+  // sac n'en gardait plus qu'une. Aucun tirage ne pouvait la satisfaire : la
+  // pioche en refusait cinq cents, puis prenait le dernier venu, qui n'avait
+  // aucune raison de contenir la voyelle survivante. Elle restait au fond du
+  // sac, et le chevalet n'avait pas une seule voyelle.
+  const uneSeuleVoyelle = { I: 1, B: 4, C: 4, D: 4, F: 4, G: 4, N: 4, T: 4 };
+  let sans: string | null = null;
+  for (let graine = 1; graine <= 40 && sans === null; graine++) {
+    const sac = new SacFini(uneSeuleVoyelle, mulberry32(graine), 7);
+    sac.jokersAuTirage = 1;
+    const d = sac.draw([]);
+    if (!d.rack.includes("I")) sans = `graine ${graine} : « ${d.rack} »`;
+  }
+  verifie("la derniere voyelle est tiree, pas laissee au sac", sans === null,
+    sans ?? "quarante graines, un joker au tirage");
+
+  // Une fois qu'elle est partie, plus rien n'est exige : le tirage suivant
+  // passe du premier coup, sans cinq cents rejets pour rien.
+  {
+    const sac = new SacFini({ B: 4, C: 4, D: 4, F: 4, G: 4, N: 4, T: 4 },
+      mulberry32(11), 7);
+    sac.jokersAuTirage = 1;
+    const d = sac.draw([]);
+    verifie("plus de voyelle du tout : le tirage passe sans rejet",
+      d.rejections === 0 && d.rack.length === 7,
+      `${d.rejections} rejet(s) · ${d.rack}`);
+  }
+
+  // La regle elle-meme : deux voyelles s'il y en a deux, une s'il n'en reste
+  // qu'une, aucune s'il n'en reste plus.
+  const huit = [..."BCDFGNTS"];
+  verifie("sans plafond, huit consonnes sont refusees",
+    politiqueSacFini(() => 1, () => true, () => 1)(huit) === true);
+  verifie("une seule voyelle en reserve : huit consonnes ne suffisent pas",
+    politiqueSacFini(() => 1, () => true, () => 1, () => ({ v: 1, c: 30 }))(huit) === true);
+  verifie("plus aucune voyelle en reserve : le tirage passe",
+    politiqueSacFini(() => 1, () => true, () => 1, () => ({ v: 0, c: 30 }))(huit) === false);
+  verifie("une voyelle en reserve, et elle est la : le tirage passe",
+    politiqueSacFini(() => 1, () => true, () => 1, () => ({ v: 1, c: 30 }))(
+      [..."BCDFGNTA"]) === false);
+}
+
 console.log(echecs === 0
   ? "\nOK : le sac fini distribue, s'epuise, et sait quand la partie est terminee\n"
   : `\n${echecs} ECHEC(S)\n`);

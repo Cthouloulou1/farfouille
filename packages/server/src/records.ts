@@ -474,9 +474,17 @@ class Observation {
 
     // Les deux seuls coups que la manche retient : les tableaux annexes en ont
     // besoin, et eux seuls.
+    //
+    // ON NE RETIENT QUE DES COUPS TROUVES. Ces deux tableaux-la nomment un
+    // joueur a cote d'un mot : un top que personne n'a vu n'a personne a
+    // nommer, et il n'entre donc pas au tableau. C'est aussi la seule chose
+    // qu'on leur demande -- ils ne reclament plus une partie topee (SPEC.md
+    // §23) : le coup se juge sur lui-meme, et un beau coup reste un beau coup
+    // dans une partie ou l'on a rate autre chose.
     const note = (c: CoupObserve): CoupNote =>
       ({ mot: c.mots[0] ?? "", score: c.score, par: c.par });
-    const trie = [...this.vus].sort((a, b) => b.score - a.score);
+    const trie = this.vus.filter((c) => c.par !== null)
+      .sort((a, b) => b.score - a.score);
 
     const cfg = this.partie.cfg;
     return {
@@ -754,18 +762,27 @@ export interface LigneDeCoup {
 }
 
 /**
- * Le coup le plus cher, ou le moins cher, sur les parties topees.
+ * Le coup le plus cher, ou le moins cher. Voir SPEC.md §23.
+ *
+ * IL SUFFIT QUE LE COUP AIT ETE TROUVE : la partie n'a pas besoin d'etre topee.
+ * C'est le seul tableau qui classe un COUP et non une partie, et un coup se
+ * juge sur lui-meme -- avoir manque un top trois coups plus loin n'enleve rien
+ * a celui-la. Les tableaux qui classent des parties, eux, exigent toujours
+ * qu'elle soit topee : leur mesure porte sur l'ensemble.
  *
  * UNE PARTIE N'Y PRESENTE QU'UN COUP : le sien. La manche ne garde plus la
  * liste de ses coups -- c'etait de quoi la reconstituer, dans un fichier qui
- * n'est pas fait pour ca -- mais elle retient son meilleur et son pire, ce qui
- * suffit exactement a ces deux tableaux.
+ * n'est pas fait pour ca -- mais elle retient son meilleur et son pire parmi
+ * ceux qu'un joueur a trouves, ce qui suffit exactement a ces deux tableaux.
  */
 export function coupsExtremes(f: Filtre, sens: "cher" | "pasCher"): LigneDeCoup[] {
   const coups: LigneDeCoup[] = [];
-  for (const m of retenues(f).filter((x) => x.topee)) {
+  for (const m of retenues(f)) {
     const c = sens === "cher" ? m.coupCher : m.coupPasCher;
     if (c === null || c === undefined) continue;
+    // Les manches ecrites avant la regle ci-dessus pouvaient retenir un top que
+    // personne n'avait trouve : le journal ne se recrit pas, on les ecarte ici.
+    if (c.par === null) continue;
     coups.push({
       rang: 0, mot: c.mot, score: c.score,
       partie: m.partie, categorie: m.categorie, lexique: m.lexique,

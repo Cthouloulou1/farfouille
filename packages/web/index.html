@@ -543,7 +543,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bascule[aria-pressed="true"] .voyant::after { transform: translateX(13px); }
 
 
-.join { position: fixed; inset: 0; overflow: auto; background: var(--ground); z-index: 30; }
+/* LA PAGE NE SAUTE PAS QUAND SON CONTENU CHANGE DE HAUTEUR.
+   C'est `.join` qui defile, et non le document : `body` est fige a la hauteur
+   de la fenetre, `overflow: hidden`. La gouttiere se reserve donc ICI -- posee
+   sur `html`, elle ne servait a rien, et la barre continuait d'apparaitre puis
+   de disparaitre en changeant de coup ou de tableau, decalant toute la page de
+   sa largeur a chaque fois. */
+.join { position: fixed; inset: 0; overflow: auto; scrollbar-gutter: stable; background: var(--ground); z-index: 30; }
 /* Un selecteur de classe bat l'attribut hidden : sans cette regle, masquer
    l'ecran d'accueil ne fait rien et il reste par-dessus le jeu. */
 .join[hidden] { display: none; }
@@ -1124,8 +1130,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LE TABLEAU. Il defile de son cote quand il est trop large -- la page, elle,
    ne defile jamais lateralement. */
 .rc-tableau { margin-top: 4px; overflow-x: auto; }
-.rc-tableau table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.rc-tableau th { padding: 9px 10px; text-align: right; font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.rc-tableau table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rc-tableau th { padding: 9px 10px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; border-bottom: 1px solid var(--rule); }
 .rc-tableau th.g, .rc-tableau td.g { text-align: left; }
 .rc-tableau th.c, .rc-tableau td.c { text-align: center; }
 /* La colonne qui fait le classement se voit : « la plus chere » et « la plus
@@ -1155,6 +1161,27 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rc-joueur { display: inline-flex; align-items: baseline; gap: 4px; font-weight: 500; }
 .rc-joueur .pastille-couleur { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
 .rc-joueur i { font-style: normal; font-size: .82em; color: var(--ink-faint); font-weight: 400; }
+/* UN PSEUDO SE CLIQUE : il mene a la fiche de son joueur. Le bouton ne se voit
+   pas tant qu'on ne le survole pas -- une colonne de noms soulignes se lirait
+   comme une liste de liens, et c'est un tableau. */
+.rc-nom { padding: 0; background: none; border: 0; font: inherit; color: inherit; cursor: pointer; }
+.rc-nom:hover { text-decoration: underline; border-color: transparent; background: none; }
+/* LE COMPTE DES AUTRES OUVRE LA LISTE ENTIERE. Une partie se joue a autant de
+   joueurs qu'elle a de coups : au-dela de trois pseudos la cellule deborde, et
+   l'infobulle ne se lit ni au doigt ni au clavier. */
+.rc-plus { padding: 1px 7px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); color: var(--ink-faint); font: inherit; font-size: .86em; cursor: pointer; }
+.rc-plus:hover { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+
+/* LA TABLEE AU COMPLET : un joueur par ligne, ses tops, et sa fiche au clic. */
+.tablee { width: min(420px, 94vw); }
+.tablee h2 { margin: 0 0 4px; }
+.tablee-liste { display: flex; flex-direction: column; gap: 1px; max-height: 52vh; overflow-y: auto; margin: 14px 0 18px; }
+.tablee-liste button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 8px; background: none; border: 0; border-radius: 4px; text-align: left; font-size: 14px; color: var(--ink); cursor: pointer; }
+.tablee-liste button:hover { background: var(--hover); border-color: transparent; }
+.tablee-liste .pastille-couleur { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.tablee-liste .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.tablee-liste i { font-style: normal; font-size: .84em; color: var(--ink-faint); font-weight: 400; }
+.tablee-liste .tops { flex: none; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .rc-tableau td .rc-de-plus { color: var(--ink-faint); font-weight: 400; }
 
 .rc-tableau .rc-outil { padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12px; }
@@ -1180,10 +1207,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* ---------------------------------------------- UNE PARTIE ARCHIVEE, RELUE
    Voir SPEC.md §23. La grille a gauche, la feuille de route a droite. */
 .partie-relue { padding-top: 14px; width: min(100%, max(70vw, 1100px)); margin: 0 auto; }
-/* LA PAGE NE SAUTE PAS QUAND ON CHANGE DE COUP. La liste des solutions change
-   de hauteur d'un coup a l'autre : la barre de defilement disparaissait puis
-   revenait, et toute la page se decalait de sa largeur a chaque fleche. */
-html { scrollbar-gutter: stable; }
 .pr-tete { display: flex; align-items: baseline; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
 .pr-tete h1 { margin: 0; font-size: 19px; font-weight: 600; }
 .pr-retour { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
@@ -1218,10 +1241,10 @@ html { scrollbar-gutter: stable; }
    hauteur de la grille obligeait a faire defiler une lucarne pour lire une
    partie de vingt-sept coups : c'est la page qui defile, pas la feuille. */
 .pr-route { overflow-x: auto; }
-.pr-route table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.pr-route th { padding: 6px 8px; text-align: right; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
+.pr-route table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pr-route th { padding: 7px 9px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
 .pr-route th.g, .pr-route td.g { text-align: left; }
-.pr-route td { padding: 5px 8px; text-align: right; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.pr-route td { padding: 6px 9px; text-align: right; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
 .pr-route tbody tr:nth-child(odd) { background: var(--field); }
 .pr-route tbody tr:hover { background: var(--hover); }
 /* Le coup qu'on regarde se voit dans la liste, et la liste le suit. */
@@ -1572,6 +1595,15 @@ html { scrollbar-gutter: stable; }
    ELLE VIT A LA RACINE, ET NON DANS L'ACCUEIL : l'accueil est masque des
    qu'on entre dans un salon, et tout ce qu'il contient avec lui. Posee
    dedans, elle s'ouvrait sans jamais rien montrer. -->
+<!-- LA TABLEE D'UNE PARTIE, quand elle ne tient pas dans sa cellule. -->
+<div class="voile" id="voile-tablee" hidden>
+  <div class="pseudo tablee">
+    <h2>Joueurs de la partie</h2>
+    <div class="tablee-liste" id="tablee-liste"></div>
+    <button class="valider" id="tablee-close" type="button">Fermer</button>
+  </div>
+</div>
+
 <div class="voile" id="voile-joueur" hidden>
   <div class="pseudo fiche">
     <div class="fiche-tete">

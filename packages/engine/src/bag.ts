@@ -72,6 +72,33 @@ export interface DrawResult {
 export type RejectPolicy = (rack: readonly string[]) => boolean;
 
 /**
+ * COMBIEN DE VOYELLES ET DE CONSONNES LA PIOCHE PEUT ENCORE DONNER.
+ *
+ * Le sac et le reliquat reunis, Y et jokers non comptes -- ils ne sont ni l'un
+ * ni l'autre. Une pioche a probabilites n'en a pas : elle peut tout donner,
+ * toujours, et n'a rien a declarer ici.
+ */
+export interface Disponibles { v: number; c: number }
+
+/**
+ * CE QU'ON EXIGE VRAIMENT, une fois vu ce qui reste.
+ *
+ * ON N'EXIGE PAS CE QUI N'EXISTE PLUS. La regle demande deux voyelles ; le sac
+ * n'en a plus qu'une : aucun tirage ne peut la satisfaire, et la pioche
+ * refusait alors cinq cents tirages avant de PRENDRE LE DERNIER VENU -- celui
+ * du hasard, qui n'avait aucune raison de contenir la voyelle survivante. On a
+ * vu un tirage sans une seule voyelle sortir d'un sac qui en gardait une.
+ *
+ * L'exigence se plie donc a ce qui reste : deux voyelles s'il y en a deux, une
+ * s'il n'en reste qu'une, aucune s'il n'en reste plus. Elle ne se relache que
+ * de ce qui manque, et le tirage EMPORTE la derniere voyelle au lieu de la
+ * laisser au fond du sac.
+ */
+function exigence(exige: number, dispo: number | undefined): number {
+  return dispo === undefined ? exige : Math.min(exige, dispo);
+}
+
+/**
  * LA REGLE DE REJET ORDINAIRE. Voir SPEC.md §16.
  *
  * Deux voyelles et deux consonnes a partir de sept caramels, une seule de
@@ -90,6 +117,7 @@ export type RejectPolicy = (rack: readonly string[]) => boolean;
  */
 export function regleOrdinaire(
   rack: readonly string[], taille = rack.length, relache = false,
+  dispo?: Disponibles,
 ): boolean {
   const exige = relache ? 1 : (taille >= 7 ? 2 : 1);
   if (rack.length < 2) return false;
@@ -98,7 +126,7 @@ export function regleOrdinaire(
     if (isVowel(ch)) v++;
     else if (isConsonant(ch)) c++;
   }
-  return v < exige || c < exige;
+  return v < exigence(exige, dispo?.v) || c < exigence(exige, dispo?.c);
 }
 
 /** La regle ordinaire sur un tirage sans joker, ou tout est dans le rack. */
@@ -144,7 +172,9 @@ export const COUP_RELACHEMENT = 16;
  * tombait deja d'elle-meme a une voyelle et une consonne -- mais en « 7 sur 9 »
  * il en distribue sept, et le deux-et-deux revenait sans qu'on l'ait voulu.
  */
-export function regleDuDoubleJoker(rack: readonly string[], coup: number): boolean {
+export function regleDuDoubleJoker(
+  rack: readonly string[], coup: number, dispo?: Disponibles,
+): boolean {
   if (coup >= COUP_RELACHEMENT) return false;
   if (rack.length < 2) return false;
   let v = 0, c = 0;
@@ -152,7 +182,7 @@ export function regleDuDoubleJoker(rack: readonly string[], coup: number): boole
     if (isVowel(ch)) v++;
     else if (isConsonant(ch)) c++;
   }
-  return v < 1 || c < 1;
+  return v < exigence(1, dispo?.v) || c < exigence(1, dispo?.c);
 }
 
 export class Bag {

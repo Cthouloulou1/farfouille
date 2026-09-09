@@ -347,6 +347,72 @@ function cadrer(): void {
   oy = cale(MARGE_BORNEE + REGLE_BORNEE + b * cell);
 }
 
+/**
+ * Les quatre cotes d'un caramel qui touchent un autre caramel.
+ *
+ * Deux caramels colles n'ont pas de bord entre eux : c'est un MOT, pas deux
+ * lettres posees l'une a cote de l'autre.
+ */
+export interface Cotes { g: boolean; d: boolean; h: boolean; b: boolean }
+
+const SEUL: Cotes = { g: false, d: false, h: false, b: false };
+
+/**
+ * LE CONTOUR D'UN CARAMEL, QUI TIENT COMPTE DE SES VOISINS.
+ *
+ * Deux corrections, et elles vont ensemble :
+ *
+ * L'ARRONDI TOMBE DU COTE OU IL Y A UN VOISIN. Deux caramels colles laissaient
+ * sinon, aux deux bouts de leur bord commun, deux petites lunes de la couleur
+ * de la case en dessous -- des taches claires alignees le long de chaque
+ * couture, qu'on prenait pour des trous dans la grille. Un coin ne s'arrondit
+ * donc que s'il donne sur du vide.
+ *
+ * LE TRAIT COMMUN NE SE TRACE QU'UNE FOIS, ET SUR UN PIXEL ENTIER. Deux voisins
+ * en tracaient deux, accoles : le bord commun paraissait deux fois plus epais
+ * que les autres, tres visible en vert sur le mot qu'on propose. Le poser
+ * exactement SUR la limite ne suffit pas -- un trait d'un pixel centre sur une
+ * limite entiere se partage entre les deux pixels qui l'encadrent, et rend une
+ * ligne floue de deux pixels au lieu d'une nette d'un seul.
+ *
+ * Les deux caramels le posent donc dans le MEME pixel : celui de droite le
+ * rentre chez lui, celui de gauche le laisse deborder d'autant. Ils dessinent
+ * alors la meme ligne, pleine, et il n'en reste qu'une.
+ *
+ * `retrait` est la moitie de l'epaisseur du trait, pour que celui-ci tienne
+ * entierement dans un pixel. Zero pour un remplissage, qui doit couvrir sa case
+ * en entier.
+ */
+function cheminDuCaramel(
+  g: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+  cotes: Cotes = SEUL, retrait = 0,
+): void {
+  const x0 = x + retrait, x1 = x + w - (cotes.d ? -retrait : retrait);
+  const y0 = y + retrait, y1 = y + h - (cotes.b ? -retrait : retrait);
+  const coin = (a: boolean, b: boolean): number => a || b ? 0 : r;
+  const hg = coin(cotes.h, cotes.g), hd = coin(cotes.h, cotes.d);
+  const bd = coin(cotes.b, cotes.d), bg = coin(cotes.b, cotes.g);
+  g.moveTo(x0 + hg, y0);
+  g.lineTo(x1 - hd, y0);
+  if (hd > 0) g.arcTo(x1, y0, x1, y0 + hd, hd);
+  g.lineTo(x1, y1 - bd);
+  if (bd > 0) g.arcTo(x1, y1, x1 - bd, y1, bd);
+  g.lineTo(x0 + bg, y1);
+  if (bg > 0) g.arcTo(x0, y1, x0, y1 - bg, bg);
+  g.lineTo(x0, y0 + hg);
+  if (hg > 0) g.arcTo(x0, y0, x0 + hg, y0, hg);
+  g.closePath();
+}
+
+/** Les cotes d'une case qui touchent une autre case occupee. */
+function cotesDe(occupe: ReadonlySet<string>, x: number, y: number): Cotes {
+  return {
+    g: occupe.has(`${x - 1},${y}`), d: occupe.has(`${x + 1},${y}`),
+    h: occupe.has(`${x},${y - 1}`), b: occupe.has(`${x},${y + 1}`),
+  };
+}
+
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -715,12 +781,14 @@ function draw() {
   ctx.textBaseline = "middle";
 
   const caramel = (x: number, y: number, letter: string, blank: boolean, face: string,
-                   edge: string, encre?: string) => {
+                   edge: string, encre?: string, cotes: Cotes = SEUL) => {
     const px = eX(x) + gap, py = eY(y) + gap;
     const w = eX(x + 1) - eX(x) - gap * 2, h = eY(y + 1) - eY(y) - gap * 2;
-    roundRect(px, py, w, h, rad);
+    ctx.beginPath();
+    cheminDuCaramel(ctx, px, py, w, h, rad, cotes);
     ctx.fillStyle = face; ctx.fill();
-    roundRect(px + .5, py + .5, w - 1, h - 1, rad);
+    ctx.beginPath();
+    cheminDuCaramel(ctx, px, py, w, h, rad, cotes, .5);
     ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.stroke();
     ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink);
     ctx.font = `700 ${Math.round(h * .62)}px Archivo, system-ui, sans-serif`;
@@ -747,29 +815,41 @@ function draw() {
   const caramels = (
     g: CanvasRenderingContext2D, lot: readonly Tile[], face: string, edge: string,
     ink: string, trait: number, orgX: number, orgY: number,
+    occupe: ReadonlySet<string>,
   ): void => {
     if (lot.length === 0) return;
     const X = (x: number) => auPixelEcran(orgX + x * cell);
     const Y = (y: number) => auPixelEcran(orgY + y * cell);
-    g.beginPath();
-    for (const q of lot) {
-      const px = X(q.x) + gap, py = Y(q.y) + gap;
-      const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
-      if (arrondi) {
-        g.moveTo(px + rad, py);
-        g.arcTo(px + w, py, px + w, py + h, rad);
-        g.arcTo(px + w, py + h, px, py + h, rad);
-        g.arcTo(px, py + h, px, py, rad);
-        g.arcTo(px, py, px + w, py, rad);
-        g.closePath();
-      } else {
+    if (arrondi) {
+      // AU ZOOM DE LECTURE, chaque caramel regarde ses voisins : pas d'arrondi
+      // ni de trait sur un bord partage. Voir `cheminDuCaramel`.
+      g.beginPath();
+      for (const q of lot) {
+        const px = X(q.x) + gap, py = Y(q.y) + gap;
+        const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
+        cheminDuCaramel(g, px, py, w, h, rad, cotesDe(occupe, q.x, q.y));
+      }
+      g.fillStyle = face; g.fill();
+      g.beginPath();
+      for (const q of lot) {
+        const px = X(q.x) + gap, py = Y(q.y) + gap;
+        const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
+        cheminDuCaramel(g, px, py, w, h, rad, cotesDe(occupe, q.x, q.y), trait / 2);
+      }
+      g.lineWidth = trait; g.strokeStyle = edge; g.stroke();
+    } else {
+      // AU DEZOOM, des carres : les coins arrondis coutent l'essentiel du temps
+      // d'une image (70 ms pour trois mille), et a cette taille un arrondi de
+      // huit dixiemes de pixel ne se voit pas. Les voisins non plus.
+      g.beginPath();
+      for (const q of lot) {
+        const px = X(q.x) + gap, py = Y(q.y) + gap;
+        const w = X(q.x + 1) - X(q.x) - gap * 2, h = Y(q.y + 1) - Y(q.y) - gap * 2;
         g.rect(px + .5, py + .5, w - 1, h - 1);
       }
+      g.fillStyle = face; g.fill();
+      g.lineWidth = trait; g.strokeStyle = edge; g.stroke();
     }
-    g.fillStyle = face; g.fill();
-    // Le trait du dernier top est plus epais : trace a l'INTERIEUR du chemin,
-    // il ne mord pas sur les cases voisines et ne cree donc pas de couture.
-    g.lineWidth = trait; g.strokeStyle = edge; g.stroke();
 
     // La lettre est dessinee A TOUTE ECHELLE. Meme reduite a une tache, elle
     // fait la difference entre une grille de jeu et un damier de couleurs :
@@ -861,8 +941,14 @@ function draw() {
 
     const y0 = Math.floor((ry - orgY) / cell) - 1, y1 = Math.ceil((ry + rh - orgY) / cell);
     const groupes = new Map<string, { face: string; edge: string; ink: string; trait: number; t: Tile[] }>();
+    // CE QUI EST POSE AUTOUR, pour que chaque caramel sache ou il touche un
+    // voisin. La bande est elargie d'une case : un caramel du bord doit voir
+    // celui d'a cote, meme s'il n'est pas repeint cette fois-ci.
+    const occupe = new Set<string>();
     for (const q of tiles) {
       if (q.n > jusqua) continue;
+      if (q.x < x0 - 1 || q.x > x1 + 1 || q.y < y0 - 1 || q.y > y1 + 1) continue;
+      occupe.add(`${q.x},${q.y}`);
       if (q.x < x0 || q.x > x1 || q.y < y0 || q.y > y1) continue;
       const face = q.b === 1 ? C.jface : C.face;
       // Le dernier top porte la couleur d'accent PARTOUT : contour, lettre et
@@ -880,7 +966,9 @@ function draw() {
     g.beginPath(); g.rect(rx, ry, rw, rh); g.clip();
     if (effacer) g.clearRect(rx, ry, rw, rh);
     peindreLeFond(g, orgX, orgY, rx, ry, rw, rh);
-    for (const l of groupes.values()) caramels(g, l.t, l.face, l.edge, l.ink, l.trait, orgX, orgY);
+    for (const l of groupes.values()) {
+      caramels(g, l.t, l.face, l.edge, l.ink, l.trait, orgX, orgY, occupe);
+    }
     g.restore();
   };
 
@@ -1002,18 +1090,29 @@ function draw() {
   }
 
   const blanks = blankPositions();
-  for (const c of typedCells()) {
+  // LE MOT QU'ON TAPE EST UN MOT, pas une file de lettres : ses caramels colles
+  // ne portent pas de bord entre eux. Ils se voient par-dessus la grille, donc
+  // leurs voisins sont les leurs, et non ceux du plateau.
+  const tapees = typedCells();
+  const sousLaMain = new Set(tapees.map((c) => `${c.x},${c.y}`));
+  for (const c of tapees) {
     const isBlank = blanks.has(`${c.x},${c.y}`);
-    caramel(c.x, c.y, c.letter, isBlank, isBlank ? C.jface : C.face, isBlank ? C.jedge : C.cursor);
+    caramel(c.x, c.y, c.letter, isBlank, isBlank ? C.jface : C.face,
+      isBlank ? C.jedge : C.cursor, undefined, cotesDe(sousLaMain, c.x, c.y));
   }
 
   if (ghost !== null && !ghostCache && cell >= 6) {
     const { word, dir, x: gx, y: gy, jokers } = ghost;
+    const { dx, dy } = step(dir);
+    // Meme raison que pour le mot tape : le fantome est un mot, et son bord
+    // vert doit faire le tour de l'ensemble, pas de chaque lettre.
+    const fantome = new Set<string>();
+    for (let i = 0; i < word.length; i++) fantome.add(`${gx + dx * i},${gy + dy * i}`);
     for (let i = 0; i < word.length; i++) {
-      const x = dir === "H" ? gx + i : gx;
-      const y = dir === "V" ? gy + i : gy;
+      const x = gx + dx * i, y = gy + dy * i;
       if (x < gx0 || x > gx1 || y < gy0 || y > gy1) continue;
-      caramel(x, y, word[i]!, jokers[i] === true, C.gface, C.gedge, C.gink);
+      caramel(x, y, word[i]!, jokers[i] === true, C.gface, C.gedge, C.gink,
+        cotesDe(fantome, x, y));
     }
   }
 
@@ -2040,30 +2139,31 @@ function paintSide() {
   // Le score dit ce qu'on a pris ; il vaut dans les deux modes, comme mesure de
   // ce qu'on a su trouver.
   const monScore = points[me] ?? 0, monNegatif = negatif[me] ?? 0;
-  $("rb-score-wrap").hidden = rejeu !== null || monScore === 0 && monNegatif === 0;
-  $("rb-score").textContent = String(monScore);
-  // LE NEGATIF SE MESURE CONTRE SOI, PAS CONTRE LES AUTRES.
-  //
-  // Un negatif dit ce qu'on a laisse au top sur SA PROPRE FEUILLE. Il a donc du
-  // sens partout ou l'on joue pour son compte :
-  //
-  // - au **duplicate**, ou chacun tient la sienne et marque a chaque coup :
-  //   l'ecart cumule est precisement ce qui departage la table ;
-  // - au **topping en solitaire** -- une partie du jour, un entrainement --,
-  //   ou il est la seule mesure de ce qu'on a manque.
-  //
-  // Il n'en a plus des qu'on est PLUSIEURS EN TOPPING. La grille n'avance alors
-  // que parce que quelqu'un a trouve le top, et sur une grille permanente c'est
-  // la seule facon d'avancer : le travail est commun, celui qui l'emporte le
-  // fait pour tout le monde, et ce que les autres avaient propose ne compte ni
-  // contre eux ni pour eux. Un ecart personnel n'y mesure rien, et l'afficher
-  // invite a lire une partie collective comme un classement individuel.
-  //
   // « Plusieurs » se compte sur la partie entiere, pas sur les connectes du
   // moment : sur une grille permanente ouverte depuis des semaines, se retrouver
   // seul devant a trois heures du matin n'en fait pas une partie solitaire.
   const monde = new Set([...online, ...Object.keys(players), ...Object.keys(points)]);
   const enGroupe = !duplicate && monde.size > 1;
+  // LE SCORE PERSONNEL DISPARAIT DES QU'ON EST PLUSIEURS EN TOPPING.
+  //
+  // Ce qu'il additionne, ce sont les points des mots qu'on a SOUMIS a chaque
+  // coup : c'est la comptabilite du duplicate, ou chacun marque ce qu'il pose.
+  // Le topping ne marche pas ainsi -- la grille n'avance que par le top, et ce
+  // qu'on a propose a cote ne se pose sur aucune grille. Un total de mille
+  // deux cents points n'y designe alors rien du tout, et il invite a lire une
+  // partie collective comme un classement individuel.
+  //
+  // En solitaire il garde son sens : c'est ce qu'on a su prendre sur la partie
+  // du jour, et il n'y a personne d'autre a qui le comparer.
+  $("rb-score-wrap").hidden = rejeu !== null || enGroupe
+    || monScore === 0 && monNegatif === 0;
+  $("rb-score").textContent = String(monScore);
+  // LE NEGATIF SUIT LE SCORE, ET POUR LA MEME RAISON. Il dit ce qu'on a laisse
+  // au top sur SA PROPRE FEUILLE : il a du sens au duplicate, ou chacun tient la
+  // sienne et marque a chaque coup, et en topping SOLITAIRE, ou il est la seule
+  // mesure de ce qu'on a manque. A plusieurs en topping, la grille n'avance que
+  // parce que quelqu'un a trouve le top : le travail est commun, et un ecart
+  // personnel n'y mesure rien.
   $("rb-neg-wrap").hidden = rejeu !== null || enGroupe
     || (monScore === 0 && monNegatif === 0);
   // LE SOLVEUR NE S'UTILISE PAS PENDANT UNE PARTIE A PLUSIEURS : ce serait
@@ -4137,6 +4237,7 @@ addEventListener("keydown", (e) => {
   // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
   if (!$("join").hidden) {
     if (e.key !== "Escape") return;
+    if (!$("voile-tablee").hidden) { $("voile-tablee").hidden = true; return; }
     if (!$("voile-joueur").hidden) { $("voile-joueur").hidden = true; return; }
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
     if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
@@ -4193,12 +4294,14 @@ addEventListener("keydown", (e) => {
   //
   // Ctrl+D poserait un signet, ce qui n'a aucun sens ici -- on le prend, et on
   // le rend a son usage des qu'on est dans une zone de saisie, celles-ci ayant
-  // rendu la main plus haut. CTRL+N FAIT LA MEME CHOSE : c'est le raccourci de
-  // « nouveau » partout ailleurs, et beaucoup l'ont dans les doigts. Le
-  // navigateur se le reserve et ouvrira peut-etre sa fenetre par-dessus ; la ou
-  // il nous laisse la main, il marche.
-  if ((e.ctrlKey || e.metaKey)
-      && (e.key === "d" || e.key === "D" || e.key === "n" || e.key === "N")) {
+  // rendu la main plus haut.
+  //
+  // CTRL+N N'EST PAS A PRENDRE. C'est le raccourci de « nouveau » partout
+  // ailleurs, et il etait tentant de le servir ici aussi -- mais le navigateur
+  // se le reserve AVANT la page : `preventDefault` n'y peut rien, et la touche
+  // ouvre une fenetre neuve par-dessus le salon. Une moitie de raccourci est
+  // pire que pas de raccourci du tout.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
     e.preventDefault();
     if (!$("reglages-open").hidden) ouvrirReglages();
     return;
@@ -4227,8 +4330,13 @@ addEventListener("keydown", (e) => {
   // est plusieurs sur une partie en cours, ou sur un salon star (voir
   // paintSide()) -- le raccourci ne fait rien de plus que simuler ce clic.
   if ((e.ctrlKey || e.metaKey) && (e.key === "g" || e.key === "G")) {
-    if ($("solveur-jeu").hidden) return;
+    // LA TOUCHE EST PRISE MEME QUAND ELLE N'OUVRE RIEN. Rendre la main au
+    // navigateur sur une partie a plusieurs y declenchait sa propre recherche,
+    // qui s'ouvre en travers de la grille : on croit appeler l'anagrammeur, on
+    // recoit la barre de recherche du navigateur. Le raccourci ne fait donc
+    // rien du tout la ou le bouton lui-meme est cache.
     e.preventDefault();
+    if ($("solveur-jeu").hidden) return;
     if (miniOuvert) fermerLeSolveurMini(); else ouvrirLeSolveurMini();
     return;
   }
@@ -7754,19 +7862,66 @@ let rcLongueur: number | null = null;
 /** Ce qu'on attend en ce moment : une reponse en retard ne repeint pas. */
 let rcDemande = 0;
 
+function hslVersRgb(h: number, s: number, l: number): [number, number, number] {
+  const k = (n: number): number => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number): number =>
+    Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+  return [f(0), f(8), f(4)];
+}
+
+/** La luminance relative de sRGB, celle dont se sert le calcul de contraste. */
+function luminance([r, g, b]: [number, number, number]): number {
+  const c = (v: number): number => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+}
+
+const couleursDejaVues = new Map<string, string>();
+
 /**
  * La couleur d'un joueur, derivee de son nom.
  *
  * RIEN A ENREGISTRER, et le meme joueur garde la sienne d'un tableau a
  * l'autre, d'une partie a l'autre, sans que personne n'ait a la choisir.
  *
- * La clarte suit le theme : une teinte lisible sur fond clair disparait sur
- * fond de nuit, et l'inverse.
+ * FNV-1a plutot qu'une somme : deux pseudos qui se ressemblent -- « Zulu » et
+ * « Zulu2 », les plus frequents a une meme table -- tombaient sur des teintes
+ * voisines, donc sur deux couleurs qu'on ne distinguait pas.
+ *
+ * LA CLARTE SE CALCULE, ELLE NE SE FIXE PAS. A clarte HSL egale, un jaune est
+ * quatre fois plus lumineux qu'un bleu : la meme valeur donnait des jaunes
+ * delaves qu'on ne lisait pas sur fond clair, et des bleus sourds qu'on ne
+ * lisait pas sur fond de nuit. On cherche donc, par dichotomie, la clarte qui
+ * amene CETTE teinte a la luminance voulue -- la meme pour toutes. Le contraste
+ * avec le fond est alors le meme partout, et la saturation peut rester haute
+ * sans que rien ne devienne illisible.
  */
 function couleurDuJoueur(nom: string): string {
-  let h = 0;
-  for (let i = 0; i < nom.length; i++) h = (h * 31 + nom.charCodeAt(i)) % 360;
-  return themeSombre() ? `hsl(${h} 58% 66%)` : `hsl(${h} 52% 38%)`;
+  const nuit = themeSombre();
+  const cle = `${nuit ? "n" : "j"}|${nom}`;
+  const deja = couleursDejaVues.get(cle);
+  if (deja !== undefined) return deja;
+
+  let h = 0x811c9dc5;
+  for (let i = 0; i < nom.length; i++) {
+    h = Math.imul(h ^ nom.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  const teinte = h % 360;
+  // 0,15 sur fond clair et 0,34 sur fond de nuit : environ cinq pour un de
+  // contraste des deux cotes, ce qu'il faut pour lire un pseudo en petit.
+  const cible = nuit ? 0.34 : 0.15;
+  let bas = 0.06, haut = 0.94;
+  for (let i = 0; i < 16; i++) {
+    const m = (bas + haut) / 2;
+    if (luminance(hslVersRgb(teinte, 0.82, m)) < cible) bas = m; else haut = m;
+  }
+  const [r, v, b] = hslVersRgb(teinte, 0.82, (bas + haut) / 2);
+  const couleur = `rgb(${r}, ${v}, ${b})`;
+  couleursDejaVues.set(cle, couleur);
+  return couleur;
 }
 
 /** Un temps de partie, au centieme : une performance se mesure (SPEC.md §16). */
@@ -7795,12 +7950,68 @@ function chronoDeManche(c: number | null): string {
 }
 
 /**
+ * Combien de pseudos une cellule montre avant de compter les autres.
+ *
+ * UNE PARTIE PEUT SE JOUER A AUTANT DE JOUEURS QU'ELLE A DE COUPS : c'est la
+ * seule borne, et une 2 sur 2 en a compte cinquante-huit. Trois noms tiennent
+ * dans la colonne, six s'y chevauchent et ne se lisent plus du tout.
+ */
+const NOMS_MONTRES = 3;
+
+/** Un pseudo de sa couleur, cliquable : il mene a la fiche de son joueur. */
+function pseudoCliquable(nom: string): HTMLButtonElement {
+  const b = el("button", "rc-nom", nom) as HTMLButtonElement;
+  b.type = "button";
+  b.style.color = couleurDuJoueur(nom);
+  b.addEventListener("click", (e) => { e.stopPropagation(); void ouvrirLaFiche(nom); });
+  return b;
+}
+
+/**
+ * LA TABLEE AU COMPLET, quand la cellule ne peut plus l'enumerer.
+ *
+ * L'infobulle contenait deja la liste entiere, mais une infobulle ne se lit ni
+ * au doigt ni au clavier, ne defile pas, et ne mene nulle part. Ici chaque nom
+ * ouvre sa fiche.
+ */
+function ouvrirLaTablee(joueurs: LigneDeRecord["joueurs"]): void {
+  const liste = $("tablee-liste");
+  liste.replaceChildren();
+  for (const j of joueurs) {
+    const ligne = el("button", "") as HTMLButtonElement;
+    ligne.type = "button";
+    const point = el("span", "pastille-couleur");
+    point.style.background = couleurDuJoueur(j.nom);
+    ligne.appendChild(point);
+    const qui = el("span", "qui");
+    const nom = el("span", "", j.nom);
+    nom.style.color = couleurDuJoueur(j.nom);
+    qui.appendChild(nom);
+    if (j.invite) qui.appendChild(el("i", "", ` ${t("(invité)")}`));
+    ligne.appendChild(qui);
+    ligne.appendChild(el("span", "tops",
+      t2(j.tops > 1 ? "{n} tops" : "{n} top", { n: j.tops })));
+    ligne.addEventListener("click", () => {
+      $("voile-tablee").hidden = true;
+      void ouvrirLaFiche(j.nom);
+    });
+    liste.appendChild(ligne);
+  }
+  $("voile-tablee").hidden = false;
+}
+
+$("tablee-close").addEventListener("click", () => { $("voile-tablee").hidden = true; });
+$("voile-tablee").addEventListener("click", (e) => {
+  if (e.target === $("voile-tablee")) $("voile-tablee").hidden = true;
+});
+
+/**
  * La cellule des joueurs : chacun de sa couleur, l'invite dit comme tel.
  *
  * AU-DELA DE TROIS NOMS ON COMPTE AU LIEU D'ENUMERER, comme la feuille de
- * route le fait deja (SPEC.md §10) : six pseudos bout a bout debordent, et une
- * ligne qui se chevauche ne se lit plus du tout. La liste entiere reste dans
- * l'infobulle.
+ * route le fait deja (SPEC.md §10). Le compte est un BOUTON : il ouvre la
+ * tablee entiere, ou chaque nom mene a sa fiche. Une infobulle ne se lit ni au
+ * doigt ni au clavier, et ne mene nulle part.
  */
 function cellulesDesJoueurs(joueurs: LigneDeRecord["joueurs"]): HTMLElement {
   const boite = el("div", "rc-joueurs");
@@ -7808,19 +8019,22 @@ function cellulesDesJoueurs(joueurs: LigneDeRecord["joueurs"]): HTMLElement {
     boite.appendChild(el("span", "rc-de-plus", "—"));
     return boite;
   }
-  for (const j of joueurs.slice(0, 3)) {
+  for (const j of joueurs.slice(0, NOMS_MONTRES)) {
     const un = el("span", "rc-joueur");
     const point = el("span", "pastille-couleur");
     point.style.background = couleurDuJoueur(j.nom);
     un.appendChild(point);
-    const nom = el("span", "", j.nom);
-    nom.style.color = couleurDuJoueur(j.nom);
-    un.appendChild(nom);
+    un.appendChild(pseudoCliquable(j.nom));
     if (j.invite) un.appendChild(el("i", "", t("(invité)")));
     boite.appendChild(un);
   }
-  if (joueurs.length > 3) {
-    boite.appendChild(el("span", "rc-de-plus", `+${joueurs.length - 3}`));
+  if (joueurs.length > NOMS_MONTRES) {
+    const plus = el("button", "rc-plus",
+      `+${joueurs.length - NOMS_MONTRES}`) as HTMLButtonElement;
+    plus.type = "button";
+    plus.title = t("Voir tous les joueurs");
+    plus.addEventListener("click", (e) => { e.stopPropagation(); ouvrirLaTablee(joueurs); });
+    boite.appendChild(plus);
   }
   boite.title = joueurs
     .map((j) => `${j.nom}${j.invite ? ` ${t("(invité)")}` : ""} · ${j.tops}`)
@@ -8440,6 +8654,12 @@ function prDessiner(): void {
   const valeurs = prPartie.config.valeurs ?? {};
   const dernier = prVu > 0 ? prPartie.coups[prVu - 1] : undefined;
   const neufs = new Set((dernier?.placements ?? []).map((p) => `${p.x},${p.y}`));
+  // Ce qui est pose, pour que deux caramels colles ne tracent pas deux traits
+  // le long de leur bord commun. Voir `cheminDuCaramel`.
+  const poses = new Set<string>();
+  for (let k = 0; k < prVu; k++) {
+    for (const p of prPartie.coups[k]?.placements ?? []) poses.add(`${p.x},${p.y}`);
+  }
   for (let k = 0; k < prVu; k++) {
     for (const p of prPartie.coups[k]?.placements ?? []) {
       const i = p.x + bornes, j = p.y + bornes;
@@ -8454,8 +8674,10 @@ function prDessiner(): void {
       g.fillRect(i * c, j * c, c, c);
       g.strokeStyle = neuf ? C.accent : (joker ? C.jedge : C.edge);
       g.lineWidth = neuf ? 2 : 1;
-      const d = g.lineWidth / 2;
-      g.strokeRect(i * c + d, j * c + d, c - g.lineWidth, c - g.lineWidth);
+      g.beginPath();
+      cheminDuCaramel(g, i * c, j * c, c, c, 0,
+        cotesDe(poses, p.x, p.y), g.lineWidth / 2);
+      g.stroke();
       g.fillStyle = C.ink;
       g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
       g.textAlign = "center";

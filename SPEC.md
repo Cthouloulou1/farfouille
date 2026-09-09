@@ -574,6 +574,27 @@ Les 7 caramels sont affichés **au-dessus de la grille**.
 
 Un caramel joué par un joker a un **rendu distinct** du caramel normal.
 
+**Deux caramels collés n'ont qu'un trait entre eux, et il fait un pixel.** Un mot
+est un bloc, pas une file de lettres posées côte à côte. Deux défauts s'y
+cachaient :
+
+- **l'arrondi laissait passer la case.** Aux deux bouts d'un bord commun, deux
+  petites lunes de la couleur de la case restaient visibles — des taches claires
+  alignées le long de chaque couture verticale, qu'on prenait pour des trous dans
+  la grille. Un coin ne s'arrondit donc que s'il donne sur du **vide** ;
+- **le bord commun était tracé deux fois**, une fois par chaque voisin, et
+  paraissait deux fois plus épais que les autres. Très visible en vert sur le mot
+  qu'on propose.
+
+Le poser exactement sur la limite ne suffit pas : un trait d'un pixel centré sur
+une limite entière se partage entre les deux pixels qui l'encadrent, et rend une
+ligne **floue de deux pixels** au lieu d'une nette d'un seul. Les deux caramels
+le posent donc dans le **même pixel** : celui de droite le rentre chez lui, celui
+de gauche le laisse déborder d'autant.
+
+La règle vaut partout où des caramels se touchent : la grille du salon, le mot
+qu'on tape, le fantôme d'une solution, et la grille d'une partie relue.
+
 ### Pendant la frappe on compte, à la validation on juge
 
 **Le score s'affiche à chaque lettre, quoi qu'on ait tapé.** Un mot en cours de
@@ -887,8 +908,9 @@ pendant la frappe** — le voir se défaire lettre après lettre serait insuppor
 | | |
 |---|---|
 | **Ctrl+R** | ouvre et referme la feuille de route |
-| **Ctrl+D**, **Ctrl+N** | ouvrent les réglages de la partie, donc en lancent une neuve |
+| **Ctrl+D** | ouvre les réglages de la partie, donc en lance une neuve |
 | **Ctrl+E** | ouvre le rejeu |
+| **Ctrl+G** | ouvre et referme le mini anagrammeur |
 | **Ctrl+A** | range le chevalet |
 | **flèches** | déplacent le curseur d'une case (§18) |
 | **Maj + flèches** | déplacent la grille |
@@ -899,11 +921,11 @@ l'autre n'a de sens ici, et tous deux se trouvent sous les doigts quand on joue.
 On les prend, et on les rend à leur usage dès qu'on est dans une **zone de
 saisie** — celles-ci reçoivent les touches avant le jeu.
 
-**`Ctrl+N` fait la même chose que `Ctrl+D`** : c'est le raccourci de « nouveau »
-partout ailleurs, et beaucoup l'ont dans les doigts. Le navigateur se le réserve
-et ouvrira peut-être sa fenêtre par-dessus ; là où il nous laisse la main, il
-marche. Deux touches pour un même geste ne coûtent rien ; en manquer une coûte
-un aller-retour à la souris.
+**`Ctrl+N` n'est pas à prendre.** C'est le raccourci de « nouveau » partout
+ailleurs, et il était tentant de le servir ici aussi. Mais le navigateur se le
+réserve **avant** la page : `preventDefault` n'y peut rien, et la touche ouvre une
+fenêtre neuve par-dessus le salon. Une moitié de raccourci est pire que pas de
+raccourci du tout, et celui-là ne marchait nulle part.
 
 **Ils s'ouvrent aussi depuis le rejeu**, comme la feuille de route : on relit la
 partie qu'on vient de finir, et c'est précisément de là qu'on veut en relancer
@@ -913,6 +935,13 @@ une. Le rejeu prenait la main sur toutes les touches et ne laissait passer que
 `Ctrl+D` ne fait rien là où le bouton des réglages n'est pas là, et `Ctrl+E` rien
 là où le rejeu ne s'ouvre pas : **un raccourci ne donne pas un droit que l'écran
 refuse**. Sur une partie en cours, montrer les paliers serait donner les réponses.
+
+**Mais la touche reste prise, même quand elle n'ouvre rien.** `Ctrl+G` est caché
+dès qu'on est plusieurs sur une partie en cours (§9, l'anagrammeur) ; rendre alors
+la main au navigateur y déclenchait **sa** recherche, qui s'ouvre en travers de la
+grille. On croit appeler l'anagrammeur, on reçoit la barre de recherche du
+navigateur. Un raccourci qui refuse doit refuser en silence, pas laisser passer
+autre chose.
 
 **Ctrl+A range le chevalet**, comme sur le logiciel historique. Le navigateur s'en
 sert pour tout sélectionner, mais la touche n'arrive ici que hors de toute zone
@@ -2441,6 +2470,33 @@ C'est le défaut qui laissait passer, au coup 37 d'une grille infinie tirée d'u
 sac bouclant, un tirage à **une seule voyelle** : le relâchement s'y appliquait
 alors que rien ne s'y épuisait.
 
+### On n'exige pas ce qui n'existe plus
+
+**L'exigence ne dépasse jamais ce que la pioche peut encore donner.** La règle
+demande deux voyelles ; le sac n'en a plus qu'une : aucun tirage ne peut la
+satisfaire. La pioche en refusait alors cinq cents avant de **prendre le dernier
+venu** — celui du hasard, qui n'avait aucune raison de contenir la voyelle
+survivante.
+
+> Vu en **7 et 8 joker**, avant le coup 16 : huit caramels au chevalet dont un
+> joker, donc sept lettres tirées et deux voyelles exigées. Le sac n'en gardait
+> qu'une, un I. Le chevalet est arrivé **sans une seule voyelle**, et le I est
+> resté au fond du sac.
+
+L'exigence se plie donc à ce qui reste, **côté par côté** : deux voyelles s'il y
+en a deux, une s'il n'en reste qu'une, aucune s'il n'en reste plus. Elle ne se
+relâche que de ce qui manque — deux consonnes restent exigées pendant qu'on
+n'attend plus qu'une voyelle — et le tirage **emporte la dernière voyelle** au
+lieu de la laisser au fond du sac.
+
+Ce n'est pas le relâchement du coup 16, qui est une règle de jeu : c'est la
+constatation qu'une préférence impossible à satisfaire n'est plus une
+préférence. Les deux se composent, et la seconde s'applique après la première.
+
+Le plafond se lit sur **le sac et le reliquat réunis** — un tirage refusé rend
+tout, reliquat compris. Il ne concerne que les pioches à sac : des probabilités
+pondérées peuvent toujours tout donner.
+
 ### Le Y devient obligatoire quand il tient seul un rôle
 
 S'il ne reste **plus de voyelle en dehors du Y**, aucun tirage ne peut en
@@ -3559,17 +3615,23 @@ où l'on veut savoir ce qu'on vient de faire. Elle affiche désormais **TOP** si
 vous l'avez trouvé, sinon **votre mot et votre écart**. Tout s'efface à la
 première lettre tapée : la zone redevient celle du mot en cours.
 
-Un carré **Score** l'accompagne dans le bandeau, dans les deux modes : votre
-total, la somme de vos meilleures solutions.
+Un carré **Score** l'accompagne dans le bandeau : votre total, la somme de vos
+meilleures solutions.
 
-Un carré **Négatif** — votre écart cumulé au top, « Top » quand il est nul —
-apparaît partout où l'on joue **pour son propre compte** :
+**Score et négatif obéissent à la même règle**, et disparaissent aux mêmes
+endroits. Ce que le score additionne, ce sont les points des mots qu'on a
+**soumis** à chaque coup : c'est la comptabilité du duplicate, où chacun marque
+ce qu'il pose. Le topping ne marche pas ainsi — la grille n'avance que par le
+top, et ce qu'on a proposé à côté ne se pose sur aucune grille. À plusieurs, un
+total de mille deux cents points n'y désigne donc rien du tout.
+
+Ils apparaissent partout où l'on joue **pour son propre compte** :
 
 | | |
 |---|---|
 | **duplicate** | chacun tient sa feuille et marque à chaque coup ; l'écart cumulé est précisément ce qui départage la table |
 | **topping en solitaire** | une partie du jour, un entraînement : c'est la seule mesure de ce qu'on a manqué |
-| **topping à plusieurs** | pas de négatif |
+| **topping à plusieurs** | ni score ni négatif |
 
 La distinction n'est pas le mode, c'est **contre qui l'on se mesure**. À plusieurs
 en topping, la grille n'avance que parce que quelqu'un a trouvé le top — sur une
@@ -4320,17 +4382,45 @@ lettres en anglais — oblige à se rappeler ce qu'on y avait mis. Elle rouvre
 toujours au même endroit : partie normale, grille normale, chevalet normal, tous
 les joueurs.
 
-**La page ne saute pas quand on change de coup.** La liste des solutions change
-de hauteur d'un coup à l'autre : la barre de défilement disparaissait puis
-revenait, et toute la page se décalait de sa largeur à chaque flèche. La
-gouttière est réservée en permanence.
+**La page ne saute pas quand son contenu change de hauteur.** La liste des
+solutions change d'un coup à l'autre, le tableau des mots ratés n'a pas la
+hauteur de celui des mots trouvés : la barre de défilement disparaissait puis
+revenait, et toute la page se décalait de sa largeur à chaque fois. La gouttière
+est réservée en permanence.
+
+Elle se réserve sur **l'élément qui défile réellement**, et non sur le document :
+`body` est figé à la hauteur de la fenêtre, c'est le conteneur de l'accueil qui
+porte l'ascenseur. Posée sur `html`, la réservation ne servait à rien.
 
 **Une couleur par joueur**, dans la colonne des noms, dans la feuille de route,
 et sur le **top** lui-même — l'œil relie le mot à celui qui l'a trouvé sans
-traverser le tableau,
-pour qu'on voie d'un coup d'œil qui a trouvé quoi. Elle se dérive du nom, ne
-coûte rien à enregistrer, et **ne va pas sur les caramels du plateau** : une
-grille bariolée se lit moins bien qu'une grille unie.
+traverser le tableau. Elle se dérive du nom, ne coûte rien à enregistrer, et **ne
+va pas sur les caramels du plateau** : une grille bariolée se lit moins bien
+qu'une grille unie.
+
+**La clarté se calcule, elle ne se fixe pas.** À clarté HSL égale, un jaune est
+quatre fois plus lumineux qu'un bleu : la même valeur pour toutes les teintes
+donnait des jaunes délavés qu'on ne lisait pas sur fond clair, et des bleus
+sourds qu'on ne lisait pas sur fond de nuit. On cherche donc, pour chaque teinte,
+la clarté qui l'amène à la **luminance voulue** — la même pour toutes, réglée sur
+un contraste d'environ cinq pour un avec le fond. La saturation peut alors rester
+haute sans que rien ne devienne illisible, et deux couleurs se distinguent par ce
+qu'elles sont, pas par leur pâleur.
+
+La teinte se tire d'un hachage **FNV-1a** du pseudo, et non d'une somme de
+caractères : deux pseudos qui se ressemblent — « Zulu » et « Zulu2 », les plus
+fréquents à une même table — tombaient sinon sur des teintes voisines.
+
+**Un pseudo se clique**, partout où il paraît dans les tableaux : il ouvre la
+fiche de son joueur, par-dessus la page, qui reste où elle est.
+
+**Au-delà de trois noms, on compte au lieu d'énumérer, et le compte s'ouvre.**
+Une partie se joue à autant de joueurs qu'elle a de coups — c'est la seule borne,
+et une 2 sur 2 en a compté cinquante-huit. Trois noms tiennent dans la colonne,
+six s'y chevauchent. Le « +6 » est donc un **bouton** : il ouvre la tablée
+entière, un joueur par ligne avec ses tops, chacun menant à sa fiche. L'infobulle
+contenait déjà la liste, mais une infobulle ne se lit ni au doigt ni au clavier,
+ne défile pas, et ne mène nulle part.
 
 ### Seuls les grands formats se complètent au négatif
 
@@ -4360,6 +4450,15 @@ du duplicate.
 Ils portent sur des parties **topées** eux aussi. Une partie entièrement révélée
 par l'échéance afficherait sinon le cumul du générateur, pas celui d'une table.
 
+**Les deux derniers font exception : ils classent un COUP.** Il suffit qu'il ait
+été **trouvé** — la partie n'a pas besoin d'être topée. Un coup se juge sur
+lui-même, et avoir manqué un top trois coups plus loin n'enlève rien à celui-là.
+Un top que personne n'a vu, en revanche, n'a personne à nommer : il n'entre pas.
+
+La manche ne retient donc, de toute la partie, que son coup trouvé le plus cher
+et son coup trouvé le moins cher — juste ce qu'il faut à ces deux tableaux, sans
+garder de quoi reconstituer la partie dans un fichier qui n'est pas fait pour ça.
+
 | tableau | ce qu'il classe |
 |---|---|
 | **Chrono le plus court** | le chrono le plus serré tenu jusqu'au bout |
@@ -4369,8 +4468,8 @@ par l'échéance afficherait sinon le cumul du générateur, pas celui d'une tab
 | **La partie la plus longue** | le plus de coups |
 | **Le plus de farfouilles** | |
 | **Le moins de farfouilles** | |
-| **Le coup le plus cher** | un coup, pas une partie : le mot, ses points, sa partie |
-| **Le coup le moins cher** | |
+| **Le coup le plus cher** | un coup **trouvé**, pas une partie : le mot, ses points, sa partie |
+| **Le coup le moins cher** | idem |
 
 Mesuré sur le disque : le cumul d'une partie normale tourne autour de **800 à
 980 points**. Le tableau a de la marge des deux côtés.

@@ -467,6 +467,10 @@ export const EN: Readonly<Record<string, string>> = {
   "Part trouvée": "Found share",
   "Revoir": "Replay",
   "(invité)": "(guest)",
+  "Joueurs de la partie": "Players in this game",
+  "Voir tous les joueurs": "See every player",
+  "{n} top": "{n} top",
+  "{n} tops": "{n} tops",
 
   "Parties non topées, du plus petit négatif": "Games not fully topped, smallest deficit first",
   "Négatif de la partie": "Deficit for the game",

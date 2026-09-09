@@ -9,7 +9,7 @@
 import { BLANK, isConsonant, isVowel } from "./alphabet.ts";
 import {
   COUP_RELACHEMENT, regleOrdinaire, regleDuDoubleJoker,
-  type DrawResult, type RejectPolicy,
+  type Disponibles, type DrawResult, type RejectPolicy,
 } from "./bag.ts";
 
 import { mulberry32, type Alea } from "./rng.ts";
@@ -40,12 +40,22 @@ export function politiqueSacFini(
    * la regle du tout au tout.
    */
   jokersAuTirage: () => number = () => 0,
+  /**
+   * Ce que le sac et le reliquat peuvent encore donner, voyelles et consonnes.
+   *
+   * L'exigence ne depasse jamais ce qui reste : demander deux voyelles a un sac
+   * qui n'en a plus qu'une, c'est demander l'impossible, et la pioche finissait
+   * par servir un tirage tire au hasard -- sans la voyelle survivante, qui
+   * restait au fond du sac. Voir `exigence` dans `bag.ts`.
+   */
+  disponibles: () => Disponibles | undefined = () => undefined,
 ): RejectPolicy {
   return (rack) => {
     const jokers = jokersAuTirage();
-    if (jokers >= 2) return regleDuDoubleJoker(rack, coup());
+    const dispo = disponibles();
+    if (jokers >= 2) return regleDuDoubleJoker(rack, coup(), dispo);
     const relache = sEpuise() && coup() >= COUP_RELACHEMENT;
-    return regleOrdinaire(rack, rack.length + jokers, relache);
+    return regleOrdinaire(rack, rack.length + jokers, relache, dispo);
   };
 }
 
@@ -133,6 +143,13 @@ export class SacFini implements Pioche {
   private caramels: string[] = [];
   /** Numero du tirage en cours, pour le relachement de la regle de rejet. */
   private coup = 0;
+  /**
+   * Ce que le sac et le reliquat peuvent encore donner, au tirage en cours.
+   *
+   * Pose au debut de chaque `draw`, lu par la politique de rejet par defaut :
+   * elle n'exige jamais plus de voyelles ou de consonnes qu'il n'en reste.
+   */
+  private dispoDuTirage: Disponibles | undefined;
 
   constructor(
     distribution: Readonly<Record<string, number>> = SAC_FRANCAIS,
@@ -147,7 +164,8 @@ export class SacFini implements Pioche {
     // chaque tirage plutot qu'une fois pour toutes.
     this.reject = reject
       ?? politiqueSacFini(
-        () => this.coup, () => !this.recharge, () => this.jokersAuTirage);
+        () => this.coup, () => !this.recharge, () => this.jokersAuTirage,
+        () => this.dispoDuTirage);
     this.distribution = distribution;
     this.remplir();
   }
@@ -255,6 +273,11 @@ export class SacFini implements Pioche {
     // C'est ce qui reconcilie les deux regles du sac : la convention d'arret
     // dit que le Y remplace la lettre manquante, la regle de tirage l'exige.
     const { v, c } = this.compte(reliquat);
+    // L'EXIGENCE SE PLIE A CE QUI RESTE. Un sac qui ne garde qu'une voyelle ne
+    // peut pas en fournir deux : sans cela la pioche refusait cinq cents
+    // tirages puis prenait le dernier venu, souvent sans aucune voyelle -- et
+    // la derniere restait au fond du sac (SPEC.md §16).
+    this.dispoDuTirage = { v, c };
     const yEnReserve = [...this.caramels, ...reliquat].filter((l) => l === "Y").length;
     const yObligatoire = yEnReserve > 0 && (v === 0 || c === 0);
     const convient = (rack: readonly string[]): boolean =>
