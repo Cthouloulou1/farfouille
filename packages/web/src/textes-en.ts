@@ -506,4 +506,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Journal illisible": "Unreadable log",
   "personne": "nobody",
   "Référence": "Reference",
+  "Solutions du coup": "Solutions for this move",
+  "recherche des solutions…": "searching for solutions…",
+  "Aucune solution trouvée.": "No solution found.",
+  "top et isotops": "top and isotops",
+  "top": "top",
+  "{n} solution(s)": "{n} solution(s)",
+  "et {n} autres": "and {n} more",
 };

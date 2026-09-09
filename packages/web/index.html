@@ -1224,6 +1224,20 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* Le mot et la case du joueur, quand le logiciel a retenu un autre isotop. */
 .pr-sien { font-style: normal; color: var(--ink-faint); font-weight: 400; }
 
+/* LES SOLUTIONS DU COUP. Un bloc par palier, le score en tete. */
+.pr-titre-sol { margin: 18px 0 8px; }
+.pr-paliers { display: flex; flex-direction: column; gap: 10px; }
+.pr-palier { border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.pr-palier-tete { display: flex; align-items: baseline; gap: 8px; padding: 5px 9px; background: var(--field); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); }
+.pr-palier-tete b { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--ink); text-transform: none; }
+.pr-solution { display: flex; align-items: baseline; gap: 10px; padding: 3px 9px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pr-solution:nth-child(even) { background: var(--field); }
+/* Le coup reellement joue se distingue de ses isotops. */
+.pr-solution.pr-pose { background: var(--accent-bg); }
+.pr-sol-mot { flex: 1; min-width: 0; color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.pr-sol-ref { flex: none; color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
+.pr-attente { padding: 8px 2px; font-size: 12.5px; color: var(--ink-faint); }
+
 @media (max-width: 900px) { .side { display: none; } }
 </style>
 </head>
@@ -1443,6 +1457,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" id="pr-fin" title="Dernier coup">⏭</button>
         </div>
         <div class="pr-coup" id="pr-coup"></div>
+        <!-- TOUTES LES SOLUTIONS DU COUP, refaites par le serveur a la demande :
+             le top et ses isotops d'abord, les sous-tops ensuite. C'est ce
+             qu'on vient etudier apres coup. -->
+        <h2 class="pr-titre-sol">Solutions du coup</h2>
+        <div class="pr-paliers" id="pr-paliers"></div>
       </div>
 
       <div class="pr-droite">

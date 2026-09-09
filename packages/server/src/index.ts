@@ -31,7 +31,7 @@ import {
   annexe, compteurWuQi, coupsExtremes, mancheDe, motsRates, motsTrouves, observer,
   ouvrirLesRecords, tableau, type Annexe,
 } from "./records.ts";
-import { journalDeLaPartie, relire } from "./lecteur.ts";
+import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lecteur.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
 const ANNEXES: readonly Annexe[] = [
@@ -737,6 +737,25 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         topee: m.topee, negatif: m.negatif, joueurs: m.joueurs, solo: m.solo,
       },
     });
+    return;
+  }
+
+  // LES PALIERS D'UN COUP D'UNE PARTIE ARCHIVEE. Toutes les solutions du coup,
+  // refaites a la demande sur un fil de solveur partage (SPEC.md §23).
+  if (url.startsWith("/api/paliers/") && req.method === "GET") {
+    const reste = url.slice("/api/paliers/".length).split("/");
+    const id = decodeURIComponent(reste[0] ?? "");
+    const n = Number(reste[1]);
+    const m = mancheDe(id);
+    if (m === undefined || !Number.isInteger(n)) {
+      json(res, 404, { message: "Cette partie n'est pas au tableau" });
+      return;
+    }
+    const fichier = journalDeLaPartie(m.partie, m.graine);
+    if (fichier === null) { json(res, 404, { message: "Partie introuvable" }); return; }
+    const p = relireEtGarder(fichier);
+    if (p === null) { json(res, 404, { message: "Journal illisible" }); return; }
+    json(res, 200, { n, paliers: await paliersDuCoup(p, n) });
     return;
   }
 

@@ -12,17 +12,24 @@
  * placements dans l'ordre reconstruit la grille exacte (SPEC.md §11) : ni sac,
  * ni solveur, ni verrou, ni fil.
  *
- * CE QU'IL NE FAIT PAS, et c'est voulu : les PALIERS. Une partie bornee ne les
- * garde pas, et les refaire demanderait le solveur. Le rejeu d'une partie
- * archivee montre donc la grille, les tirages, les mots et leurs trouveurs --
- * ce qu'on vient y chercher -- et non la liste des solutions de chaque coup.
+ * LES PALIERS SE REFONT ICI AUSSI. Une partie bornee ne les garde pas -- et ce
+ * n'est PAS le navigateur qui les calcule, contrairement a ce qu'on pourrait
+ * croire : le client les demande au serveur, qui les cherche dans le fil du
+ * salon. Un salon ferme, plus de fil, plus de paliers.
+ *
+ * Or la demande de paliers du fil est SANS ETAT : elle recoit les caramels
+ * poses avant le coup et le tirage, et se batit une grille neuve. Il suffit
+ * donc d'un fil a part, partage par toutes les parties archivees de meme
+ * configuration, cree a la demande et rendu quand plus personne ne lit.
  *
  * IL NE SERT QUE DES PARTIES CITEES AU JOURNAL DES RECORDS. C'est la regle de
  * surete de ce fichier : servir un journal quelconque par son nom donnerait le
  * moyen de lire une partie EN COURS, donc le top que tout le monde cherche.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
+import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 import { Dict } from "../../engine/src/dictionary.ts";
 import { loadDict } from "../../engine/src/dictionary_node.ts";
@@ -50,6 +57,107 @@ export function lexique(id: string): Dict {
   let d = lexiques.get(chemin);
   if (d === undefined) { d = loadDict(chemin); lexiques.set(chemin, d); }
   return d;
+}
+
+/**
+ * LES FILS DE SOLVEUR DES PARTIES ARCHIVEES.
+ *
+ * Un par configuration -- lexique, pavage, format, primes -- et pas un par
+ * partie : deux parties normales du meme lexique posent exactement la meme
+ * question au solveur. Chacun coute les 4 Mo du GADDAG, d'ou le plafond et le
+ * renvoi apres un quart d'heure sans lecture.
+ */
+const FILS_MAX = 3;
+const FIL_INACTIF_MS = 15 * 60_000;
+
+interface FilDeLecture {
+  w: Worker;
+  attente: Map<number, (r: any) => void>;
+  minuteur: NodeJS.Timeout | null;
+  vuA: number;
+}
+
+const fils = new Map<string, FilDeLecture>();
+let prochaineDemande = 1;
+
+function signature(layout: LayoutName, config: ConfigSerialisee): string {
+  return `${layout}|` + createHash("sha256")
+    .update(JSON.stringify(config)).digest("hex").slice(0, 12);
+}
+
+function rendreLeFil(cle: string): void {
+  const f = fils.get(cle);
+  if (f === undefined) return;
+  fils.delete(cle);
+  if (f.minuteur !== null) clearTimeout(f.minuteur);
+  for (const [, done] of f.attente) done({ tiers: [] });
+  void f.w.terminate();
+  console.log(`[lecteur] fil de solveur rendu (${cle})`);
+}
+
+function filDeLecture(layout: LayoutName, config: ConfigSerialisee): FilDeLecture {
+  const cle = signature(layout, config);
+  let f = fils.get(cle);
+  if (f === undefined) {
+    // Le plus anciennement lu s'en va : trois fils suffisent, et chacun pese
+    // le prix d'un GADDAG.
+    while (fils.size >= FILS_MAX) {
+      const vieux = [...fils].sort((a, b) => a[1].vuA - b[1].vuA)[0];
+      if (vieux === undefined) break;
+      rendreLeFil(vieux[0]);
+    }
+    const w = new Worker(new URL("./worker.ts", import.meta.url), {
+      workerData: { layout, seed: "lecture", config, rngAlgo: "mulberry32" },
+    });
+    const cree: FilDeLecture = { w, attente: new Map(), minuteur: null, vuA: Date.now() };
+    w.on("message", (m: any) => {
+      if (m?.t !== "paliers") return;
+      const done = cree.attente.get(m.id);
+      cree.attente.delete(m.id);
+      done?.(m);
+    });
+    w.on("error", (e) => console.error("[lecteur]", e));
+    fils.set(cle, cree);
+    f = cree;
+    console.log(`[lecteur] fil de solveur ouvert (${cle})`);
+  }
+  f.vuA = Date.now();
+  if (f.minuteur !== null) clearTimeout(f.minuteur);
+  f.minuteur = setTimeout(() => rendreLeFil(cle), FIL_INACTIF_MS);
+  f.minuteur.unref?.();
+  return f;
+}
+
+/** Un palier : un score, et tous les coups qui l'atteignent. */
+export interface PalierRelu {
+  score: number;
+  moves: [string, string, number, number][];
+}
+
+/**
+ * Les paliers d'un coup d'une partie archivee : le top, ses isotops, puis les
+ * sous-tops. Toutes les solutions, sur un plateau borne.
+ *
+ * LA POSITION EST CELLE D'AVANT LE COUP. On lui donne les caramels poses par
+ * les coups precedents, et le tirage de celui-la : le fil se batit une grille
+ * neuve et cherche tout.
+ */
+export function paliersDuCoup(
+  partie: PartieRelue, n: number,
+): Promise<PalierRelu[]> {
+  const coup = partie.coups.find((c) => c.n === n);
+  if (coup === undefined) return Promise.resolve([]);
+  const avant: Placement[] = [];
+  for (const c of partie.coups) {
+    if (c.n >= n) break;
+    avant.push(...c.placements);
+  }
+  const f = filDeLecture(partie.layout, partie.config);
+  const id = prochaineDemande++;
+  return new Promise((resolve) => {
+    f.attente.set(id, (r) => resolve((r.tiers ?? []) as PalierRelu[]));
+    f.w.postMessage({ t: "paliers", id, rack: coup.rack, avant });
+  });
 }
 
 /** Un coup, tel que le lecteur le rend. */
@@ -127,6 +235,29 @@ function graineDuJournal(fichier: string): string | null {
     const e = JSON.parse(premiere) as Record<string, unknown>;
     return e["t"] === "grille" ? (e["seed"] as string) ?? null : null;
   } catch { return null; }
+}
+
+/**
+ * LES PARTIES RELUES SONT GARDEES, quelques-unes.
+ *
+ * Le rejeu navigue -- coup 7, coup 8, retour au 7 -- et chaque demande de
+ * paliers a besoin de la partie entiere pour savoir ce qui etait pose avant.
+ * La relire a chaque fois, c'est refaire vingt fois la meme grille.
+ */
+const RELUES_GARDEES = 4;
+const relues = new Map<string, PartieRelue>();
+
+export function relireEtGarder(fichier: string): PartieRelue | null {
+  const deja = relues.get(fichier);
+  if (deja !== undefined) return deja;
+  const p = relire(fichier);
+  if (p === null) return null;
+  relues.set(fichier, p);
+  while (relues.size > RELUES_GARDEES) {
+    const premier = relues.keys().next().value as string;
+    relues.delete(premier);
+  }
+  return p;
 }
 
 /**

@@ -4313,7 +4313,9 @@ de l'en-tête dit laquelle des deux colonnes classe.
 > Le jour où l'on voudra trier librement, ce sera en rendant la colonne
 > cliquable, pas en ajoutant un réglage à côté du tableau.
 
-**Une couleur par joueur**, dans la colonne des noms et dans la feuille de route,
+**Une couleur par joueur**, dans la colonne des noms, dans la feuille de route,
+et sur le **top** lui-même — l'œil relie le mot à celui qui l'a trouvé sans
+traverser le tableau,
 pour qu'on voie d'un coup d'œil qui a trouvé quoi. Elle se dérive du nom, ne
 coûte rien à enregistrer, et **ne va pas sur les caramels du plateau** : une
 grille bariolée se lit moins bien qu'une grille unie.
@@ -4659,10 +4661,26 @@ de variables du direct. Le reprendre ici, c'est risquer de casser ce sur quoi on
 joue. Celui de la page des records ne sait qu'une chose : dessiner un plateau
 borné et des caramels dessus.
 
-**Pas de paliers.** Une partie bornée ne les garde pas, et les refaire
-demanderait le solveur. Le rejeu d'une partie archivée montre la grille, les
-tirages, les mots et leurs trouveurs — ce qu'on vient y chercher — et non la
-liste des solutions de chaque coup.
+**Les paliers se refont, eux aussi.** Une partie bornée ne les garde pas — et ce
+n'est **pas le navigateur** qui les calcule, contrairement à ce qu'on croirait :
+son lexique sert à valider un mot tapé et à l'anagrammeur, pas à balayer une
+grille. Le client les demande au serveur, qui les cherche dans le fil du salon.
+Salon fermé, plus de fil, plus de paliers.
+
+Or la demande de paliers du fil est **sans état** : elle reçoit les caramels
+posés avant le coup et le tirage, et se bâtit une grille neuve. Il suffit donc
+d'un **fil à part**, partagé par toutes les parties archivées de même
+configuration — même lexique, même pavage, même format, mêmes primes : deux
+parties normales du même lexique posent exactement la même question au solveur.
+
+Trois fils au plus, rendus après un quart d'heure sans lecture : chacun coûte les
+4 Mo du GADDAG. Et les parties relues sont gardées à quelques-unes, parce que le
+rejeu navigue — coup 7, coup 8, retour au 7 — et que chaque demande a besoin de
+la partie entière pour savoir ce qui était posé avant.
+
+La page montre alors, sous la grille, **toutes les solutions du coup** : le top
+et ses isotops d'abord, les sous-tops ensuite, et le coup réellement joué s'y
+distingue.
 
 **FdR et Revoir ouvrent la même page**, à deux endroits : la feuille de route la
 montre finie, ce qu'on lit d'abord ; le rejeu la reprend au premier coup.

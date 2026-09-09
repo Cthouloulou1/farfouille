@@ -8503,6 +8503,9 @@ function prPeindreLaRoute(): void {
     // WU a une case ou il n'a rien joue. Les deux figurent donc, le retenu
     // d'abord et le sien entre parentheses.
     const mot = el("td", "g pr-mot", m.word);
+    // LE TOP PORTE LA COULEUR DE CELUI QUI L'A TROUVE, comme son nom au bout de
+    // la ligne : l'oeil relie les deux sans traverser le tableau.
+    if (m.player !== null) mot.style.color = couleurDuJoueur(m.player);
     if (m.playerWord !== undefined && m.playerWord !== m.word) {
       mot.appendChild(el("i", "pr-sien", ` (${m.playerWord})`));
     }
@@ -8534,6 +8537,81 @@ function prPeindreLaRoute(): void {
   boite.replaceChildren(table);
 }
 
+/**
+ * Les solutions du coup regarde : le top et ses isotops, puis les sous-tops.
+ *
+ * ELLES VIENNENT DU SERVEUR, comme dans le rejeu d'un salon. Le navigateur ne
+ * sait pas chercher tous les coups d'une position : son lexique sert a valider
+ * un mot tape et a l'anagrammeur, pas a balayer la grille. Le serveur, lui, a
+ * le GADDAG et un fil pour s'en servir.
+ */
+const prPaliers = new Map<number, PalierRelu[]>();
+/** Ce qu'on attend : une reponse en retard ne repeint pas. */
+let prAttente = 0;
+
+interface PalierRelu { score: number; moves: [string, string, number, number][] }
+
+function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
+  const boite = $("pr-paliers");
+  boite.replaceChildren();
+  if (n === 0) return;
+  if (paliers === null) {
+    boite.appendChild(el("div", "pr-attente", t("recherche des solutions…")));
+    return;
+  }
+  if (paliers.length === 0) {
+    boite.appendChild(el("div", "pr-attente", t("Aucune solution trouvée.")));
+    return;
+  }
+  const joue = prPartie?.coups[n - 1];
+  const bornes = prPartie?.config.bornes ?? null;
+  for (const [rang, p] of paliers.entries()) {
+    const bloc = el("div", "pr-palier");
+    const tete = el("div", "pr-palier-tete");
+    tete.appendChild(el("b", "", String(p.score)));
+    // Le palier 0 est le top et ses isotops ; les suivants sont les sous-tops.
+    tete.appendChild(el("span", "", rang === 0
+      ? (p.moves.length > 1 ? t("top et isotops") : t("top"))
+      : t2("{n} solution(s)", { n: p.moves.length })));
+    bloc.appendChild(tete);
+    for (const [mot, dir, x, y] of p.moves.slice(0, 60)) {
+      const l = el("div", "pr-solution");
+      // Le coup REELLEMENT joue se distingue de ses isotops.
+      const pose = joue !== undefined && joue.word === mot
+        && joue.dir === dir && joue.x === x && joue.y === y;
+      if (pose) l.classList.add("pr-pose");
+      l.appendChild(el("span", "pr-sol-mot", mot));
+      l.appendChild(el("span", "pr-sol-ref", noteCoup(dir as "H" | "V", x, y, bornes)));
+      bloc.appendChild(l);
+    }
+    if (p.moves.length > 60) {
+      bloc.appendChild(el("div", "pr-attente",
+        t2("et {n} autres", { n: p.moves.length - 60 })));
+    }
+    boite.appendChild(bloc);
+  }
+}
+
+/** Va chercher les solutions du coup, si on ne les a pas deja. */
+async function prChercherLesPaliers(n: number): Promise<void> {
+  if (prPartie === null || n === 0) { prPeindreLesPaliers(n, []); return; }
+  const deja = prPaliers.get(n);
+  if (deja !== undefined) { prPeindreLesPaliers(n, deja); return; }
+  const mien = ++prAttente;
+  prPeindreLesPaliers(n, null);
+  try {
+    const r = await fetch(`/api/paliers/${encodeURIComponent(prPartie.partie)}/${n}`);
+    const d = await r.json();
+    if (mien !== prAttente) return;
+    const paliers = (d.paliers ?? []) as PalierRelu[];
+    prPaliers.set(n, paliers);
+    prPeindreLesPaliers(n, paliers);
+  } catch {
+    if (mien !== prAttente) return;
+    prPeindreLesPaliers(n, []);
+  }
+}
+
 /** Mene la vue au coup `n` : la grille, la ligne, le curseur. */
 function prAller(n: number): void {
   if (prPartie === null) return;
@@ -8545,6 +8623,7 @@ function prAller(n: number): void {
   ($("pr-fin") as HTMLButtonElement).disabled = prVu >= prPartie.coups.length;
   prDessiner();
   prPeindreLeCoup();
+  void prChercherLesPaliers(prVu);
   for (const l of $("pr-route").querySelectorAll("tr.pr-vu")) l.classList.remove("pr-vu");
   const lignes = $("pr-route").querySelectorAll("tbody tr");
   const active = lignes[prVu - 1];
@@ -8607,7 +8686,9 @@ function fermerLaPartie(pousser = true): void {
   $("corps-records").hidden = false;
   // On ne garde pas une partie entiere derriere une page fermee.
   prPartie = null;
+  prPaliers.clear();
   $("pr-route").replaceChildren();
+  $("pr-paliers").replaceChildren();
   if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
 }
 
