@@ -64,6 +64,7 @@ function manche(e: Esquisse): Manche {
   const tops = new Map<string, number>();
   for (const c of vus) if (c.par !== null) tops.set(c.par, (tops.get(c.par) ?? 0) + 1);
   const topee = vus.every((c) => c.par !== null);
+  const chers = [...vus].sort((a, b) => b.score - a.score);
   return {
     partie: e.partie,
     graine: `graine-de-${e.partie}`,
@@ -82,14 +83,32 @@ function manche(e: Esquisse): Manche {
     joueurs: [...tops].sort((a, b) => b[1] - a[1])
       .map(([nom, t]) => ({ nom, tops: t, invite: true })),
     solo: topee && tops.size === 1 ? [...tops.keys()][0]! : null,
-    vus,
+    coupCher: note(chers[0]),
+    coupPasCher: note(chers[chers.length - 1]),
   };
 }
+
+const note = (c: CoupObserve | undefined): { mot: string; score: number; par: string | null } | null =>
+  c === undefined ? null : { mot: c.mots[0] ?? "", score: c.score, par: c.par };
 
 /** Ecrit ces manches au journal et les relit par le vrai chemin. */
 function poser(...m: Manche[]): void {
   writeFileSync(JOURNAL,
     m.map((x) => JSON.stringify({ t: "manche", ...x })).join("\n") + "\n", "utf8");
+  ouvrirLesRecords();
+}
+
+/**
+ * Ecrit des lots de mots au journal, et les relit.
+ *
+ * C'EST CE QUE LE JOURNAL PORTE DESORMAIS pour les mots : un lot par partie,
+ * et non plus le detail de ses coups. Une partie abandonnee n'ecrit que cela.
+ */
+function poserDesMots(...lots: { lexique?: string; trouves?: string[]; rates?: string[] }[]): void {
+  writeFileSync(JOURNAL, lots.map((l) => JSON.stringify({
+    t: "mots", lexique: l.lexique ?? "ods9", at: horloge++,
+    trouves: l.trouves ?? [], rates: l.rates ?? [],
+  })).join("\n") + "\n", "utf8");
   ouvrirLesRecords();
 }
 
@@ -275,24 +294,15 @@ console.log("\n  --- les tableaux annexes ---\n");
 // ------------------------------------------------------------- les mots
 console.log("\n  --- les mots rates ---\n");
 {
-  poser(
-    manche({ partie: "p1", temps: 10_000, vus: [
-      // Rate, et il a DEUX isotops : les deux sont rates.
-      coup(1, ["PLUTOT", "POULET"], null),
-      coup(2, ["AUNERA"], "alice"),
-      // Personne n'a rien soumis sur ce coup : il ne compte pas.
-      coup(3, ["INVISIBLE"], null, { actif: false }),
-      // Trouve les deux fois : il n'a rien a faire au tableau des rates.
-      coup(4, ["CONNU"], "alice"),
-    ] }),
-    manche({ partie: "p2", temps: 11_000, vus: [
-      coup(1, ["PLUTOT", "POULET"], null),
-      coup(2, ["AUNERA"], null),
-      coup(3, ["CONNU"], "alice"),
-    ] }),
-    manche({ partie: "anglaise", temps: 9_000, lexique: "csw24", vus: [
-      coup(1, ["PLUTOT"], null),
-    ] }),
+  poserDesMots(
+    // Un coup rate a deux isotops : les deux sont rates, a egalite.
+    { rates: ["PLUTOT", "POULET"] },
+    { rates: ["PLUTOT", "POULET"], trouves: ["AUNERA"] },
+    // AUNERA rate une fois : il sort des trouves, meme trouve par ailleurs.
+    { rates: ["AUNERA"] },
+    // CONNU trouve deux fois et jamais rate.
+    { trouves: ["CONNU", "CONNU"] },
+    { lexique: "csw24", rates: ["PLUTOT"] },
   );
   const rates = motsRates("ods9");
   const par = new Map(rates.map((l) => [l.mot, l]));
@@ -305,8 +315,8 @@ console.log("\n  --- les mots rates ---\n");
   verifie("un mot trouve une fois sur deux affiche 50 %",
     par.get("AUNERA")?.fois === 2 && par.get("AUNERA")?.trouves === 1
     && par.get("AUNERA")?.part === 50, `${par.get("AUNERA")?.part} %`);
-  verifie("un coup que personne n'a cherche ne compte pas",
-    !par.has("INVISIBLE"), par.has("INVISIBLE") ? "INVISIBLE est compté" : "");
+  verifie("un mot jamais rate ne figure pas dans les rates",
+    !par.has("CONNU"), par.has("CONNU") ? "CONNU y est" : "CONNU n'y est pas");
   verifie("le lexique anglais ne se melange pas au francais",
     par.get("PLUTOT")?.fois === 2, `${par.get("PLUTOT")?.fois} fois en ods9`);
   verifie("et il a son propre tableau",
@@ -315,10 +325,7 @@ console.log("\n  --- les mots rates ---\n");
     motsRates("ods9", 6).every((l) => l.mot.length === 6)
     && motsRates("ods9", 6).length === 3,
     motsRates("ods9", 6).map((l) => l.mot).join(","));
-  verifie("un mot jamais rate ne figure pas dans les rates",
-    !par.has("CONNU"), par.has("CONNU") ? "CONNU y est" : "CONNU n'y est pas");
-  // LES DEUX TABLEAUX S'EXCLUENT. Un mot rate une seule fois n'est pas un mot
-  // que la table connait, meme s'il a par ailleurs ete trouve dix fois.
+  // LES DEUX TABLEAUX S'EXCLUENT.
   const trouves = motsTrouves("ods9");
   const nomsTrouves = trouves.map((l) => l.mot);
   verifie("les mots jamais rates sont les seuls a figurer dans les trouves",
@@ -332,43 +339,28 @@ console.log("\n  --- les mots rates ---\n");
     motsRates("ods9").every((l) => l.rates > 0));
 }
 
-// ------------------------------------- la partie abandonnee laisse ses coups
+// ------------------------------------- la partie abandonnee laisse ses mots
 console.log("\n  --- une partie abandonnee ---\n");
 {
-  // Une table qui rate un top relance aussitot : sans le releve, le mot rate
-  // -- celui-la meme qui fait abandonner -- ne serait compte nulle part.
-  writeFileSync(JOURNAL, JSON.stringify({
-    t: "releve", partie: "abandonnee", at: 1_789_000_000_000, lexique: "ods9",
-    vus: [
-      coup(1, ["QUARTZEUX"], null),
-      coup(2, ["JAMAIS"], null, { actif: false }),
-    ],
-  }) + "\n", "utf8");
-  ouvrirLesRecords();
+  // Une table qui rate un top relance aussitot : sans ce lot, le mot rate --
+  // celui-la meme qui fait abandonner -- ne serait compte nulle part. Elle ne
+  // laisse RIEN d'autre : pas de quoi reconstituer la partie.
+  poserDesMots({ rates: ["QUARTZEUX"] });
   verifie("elle n'entre dans aucun classement",
     classementDeVitesse({ categorie: "normale" }).length === 0);
   const rates = motsRates("ods9");
   verifie("mais son coup rate compte dans les mots",
     rates.length === 1 && rates[0]?.mot === "QUARTZEUX" && rates[0]?.rates === 1,
     rates.map((l) => l.mot).join(","));
-  verifie("et son coup que personne n'a cherche ne compte pas",
-    !rates.some((l) => l.mot === "JAMAIS"));
 }
 
 // --------------------------------------------------------- WU et QI
 console.log("\n  --- WU et QI ---\n");
 {
-  poser(
-    manche({ partie: "avec-qi", temps: 10_000, vus: [
-      coup(1, ["QI"], "alice"),
-      coup(2, ["QI"], null),
-      // Un isotop qui n'est pas le mot pose ne compte pas : c'est le top JOUE
-      // que le pari regarde.
-      coup(3, ["AUTRE", "WU"], "alice"),
-      // Ni WUS ni QIS : ce sont d'autres mots.
-      coup(4, ["QIS"], "alice"),
-    ] }),
-    manche({ partie: "avec-wu", temps: 11_000, vus: [coup(1, ["WU"], "alice")] }),
+  poserDesMots(
+    { trouves: ["QI"], rates: ["QI"] },
+    // Ni WUS ni QIS : ce sont d'autres mots, et le compteur ne les connait pas.
+    { trouves: ["WU", "QIS"] },
   );
   const compte = new Map(compteurWuQi("ods9").map((l) => [l.mot, l]));
   verifie("QI est sorti deux fois et trouve une",
@@ -394,8 +386,11 @@ console.log("\n  --- une manche invalidee ---\n");
   verifie("une fois invalidee, elle disparait du tableau",
     apres.length === 1 && apres[0]?.partie === "propre",
     apres.map((l) => l.partie).join(","));
-  verifie("elle ne compte plus dans les mots non plus",
-    !motsRates("ods9").some((l) => l.mot === "DEUX"));
+  // LES MOTS NE SUIVENT PAS L'INVALIDATION. Ils ne viennent plus des manches
+  // mais d'un compteur tenu a part, et un mot rate l'a ete quoi qu'on pense de
+  // la partie ou il est sorti.
+  verifie("les compteurs de mots, eux, ne bougent pas",
+    motsRates("ods9").length === 0, "aucun lot de mots dans ce bloc");
 }
 
 rendreLeJournal();

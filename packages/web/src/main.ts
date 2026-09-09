@@ -7933,12 +7933,11 @@ function rendreLeClassement(d: { topees: LigneDeRecord[]; negatifs: LigneDeRecor
   const boite = $("rc-tableau");
   if (d.topees.length === 0 && d.negatifs.length === 0) {
     boite.replaceChildren(tableauVide(t("Aucune partie enregistrée dans cette catégorie.")));
-    $("rc-compte").textContent = "";
     return;
   }
   const avecNegatif = d.negatifs.length > 0;
   const colonnes = [
-    { texte: "#" }, { texte: t("Joueurs"), classe: "g" }, { texte: t("Temps") },
+    { texte: "#" }, { texte: t("Joueur(s)"), classe: "g" }, { texte: t("Temps") },
     ...(avecNegatif ? [{ texte: t("Négatif") }] : []),
     { texte: t("Chrono") }, { texte: t("Coups") }, { texte: t("Temps / coup") },
     { texte: t("Cumul") }, { texte: t("Date") }, { texte: t("Lexique") },
@@ -7963,15 +7962,12 @@ function rendreLeClassement(d: { topees: LigneDeRecord[]; negatifs: LigneDeRecor
   }
   table.appendChild(corps);
   boite.replaceChildren(table);
-  const total = d.topees.length + d.negatifs.length;
-  $("rc-compte").textContent = t2(total > 1 ? "{n} parties au tableau" : "{n} partie au tableau", { n: total });
 }
 
 function rendreLesAnnexes(lignes: LigneDeRecord[]): void {
   const boite = $("rc-tableau");
   if (lignes.length === 0) {
     boite.replaceChildren(tableauVide(t("Aucune partie topée dans cette catégorie.")));
-    $("rc-compte").textContent = "";
     return;
   }
   const triPar: Record<string, string> = {
@@ -7981,7 +7977,7 @@ function rendreLesAnnexes(lignes: LigneDeRecord[]): void {
   };
   const table = el("table");
   table.appendChild(tete([
-    { texte: "#" }, { texte: t("Joueurs"), classe: "g" }, { texte: t("Temps") },
+    { texte: "#" }, { texte: t("Joueur(s)"), classe: "g" }, { texte: t("Temps") },
     { texte: t("Chrono") }, { texte: t("Coups") }, { texte: t("Temps / coup") },
     { texte: t("Cumul") }, { texte: t("Farfouilles") }, { texte: t("Date") },
     { texte: t("Lexique") }, { texte: "", classe: "c" },
@@ -7990,14 +7986,12 @@ function rendreLesAnnexes(lignes: LigneDeRecord[]): void {
   for (const l of lignes) corps.appendChild(ligneDePartie(l, { farfouilles: true }));
   table.appendChild(corps);
   boite.replaceChildren(table);
-  $("rc-compte").textContent = t2(lignes.length > 1 ? "{n} parties au tableau" : "{n} partie au tableau", { n: lignes.length });
 }
 
 function rendreLesCoups(coups: LigneDeCoup[]): void {
   const boite = $("rc-tableau");
   if (coups.length === 0) {
     boite.replaceChildren(tableauVide(t("Aucun coup enregistré dans cette catégorie.")));
-    $("rc-compte").textContent = "";
     return;
   }
   const table = el("table");
@@ -8021,14 +8015,12 @@ function rendreLesCoups(coups: LigneDeCoup[]): void {
   }
   table.appendChild(corps);
   boite.replaceChildren(table);
-  $("rc-compte").textContent = t2(coups.length > 1 ? "{n} coups au tableau" : "{n} coup au tableau", { n: coups.length });
 }
 
 function rendreLesMots(lignes: LigneDeMot[]): void {
   const boite = $("rc-tableau");
   if (lignes.length === 0) {
     boite.replaceChildren(tableauVide(t("Aucun mot compté pour l'instant.")));
-    $("rc-compte").textContent = "";
     return;
   }
   const table = el("table");
@@ -8049,7 +8041,6 @@ function rendreLesMots(lignes: LigneDeMot[]): void {
   }
   table.appendChild(corps);
   boite.replaceChildren(table);
-  $("rc-compte").textContent = t2(lignes.length > 1 ? "{n} mots au tableau" : "{n} mot au tableau", { n: lignes.length });
 }
 
 /** Va chercher ce que la vue courante demande, et le peint. */
@@ -8069,7 +8060,17 @@ async function chargerLesRecords(): Promise<void> {
   }
   let data: any;
   try {
-    data = await (await fetch(url)).json();
+    const r = await fetch(url);
+    data = await r.json();
+    if (!r.ok) {
+      if (mien !== rcDemande) return;
+      // Un serveur qui ne connait pas encore cette categorie repond ici. Le
+      // dire vaut mieux qu'un tableau vide, qui ferait chercher la partie
+      // manquante du mauvais cote.
+      $("rc-tableau").replaceChildren(tableauVide(
+        typeof data?.message === "string" ? data.message : t("serveur injoignable")));
+      return;
+    }
   } catch {
     if (mien !== rcDemande) return;
     $("rc-tableau").replaceChildren(tableauVide(t("serveur injoignable")));
@@ -8099,7 +8100,6 @@ function rendreWuQi(lignes: { mot: string; sorti: number; trouve: number }[]): v
   const total = lignes.reduce((a, l) => a + l.trouve, 0);
   if (total === 0) {
     boite.replaceChildren(tableauVide(t("Ni WU ni QI n'ont encore été joués.")));
-    $("rc-compte").textContent = "";
     return;
   }
   const table = el("table");
@@ -8120,7 +8120,6 @@ function rendreWuQi(lignes: { mot: string; sorti: number; trouve: number }[]): v
   });
   table.appendChild(corps);
   boite.replaceChildren(table);
-  $("rc-compte").textContent = t2(total > 1 ? "{n} coups joués" : "{n} coup joué", { n: total });
 }
 
 /**

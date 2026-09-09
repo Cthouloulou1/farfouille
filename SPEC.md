@@ -4383,11 +4383,33 @@ Un tableau des cent mots les plus ratés, et un tableau par longueur, de deux à
 quinze lettres. Chaque mot y porte **combien de fois il est sorti en top**,
 **combien de fois il a été trouvé**, et le pourcentage.
 
+**Ce n'est pas une lecture, c'est un compteur.** Le tableau se refaisait à
+chaque affichage en reparcourant le détail de toutes les manches : dix millions
+de mots à visiter par requête au bout d'une année de jeu, pour un résultat qui
+ne change qu'à la fin d'un coup. Un compteur qu'on incrémente coûte une addition
+par coup et se lit sans rien recalculer.
+
+Il s'incrémente **au moment où le coup se clôt**, dans le salon, en même temps
+que le reste de l'observation. Au journal, il ne laisse qu'un **lot de mots** par
+partie — la liste de ce qui a été trouvé, la liste de ce qui a été raté — qu'un
+redémarrage rejoue pour retrouver ses totaux.
+
+**Un coup compte une fois, quoi qu'il arrive.**
+
+| ce qui se passe | ce qui est compté |
+|---|---|
+| six joueurs ratent le même top | **un** raté |
+| six joueurs trouvent le top en duplicate | **une** trouvaille |
+| un joueur trouve, cinq ratent | **une** trouvaille |
+| personne n'a rien soumis | **rien** |
+
+C'est le coup qu'on compte, pas les joueurs.
+
 **Un coup ne compte que si au moins un joueur a soumis un mot sur ce coup-là.**
 Pas dans la partie : sur le coup. Un joueur qui ne trouve pas le top ne reste pas
 les bras croisés, il joue autre chose ; ne rien soumettre du tout, c'est ne pas
-être là. C'est le seul filtre qui distingue un mot vraiment difficile d'un mot que
-personne ne regardait.
+être là. C'est le seul filtre qui distingue un mot vraiment difficile d'un mot
+que personne ne regardait.
 
 **Un coup raté rate tous ses isotops.** Le mot retenu par le logiciel est tiré au
 sort parmi les coups au meilleur score (§5) : le mettre seul au tableau des ratés
@@ -4395,32 +4417,27 @@ serait un accident de tirage au sort. Le coup compte donc pour **chacun** de ses
 isotops, en sortie comme en trouvaille — trouver le top par n'importe lequel
 d'entre eux, c'est les avoir tous trouvés.
 
-La liste des isotops est connue au moment où le coup se clôt : `pickTop` la
-calcule toujours, y compris sur une partie qui ne garde aucun palier. Le salon la
-retient avec le reste de son observation et l'écrit dans la ligne de la manche.
-
 **Les deux tableaux s'excluent.** Un mot jamais raté n'a rien à faire dans les
 ratés — il y figurait, tout en bas, avec un zéro : c'était un tableau des mots
 vus, pas des mots ratés. Et un mot raté une seule fois sort des **plus trouvés**,
 même s'il a par ailleurs été trouvé dix fois : ce n'est pas un mot que la table
 connaît.
 
-### Une partie abandonnée laisse ses coups
+**Le compteur ne suit pas l'invalidation d'une manche.** Un mot raté l'a été,
+quoi qu'on pense ensuite de la partie où il est sorti.
+
+### Une partie abandonnée laisse ses mots, et rien d'autre
 
 **Une table qui rate un top relance aussitôt.** C'est le geste le plus courant du
 jeu, et c'est exactement le moment où le mot qui vient d'échapper à tout le monde
 est le plus intéressant. Or une partie quittée en cours de route n'a ni temps ni
-cumul comparables : elle n'a aucune manche à enregistrer, et jusqu'ici elle
-emportait le mot raté avec elle.
+cumul comparables : elle n'a aucune manche à enregistrer.
 
-Elle laisse donc un **relevé** : ses coups vus, et rien d'autre. Il n'entre dans
-aucun classement — il n'y a pas de partie à classer — mais il compte dans les
-mots ratés et dans WU/QI, aux mêmes conditions que les autres : le coup ne
-compte que si quelqu'un a soumis quelque chose dessus.
-
-Le relevé s'écrit quand la partie **se ferme**, quelle qu'en soit la raison :
-relance, salon fermé, serveur arrêté. Une partie qui a déjà enregistré sa manche
-ne se relève pas une seconde fois.
+Elle écrit donc son **lot de mots**, et rien de plus. Pas de quoi la
+reconstituer : seules les parties terminées se gardent, et leur journal à elles
+fait déjà ce travail. Le lot part quand la partie se ferme, quelle qu'en soit la
+raison — relance, salon fermé, serveur arrêté — et une partie qui a déjà écrit sa
+manche n'en écrit pas un second.
 
 > C'est aussi ce qui sauve l'observation d'un serveur qui redémarre : les coups
 > qu'on a vus, on les a bien vus, et un mot raté sous les yeux d'un joueur reste
@@ -4435,9 +4452,9 @@ Un point est compté quand le **top d'un coup est exactement `WU` ou `QI`**, et 
 ce coup a été **joué par un joueur**. Ni `WUS`, ni `QIS`, ni les collantes formées
 à côté d'un autre mot : ce sont d'autres mots.
 
-Il vit dans la section **Mots**, à côté des ratés et des trouvés, et compte sur
-tout ce que le journal des records porte : les manches comme les relevés des
-parties abandonnées. Ce n'est pas un classement, c'est une curiosité — elle
+Il vit dans la section **Mots**, à côté des ratés et des trouvés, et se lit au
+même compteur qu'eux : `WU` et `QI` sont des mots comme les autres. Ce n'est pas
+un classement, c'est une curiosité — elle
 prolonge le pari des équipes WU et QI (§13), mesuré sur les 16 632 premiers coups
 de `top-leger` : QI 48, WU 41.
 
@@ -4551,8 +4568,17 @@ réécrit — la même discipline que les parties, les salons et les comptes.
 Une ligne par manche valide, écrite quand la partie se termine. Elle porte tout ce
 qu'un tableau affiche : catégorie, lexique et sa version, grille, chrono, date,
 joueurs et ce que chacun a trouvé, temps, coups, cumul, farfouilles, négatif, et
-le détail coup par coup — le mot, ses isotops, trouvé ou non, par qui, en combien
-de temps, et si quelqu'un a soumis quelque chose.
+les **deux coups extrêmes** de la partie, dont deux tableaux annexes ont besoin.
+
+**Elle ne garde plus ses coups un à un.** Elle en portait la liste entière — mot,
+isotops, score, temps, trouveur — soit 97 octets par coup et 1 851 sur 2 235 pour
+une partie de dix-neuf coups. C'était garder de quoi **reconstituer** la partie
+dans un fichier qui n'est pas fait pour ça : le journal de la partie le fait
+déjà, et mieux. Les mots vivent maintenant dans leur compteur.
+
+Mesuré, pour une partie normale de dix-neuf coups : **495 octets** de manche et
+**331 octets** de lot de mots, soit 826 contre 2 235. À mille parties par jour,
+0,28 Go par an au lieu de 0,76.
 
 **Il ne double pas le journal des parties.** Chaque partie garde le sien, comme
 toujours, terminée ou non : c'est lui qui fait foi, c'est lui qu'on rejoue. Le

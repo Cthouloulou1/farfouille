@@ -25,8 +25,8 @@ import { fileURLToPath } from "node:url";
 import { Game } from "../src/game.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import {
-  empreinteDuLexique, invaliderLaManche, manchesValides, motsRates, observer,
-  ouvrirLesRecords,
+  empreinteDuLexique, invaliderLaManche, manchesValides, motsRates, motsTrouves,
+  observer, ouvrirLesRecords,
 } from "../src/records.ts";
 import { avec, configParDefaut, type ConfigPartie } from "../../engine/src/config.ts";
 import { setLayout, LAYOUTS } from "../../engine/src/bonus.ts";
@@ -182,13 +182,23 @@ nettoyer(ID);
     m?.cumul === g.moves.reduce((a, c) => a + c.score, 0), `${m?.cumul} points`);
   verifie("le nombre de coups tient dans ce qu'une 15x15 donne",
     (m?.coups ?? 0) >= 15 && (m?.coups ?? 0) <= 40, `${m?.coups} coups`);
-  verifie("tous les coups sont marques actifs", m?.vus.every((c) => c.actif) === true);
+  verifie("le coup le plus cher est retenu",
+    m?.coupCher !== null && (m?.coupCher?.score ?? 0) > 0,
+    `${m?.coupCher?.mot} à ${m?.coupCher?.score} points`);
+  verifie("le moins cher aussi",
+    m?.coupPasCher !== null
+    && (m?.coupPasCher?.score ?? 0) <= (m?.coupCher?.score ?? 0),
+    `${m?.coupPasCher?.mot} à ${m?.coupPasCher?.score} points`);
   verifie("le lexique porte son empreinte",
     /^[0-9a-f]{8}$/.test(m?.empreinte ?? ""), m?.empreinte ?? "aucune");
-  verifie("le mot pose vient en tete de ses isotops",
-    m?.vus.every((c, i) => c.mots[0] === g.moves[i]?.word) === true);
-  const avecIsotops = m?.vus.filter((c) => c.mots.length > 1).length ?? 0;
-  verifie("les isotops sont retenus", avecIsotops > 0, `${avecIsotops} coup(s) a isotops`);
+  // LA MANCHE NE GARDE PLUS SES COUPS : les mots sont au compteur, et le
+  // journal de la partie porte le detail. On verifie donc le compteur.
+  const auCompteur = motsTrouves("ods9");
+  verifie("les mots de la partie sont au compteur",
+    auCompteur.length > 0, `${auCompteur.length} mot(s)`);
+  verifie("et le mot du premier coup y est",
+    auCompteur.some((l) => l.mot === g.moves[0]?.word),
+    g.moves[0]?.word ?? "aucun");
   await g.stop();
 }
 
