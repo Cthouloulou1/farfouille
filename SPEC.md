@@ -4202,20 +4202,21 @@ lexique, la grille, le nombre de lettres et le fait de jouer seul sont des
 **Trois tailles de chevalet, et elles ne se comparent pas.** Un 2 sur 2 se tope
 en quelques secondes par coup ; un 15 sur 15 ne se tope presque jamais. Les
 mêler ferait un classement où la taille du chevalet compte plus que le joueur.
-L'axe s'appelle **Lettres**, et il a trois valeurs.
+L'axe s'appelle **Nombre de lettres**, et il a trois valeurs.
 
-| Lettres | ce qu'il porte |
+| Nombre de lettres | ce qu'il porte |
 |---|---|
-| **Pas beaucoup** | 2 sur 2 à 6 sur 6, chacune avec sa variante joker |
-| **Normal** | les dix catégories ci-dessous |
-| **Un nombre conséquent de lettres** | 10 sur 10 à 15 sur 15, chacune avec sa variante joker |
+| **Moindre** | 2 sur 2 à 6 sur 6, chacune avec sa variante joker |
+| **Normal** | les onze catégories ci-dessous |
+| **Supérieur** | 10 sur 10 à 15 sur 15, chacune avec sa variante joker |
 
-Les dix catégories de la taille normale :
+Les onze catégories de la taille normale :
 
 | catégorie | X sur Y | joker |
 |---|---|---|
 | **Partie normale** | 7 sur 7 | non |
 | **Partie normale solo** | 7 sur 7 | non |
+| **Temps par coup** | 7 sur 7 | non |
 | **Montante** | les six étapes, voir plus bas | |
 | **Joker** | 7 sur 7 | oui |
 | **7 sur 8** | 7 sur 8 | non |
@@ -4255,8 +4256,9 @@ annexes**, **Mots** — et, à droite, le **règlement** en trois phrases.
 
 **La page ne va pas d'un bord à l'autre.** Un tableau de dix colonnes étalé sur
 deux mille pixels oblige l'œil à traverser l'écran entier pour aller du rang au
-dernier chiffre. Il est borné et centré ; le tableau défile de son côté quand il
-est trop large, la page jamais.
+dernier chiffre. Elle occupe **70 % de la largeur**, sans jamais descendre sous
+1100 pixels — en dessous, la table se serrerait pour rien — et se centre. Le
+tableau défile de son côté quand il est trop large ; la page, jamais.
 
 ### Le tableau
 
@@ -4300,12 +4302,16 @@ identité, un pseudo n'engage rien.
 une 7 sur 7 complète en 15×15 fait **19 à 26 coups**, 22 le plus souvent. Une
 partie courte est structurellement plus rapide.
 
-Le tableau se classe donc de **deux façons**, au choix : au **temps de la
-partie**, qui dit qui a fini le premier, ou au **temps par coup**, qui dit qui a
-cherché le plus vite. Ce sont deux questions, et aucune ne répond à l'autre : une
-partie de vingt coups en cent secondes est plus lente au total qu'une partie de
-cinq coups en cinquante, et deux fois plus rapide par coup. Le chevron de
-l'en-tête dit laquelle des deux colonnes classe.
+D'où **« Temps par coup », qui est une catégorie et non un tri**. Les deux
+répondent à des questions différentes — qui a fini le premier, qui a cherché le
+plus vite — et une partie de vingt coups en cent secondes est plus lente au total
+qu'une partie de cinq coups en cinquante, tout en étant deux fois plus rapide par
+coup. Chacune mérite son tableau et son podium ; les mêler sous un bouton de tri
+donnerait un classement dont on ne saurait plus ce qu'il récompense. Le chevron
+de l'en-tête dit laquelle des deux colonnes classe.
+
+> Le jour où l'on voudra trier librement, ce sera en rendant la colonne
+> cliquable, pas en ajoutant un réglage à côté du tableau.
 
 **Une couleur par joueur**, dans la colonne des noms et dans la feuille de route,
 pour qu'on voie d'un coup d'œil qui a trouvé quoi. Elle se dérive du nom, ne

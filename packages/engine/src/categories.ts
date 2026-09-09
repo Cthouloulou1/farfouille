@@ -36,9 +36,9 @@ export function grilleDeBornes(bornes: number | null): Grille | null {
 export type Taille = "petit" | "normal" | "grand";
 
 export const TAILLES: readonly { id: Taille; nom: string }[] = [
-  { id: "petit", nom: "Pas beaucoup" },
+  { id: "petit", nom: "Moindre" },
   { id: "normal", nom: "Normal" },
-  { id: "grand", nom: "Un nombre conséquent de lettres" },
+  { id: "grand", nom: "Supérieur" },
 ];
 
 /** Seule la grande taille complete ses tableaux au negatif (SPEC.md §23). */
@@ -78,13 +78,26 @@ export interface Categorie {
   solo: boolean;
   /** La suite de six parties enchainees, qui n'est pas une partie (SPEC.md §23). */
   montante: boolean;
+  /**
+   * Le meme format, classe au TEMPS PAR COUP et non au temps de la partie.
+   *
+   * CE N'EST PAS UN TRI, C'EST UNE CATEGORIE. Les deux repondent a des
+   * questions differentes -- qui a fini le premier, qui a cherche le plus vite
+   * -- et une partie de vingt coups en cent secondes est plus lente au total
+   * qu'une partie de cinq coups en cinquante, tout en etant deux fois plus
+   * rapide par coup. Chacune merite son tableau et son podium.
+   */
+  parCoup: boolean;
 }
 
 function format(
   id: string, nom: string, jouables: number, tirage: number,
   joker: boolean, taille: Taille,
 ): Categorie {
-  return { id, nom, tirage, jouables, joker, taille, solo: false, montante: false };
+  return {
+    id, nom, tirage, jouables, joker, taille,
+    solo: false, montante: false, parCoup: false,
+  };
 }
 
 /**
@@ -107,6 +120,7 @@ export const CATEGORIES: readonly Categorie[] = [
   // ---------------------------------------------------------------- normal
   format("normale", "Partie normale", 7, 7, false, "normal"),
   { ...format("normale-solo", "Partie normale solo", 7, 7, false, "normal"), solo: true },
+  { ...format("temps-par-coup", "Temps par coup", 7, 7, false, "normal"), parCoup: true },
   { ...format("montante", "Montante", 7, 7, false, "normal"), montante: true },
   format("joker", "Joker", 7, 7, true, "normal"),
   format("7-8", "7 sur 8", 7, 8, false, "normal"),

@@ -1087,9 +1087,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    deux mille pixels oblige l'oeil a traverser l'ecran entier pour aller du rang
    au dernier chiffre. On le borne, et on le centre : la ligne reste lisible
    d'un seul regard sur un grand ecran, et la page garde ses marges. */
-.records-page { padding-top: 14px; max-width: 1180px; margin: 0 auto; width: 100%; }
+.records-page { padding-top: 14px; width: min(100%, max(70vw, 1100px)); margin: 0 auto; }
 
-.rc-categories { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Un peu d'air sous les onglets de vue : colles, les boutons de categorie
+   touchaient presque le trait vert de l'onglet actif. */
+.rc-categories { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .rc-categories button { padding: 8px 15px; border: 1px solid transparent; border-radius: 5px; background: var(--field); color: var(--ink-soft); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
 .rc-categories button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); border-color: transparent; }
 .rc-categories button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
@@ -1312,7 +1314,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="rc-choix" id="rc-lexique"></div>
       </div>
       <div class="rc-groupe">
-        <label>Lettres</label>
+        <label>Nombre de lettres</label>
         <div class="rc-choix" id="rc-taille"></div>
       </div>
       <div class="rc-groupe">
@@ -1334,18 +1336,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     </div>
 
     <div class="rc-categories" id="rc-categories"></div>
-
-    <!-- Le classement principal se lit de deux facons : qui a fini le premier,
-         et qui a cherche le plus vite. Ce sont deux questions. -->
-    <div class="rc-declinaisons rc-seconde" id="rc-tri-bloc">
-      <div class="rc-groupe">
-        <label>Classer par</label>
-        <div class="rc-choix" id="rc-tri">
-          <button type="button" data-v="temps">Temps de la partie</button>
-          <button type="button" data-v="coup">Temps par coup</button>
-        </div>
-      </div>
-    </div>
 
     <div class="rc-declinaisons rc-seconde" id="rc-annexes" hidden>
       <div class="rc-groupe">

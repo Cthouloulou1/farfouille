@@ -681,7 +681,6 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         : p.get("grille") === "normale" ? "normale" : undefined,
       lexique: dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : undefined,
       solo: p.get("solo") === "1",
-      tri: p.get("tri") === "coup" ? "coup" : "temps",
     }));
     return;
   }

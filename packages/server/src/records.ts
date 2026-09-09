@@ -463,11 +463,6 @@ export interface Filtre {
   lexique?: string;
   /** Ne garder que les manches ou un seul joueur a tout trouve. */
   solo?: boolean;
-  /**
-   * Sur quoi le classement se fait : le temps de la partie, ou le temps par
-   * coup. Voir `parCoup`.
-   */
-  tri?: "temps" | "coup";
 }
 
 /** Cent lignes : ce qu'un tableau montre, et pas une de plus. */
@@ -479,7 +474,10 @@ function retenues(f: Filtre): Manche[] {
   // « Partie normale solo » n'est pas une configuration : une manche porte la
   // categorie de BASE, et le solo se lit dans son resultat. L'onglet solo et la
   // case a cocher passent donc par le meme chemin.
-  const base = cat?.solo === true ? "normale" : f.categorie;
+  // « Partie normale solo » et « Temps par coup » ne sont pas des
+  // configurations : ce sont la meme partie normale, lue autrement. Une manche
+  // porte donc la categorie de BASE, et ces deux-la y renvoient.
+  const base = cat?.solo === true || cat?.parCoup === true ? "normale" : f.categorie;
   const seulement = cat?.solo === true || f.solo === true;
   return manchesValides().filter((m) =>
     m.categorie === base
@@ -529,7 +527,10 @@ const parCoup = (m: Manche): number =>
  * a rien : il faudrait dire ce que « presque » vaut.
  */
 export function classementDeVitesse(f: Filtre): LigneDeRecord[] {
-  const cle = f.tri === "coup" ? parCoup : (m: Manche): number => auCentieme(m.temps);
+  // C'est la CATEGORIE qui dit sur quoi on classe : « Temps par coup » est un
+  // tableau a elle, avec son propre podium, et non un tri de la partie normale.
+  const cle = categorie(f.categorie)?.parCoup === true
+    ? parCoup : (m: Manche): number => auCentieme(m.temps);
   const triees = retenues(f)
     .filter((m) => m.topee)
     .sort((a, b) => cle(a) - cle(b) || a.at - b.at);

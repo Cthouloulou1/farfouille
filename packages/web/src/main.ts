@@ -7735,8 +7735,6 @@ let rcSolo = false;
 let rcVue: VueDesRecords = "classement";
 let rcAnnexe = "chrono";
 let rcSens: "rates" | "trouves" | "wuqi" = "rates";
-/** Le classement principal se lit de deux facons : voir `rc-tri`. */
-let rcTri: "temps" | "coup" = "temps";
 /** `null` : toutes les longueurs confondues. */
 let rcLongueur: number | null = null;
 /** Ce qu'on attend en ce moment : une reponse en retard ne repeint pas. */
@@ -7873,7 +7871,7 @@ function tableauVide(quoi: string): HTMLElement {
  * pourquoi ils ne repondent pas encore.
  */
 function outilsDeLigne(): HTMLElement[] {
-  const feuille = el("button", "rc-outil", t("Feuille")) as HTMLButtonElement;
+  const feuille = el("button", "rc-outil", t("FdR")) as HTMLButtonElement;
   const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
   for (const b of [feuille, revoir]) {
     b.type = "button";
@@ -7949,7 +7947,8 @@ function rendreLeClassement(d: { topees: LigneDeRecord[]; negatifs: LigneDeRecor
   const table = el("table");
   // Le chevron suit CE QUI CLASSE, et non la colonne du temps : les deux
   // colonnes existent, et rien d'autre ne dirait laquelle decide.
-  table.appendChild(tete(colonnes, t(rcTri === "coup" ? "Temps / coup" : "Temps")));
+  const surLeCoup = CATEGORIES.find((c) => c.id === rcCategorie)?.parCoup === true;
+  table.appendChild(tete(colonnes, t(surLeCoup ? "Temps / coup" : "Temps")));
   const corps = el("tbody");
   for (const l of d.topees) corps.appendChild(ligneDePartie(l, { negatif: avecNegatif }));
   if (avecNegatif) {
@@ -8066,7 +8065,7 @@ async function chargerLesRecords(): Promise<void> {
   } else if (rcVue === "annexes") {
     url = `/api/records/annexe?${base}&quoi=${rcAnnexe}`;
   } else {
-    url = `/api/records?${base}&tri=${rcTri}${rcSolo ? "&solo=1" : ""}`;
+    url = `/api/records?${base}${rcSolo ? "&solo=1" : ""}`;
   }
   let data: any;
   try {
@@ -8182,12 +8181,10 @@ function peindreLesDeclinaisons(): void {
   presser("rc-solo", rcSolo ? "solo" : "tous");
   presser("rc-annexe", rcAnnexe);
   presser("rc-sens", rcSens);
-  presser("rc-tri", rcTri);
   presser("rc-longueur", rcLongueur === null ? "toutes" : String(rcLongueur));
   presser("rc-vues", rcVue);
   $("rc-annexes").hidden = rcVue !== "annexes";
   $("rc-mots").hidden = rcVue !== "mots";
-  $("rc-tri-bloc").hidden = rcVue !== "classement";
   // WU et QI ne se filtrent pas par longueur : ils font deux lettres, tous les
   // deux, et c'est tout le sujet.
   $("rc-longueur-bloc").hidden = rcSens === "wuqi";
@@ -8275,7 +8272,6 @@ for (const [id, poser] of [
   ["rc-solo", (v: string) => { rcSolo = v === "solo"; }],
   ["rc-annexe", (v: string) => { rcAnnexe = v; }],
   ["rc-sens", (v: string) => { rcSens = v as typeof rcSens; }],
-  ["rc-tri", (v: string) => { rcTri = v === "coup" ? "coup" : "temps"; }],
   ["rc-vues", (v: string) => { rcVue = v as VueDesRecords; }],
 ] as [string, (v: string) => void][]) {
   $(id).addEventListener("click", (e) => {

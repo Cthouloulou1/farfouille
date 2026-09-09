@@ -199,9 +199,12 @@ console.log("\n  --- classer par temps par coup ---\n");
   const parTemps = classementDeVitesse({ categorie: "normale" });
   verifie("au temps total, la partie courte mene",
     parTemps[0]?.partie === "courte-mais-lente", parTemps[0]?.partie ?? "aucune");
-  const parCoup = classementDeVitesse({ categorie: "normale", tri: "coup" });
-  verifie("au temps par coup, l'autre passe devant",
+  // « Temps par coup » est une CATEGORIE, pas un tri : elle a son propre onglet
+  // et son propre podium, et lit les manches de la partie normale autrement.
+  const parCoup = classementDeVitesse({ categorie: "temps-par-coup" });
+  verifie("la categorie du temps par coup renverse l'ordre",
     parCoup[0]?.partie === "lente-mais-reguliere", parCoup[0]?.partie ?? "aucune");
+  verifie("et elle lit bien les memes manches", parCoup.length === 2, `${parCoup.length}`);
 }
 
 // ------------------------------------------------------------- les filtres

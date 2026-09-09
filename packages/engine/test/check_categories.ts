@@ -47,7 +47,7 @@ console.log("  --- la table ---\n");
   const grandes = CATEGORIES.filter((c) => c.taille === "grand");
   verifie("dix petits formats, de 2 sur 2 a 6 sur 6 joker", petites.length === 10,
     petites.map((c) => c.id).join(" "));
-  verifie("dix categories normales", normales.length === 10,
+  verifie("onze categories normales", normales.length === 11,
     normales.map((c) => c.id).join(" "));
   verifie("douze grands formats", grandes.length === 12, "de 10 sur 10 a 15 sur 15 joker");
   verifie("les trois tailles couvrent la table",
@@ -58,13 +58,18 @@ console.log("  --- la table ---\n");
     normales[0]!.id === "normale");
   verifie("le solo la suit", normales[1]!.id === "normale-solo"
     && normales[1]!.solo === true);
+  verifie("le temps par coup vient ensuite",
+    normales[2]!.id === "temps-par-coup" && normales[2]!.parCoup === true);
   verifie("la montante est marquee comme telle",
-    normales[2]!.id === "montante" && normales[2]!.montante === true);
+    normales[3]!.id === "montante" && normales[3]!.montante === true);
   verifie("les petits formats sont reconnus",
     categorieDesReglages(avec(normale(), { tirage: 2, jouables: 2 }))?.id === "2-2");
+  // Les trois categories qui ne sont pas des formats -- solo, temps par coup,
+  // montante -- lisent la partie normale autrement et n'ont pas de jumelle.
+  const formats = CATEGORIES.filter((c) => !c.solo && !c.montante && !c.parCoup);
   verifie("chaque format a sa variante joker",
-    CATEGORIES.filter((c) => !c.solo && !c.montante && c.joker).length
-      === CATEGORIES.filter((c) => !c.solo && !c.montante && !c.joker).length);
+    formats.filter((c) => c.joker).length === formats.filter((c) => !c.joker).length,
+    `${formats.length} formats`);
 }
 
 // ----------------------------------------------------------- les grilles
