@@ -28,8 +28,8 @@ import {
 } from "../../engine/src/config.ts";
 import { categorie, estPartieNormale } from "../../engine/src/categories.ts";
 import {
-  annexe, coupsExtremes, motsRates, motsTrouves, observer, ouvrirLesRecords, tableau,
-  type Annexe,
+  annexe, compteurWuQi, coupsExtremes, motsRates, motsTrouves, observer, ouvrirLesRecords,
+  tableau, type Annexe,
 } from "./records.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
@@ -681,6 +681,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         : p.get("grille") === "normale" ? "normale" : undefined,
       lexique: dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : undefined,
       solo: p.get("solo") === "1",
+      tri: p.get("tri") === "coup" ? "coup" : "temps",
     }));
     return;
   }
@@ -715,6 +716,12 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Le lexique n'est pas optionnel : deux lexiques n'ont pas les memes mots,
     // et les melanger ferait un tableau qui ne veut rien dire.
     const lexique = dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : DICO_PAR_DEFAUT;
+    // WU et QI ne se comptent que dans le lexique officiel du jeu francophone :
+    // « WU » n'existe pas en anglais.
+    if (p.get("sens") === "wuqi") {
+      json(res, 200, { lexique, wuqi: compteurWuQi(lexique) });
+      return;
+    }
     const brute = Number(p.get("longueur"));
     const longueur = Number.isInteger(brute) && brute >= 2 && brute <= 15 ? brute : undefined;
     const lignes = p.get("sens") === "trouves"

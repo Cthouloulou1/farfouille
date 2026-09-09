@@ -1083,7 +1083,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    etiquette qui dit de quoi il s'agit. La vue vient en dernier, en onglets
    soulignes : elle ne change pas de quoi on parle, seulement ce qu'on regarde
    du meme sujet. */
-.records-page { padding-top: 14px; }
+/* LA PAGE NE VA PAS D'UN BORD A L'AUTRE. Un tableau de dix colonnes etale sur
+   deux mille pixels oblige l'oeil a traverser l'ecran entier pour aller du rang
+   au dernier chiffre. On le borne, et on le centre : la ligne reste lisible
+   d'un seul regard sur un grand ecran, et la page garde ses marges. */
+.records-page { padding-top: 14px; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 .rc-categories { display: flex; flex-wrap: wrap; gap: 6px; }
 .rc-categories button { padding: 8px 15px; border: 1px solid transparent; border-radius: 5px; background: var(--field); color: var(--ink-soft); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
@@ -1288,16 +1292,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 
   <!-- LES RECORDS SONT UNE PAGE, comme le profil et l'anagrammeur : ils
-       partagent le bandeau de l'accueil et prennent toute la largeur. Voir
-       SPEC.md §23.
+       partagent le bandeau de l'accueil. Voir SPEC.md §23.
 
-       TROIS RANGEES AVANT LE TABLEAU, et c'est l'ordre qui les explique : la
-       categorie d'abord, puisqu'elle decide de tout ; ce qui la decline
-       ensuite -- grille, lexique, solo ; la vue en dernier, qui ne change que
-       ce qu'on regarde. -->
+       LES PARAMETRES D'ABORD, LES CATEGORIES ENSUITE. Grille, lexique, lettres
+       et joueurs disent DE QUOI on parle ; les onglets de categorie disent
+       LAQUELLE on regarde, et leur liste change avec le nombre de lettres. Ce
+       qui commande vient donc avant ce qui est commande. -->
   <div class="corps records-page" id="corps-records" hidden>
-    <div class="rc-categories" id="rc-categories"></div>
-
     <div class="rc-declinaisons">
       <div class="rc-groupe">
         <label>Grille</label>
@@ -1311,6 +1312,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="rc-choix" id="rc-lexique"></div>
       </div>
       <div class="rc-groupe">
+        <label>Lettres</label>
+        <div class="rc-choix" id="rc-taille"></div>
+      </div>
+      <div class="rc-groupe">
         <label>Joueurs</label>
         <div class="rc-choix" id="rc-solo">
           <button type="button" data-v="tous">Tous</button>
@@ -1321,20 +1326,32 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
     <div class="rc-barre">
       <div class="rc-vues" id="rc-vues">
-        <button type="button" data-v="classement">Classement</button>
-        <button type="button" data-v="annexes">Tableaux annexes</button>
+        <button type="button" data-v="classement">Catégories principales</button>
+        <button type="button" data-v="annexes">Catégories annexes</button>
         <button type="button" data-v="mots">Mots</button>
       </div>
-      <button type="button" class="rc-regles" id="rc-regles">Ce qui compte</button>
+      <button type="button" class="rc-regles" id="rc-regles">Règles</button>
     </div>
 
-    <!-- Le second rang de choix : il ne parait que dans les vues qui en ont
-         un. Les annexes choisissent leur tableau, les mots leur longueur. -->
+    <div class="rc-categories" id="rc-categories"></div>
+
+    <!-- Le classement principal se lit de deux facons : qui a fini le premier,
+         et qui a cherche le plus vite. Ce sont deux questions. -->
+    <div class="rc-declinaisons rc-seconde" id="rc-tri-bloc">
+      <div class="rc-groupe">
+        <label>Classer par</label>
+        <div class="rc-choix" id="rc-tri">
+          <button type="button" data-v="temps">Temps de la partie</button>
+          <button type="button" data-v="coup">Temps par coup</button>
+        </div>
+      </div>
+    </div>
+
     <div class="rc-declinaisons rc-seconde" id="rc-annexes" hidden>
       <div class="rc-groupe">
         <label>Tableau</label>
         <div class="rc-choix" id="rc-annexe">
-          <button type="button" data-v="chrono">Chrono le plus serré</button>
+          <button type="button" data-v="chrono">Chrono le plus court</button>
           <button type="button" data-v="chere">La plus chère</button>
           <button type="button" data-v="pasChere">La moins chère</button>
           <button type="button" data-v="courte">La plus courte</button>
@@ -1349,13 +1366,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
     <div class="rc-declinaisons rc-seconde" id="rc-mots" hidden>
       <div class="rc-groupe">
-        <label>Sens</label>
         <div class="rc-choix" id="rc-sens">
           <button type="button" data-v="rates">Les plus ratés</button>
           <button type="button" data-v="trouves">Les plus trouvés</button>
+          <button type="button" data-v="wuqi">WU et QI</button>
         </div>
       </div>
-      <div class="rc-groupe">
+      <div class="rc-groupe" id="rc-longueur-bloc">
         <label>Longueur</label>
         <div class="rc-choix rc-longueurs" id="rc-longueur"></div>
       </div>
@@ -1368,25 +1385,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     </div>
   </div>
 
-  <!-- CE QUI COMPTE : la regle, en clair, a cote du tableau qu'elle explique.
-       Un classement dont on ne sait pas ce qu'il exige n'apprend rien. -->
+  <!-- LE REGLEMENT EST DE ZULU, MOT POUR MOT. Il l'a epure lui-meme ; ce n'est
+       pas un resume de la specification, c'est ce qu'un joueur a besoin de
+       savoir devant le tableau. -->
   <div class="voile" id="voile-regles" hidden>
     <div class="pseudo rc-regles-boite">
-      <h2>Ce qui compte</h2>
-      <p>Une partie entre au classement de vitesse si <b>tous ses coups ont été
-         trouvés</b>. Un seul coup manqué, et elle ne concourt plus qu'au négatif.</p>
-      <p>Elle doit être <b>terminée par son sac</b>, jouée en topping sur une
-         grille bornée, avec le sac du commerce et les primes de farfouilles
-         intactes. Ni grille sans fin, ni pioche qui ne s'épuise pas, ni nombre
-         de coups imposé.</p>
-      <p><b>Au moins un joueur doit avoir cherché.</b> Une partie que personne
-         n'a jouée n'entre nulle part.</p>
-      <p>Pour être cité, il faut avoir <b>trouvé au moins un top</b>. Un joueur
-         sans compte est nommé, avec la mention <i>(invité)</i> : c'est la
-         mention qui porte la garantie, pas le nom.</p>
-      <p><b>Solo</b> veut dire qu'un seul joueur a trouvé tous les tops, pas
-         qu'il était seul dans le salon.</p>
-      <p>Deux temps égaux au centième sont <b>ex æquo</b>.</p>
+      <h2>Règlement</h2>
+      <p>Seules sont comptabilisées les parties topées pour les records de vitesse.</p>
+      <p>Pour être dans un record, il faut au moins avoir trouvé un top sur la partie.</p>
+      <p>Sur les mots ratés, ne sont comptabilisés que les coups où un joueur a rendu une solution.</p>
       <button class="valider" id="regles-close" type="button">Fermer</button>
     </div>
   </div>

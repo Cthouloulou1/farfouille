@@ -4196,10 +4196,21 @@ partie, et la question ne se repose plus.
 ### Les catégories
 
 Une catégorie se nomme par ce qu'on pose sur ce qu'on tire : **X sur Y**. Le
-lexique, la grille et le fait de jouer seul sont des **axes**, pas des
-catégories : ils filtrent chacun des tableaux ci-dessous.
+lexique, la grille, le nombre de lettres et le fait de jouer seul sont des
+**axes**, pas des catégories : ils filtrent chacun des tableaux ci-dessous.
 
-**Première page.**
+**Trois tailles de chevalet, et elles ne se comparent pas.** Un 2 sur 2 se tope
+en quelques secondes par coup ; un 15 sur 15 ne se tope presque jamais. Les
+mêler ferait un classement où la taille du chevalet compte plus que le joueur.
+L'axe s'appelle **Lettres**, et il a trois valeurs.
+
+| Lettres | ce qu'il porte |
+|---|---|
+| **Pas beaucoup** | 2 sur 2 à 6 sur 6, chacune avec sa variante joker |
+| **Normal** | les dix catégories ci-dessous |
+| **Un nombre conséquent de lettres** | 10 sur 10 à 15 sur 15, chacune avec sa variante joker |
+
+Les dix catégories de la taille normale :
 
 | catégorie | X sur Y | joker |
 |---|---|---|
@@ -4214,9 +4225,9 @@ catégories : ils filtrent chacun des tableaux ci-dessous.
 | **7, 8 et 9** | 9 sur 9 | non |
 | **7, 8 et 9 joker** | 9 sur 9 | oui |
 
-**Seconde page** : de 10 sur 10 à 15 sur 15, chacune avec sa variante joker.
-Douze tableaux de plus, séparés parce qu'ils sont d'une autre nature — on y
-comptera les parties topées sur les doigts d'une main.
+Les grandes se nomment « 10 sur 10 » et non « 7, 8, 9 et 10 » : les normales
+énumèrent parce que trois nombres se lisent, celles-là en auraient neuf sur un
+onglet, et « 7, 8, 9, 10, 11, 12, 13, 14 et 15 » ne se lit plus du tout.
 
 La partie joker se joue à **un joker par tirage**. Le double joker n'a pas de
 catégorie : c'est une autre partie, et elle n'a pas encore de public.
@@ -4231,6 +4242,21 @@ que cinq personnes cherchent est plus difficile que d'être seul à chercher.
 « Partie normale solo » a son propre onglet, parce que c'est la performance
 individuelle qui intéresse. Partout ailleurs, le solo est un **filtre** du
 tableau : une case à cocher qui ne garde que ces manches-là.
+
+### La page
+
+**Les paramètres d'abord, les catégories ensuite.** Grille, lexique, lettres et
+joueurs disent *de quoi* on parle ; les onglets de catégorie disent *laquelle* on
+regarde, et leur liste change avec le nombre de lettres. Ce qui commande se lit
+donc avant ce qui est commandé.
+
+Viennent ensuite les trois vues — **Catégories principales**, **Catégories
+annexes**, **Mots** — et, à droite, le **règlement** en trois phrases.
+
+**La page ne va pas d'un bord à l'autre.** Un tableau de dix colonnes étalé sur
+deux mille pixels oblige l'œil à traverser l'écran entier pour aller du rang au
+dernier chiffre. Il est borné et centré ; le tableau défile de son côté quand il
+est trop large, la page jamais.
 
 ### Le tableau
 
@@ -4272,26 +4298,42 @@ identité, un pseudo n'engage rien.
 
 **Le nombre de coups varie, et c'est une part de chance.** Mesuré sur le disque :
 une 7 sur 7 complète en 15×15 fait **19 à 26 coups**, 22 le plus souvent. Une
-partie courte est structurellement plus rapide. Le classement roi reste le temps
-total — c'est la performance qu'on raconte — mais la colonne **temps par coup**
-est là pour qui veut lire l'autre vérité.
+partie courte est structurellement plus rapide.
+
+Le tableau se classe donc de **deux façons**, au choix : au **temps de la
+partie**, qui dit qui a fini le premier, ou au **temps par coup**, qui dit qui a
+cherché le plus vite. Ce sont deux questions, et aucune ne répond à l'autre : une
+partie de vingt coups en cent secondes est plus lente au total qu'une partie de
+cinq coups en cinquante, et deux fois plus rapide par coup. Le chevron de
+l'en-tête dit laquelle des deux colonnes classe.
 
 **Une couleur par joueur**, dans la colonne des noms et dans la feuille de route,
 pour qu'on voie d'un coup d'œil qui a trouvé quoi. Elle se dérive du nom, ne
 coûte rien à enregistrer, et **ne va pas sur les caramels du plateau** : une
 grille bariolée se lit moins bien qu'une grille unie.
 
-### Les tableaux de la seconde page se complètent au négatif
+### Seuls les grands formats se complètent au négatif
 
 À partir de 10 sur 10, une partie topée est rare. Un tableau à trois lignes
 n'apprend rien. Les manches topées occupent donc le haut du tableau, classées au
 temps ; s'il en manque pour faire cent, la suite est complétée par les **meilleurs
 négatifs**, dans un bloc visiblement séparé.
 
+**Et seulement là.** En dessous de dix caramels, les parties topées existent en
+nombre, et mêler les deux ferait passer pour un record une partie où l'on a raté
+un top. Les tableaux de « Pas beaucoup » et de « Normal » s'arrêtent donc à ce
+qui a été topé, fût-ce une seule ligne.
+
 Le **négatif d'une manche** est la somme, sur les coups non trouvés, de l'écart
 entre le top et la meilleure solution soumise — le score entier du top quand
 personne n'a rien soumis. Un négatif nul, c'est une partie topée : les deux
 classements se rejoignent par le haut.
+
+**Il s'affiche négatif**, parce qu'il l'est : une partie où l'on a laissé sept
+points au top porte **-7**, et non +7. C'est un manque, pas un gain. Le compte
+interne, lui, reste un écart positif — c'est ce que le reste du moteur appelle
+déjà « négatif » (§16), et le renverser à la source ferait mentir le classement
+du duplicate.
 
 ### Les tableaux annexes
 
@@ -4300,7 +4342,7 @@ par l'échéance afficherait sinon le cumul du générateur, pas celui d'une tab
 
 | tableau | ce qu'il classe |
 |---|---|
-| **Chrono de partie normale** | le chrono le plus serré tenu jusqu'au bout |
+| **Chrono le plus court** | le chrono le plus serré tenu jusqu'au bout |
 | **La partie la plus chère** | le cumul le plus haut |
 | **La partie la moins chère** | le cumul le plus bas |
 | **La partie la plus courte** | le moins de coups |
@@ -4351,7 +4393,32 @@ La liste des isotops est connue au moment où le coup se clôt : `pickTop` la
 calcule toujours, y compris sur une partie qui ne garde aucun palier. Le salon la
 retient avec le reste de son observation et l'écrit dans la ligne de la manche.
 
-**Le tableau symétrique existe aussi** : les mots les plus trouvés.
+**Les deux tableaux s'excluent.** Un mot jamais raté n'a rien à faire dans les
+ratés — il y figurait, tout en bas, avec un zéro : c'était un tableau des mots
+vus, pas des mots ratés. Et un mot raté une seule fois sort des **plus trouvés**,
+même s'il a par ailleurs été trouvé dix fois : ce n'est pas un mot que la table
+connaît.
+
+### Une partie abandonnée laisse ses coups
+
+**Une table qui rate un top relance aussitôt.** C'est le geste le plus courant du
+jeu, et c'est exactement le moment où le mot qui vient d'échapper à tout le monde
+est le plus intéressant. Or une partie quittée en cours de route n'a ni temps ni
+cumul comparables : elle n'a aucune manche à enregistrer, et jusqu'ici elle
+emportait le mot raté avec elle.
+
+Elle laisse donc un **relevé** : ses coups vus, et rien d'autre. Il n'entre dans
+aucun classement — il n'y a pas de partie à classer — mais il compte dans les
+mots ratés et dans WU/QI, aux mêmes conditions que les autres : le coup ne
+compte que si quelqu'un a soumis quelque chose dessus.
+
+Le relevé s'écrit quand la partie **se ferme**, quelle qu'en soit la raison :
+relance, salon fermé, serveur arrêté. Une partie qui a déjà enregistré sa manche
+ne se relève pas une seconde fois.
+
+> C'est aussi ce qui sauve l'observation d'un serveur qui redémarre : les coups
+> qu'on a vus, on les a bien vus, et un mot raté sous les yeux d'un joueur reste
+> un mot raté quoi qu'il se soit passé avant.
 
 ### WU et QI
 
@@ -4362,10 +4429,16 @@ Un point est compté quand le **top d'un coup est exactement `WU` ou `QI`**, et 
 ce coup a été **joué par un joueur**. Ni `WUS`, ni `QIS`, ni les collantes formées
 à côté d'un autre mot : ce sont d'autres mots.
 
-Ce compteur ne demande pas de manche valide. Il compte sur **toutes** les parties
-du site, en topping comme en duplicate, bornées ou non : c'est une curiosité, pas
-un classement. Elle prolonge le pari des équipes WU et QI (§13) — mesuré sur les
-16 632 premiers coups de `top-leger` : QI 48, WU 41.
+Il vit dans la section **Mots**, à côté des ratés et des trouvés, et compte sur
+tout ce que le journal des records porte : les manches comme les relevés des
+parties abandonnées. Ce n'est pas un classement, c'est une curiosité — elle
+prolonge le pari des équipes WU et QI (§13), mesuré sur les 16 632 premiers coups
+de `top-leger` : QI 48, WU 41.
+
+> Le §13 le voulait sur **toutes** les parties du site, grille sans fin comprise.
+> Il ne compte pour l'instant que là où le journal des records regarde, c'est-à-
+> dire sur les configurations qui peuvent porter un record. L'étendre demanderait
+> un second flux d'événements, et rien ne presse tant que la courbe est vide.
 
 ### La montante
 

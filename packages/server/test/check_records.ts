@@ -9,9 +9,12 @@
  * une table de six joueurs -- en topping, il n'ecrit que le gagnant du coup, et
  * un coup rate n'y ecrit personne.
  *
- * Ce test joue donc quatre parties : une topee par un joueur qui cherche
- * vraiment, une que personne ne joue, une dont les reglages ne portent aucun
- * record, et une reprise en cours de route. Une seule doit entrer.
+ * Ce test joue donc cinq parties : une topee par un joueur qui cherche vraiment,
+ * une que personne ne joue, une dont les reglages ne portent aucun record, une
+ * reprise en cours de route, et une qu'on abandonne apres avoir rate. Une seule
+ * doit entrer au tableau -- mais la derniere doit quand meme laisser ses coups
+ * rates aux tableaux de mots, parce que relancer apres un rate est le geste le
+ * plus courant du jeu.
  *
  * LE JOURNAL DES RECORDS EXISTANT EST MIS DE COTE puis rendu : ce test ne doit
  * rien couter a la machine sur laquelle il tourne.
@@ -22,7 +25,8 @@ import { fileURLToPath } from "node:url";
 import { Game } from "../src/game.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import {
-  empreinteDuLexique, invaliderLaManche, manchesValides, observer, ouvrirLesRecords,
+  empreinteDuLexique, invaliderLaManche, manchesValides, motsRates, observer,
+  ouvrirLesRecords,
 } from "../src/records.ts";
 import { avec, configParDefaut, type ConfigPartie } from "../../engine/src/config.ts";
 import { setLayout, LAYOUTS } from "../../engine/src/bonus.ts";
@@ -256,7 +260,53 @@ nettoyer(ID4);
   await r.stop();
 }
 
-// ------------------------------------------------- 5. l'invalidation
+// ------------------- 5. une partie abandonnee laisse ses coups aux mots
+//
+// C'EST LE CAS LE PLUS COURANT DU JEU. Une table qui rate un top relance
+// aussitot : sans le releve ecrit a l'arret, le mot rate -- celui-la meme qui
+// fait abandonner -- ne serait compte nulle part.
+console.log("\n  --- une partie qu'on relance apres un rate ---\n");
+const ID5 = "records-abandon";
+nettoyer(ID5);
+{
+  const avant = motsRates("ods9").length;
+  // TROIS SECONDES PAR COUP : assez pour qu'une soumission tombe DANS le coup.
+  //
+  // Un mot soumis entre deux coups ne compte pas, et c'est juste : le serveur
+  // cherche encore, il n'y a pas de coup sur lequel etre actif. Avec un chrono
+  // d'une seconde, toutes les soumissions du test tombaient dans cet
+  // intervalle, et pas un seul rate n'etait compte.
+  const g = new Game(ID5, "classique15", avec(partieNormale(), { chrono: 3 }));
+  await g.start();
+  observer(g);
+  g.presents.add("alice");
+  await g.reveiller();
+  await g.demarrer();
+  for (let i = 0; i < 3 && !g.finie; i++) {
+    // On attend que le coup soit servi, puis on propose un mot qui n'existe
+    // pas : alice a cherche, elle n'a pas trouve. C'est exactement le cas que
+    // le tableau des rates doit compter.
+    for (let attente = 0; attente < 40 && g.tiers.length === 0; attente++) await dors(50);
+    await g.attempt("alice", "H", 0, 0, "ZZZZ");
+    const n = g.moves.length;
+    for (let attente = 0; attente < 80 && g.moves.length === n; attente++) await dors(100);
+  }
+  const rates = g.moves.filter((m) => m.player === null).length;
+  verifie("des coups ont ete rates", rates > 0, `${rates} sur ${g.moves.length} coups`);
+  verifie("la partie n'est pas finie", !g.finie);
+
+  // On abandonne : c'est ici que le releve part.
+  await g.stop();
+  verifie("elle n'ajoute aucune manche", manchesValides().length === 1,
+    `${manchesValides().length} manche(s)`);
+  const apres = motsRates("ods9");
+  verifie("mais ses coups rates comptent dans les mots", apres.length > avant,
+    `${avant} mot(s) avant, ${apres.length} apres`);
+  verifie("et chaque mot du tableau a bien ete rate",
+    apres.every((l) => l.rates > 0));
+}
+
+// ------------------------------------------------- 6. l'invalidation
 console.log("\n  --- l'invalidation ---\n");
 {
   verifie("une manche inconnue ne s'invalide pas",
@@ -282,7 +332,7 @@ console.log("\n  --- l'empreinte du lexique ---\n");
   verifie("deux lexiques ont deux empreintes", a !== anglais, `${a} contre ${anglais}`);
 }
 
-for (const id of [ID, ID2, ID3, ID4]) nettoyer(id);
+for (const id of [ID, ID2, ID3, ID4, ID5]) nettoyer(id);
 rendreLeJournal();
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);
 process.exit(echecs === 0 ? 0 : 1);

@@ -28,6 +28,24 @@ export function grilleDeBornes(bornes: number | null): Grille | null {
   return null;
 }
 
+/**
+ * Les trois tailles de chevalet, et ce qu'elles s'appellent a l'ecran.
+ *
+ * Le nom long de la grande est de Zulu : « un nombre consequent de lettres ».
+ */
+export type Taille = "petit" | "normal" | "grand";
+
+export const TAILLES: readonly { id: Taille; nom: string }[] = [
+  { id: "petit", nom: "Pas beaucoup" },
+  { id: "normal", nom: "Normal" },
+  { id: "grand", nom: "Un nombre conséquent de lettres" },
+];
+
+/** Seule la grande taille complete ses tableaux au negatif (SPEC.md §23). */
+export function completeAuNegatif(c: Categorie | undefined): boolean {
+  return c?.taille === "grand";
+}
+
 export interface Categorie {
   id: string;
   /** Le nom du tableau, tel qu'il s'affiche. */
@@ -38,13 +56,17 @@ export interface Categorie {
   jouables: number;
   joker: boolean;
   /**
-   * Sur quelle page elle se range.
+   * Combien de caramels au chevalet : c'est l'axe « Lettres » de la page.
    *
-   * La seconde tient les formats a dix caramels et plus. Ils sont separes parce
-   * qu'ils sont d'une autre nature : on y comptera les parties topees sur les
-   * doigts d'une main, et leurs tableaux se completent au negatif.
+   * TROIS TAILLES, ET ELLES NE SE COMPARENT PAS. Un 2 sur 2 se tope en quelques
+   * secondes par coup, un 15 sur 15 ne se tope presque jamais : melanger leurs
+   * tableaux ferait un classement ou la taille du chevalet compte plus que le
+   * joueur.
+   *
+   * Seule la grande complete ses tableaux au negatif : elle est la seule ou les
+   * parties topees se comptent sur les doigts d'une main (SPEC.md §23).
    */
-  page: 1 | 2;
+  taille: Taille;
   /**
    * Un seul joueur a trouve TOUS les tops.
    *
@@ -60,9 +82,9 @@ export interface Categorie {
 
 function format(
   id: string, nom: string, jouables: number, tirage: number,
-  joker: boolean, page: 1 | 2,
+  joker: boolean, taille: Taille,
 ): Categorie {
-  return { id, nom, tirage, jouables, joker, page, solo: false, montante: false };
+  return { id, nom, tirage, jouables, joker, taille, solo: false, montante: false };
 }
 
 /**
@@ -73,29 +95,35 @@ function format(
  * ailleurs le solo n'est qu'un filtre.
  */
 export const CATEGORIES: readonly Categorie[] = [
-  format("normale", "Partie normale", 7, 7, false, 1),
-  { ...format("normale-solo", "Partie normale solo", 7, 7, false, 1), solo: true },
-  { ...format("montante", "Montante", 7, 7, false, 1), montante: true },
-  format("joker", "Joker", 7, 7, true, 1),
-  format("7-8", "7 sur 8", 7, 8, false, 1),
-  format("7-8-joker", "7 sur 8 joker", 7, 8, true, 1),
-  format("8-8", "7 et 8", 8, 8, false, 1),
-  format("8-8-joker", "7 et 8 joker", 8, 8, true, 1),
-  format("9-9", "7, 8 et 9", 9, 9, false, 1),
-  format("9-9-joker", "7, 8 et 9 joker", 9, 9, true, 1),
-  // La seconde page : de dix sur dix a quinze sur quinze, chacune avec sa
-  // variante joker.
+  // ----------------------------------------------------------- pas beaucoup
   //
-  // Elles se nomment « 10 sur 10 » et non « 7, 8, 9 et 10 » : la premiere page
-  // enumere parce que trois nombres se lisent, la seconde en aurait neuf sur un
-  // onglet, et « 7, 8, 9, 10, 11, 12, 13, 14 et 15 » ne se lit plus du tout.
-  ...Array.from({ length: 6 }, (_, i) => {
-    const n = 10 + i;
-    return [
-      format(`${n}-${n}`, `${n} sur ${n}`, n, n, false, 2),
-      format(`${n}-${n}-joker`, `${n} sur ${n} joker`, n, n, true, 2),
-    ];
-  }).flat(),
+  // De deux a six caramels. Ce sont des parties courtes et tres rapides -- une
+  // 2 sur 2 s'est jouee en cinquante-huit coups a six joueurs -- et elles ont
+  // leurs tableaux a elles pour la meme raison que les grandes ont les leurs.
+  ...[2, 3, 4, 5, 6].flatMap((n) => [
+    format(`${n}-${n}`, `${n} sur ${n}`, n, n, false, "petit"),
+    format(`${n}-${n}-joker`, `${n} sur ${n} joker`, n, n, true, "petit"),
+  ]),
+  // ---------------------------------------------------------------- normal
+  format("normale", "Partie normale", 7, 7, false, "normal"),
+  { ...format("normale-solo", "Partie normale solo", 7, 7, false, "normal"), solo: true },
+  { ...format("montante", "Montante", 7, 7, false, "normal"), montante: true },
+  format("joker", "Joker", 7, 7, true, "normal"),
+  format("7-8", "7 sur 8", 7, 8, false, "normal"),
+  format("7-8-joker", "7 sur 8 joker", 7, 8, true, "normal"),
+  format("8-8", "7 et 8", 8, 8, false, "normal"),
+  format("8-8-joker", "7 et 8 joker", 8, 8, true, "normal"),
+  format("9-9", "7, 8 et 9", 9, 9, false, "normal"),
+  format("9-9-joker", "7, 8 et 9 joker", 9, 9, true, "normal"),
+  // ------------------------------------------------------------- les grands
+  //
+  // Elles se nomment « 10 sur 10 » et non « 7, 8, 9 et 10 » : les normales
+  // enumerent parce que trois nombres se lisent, celles-ci en auraient neuf sur
+  // un onglet, et « 7, 8, 9, 10, 11, 12, 13, 14 et 15 » ne se lit plus du tout.
+  ...[10, 11, 12, 13, 14, 15].flatMap((n) => [
+    format(`${n}-${n}`, `${n} sur ${n}`, n, n, false, "grand"),
+    format(`${n}-${n}-joker`, `${n} sur ${n} joker`, n, n, true, "grand"),
+  ]),
 ];
 
 export function categorie(id: string): Categorie | undefined {

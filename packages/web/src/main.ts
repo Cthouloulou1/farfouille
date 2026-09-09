@@ -15,7 +15,7 @@ import {
 import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tailleDuSac, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
-import { CATEGORIES } from "../../engine/src/categories.ts";
+import { CATEGORIES, TAILLES, type Taille } from "../../engine/src/categories.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
   plusDeJokers, rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette,
@@ -7727,13 +7727,16 @@ interface LigneDeMot {
 type VueDesRecords = "classement" | "annexes" | "mots";
 
 let rcCategorie = "normale";
-let rcPageDeCategories: 1 | 2 = 1;
+/** L'axe « Lettres » : combien de caramels au chevalet. */
+let rcTaille: Taille = "normal";
 let rcGrille: "normale" | "super" = "normale";
 let rcLexique = DICO_PAR_DEFAUT;
 let rcSolo = false;
 let rcVue: VueDesRecords = "classement";
 let rcAnnexe = "chrono";
-let rcSens: "rates" | "trouves" = "rates";
+let rcSens: "rates" | "trouves" | "wuqi" = "rates";
+/** Le classement principal se lit de deux facons : voir `rc-tri`. */
+let rcTri: "temps" | "coup" = "temps";
 /** `null` : toutes les longueurs confondues. */
 let rcLongueur: number | null = null;
 /** Ce qu'on attend en ce moment : une reponse en retard ne repeint pas. */
@@ -7901,7 +7904,9 @@ function ligneDePartie(
 
   tr.appendChild(el("td", "fort", tempsDeManche(l.temps)));
   if (opts.negatif === true) {
-    const neg = el("td", l.topee ? "" : "fort", l.topee ? "—" : `+${l.negatif}`);
+    // LE NEGATIF EST NEGATIF. C'est un manque, pas un gain : une partie ou
+    // l'on a laisse sept points au top affiche -7, et non +7.
+    const neg = el("td", l.topee ? "" : "fort", l.topee ? "—" : `-${l.negatif}`);
     tr.appendChild(neg);
   }
   tr.appendChild(el("td", "", chronoDeManche(l.chrono)));
@@ -7942,7 +7947,9 @@ function rendreLeClassement(d: { topees: LigneDeRecord[]; negatifs: LigneDeRecor
     { texte: "", classe: "c" },
   ];
   const table = el("table");
-  table.appendChild(tete(colonnes, t("Temps")));
+  // Le chevron suit CE QUI CLASSE, et non la colonne du temps : les deux
+  // colonnes existent, et rien d'autre ne dirait laquelle decide.
+  table.appendChild(tete(colonnes, t(rcTri === "coup" ? "Temps / coup" : "Temps")));
   const corps = el("tbody");
   for (const l of d.topees) corps.appendChild(ligneDePartie(l, { negatif: avecNegatif }));
   if (avecNegatif) {
@@ -8055,11 +8062,11 @@ async function chargerLesRecords(): Promise<void> {
   let url: string;
   if (rcVue === "mots") {
     url = `/api/records/mots?lexique=${encodeURIComponent(rcLexique)}&sens=${rcSens}`
-      + (rcLongueur === null ? "" : `&longueur=${rcLongueur}`);
+      + (rcLongueur === null || rcSens === "wuqi" ? "" : `&longueur=${rcLongueur}`);
   } else if (rcVue === "annexes") {
     url = `/api/records/annexe?${base}&quoi=${rcAnnexe}`;
   } else {
-    url = `/api/records?${base}${rcSolo ? "&solo=1" : ""}`;
+    url = `/api/records?${base}&tri=${rcTri}${rcSolo ? "&solo=1" : ""}`;
   }
   let data: any;
   try {
@@ -8071,22 +8078,65 @@ async function chargerLesRecords(): Promise<void> {
   }
   // Une reponse en retard ne repeint pas : on a change d'onglet entre-temps.
   if (mien !== rcDemande) return;
-  if (rcVue === "mots") rendreLesMots(data.lignes ?? []);
+  if (rcVue === "mots") {
+    if (rcSens === "wuqi") rendreWuQi(data.wuqi ?? []);
+    else rendreLesMots(data.lignes ?? []);
+  }
   else if (rcVue === "annexes") {
     if (data.coups !== undefined) rendreLesCoups(data.coups);
     else rendreLesAnnexes(data.lignes ?? []);
   } else rendreLeClassement({ topees: data.topees ?? [], negatifs: data.negatifs ?? [] });
 }
 
+/**
+ * WU et QI : le pari d'avant-partie, tenu a jour. Voir SPEC.md §13 et §23.
+ *
+ * On compte le TOP POSE, exactement `WU` ou `QI` -- ni `WUS`, ni `QIS`, ni les
+ * collantes formees a cote d'un autre mot. « Trouvé » est ce que le compteur
+ * regarde : un top que personne n'a vu n'a ete joue par personne.
+ */
+function rendreWuQi(lignes: { mot: string; sorti: number; trouve: number }[]): void {
+  const boite = $("rc-tableau");
+  const total = lignes.reduce((a, l) => a + l.trouve, 0);
+  if (total === 0) {
+    boite.replaceChildren(tableauVide(t("Ni WU ni QI n'ont encore été joués.")));
+    $("rc-compte").textContent = "";
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: "#" }, { texte: t("Mot"), classe: "g" },
+    { texte: t("Trouvé") }, { texte: t("Sorti en top") }, { texte: t("Part trouvée") },
+  ], t("Trouvé")));
+  const corps = el("tbody");
+  lignes.forEach((l, i) => {
+    const tr = el("tr");
+    tr.appendChild(celluleDuRang(i + 1, false));
+    tr.appendChild(el("td", "g fort", l.mot));
+    tr.appendChild(el("td", "fort", String(l.trouve)));
+    tr.appendChild(el("td", "", String(l.sorti)));
+    tr.appendChild(el("td", "",
+      l.sorti === 0 ? "—" : `${Math.round((l.trouve / l.sorti) * 1000) / 10} %`));
+    corps.appendChild(tr);
+  });
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+  $("rc-compte").textContent = t2(total > 1 ? "{n} coups joués" : "{n} coup joué", { n: total });
+}
+
+/**
+ * Les onglets de categorie, pour la taille de chevalet choisie.
+ *
+ * ILS VIENNENT SOUS LES PARAMETRES, et non au-dessus : c'est « Lettres » qui
+ * decide de leur liste, et ce qui commande se lit avant ce qui est commande.
+ */
 function peindreLesCategories(): void {
   const boite = $("rc-categories");
   boite.replaceChildren();
-  for (const c of CATEGORIES.filter((x) => x.page === rcPageDeCategories)) {
+  for (const c of CATEGORIES.filter((x) => x.taille === rcTaille)) {
     const b = el("button", "", t(c.nom)) as HTMLButtonElement;
     b.type = "button";
     b.setAttribute("aria-pressed", String(c.id === rcCategorie));
-    // LA MONTANTE N'EST PAS ENCORE JOUABLE : son onglet existe, il dit ce qui
-    // viendra, et il ne ment pas en affichant un tableau vide comme les autres.
     b.addEventListener("click", () => {
       rcCategorie = c.id;
       peindreLesCategories();
@@ -8094,19 +8144,30 @@ function peindreLesCategories(): void {
     });
     boite.appendChild(b);
   }
-  const page = el("button", "rc-page",
-    rcPageDeCategories === 1 ? t("Grands formats") : t("Formats courants")) as HTMLButtonElement;
-  page.type = "button";
-  page.title = rcPageDeCategories === 1
-    ? t("De 10 sur 10 à 15 sur 15") : t("De la partie normale au 7, 8 et 9");
-  page.addEventListener("click", () => {
-    rcPageDeCategories = rcPageDeCategories === 1 ? 2 : 1;
-    const premiere = CATEGORIES.find((x) => x.page === rcPageDeCategories);
-    if (premiere !== undefined) rcCategorie = premiere.id;
-    peindreLesCategories();
-    void chargerLesRecords();
-  });
-  boite.appendChild(page);
+}
+
+/** Les trois tailles de chevalet, et la categorie qui s'affiche avec. */
+function peindreLesTailles(): void {
+  const boite = $("rc-taille");
+  boite.replaceChildren();
+  for (const taille of TAILLES) {
+    const b = el("button", "", t(taille.nom)) as HTMLButtonElement;
+    b.type = "button";
+    b.dataset["v"] = taille.id;
+    b.setAttribute("aria-pressed", String(taille.id === rcTaille));
+    b.addEventListener("click", () => {
+      if (taille.id === rcTaille) return;
+      rcTaille = taille.id;
+      // La categorie choisie n'existe pas dans la nouvelle taille : on prend la
+      // premiere, plutot que de montrer un tableau que rien ne selectionne.
+      const premiere = CATEGORIES.find((c) => c.taille === rcTaille);
+      if (premiere !== undefined) rcCategorie = premiere.id;
+      peindreLesTailles();
+      peindreLesCategories();
+      void chargerLesRecords();
+    });
+    boite.appendChild(b);
+  }
 }
 
 /** Pose l'etat presse sur un groupe de boutons a valeur. */
@@ -8121,16 +8182,23 @@ function peindreLesDeclinaisons(): void {
   presser("rc-solo", rcSolo ? "solo" : "tous");
   presser("rc-annexe", rcAnnexe);
   presser("rc-sens", rcSens);
+  presser("rc-tri", rcTri);
   presser("rc-longueur", rcLongueur === null ? "toutes" : String(rcLongueur));
   presser("rc-vues", rcVue);
-  // Les mots ne dependent ni de la categorie ni de la grille : ce sont les
-  // memes mots partout. Leurs choix propres remplacent donc ceux du haut.
   $("rc-annexes").hidden = rcVue !== "annexes";
   $("rc-mots").hidden = rcVue !== "mots";
+  $("rc-tri-bloc").hidden = rcVue !== "classement";
+  // WU et QI ne se filtrent pas par longueur : ils font deux lettres, tous les
+  // deux, et c'est tout le sujet.
+  $("rc-longueur-bloc").hidden = rcSens === "wuqi";
+  // LES MOTS NE DEPENDENT NI DE LA CATEGORIE, NI DE LA GRILLE, NI DU CHEVALET :
+  // ce sont les memes mots partout, et seul le lexique les distingue. Ce qui ne
+  // change rien a ce qu'on lit ne doit pas rester affiche a cote.
   const surLesMots = rcVue === "mots";
   $("rc-categories").hidden = surLesMots;
-  ($("rc-grille").parentElement as HTMLElement).hidden = surLesMots;
-  ($("rc-solo").parentElement as HTMLElement).hidden = surLesMots;
+  for (const id of ["rc-grille", "rc-taille", "rc-solo"]) {
+    ($(id).parentElement as HTMLElement).hidden = surLesMots;
+  }
 }
 
 /** Les lexiques, en puces : quatre, et l'on veut les voir tous d'un coup. */
@@ -8184,6 +8252,7 @@ function ouvrirLesRecords(pousser = true): void {
   $("corps-solveur").hidden = true;
   $("corps-records").hidden = false;
   $("join").hidden = false;
+  peindreLesTailles();
   peindreLesCategories();
   peindreLesLexiques();
   peindreLesLongueurs();
@@ -8205,7 +8274,8 @@ for (const [id, poser] of [
   ["rc-grille", (v: string) => { rcGrille = v === "super" ? "super" : "normale"; }],
   ["rc-solo", (v: string) => { rcSolo = v === "solo"; }],
   ["rc-annexe", (v: string) => { rcAnnexe = v; }],
-  ["rc-sens", (v: string) => { rcSens = v === "trouves" ? "trouves" : "rates"; }],
+  ["rc-sens", (v: string) => { rcSens = v as typeof rcSens; }],
+  ["rc-tri", (v: string) => { rcTri = v === "coup" ? "coup" : "temps"; }],
   ["rc-vues", (v: string) => { rcVue = v as VueDesRecords; }],
 ] as [string, (v: string) => void][]) {
   $(id).addEventListener("click", (e) => {

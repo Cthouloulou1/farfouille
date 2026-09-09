@@ -722,6 +722,7 @@ export class Game {
   private surCoup: ((m: PlayedMove) => void)[] = [];
   private surChat: ((m: ChatMessage) => void)[] = [];
   private surFin: ((raison: RaisonDeFin) => void)[] = [];
+  private surArret: (() => void)[] = [];
 
   constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
     this.gameId = gameId;
@@ -806,6 +807,11 @@ export class Game {
    * et le verrou empecherait la nouvelle partie de s'ouvrir.
    */
   async stop(): Promise<void> {
+    // CE QUE LE SALON A OBSERVE PART AVANT QU'ON NE DEMONTE QUOI QUE CE SOIT.
+    // Une partie abandonnee en cours de route a ete jouee quand meme, et ses
+    // coups rates sont ce que le tableau des mots attend. Voir `onArret`.
+    for (const f of this.surArret) f();
+    this.surArret = [];
     // D'ABORD couper l'avance. Les demandes en attente vont etre denouees juste
     // en dessous ; sans ce drapeau, la boucle de calcul en relancerait une
     // aussitot, vers un fil qui n'existe plus, et n'aurait plus jamais de
@@ -829,6 +835,7 @@ export class Game {
     this.surCoup = [];
     this.surChat = [];
     this.surFin = [];
+    this.surArret = [];
     if (this.worker !== undefined) await this.worker.terminate();
   }
 
@@ -1008,6 +1015,20 @@ export class Game {
    * second record pour la meme partie a chaque demarrage du serveur.
    */
   onFin(fn: (raison: RaisonDeFin) => void): void { this.surFin.push(fn); }
+
+  /**
+   * Prevenu quand la partie SE FERME, terminee ou non.
+   *
+   * UNE PARTIE ABANDONNEE A ETE JOUEE QUAND MEME. Une table qui rate un top
+   * relance aussitot une partie neuve -- c'est le geste le plus courant du jeu
+   * -- et la partie quittee emportait avec elle tout ce qu'on avait vu, le mot
+   * rate compris. Or c'est justement ce mot-la que le tableau des rates attend.
+   *
+   * Ce que le salon a observe part donc au journal des records dans les deux
+   * cas : une manche entiere pour la partie qui va au bout de son sac, un simple
+   * releve de coups pour celle qu'on abandonne (SPEC.md §23).
+   */
+  onArret(fn: () => void): void { this.surArret.push(fn); }
 
   /**
    * Arrete la partie, et l'ecrit au journal.

@@ -38,7 +38,8 @@ import { fileURLToPath } from "node:url";
 import type { Game, PlayedMove, RaisonDeFin } from "./game.ts";
 import { compte } from "./comptes.ts";
 import {
-  categorie, categorieDesReglages, grilleDeBornes, type Categorie, type Grille,
+  categorie, categorieDesReglages, completeAuNegatif, grilleDeBornes,
+  type Categorie, type Grille,
 } from "../../engine/src/categories.ts";
 import { dawgPath } from "../../engine/src/paths.ts";
 
@@ -123,9 +124,27 @@ export interface Manche {
   vus: CoupObserve[];
 }
 
+/**
+ * Ce qu'une partie ABANDONNEE laisse au journal.
+ *
+ * Une table qui rate un top relance aussitot une partie neuve : c'est le geste
+ * le plus courant du jeu, et la partie quittee emportait avec elle le mot rate
+ * -- justement celui que le tableau des rates attend.
+ *
+ * Elle n'entre dans AUCUN classement : elle n'est pas allee au bout de son sac,
+ * elle n'a ni temps ni cumul comparables. Elle ne porte que ses coups.
+ */
+export interface Releve {
+  partie: string;
+  at: number;
+  lexique: string;
+  vus: CoupObserve[];
+}
+
 /** Ce que le journal des records peut porter. */
 type Evenement =
   | ({ t: "manche" } & Manche)
+  | ({ t: "releve" } & Releve)
   | { t: "invalide"; partie: string; par: string; raison: string; at: number };
 
 // ------------------------------------------------------------- l'empreinte
@@ -154,6 +173,7 @@ export function empreinteDuLexique(id: string): string {
 // ---------------------------------------------------------------- le journal
 
 let manches: Manche[] = [];
+let releves: Releve[] = [];
 const invalidees = new Set<string>();
 let ouvert = false;
 
@@ -174,6 +194,7 @@ function inscrire(ev: Evenement): void {
  */
 export function ouvrirLesRecords(): void {
   manches = [];
+  releves = [];
   invalidees.clear();
   ouvert = true;
   if (!existsSync(JOURNAL)) {
@@ -186,10 +207,12 @@ export function ouvrirLesRecords(): void {
     let ev: Evenement;
     try { ev = JSON.parse(ligne) as Evenement; } catch { cassees++; continue; }
     if (ev.t === "manche") manches.push(ev);
+    else if (ev.t === "releve") releves.push(ev);
     else if (ev.t === "invalide") invalidees.add(ev.partie);
   }
   if (cassees > 0) console.warn(`[records] ${cassees} ligne(s) illisible(s), ignorees`);
-  console.log(`[records] ${manches.length} manche(s) relues, ${invalidees.size} invalidee(s)`);
+  console.log(`[records] ${manches.length} manche(s) et ${releves.length} relevé(s) relus, `
+    + `${invalidees.size} invalidée(s)`);
 }
 
 /** Les manches qui comptent : tout ce qui n'a pas ete invalide. */
@@ -245,6 +268,24 @@ class Observation {
     // La partie cesse alors d'etre eligible plutot que d'entrer au tableau
     // avec des coups dont personne ne sait s'ils ont ete cherches.
     this.entiere = partie.moves.length === 0;
+  }
+
+  /**
+   * Le releve des coups vus, pour une partie qu'on abandonne.
+   *
+   * Rend `null` quand il n'y a rien a dire : aucun coup, ou aucun coup cherche
+   * par personne. Rend un releve MEME si l'observation est incomplete -- les
+   * coups qu'on a vus, on les a bien vus, et un mot rate sous les yeux d'un
+   * joueur reste un mot rate quel que soit ce qui s'est passe avant.
+   */
+  releve(): Releve | null {
+    if (!this.vus.some((c) => c.actif)) return null;
+    return {
+      partie: this.partie.gameId,
+      at: Date.now(),
+      lexique: this.partie.cfg.dictionnaire,
+      vus: this.vus,
+    };
   }
 
   /** Un coup vient de se clore. Le salon a vu ce qu'il fallait voir. */
@@ -341,11 +382,14 @@ export function observer(partie: Game): void {
   const categorie = categorieDesReglages(partie.cfg);
   if (categorie === null) return;
   const vue = new Observation(partie, categorie);
+  /** La manche a ete ecrite : l'arret n'a plus rien a relever. */
+  let ecrite = false;
   partie.onMove((m) => vue.coup(m));
   partie.onFin((raison) => {
     const m = vue.manche(raison);
     if (m === null) return;
     if (!ouvert) ouvrirLesRecords();
+    ecrite = true;
     manches.push(m);
     inscrire({ t: "manche", ...m });
     const qui = m.joueurs.map((j) => j.invite ? `${j.nom} (invité)` : j.nom);
@@ -353,6 +397,23 @@ export function observer(partie: Game): void {
       `[records] ${m.categorie} · ${m.coups} coups en ${(m.temps / 1000).toFixed(2)} s · ` +
       `${m.topee ? "topée" : `négatif ${m.negatif}`} · ${qui.join(", ") || "personne"}`,
     );
+  });
+  // LA PARTIE QU'ON ABANDONNE LAISSE SES COUPS. Une table qui rate un top
+  // relance aussitot une partie neuve : sans ce releve, le mot rate -- celui-la
+  // meme que le tableau des rates attend -- partirait avec elle.
+  //
+  // Une manche deja ecrite ne se releve pas une seconde fois : la partie qui va
+  // au bout de son sac dit tout au meme endroit.
+  partie.onArret(() => {
+    if (ecrite) return;
+    const r = vue.releve();
+    if (r === null) return;
+    if (!ouvert) ouvrirLesRecords();
+    releves.push(r);
+    inscrire({ t: "releve", ...r });
+    const rates = r.vus.filter((c) => c.actif && c.par === null).length;
+    console.log(`[records] "${r.partie}" abandonnée : ${r.vus.length} coups relevés, `
+      + `${rates} raté(s)`);
   });
 }
 
@@ -402,6 +463,11 @@ export interface Filtre {
   lexique?: string;
   /** Ne garder que les manches ou un seul joueur a tout trouve. */
   solo?: boolean;
+  /**
+   * Sur quoi le classement se fait : le temps de la partie, ou le temps par
+   * coup. Voir `parCoup`.
+   */
+  tri?: "temps" | "coup";
 }
 
 /** Cent lignes : ce qu'un tableau montre, et pas une de plus. */
@@ -446,17 +512,28 @@ function ranger(
 }
 
 /**
+ * Le temps par coup, au centieme.
+ *
+ * IL NE SE DEDUIT PAS DU TEMPS TOTAL POUR CLASSER. Une partie de dix-neuf coups
+ * et une de vingt-six ne demandent pas le meme travail : le temps total dit qui
+ * a fini le premier, le temps par coup dit qui a cherche le plus vite. Ce sont
+ * deux questions, et Zulu veut les deux.
+ */
+const parCoup = (m: Manche): number =>
+  m.coups === 0 ? Infinity : Math.round(m.temps / m.coups / 10);
+
+/**
  * Le classement de vitesse : les parties topees, la plus rapide en tete.
  *
  * Seules les parties TOPEES y figurent. Une partie presque topee ne se compare
  * a rien : il faudrait dire ce que « presque » vaut.
  */
 export function classementDeVitesse(f: Filtre): LigneDeRecord[] {
+  const cle = f.tri === "coup" ? parCoup : (m: Manche): number => auCentieme(m.temps);
   const triees = retenues(f)
     .filter((m) => m.topee)
-    .sort((a, b) => auCentieme(a.temps) - auCentieme(b.temps) || a.at - b.at);
-  return ranger(triees, (a, b) => auCentieme(a.temps) === auCentieme(b.temps))
-    .slice(0, LIGNES_PAR_TABLEAU);
+    .sort((a, b) => cle(a) - cle(b) || a.at - b.at);
+  return ranger(triees, (a, b) => cle(a) === cle(b)).slice(0, LIGNES_PAR_TABLEAU);
 }
 
 /**
@@ -474,9 +551,17 @@ export function classementAuNegatif(f: Filtre, place = LIGNES_PAR_TABLEAU): Lign
   return ranger(triees, (a, b) => a.negatif === b.negatif).slice(0, place);
 }
 
-/** Un tableau complet : les topees, puis les negatifs s'il reste de la place. */
+/**
+ * Un tableau complet : les topees, puis les negatifs s'il reste de la place.
+ *
+ * LES NEGATIFS NE COMPLETENT QUE LES GRANDS FORMATS. A dix caramels et plus,
+ * une partie topee est rare, et un tableau de trois lignes n'apprend rien ; en
+ * dessous, il s'en trouve, et melanger les deux ferait passer pour un record
+ * une partie ou l'on a rate un top.
+ */
 export function tableau(f: Filtre): { topees: LigneDeRecord[]; negatifs: LigneDeRecord[] } {
   const topees = classementDeVitesse(f);
+  if (!completeAuNegatif(categorie(f.categorie))) return { topees, negatifs: [] };
   return {
     topees,
     negatifs: classementAuNegatif(f, LIGNES_PAR_TABLEAU - topees.length),
@@ -580,7 +665,12 @@ function compterLesMots(
   lexique: string, longueur?: number,
 ): Map<string, { fois: number; trouves: number }> {
   const vu = new Map<string, { fois: number; trouves: number }>();
-  for (const m of manchesValides()) {
+  // LES PARTIES ABANDONNEES COMPTENT ICI, ET ELLES SEULES Y COMPTENT VRAIMENT.
+  // Une table qui rate un top relance aussitot : si l'on n'ecoutait que les
+  // parties menees au bout de leur sac, le tableau des rates serait vide des
+  // mots qui font justement abandonner.
+  const sources: { lexique: string; vus: CoupObserve[] }[] = [...manchesValides(), ...releves];
+  for (const m of sources) {
     if (m.lexique !== lexique) continue;
     for (const c of m.vus) {
       if (!c.actif) continue;
@@ -600,8 +690,9 @@ function compterLesMots(
 function classerLesMots(
   vu: Map<string, { fois: number; trouves: number }>,
   cle: (e: { fois: number; trouves: number }) => number,
+  garder: (e: { fois: number; trouves: number }) => boolean,
 ): LigneDeMot[] {
-  const lignes = [...vu].map(([mot, e]) => ({
+  const lignes = [...vu].filter(([, e]) => garder(e)).map(([mot, e]) => ({
     rang: 0, mot, fois: e.fois, trouves: e.trouves,
     rates: e.fois - e.trouves,
     part: e.fois === 0 ? 0 : Math.round((e.trouves / e.fois) * 1000) / 10,
@@ -614,12 +705,54 @@ function classerLesMots(
   });
 }
 
-/** Les mots les plus rates. `longueur` restreint au tableau de cette longueur. */
+/**
+ * Les mots les plus rates. `longueur` restreint au tableau de cette longueur.
+ *
+ * UN MOT JAMAIS RATE N'A RIEN A FAIRE DANS LES RATES. Il y figurait, tout en
+ * bas, avec un zero : c'est un tableau des mots vus, pas des mots rates.
+ */
 export function motsRates(lexique: string, longueur?: number): LigneDeMot[] {
-  return classerLesMots(compterLesMots(lexique, longueur), (e) => e.fois - e.trouves);
+  return classerLesMots(compterLesMots(lexique, longueur),
+    (e) => e.fois - e.trouves, (e) => e.fois > e.trouves);
 }
 
-/** Les mots les plus trouves : le tableau symetrique. */
+/**
+ * Les mots les plus trouves : le tableau symetrique, et exclusif de l'autre.
+ *
+ * Un mot rate une seule fois n'est pas un mot que la table connait : il sort
+ * des trouves, meme s'il a par ailleurs ete trouve dix fois.
+ */
 export function motsTrouves(lexique: string, longueur?: number): LigneDeMot[] {
-  return classerLesMots(compterLesMots(lexique, longueur), (e) => e.trouves);
+  return classerLesMots(compterLesMots(lexique, longueur),
+    (e) => e.trouves, (e) => e.trouves > 0 && e.fois === e.trouves);
+}
+
+/**
+ * WU et QI, exactement. Voir SPEC.md §13 et §23.
+ *
+ * NI `WUS`, NI `QIS`, NI LES COLLANTES formees a cote d'un autre mot : ce sont
+ * d'autres mots. On compte le TOP POSE -- le premier de la liste, celui que la
+ * grille porte -- et non ses isotops : le pari est sur ce qui sort, pas sur ce
+ * qui aurait pu sortir.
+ *
+ * `WU` n'existe pas en anglais : le compteur ne vaut que pour le lexique
+ * officiel du jeu francophone.
+ */
+export function compteurWuQi(lexique: string): { mot: string; sorti: number; trouve: number }[] {
+  const compte = new Map<string, { sorti: number; trouve: number }>([
+    ["QI", { sorti: 0, trouve: 0 }],
+    ["WU", { sorti: 0, trouve: 0 }],
+  ]);
+  const sources: { lexique: string; vus: CoupObserve[] }[] = [...manchesValides(), ...releves];
+  for (const m of sources) {
+    if (m.lexique !== lexique) continue;
+    for (const c of m.vus) {
+      const e = compte.get(c.mots[0] ?? "");
+      if (e === undefined) continue;
+      e.sorti++;
+      if (c.par !== null) e.trouve++;
+    }
+  }
+  return [...compte].map(([mot, e]) => ({ mot, ...e }))
+    .sort((a, b) => b.trouve - a.trouve || a.mot.localeCompare(b.mot));
 }

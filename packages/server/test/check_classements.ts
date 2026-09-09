@@ -16,8 +16,8 @@ import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  annexe, classementAuNegatif, classementDeVitesse, coupsExtremes, invaliderLaManche,
-  motsRates, motsTrouves, ouvrirLesRecords, tableau,
+  annexe, classementAuNegatif, classementDeVitesse, compteurWuQi, coupsExtremes,
+  invaliderLaManche, motsRates, motsTrouves, ouvrirLesRecords, tableau,
   type CoupObserve, type Manche,
 } from "../src/records.ts";
 
@@ -153,9 +153,55 @@ console.log("\n  --- topees et negatifs ---\n");
   verifie("les deux autres sont au negatif", negatifs.length === 2, `${negatifs.length}`);
   verifie("le plus petit negatif en tete",
     negatifs[0]?.partie === "ratee", `${negatifs[0]?.partie} (${negatifs[0]?.negatif})`);
-  const t = tableau({ categorie: "normale" });
-  verifie("le tableau complet porte les deux blocs",
-    t.topees.length === 1 && t.negatifs.length === 2);
+  // LE BLOC DES NEGATIFS NE COMPLETE QUE LES GRANDS FORMATS. A dix caramels et
+  // plus, une partie topee est rare et un tableau de trois lignes n'apprend
+  // rien ; en dessous, il s'en trouve, et melanger les deux ferait passer pour
+  // un record une partie ou l'on a rate un top.
+  const normal = tableau({ categorie: "normale" });
+  verifie("un format normal ne montre pas les negatifs",
+    normal.topees.length === 1 && normal.negatifs.length === 0,
+    `${normal.negatifs.length} négatif(s)`);
+}
+
+// ------------------------------------- le grand format complete au negatif
+console.log("\n  --- les grands formats ---\n");
+{
+  poser(
+    manche({ partie: "grande-topee", categorie: "12-12", temps: 800_000,
+      vus: [coup(1, ["UN"], "alice")] }),
+    manche({ partie: "grande-ratee", categorie: "12-12", temps: 700_000,
+      vus: [coup(1, ["UN"], null, { negatif: 95 })] }),
+    manche({ partie: "petite-ratee", categorie: "3-3", temps: 90_000,
+      vus: [coup(1, ["UN"], null, { negatif: 12 })] }),
+  );
+  const grand = tableau({ categorie: "12-12" });
+  verifie("un grand format porte les deux blocs",
+    grand.topees.length === 1 && grand.negatifs.length === 1,
+    `${grand.topees.length} topée(s), ${grand.negatifs.length} négatif(s)`);
+  const petit = tableau({ categorie: "3-3" });
+  verifie("un petit format n'en porte qu'un",
+    petit.topees.length === 0 && petit.negatifs.length === 0);
+}
+
+// ------------------------------------------------ le temps par coup
+console.log("\n  --- classer par temps par coup ---\n");
+{
+  poser(
+    // Vingt coups en cent secondes : cinq secondes par coup, et la plus lente
+    // des deux au total.
+    manche({ partie: "lente-mais-reguliere", temps: 100_000,
+      vus: Array.from({ length: 20 }, (_, i) => coup(i + 1, [`M${i}`], "alice")) }),
+    // Cinq coups en cinquante secondes : dix secondes par coup, et la plus
+    // rapide des deux au total.
+    manche({ partie: "courte-mais-lente", temps: 50_000,
+      vus: Array.from({ length: 5 }, (_, i) => coup(i + 1, [`N${i}`], "alice")) }),
+  );
+  const parTemps = classementDeVitesse({ categorie: "normale" });
+  verifie("au temps total, la partie courte mene",
+    parTemps[0]?.partie === "courte-mais-lente", parTemps[0]?.partie ?? "aucune");
+  const parCoup = classementDeVitesse({ categorie: "normale", tri: "coup" });
+  verifie("au temps par coup, l'autre passe devant",
+    parCoup[0]?.partie === "lente-mais-reguliere", parCoup[0]?.partie ?? "aucune");
 }
 
 // ------------------------------------------------------------- les filtres
@@ -233,10 +279,13 @@ console.log("\n  --- les mots rates ---\n");
       coup(2, ["AUNERA"], "alice"),
       // Personne n'a rien soumis sur ce coup : il ne compte pas.
       coup(3, ["INVISIBLE"], null, { actif: false }),
+      // Trouve les deux fois : il n'a rien a faire au tableau des rates.
+      coup(4, ["CONNU"], "alice"),
     ] }),
     manche({ partie: "p2", temps: 11_000, vus: [
       coup(1, ["PLUTOT", "POULET"], null),
       coup(2, ["AUNERA"], null),
+      coup(3, ["CONNU"], "alice"),
     ] }),
     manche({ partie: "anglaise", temps: 9_000, lexique: "csw24", vus: [
       coup(1, ["PLUTOT"], null),
@@ -263,9 +312,69 @@ console.log("\n  --- les mots rates ---\n");
     motsRates("ods9", 6).every((l) => l.mot.length === 6)
     && motsRates("ods9", 6).length === 3,
     motsRates("ods9", 6).map((l) => l.mot).join(","));
+  verifie("un mot jamais rate ne figure pas dans les rates",
+    !par.has("CONNU"), par.has("CONNU") ? "CONNU y est" : "CONNU n'y est pas");
+  // LES DEUX TABLEAUX S'EXCLUENT. Un mot rate une seule fois n'est pas un mot
+  // que la table connait, meme s'il a par ailleurs ete trouve dix fois.
   const trouves = motsTrouves("ods9");
-  verifie("le tableau symetrique classe les plus trouves",
-    trouves[0]?.mot === "AUNERA", trouves[0]?.mot ?? "aucun");
+  const nomsTrouves = trouves.map((l) => l.mot);
+  verifie("les mots jamais rates sont les seuls a figurer dans les trouves",
+    trouves.every((l) => l.rates === 0), nomsTrouves.join(","));
+  verifie("un mot rate une fois sort des trouves",
+    !nomsTrouves.includes("AUNERA") && !nomsTrouves.includes("PLUTOT"),
+    nomsTrouves.join(","));
+  verifie("et le mot jamais rate y est, lui",
+    nomsTrouves.includes("CONNU"), nomsTrouves.join(","));
+  verifie("et les rates ne portent que des mots vraiment rates",
+    motsRates("ods9").every((l) => l.rates > 0));
+}
+
+// ------------------------------------- la partie abandonnee laisse ses coups
+console.log("\n  --- une partie abandonnee ---\n");
+{
+  // Une table qui rate un top relance aussitot : sans le releve, le mot rate
+  // -- celui-la meme qui fait abandonner -- ne serait compte nulle part.
+  writeFileSync(JOURNAL, JSON.stringify({
+    t: "releve", partie: "abandonnee", at: 1_789_000_000_000, lexique: "ods9",
+    vus: [
+      coup(1, ["QUARTZEUX"], null),
+      coup(2, ["JAMAIS"], null, { actif: false }),
+    ],
+  }) + "\n", "utf8");
+  ouvrirLesRecords();
+  verifie("elle n'entre dans aucun classement",
+    classementDeVitesse({ categorie: "normale" }).length === 0);
+  const rates = motsRates("ods9");
+  verifie("mais son coup rate compte dans les mots",
+    rates.length === 1 && rates[0]?.mot === "QUARTZEUX" && rates[0]?.rates === 1,
+    rates.map((l) => l.mot).join(","));
+  verifie("et son coup que personne n'a cherche ne compte pas",
+    !rates.some((l) => l.mot === "JAMAIS"));
+}
+
+// --------------------------------------------------------- WU et QI
+console.log("\n  --- WU et QI ---\n");
+{
+  poser(
+    manche({ partie: "avec-qi", temps: 10_000, vus: [
+      coup(1, ["QI"], "alice"),
+      coup(2, ["QI"], null),
+      // Un isotop qui n'est pas le mot pose ne compte pas : c'est le top JOUE
+      // que le pari regarde.
+      coup(3, ["AUTRE", "WU"], "alice"),
+      // Ni WUS ni QIS : ce sont d'autres mots.
+      coup(4, ["QIS"], "alice"),
+    ] }),
+    manche({ partie: "avec-wu", temps: 11_000, vus: [coup(1, ["WU"], "alice")] }),
+  );
+  const compte = new Map(compteurWuQi("ods9").map((l) => [l.mot, l]));
+  verifie("QI est sorti deux fois et trouve une",
+    compte.get("QI")?.sorti === 2 && compte.get("QI")?.trouve === 1,
+    `sorti ${compte.get("QI")?.sorti}, trouvé ${compte.get("QI")?.trouve}`);
+  verifie("WU une fois, trouve une fois",
+    compte.get("WU")?.sorti === 1 && compte.get("WU")?.trouve === 1,
+    `sorti ${compte.get("WU")?.sorti}, trouvé ${compte.get("WU")?.trouve}`);
+  verifie("QIS ne compte pas pour QI", compte.get("QI")?.sorti === 2);
 }
 
 // ------------------------------------------------------- l'invalidation

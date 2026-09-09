@@ -10,7 +10,7 @@
  */
 import {
   BORNES_NORMALE, BORNES_SUPER, CATEGORIES, categorieDesReglages,
-  estPartieNormale, grilleDeBornes, reglagesRecevables,
+  completeAuNegatif, estPartieNormale, grilleDeBornes, reglagesRecevables,
 } from "../src/categories.ts";
 import { avec, configParDefaut, primesParDefaut, type ConfigPartie } from "../src/config.ts";
 import { setLayout, LAYOUTS } from "../src/bonus.ts";
@@ -42,16 +42,26 @@ console.log("  --- la table ---\n");
   const ids = CATEGORIES.map((c) => c.id);
   verifie("aucun identifiant en double", new Set(ids).size === ids.length,
     `${ids.length} categories`);
-  const page1 = CATEGORIES.filter((c) => c.page === 1);
-  const page2 = CATEGORIES.filter((c) => c.page === 2);
-  verifie("dix categories sur la premiere page", page1.length === 10,
-    page1.map((c) => c.id).join(" "));
-  verifie("douze sur la seconde", page2.length === 12, "de 10 sur 10 a 15 sur 15 joker");
-  verifie("la categorie reine vient en tete", CATEGORIES[0]!.id === "normale");
-  verifie("le solo la suit", CATEGORIES[1]!.id === "normale-solo"
-    && CATEGORIES[1]!.solo === true);
+  const petites = CATEGORIES.filter((c) => c.taille === "petit");
+  const normales = CATEGORIES.filter((c) => c.taille === "normal");
+  const grandes = CATEGORIES.filter((c) => c.taille === "grand");
+  verifie("dix petits formats, de 2 sur 2 a 6 sur 6 joker", petites.length === 10,
+    petites.map((c) => c.id).join(" "));
+  verifie("dix categories normales", normales.length === 10,
+    normales.map((c) => c.id).join(" "));
+  verifie("douze grands formats", grandes.length === 12, "de 10 sur 10 a 15 sur 15 joker");
+  verifie("les trois tailles couvrent la table",
+    petites.length + normales.length + grandes.length === CATEGORIES.length);
+  verifie("seuls les grands formats se completent au negatif",
+    CATEGORIES.every((c) => completeAuNegatif(c) === (c.taille === "grand")));
+  verifie("la categorie reine vient en tete des normales",
+    normales[0]!.id === "normale");
+  verifie("le solo la suit", normales[1]!.id === "normale-solo"
+    && normales[1]!.solo === true);
   verifie("la montante est marquee comme telle",
-    CATEGORIES[2]!.id === "montante" && CATEGORIES[2]!.montante === true);
+    normales[2]!.id === "montante" && normales[2]!.montante === true);
+  verifie("les petits formats sont reconnus",
+    categorieDesReglages(avec(normale(), { tirage: 2, jouables: 2 }))?.id === "2-2");
   verifie("chaque format a sa variante joker",
     CATEGORIES.filter((c) => !c.solo && !c.montante && c.joker).length
       === CATEGORIES.filter((c) => !c.solo && !c.montante && !c.joker).length);
@@ -115,10 +125,13 @@ console.log("\n  --- ce qui est refuse ---\n");
     return { primes: p };
   })());
   // Un format que la table ne porte pas : les reglages sont recevables, mais
-  // aucun tableau ne les accueille.
-  const petit = avec(normale(), { tirage: 6, jouables: 6 });
+  // aucun tableau ne les accueille. « 6 sur 6 » en etait un avant que les
+  // petits formats n'existent ; « 7 sur 9 » n'a jamais eu de tableau.
+  const horsTable = avec(normale(), { tirage: 9, jouables: 7 });
   verifie("un format hors table n'a pas de categorie",
-    reglagesRecevables(petit) && categorieDesReglages(petit) === null, "6 sur 6");
+    reglagesRecevables(horsTable) && categorieDesReglages(horsTable) === null, "7 sur 9");
+  verifie("mais le 6 sur 6 en a une, maintenant",
+    categorieDesReglages(avec(normale(), { tirage: 6, jouables: 6 }))?.id === "6-6");
 }
 
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);
