@@ -5369,8 +5369,12 @@ addEventListener("popstate", () => {
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
   if (page === "records") { fermerLaPartie(false); ouvrirLesRecords(false); return; }
   if (page === "partie") {
-    const id = new URLSearchParams(location.search).get("partie");
-    if (id !== null) { void ouvrirLaPartie(id, false); return; }
+    const p = new URLSearchParams(location.search);
+    const id = p.get("partie");
+    if (id !== null) {
+      void ouvrirLaPartie(id, p.get("mode") === "rejeu" ? "rejeu" : "route");
+      return;
+    }
   }
   fermerLeProfil(false);
   fermerLeSolveur(false);
@@ -7883,11 +7887,12 @@ function outilsDeLigne(partie: string): HTMLElement[] {
   feuille.title = t("La feuille de route de cette partie");
   const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
   revoir.title = t("Revoir la partie, coup par coup");
-  for (const [b, auDebut] of [[feuille, false], [revoir, true]] as [HTMLButtonElement, boolean][]) {
+  for (const [b, mode] of
+       [[feuille, "route"], [revoir, "rejeu"]] as [HTMLButtonElement, "route" | "rejeu"][]) {
     b.type = "button";
     b.addEventListener("click", (e) => {
       e.stopPropagation();
-      void ouvrirLaPartie(partie, auDebut);
+      void ouvrirLaPartie(partie, mode);
     });
   }
   return [feuille, revoir];
@@ -8270,12 +8275,29 @@ function ouvrirLesRecords(pousser = true): void {
   if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
 }
 
+/**
+ * LA PAGE SE VIDE ET SE REMET A ZERO EN LA QUITTANT.
+ *
+ * Deux raisons, et elles vont ensemble. La table de cent lignes continuerait de
+ * peser sur le document une fois masquee, comme la liste de l'anagrammeur. Et
+ * la retrouver telle qu'on l'avait laissee -- sur un tableau annexe d'un format
+ * a douze lettres en anglais -- oblige a se rappeler ce qu'on y avait mis. Elle
+ * rouvre donc toujours au meme endroit : partie normale, grille normale,
+ * chevalet normal, tous les joueurs.
+ */
 function fermerLesRecords(pousser = true): void {
   $("corps-records").hidden = true;
   $("corps-salons").hidden = false;
-  // On ne garde pas cent lignes derriere une page fermee : masquee, la table
-  // continue de peser sur le document, comme la liste de l'anagrammeur.
   $("rc-tableau").replaceChildren();
+  rcCategorie = "normale";
+  rcTaille = "normal";
+  rcGrille = "normale";
+  rcLexique = DICO_PAR_DEFAUT;
+  rcSolo = false;
+  rcVue = "classement";
+  rcAnnexe = "chrono";
+  rcSens = "rates";
+  rcLongueur = null;
   if (pousser) window.history.pushState({ page: "salons" }, "", location.pathname);
 }
 
@@ -8346,6 +8368,15 @@ interface PartieRelue {
 let prPartie: PartieRelue | null = null;
 /** Le coup qu'on regarde, de 0 (grille vide) au dernier. */
 let prVu = 0;
+/**
+ * LES DEUX MODES NE MONTRENT PAS LA MEME CHOSE, et c'est pour cela qu'ils sont
+ * deux. La feuille de route donne la partie d'un coup d'oeil : tous ses coups,
+ * qui les a trouves, pour combien. Le rejeu fait etudier UN coup : la grille
+ * telle qu'elle etait, et toutes les solutions qu'elle offrait.
+ *
+ * Melanger les deux donnait une page qui faisait mal les deux.
+ */
+let prMode: "route" | "rejeu" = "route";
 
 /** Le pavage de la partie relue, retrouve par son nom. */
 function prPavage(): LayoutFn {
@@ -8552,48 +8583,65 @@ let prAttente = 0;
 interface PalierRelu { score: number; moves: [string, string, number, number][] }
 
 function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
-  const boite = $("pr-paliers");
-  boite.replaceChildren();
-  if (n === 0) return;
+  const piste = $("pr-piste");
+  const compte = $("pr-sols-compte");
+  piste.style.height = "";
+  if (n === 0 || paliers !== null && paliers.length === 0) {
+    piste.replaceChildren(el("div", "pr-attente",
+      n === 0 ? t("Aucun coup joué.") : t("Aucune solution trouvée.")));
+    compte.textContent = "";
+    return;
+  }
   if (paliers === null) {
-    boite.appendChild(el("div", "pr-attente", t("recherche des solutions…")));
+    piste.replaceChildren(el("div", "pr-attente", t("recherche des solutions…")));
+    compte.textContent = "";
     return;
   }
-  if (paliers.length === 0) {
-    boite.appendChild(el("div", "pr-attente", t("Aucune solution trouvée.")));
-    return;
-  }
+
+  // A PLAT ET PAR POINTS DECROISSANTS, comme dans le rejeu d'un salon : les
+  // paliers ne sont qu'une facon de grouper, et de gros pavés se lisent moins
+  // bien qu'une liste continue. Le top et ses isotops sont en gras.
   const joue = prPartie?.coups[n - 1];
   const bornes = prPartie?.config.bornes ?? null;
-  for (const [rang, p] of paliers.entries()) {
-    const bloc = el("div", "pr-palier");
-    const tete = el("div", "pr-palier-tete");
-    tete.appendChild(el("b", "", String(p.score)));
-    // Le palier 0 est le top et ses isotops ; les suivants sont les sous-tops.
-    tete.appendChild(el("span", "", rang === 0
-      ? (p.moves.length > 1 ? t("top et isotops") : t("top"))
-      : t2("{n} solution(s)", { n: p.moves.length })));
-    bloc.appendChild(tete);
-    for (const [mot, dir, x, y] of p.moves.slice(0, 60)) {
-      const l = el("div", "pr-solution");
-      // Le coup REELLEMENT joue se distingue de ses isotops.
-      const pose = joue !== undefined && joue.word === mot
-        && joue.dir === dir && joue.x === x && joue.y === y;
-      if (pose) l.classList.add("pr-pose");
-      l.appendChild(el("span", "pr-sol-mot", mot));
-      l.appendChild(el("span", "pr-sol-ref", noteCoup(dir as "H" | "V", x, y, bornes)));
-      bloc.appendChild(l);
+  const meilleur = paliers[0]?.score ?? 0;
+  const lignes: { mot: string; dir: "H" | "V"; x: number; y: number; score: number }[] = [];
+  for (const p of paliers) {
+    for (const [mot, dir, x, y] of p.moves) {
+      lignes.push({ mot, dir: dir as "H" | "V", x, y, score: p.score });
     }
-    if (p.moves.length > 60) {
-      bloc.appendChild(el("div", "pr-attente",
-        t2("et {n} autres", { n: p.moves.length - 60 })));
-    }
-    boite.appendChild(bloc);
   }
+
+  const H = 26;
+  piste.style.height = `${lignes.length * H}px`;
+  piste.replaceChildren();
+  lignes.forEach((s, i) => {
+    const b = el("button", `sol${s.score === meilleur ? " best" : ""}`) as HTMLButtonElement;
+    b.type = "button";
+    b.style.top = `${i * H}px`;
+    // Le coup REELLEMENT joue se marque, comme le rejeu marque celui qu'on
+    // examine : c'est ce qu'on cherche des l'ouverture.
+    if (joue !== undefined && joue.word === s.mot && joue.dir === s.dir
+        && joue.x === s.x && joue.y === s.y) {
+      b.setAttribute("aria-current", "true");
+      if (joue.player !== null) b.title = t2("trouvé par {qui}", { qui: joue.player });
+    }
+    b.appendChild(el("span", "w", s.mot));
+    b.appendChild(el("span", "p", noteCoup(s.dir, s.x, s.y, bornes)));
+    b.appendChild(el("span", "s", String(s.score)));
+    b.appendChild(el("span", "d", s.score === meilleur ? t("top") : String(s.score - meilleur)));
+    b.appendChild(el("span", "n", ""));
+    piste.appendChild(b);
+  });
+  compte.textContent = t2(lignes.length > 1 ? "{n} solutions" : "{n} solution",
+    { n: lignes.length });
+  $("pr-sols").scrollTop = 0;
 }
 
 /** Va chercher les solutions du coup, si on ne les a pas deja. */
 async function prChercherLesPaliers(n: number): Promise<void> {
+  // Elles n'ont d'objet que dans le rejeu : la feuille de route ne les montre
+  // pas, et les chercher pour rien ferait travailler le serveur a chaque ligne.
+  if (prMode !== "rejeu") return;
   if (prPartie === null || n === 0) { prPeindreLesPaliers(n, []); return; }
   const deja = prPaliers.get(n);
   if (deja !== undefined) { prPeindreLesPaliers(n, deja); return; }
@@ -8624,28 +8672,30 @@ function prAller(n: number): void {
   prDessiner();
   prPeindreLeCoup();
   void prChercherLesPaliers(prVu);
+  if (prMode !== "route") return;
   for (const l of $("pr-route").querySelectorAll("tr.pr-vu")) l.classList.remove("pr-vu");
-  const lignes = $("pr-route").querySelectorAll("tbody tr");
-  const active = lignes[prVu - 1];
-  if (active !== undefined) {
-    active.classList.add("pr-vu");
-    active.scrollIntoView({ block: "nearest" });
-  }
+  const active = $("pr-route").querySelectorAll("tbody tr")[prVu - 1];
+  if (active !== undefined) active.classList.add("pr-vu");
 }
 
 /**
  * Ouvre une partie archivee. `auDebut` distingue les deux boutons : « Revoir »
  * la reprend au premier coup, « FdR » la montre finie, ce qu'on lit d'abord.
  */
-async function ouvrirLaPartie(id: string, auDebut: boolean): Promise<void> {
+async function ouvrirLaPartie(id: string, mode: "route" | "rejeu"): Promise<void> {
+  prMode = mode;
   $("corps-records").hidden = true;
   $("corps-partie").hidden = false;
+  // Chaque mode montre sa colonne, et rien d'autre.
+  $("pr-bloc-solutions").hidden = mode !== "rejeu";
+  $("pr-bloc-route").hidden = mode !== "route";
+  $("corps-partie").classList.toggle("pr-seule", mode === "route");
   $("pr-titre").textContent = t("chargement…");
   $("pr-detail").textContent = "";
   $("pr-route").replaceChildren();
   $("pr-coup").replaceChildren();
-  window.history.pushState({ page: "partie", id },
-    "", `?page=partie&partie=${encodeURIComponent(id)}`);
+  window.history.pushState({ page: "partie", id, mode },
+    "", `?page=partie&partie=${encodeURIComponent(id)}&mode=${mode}`);
 
   let data: PartieRelue;
   try {
@@ -8677,18 +8727,24 @@ async function ouvrirLaPartie(id: string, auDebut: boolean): Promise<void> {
 
   const curseur = $("pr-curseur") as HTMLInputElement;
   curseur.max = String(data.coups.length);
-  prPeindreLaRoute();
-  prAller(auDebut ? 1 : data.coups.length);
+  if (mode === "route") prPeindreLaRoute();
+  // Le rejeu s'ouvre au premier coup, la feuille sur la partie finie.
+  prAller(mode === "rejeu" ? 1 : data.coups.length);
 }
 
 function fermerLaPartie(pousser = true): void {
   $("corps-partie").hidden = true;
   $("corps-records").hidden = false;
-  // On ne garde pas une partie entiere derriere une page fermee.
+  // ON NE GARDE RIEN DERRIERE UNE PAGE FERMEE. Une partie relue, ce sont des
+  // centaines de placements et jusqu'a cent solutions par coup : masquee, elle
+  // continuerait de peser sur le document et sur la memoire.
   prPartie = null;
   prPaliers.clear();
+  prVu = 0;
   $("pr-route").replaceChildren();
-  $("pr-paliers").replaceChildren();
+  $("pr-piste").replaceChildren();
+  $("pr-coup").replaceChildren();
+  $("pr-sols-compte").textContent = "";
   if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
 }
 

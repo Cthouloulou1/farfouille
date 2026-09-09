@@ -95,6 +95,15 @@ export interface PaliersRequest {
   rack: string;
   /** Les caramels poses avant ce coup-la. */
   avant: Placement[];
+  /**
+   * Plafond en nombre de coups, ou absent pour TOUT rendre.
+   *
+   * Le rejeu d'un salon veut tout : il est virtualise, et la memoire du serveur
+   * est bornee ailleurs. La relecture d'une partie archivee, elle, se contente
+   * de cent lignes -- le generateur tronque a une frontiere de palier et ne
+   * sacrifie jamais celui du top (SPEC.md §23).
+   */
+  maxMoves?: number;
 }
 
 /**
@@ -122,11 +131,32 @@ parentPort!.on(
     // La graine ne sert qu'a departager les isotops ; les paliers, eux, ne
     // dependent que de la position et du tirage.
     const top = pickTop(gen.moves, mulberry32(1), passe.cfg.joker);
+    // LE PLAFOND SE POSE ICI, ET PAS DANS LE GENERATEUR.
+    //
+    // `maxMoves` n'y sert a rien avec `prune: false` : son elagage renonce des
+    // que le nombre de paliers voulus est infini, ce qu'implique `prune: false`.
+    // Le garde-fou existait donc, mais restait inopérant sur ce chemin -- une
+    // position ouverte a deux jokers rendait ses 18 655 solutions.
+    //
+    // On coupe donc apres coup, a une FRONTIERE DE PALIER et jamais au milieu :
+    // un palier tronque ferait croire qu'il n'a que ce qu'on en montre. Le
+    // palier du top passe toujours, meme s'il depasse a lui seul -- ses isotops
+    // sont tous des tops valables.
+    let tiers = top === null ? [] : top.tiers;
+    if (msg.maxMoves !== undefined && tiers.length > 0) {
+      let total = 0, n = 0;
+      for (const g of tiers) {
+        if (n > 0 && total + g.length > msg.maxMoves) break;
+        total += g.length;
+        n++;
+      }
+      tiers = tiers.slice(0, Math.max(1, n));
+    }
     parentPort!.postMessage({
       t: "paliers",
       id: msg.id,
       ms: performance.now() - t0,
-      tiers: top === null ? [] : top.tiers.map((g) => ({
+      tiers: tiers.map((g) => ({
         score: g[0]!.score,
         moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
       })),

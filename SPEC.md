@@ -4313,6 +4313,18 @@ de l'en-tête dit laquelle des deux colonnes classe.
 > Le jour où l'on voudra trier librement, ce sera en rendant la colonne
 > cliquable, pas en ajoutant un réglage à côté du tableau.
 
+**La page des records se vide et se remet à zéro quand on la quitte.** La table
+de cent lignes continuerait de peser sur le document une fois masquée, et la
+retrouver telle qu'on l'avait laissée — sur un tableau annexe d'un format à douze
+lettres en anglais — oblige à se rappeler ce qu'on y avait mis. Elle rouvre
+toujours au même endroit : partie normale, grille normale, chevalet normal, tous
+les joueurs.
+
+**La page ne saute pas quand on change de coup.** La liste des solutions change
+de hauteur d'un coup à l'autre : la barre de défilement disparaissait puis
+revenait, et toute la page se décalait de sa largeur à chaque flèche. La
+gouttière est réservée en permanence.
+
 **Une couleur par joueur**, dans la colonne des noms, dans la feuille de route,
 et sur le **top** lui-même — l'œil relie le mot à celui qui l'a trouvé sans
 traverser le tableau,
@@ -4667,6 +4679,30 @@ son lexique sert à valider un mot tapé et à l'anagrammeur, pas à balayer une
 grille. Le client les demande au serveur, qui les cherche dans le fil du salon.
 Salon fermé, plus de fil, plus de paliers.
 
+#### Cent solutions, et le garde-fou qui manquait
+
+La demande de paliers du fil n'avait **aucun plafond**, et le garde-fou qui aurait
+dû l'en donner un était **inopérant sur ce chemin**. Elle appelle le générateur
+avec `prune: false`, ce qui met le nombre de paliers voulus à l'infini ; or
+l'élagage renonce dès que ce nombre est infini, et `maxMoves` avec lui. Une
+position ouverte à deux jokers rendait donc ses 18 655 solutions (§10), au
+serveur puis au client.
+
+Le rejeu d'un salon peut le supporter — sa liste est virtualisée, et la mémoire
+du serveur y est bornée à 60 000 solutions. La relecture d'une partie archivée,
+elle, se contente de **cent** : on relit une partie finie, cent lignes suffisent
+à comprendre le coup, et le reste ne serait ni lu ni utile.
+
+La coupe se fait **à une frontière de palier**, jamais au milieu : un palier
+tronqué ferait croire qu'il n'a que ce qu'on en montre. Le palier du top passe
+toujours, même s'il dépasse à lui seul — ses isotops sont tous des tops valables.
+Mesuré sur une partie d'essai : 81, 51, 83 et 95 solutions rendues là où le coup 5
+en donnait 725.
+
+> Le plafond borne ce qui est **rendu**, pas ce qui est **cherché** : la
+> génération explore toujours tout. La borner demanderait l'élagage, qui perdrait
+> de vrais sous-tops.
+
 Or la demande de paliers du fil est **sans état** : elle reçoit les caramels
 posés avant le coup et le tirage, et se bâtit une grille neuve. Il suffit donc
 d'un **fil à part**, partagé par toutes les parties archivées de même
@@ -4678,17 +4714,25 @@ Trois fils au plus, rendus après un quart d'heure sans lecture : chacun coûte 
 rejeu navigue — coup 7, coup 8, retour au 7 — et que chaque demande a besoin de
 la partie entière pour savoir ce qui était posé avant.
 
-La page montre alors, sous la grille, **toutes les solutions du coup** : le top
-et ses isotops d'abord, les sous-tops ensuite, et le coup réellement joué s'y
-distingue.
+La page montre alors, **à droite de la grille**, les solutions du coup : à plat et
+par points décroissants, le top et ses isotops en gras, la référence, les points
+et l'écart. Le coup réellement joué s'y marque.
 
-**FdR et Revoir ouvrent la même page**, à deux endroits : la feuille de route la
-montre finie, ce qu'on lit d'abord ; le rejeu la reprend au premier coup.
+**C'est la liste du rejeu d'un salon, exactement** — mêmes classes, même mise en
+page. Elle est déjà bonne ; en dessiner une autre, avec de gros pavés par palier,
+se lisait moins bien pour rien.
 
-**La feuille se lit en entier**, sans ascenseur à elle. L'aligner sur la hauteur
-de la grille obligeait à faire défiler une lucarne pour lire une partie de
-vingt-sept coups : c'est la page qui défile, pas la feuille. La grille, elle,
-reste sous les yeux tant qu'il y a deux colonnes.
+#### Deux modes, et ils ne montrent pas la même chose
+
+**FdR** donne la partie d'un coup d'œil : tous ses coups, qui les a trouvés, pour
+combien. Elle prend toute la largeur, sans grille ni curseur — ils n'y ont rien à
+faire — et **se lit en entier**, sans ascenseur à elle : c'est la page qui défile.
+
+**Revoir** fait étudier *un* coup : la grille telle qu'elle était, et les
+solutions qu'elle offrait. Il s'ouvre au premier coup ; la feuille de route n'y
+paraît pas.
+
+Les mêler donnait une page qui faisait mal les deux.
 
 **Le caramel couvre sa case exactement.** Il était posé en retrait de deux
 pixels : un liseré de la case restait visible tout autour, le cerne du coup

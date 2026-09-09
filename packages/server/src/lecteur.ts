@@ -128,6 +128,22 @@ function filDeLecture(layout: LayoutName, config: ConfigSerialisee): FilDeLectur
   return f;
 }
 
+/**
+ * COMBIEN DE SOLUTIONS UN COUP ARCHIVE EN REND.
+ *
+ * La demande de paliers du fil n'en avait AUCUN plafond : elle appelle le
+ * generateur avec `prune: false`, qui rend alors tout -- une position ouverte a
+ * deux jokers en compte 18 655 (SPEC.md §10). C'est ce que le rejeu d'un salon
+ * demande, et il le peut : il est virtualise, et la memoire du serveur y est
+ * bornee a 60 000 solutions.
+ *
+ * Ici, on relit une partie finie : cent lignes suffisent a comprendre le coup,
+ * et le reste ne serait ni lu ni utile. Le generateur tronque TOUJOURS a une
+ * frontiere de palier et ne sacrifie jamais le palier du top, meme s'il depasse
+ * a lui seul.
+ */
+const SOLUTIONS_MAX = 100;
+
 /** Un palier : un score, et tous les coups qui l'atteignent. */
 export interface PalierRelu {
   score: number;
@@ -156,7 +172,7 @@ export function paliersDuCoup(
   const id = prochaineDemande++;
   return new Promise((resolve) => {
     f.attente.set(id, (r) => resolve((r.tiers ?? []) as PalierRelu[]));
-    f.w.postMessage({ t: "paliers", id, rack: coup.rack, avant });
+    f.w.postMessage({ t: "paliers", id, rack: coup.rack, avant, maxMoves: SOLUTIONS_MAX });
   });
 }
 

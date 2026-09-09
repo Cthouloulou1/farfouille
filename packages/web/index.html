@@ -1180,6 +1180,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* ---------------------------------------------- UNE PARTIE ARCHIVEE, RELUE
    Voir SPEC.md §23. La grille a gauche, la feuille de route a droite. */
 .partie-relue { padding-top: 14px; width: min(100%, max(70vw, 1100px)); margin: 0 auto; }
+/* LA PAGE NE SAUTE PAS QUAND ON CHANGE DE COUP. La liste des solutions change
+   de hauteur d'un coup a l'autre : la barre de defilement disparaissait puis
+   revenait, et toute la page se decalait de sa largeur a chaque fleche. */
+html { scrollbar-gutter: stable; }
 .pr-tete { display: flex; align-items: baseline; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
 .pr-tete h1 { margin: 0; font-size: 19px; font-weight: 600; }
 .pr-retour { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
@@ -1192,6 +1196,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    en haut recouvre la feuille qui defile dessous. */
 @media (min-width: 981px) { .pr-gauche { position: sticky; top: 12px; } }
 @media (max-width: 980px) { .pr-corps { grid-template-columns: minmax(0, 1fr); } }
+/* LA FEUILLE DE ROUTE PREND TOUTE LA LARGEUR. Elle donne la partie d'un coup
+   d'oeil ; la grille et son curseur n'ont rien a y faire. */
+.pr-seule .pr-corps { grid-template-columns: minmax(0, 1fr); }
+.pr-seule .pr-gauche { display: none; }
 
 #pr-grille { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--field); border-radius: 4px; }
 .pr-nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
@@ -1224,19 +1232,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* Le mot et la case du joueur, quand le logiciel a retenu un autre isotop. */
 .pr-sien { font-style: normal; color: var(--ink-faint); font-weight: 400; }
 
-/* LES SOLUTIONS DU COUP. Un bloc par palier, le score en tete. */
-.pr-titre-sol { margin: 18px 0 8px; }
-.pr-paliers { display: flex; flex-direction: column; gap: 10px; }
-.pr-palier { border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
-.pr-palier-tete { display: flex; align-items: baseline; gap: 8px; padding: 5px 9px; background: var(--field); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); }
-.pr-palier-tete b { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--ink); text-transform: none; }
-.pr-solution { display: flex; align-items: baseline; gap: 10px; padding: 3px 9px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.pr-solution:nth-child(even) { background: var(--field); }
-/* Le coup reellement joue se distingue de ses isotops. */
-.pr-solution.pr-pose { background: var(--accent-bg); }
-.pr-sol-mot { flex: 1; min-width: 0; color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
-.pr-sol-ref { flex: none; color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; font-size: 11.5px; }
-.pr-attente { padding: 8px 2px; font-size: 12.5px; color: var(--ink-faint); }
+/* LES SOLUTIONS DU COUP, exactement la liste du rejeu d'un salon : `.sols`,
+   `.sols-piste` et `.sol` sont ceux-la, sans rien de neuf. Elle est deja bonne,
+   il n'y avait aucune raison d'en dessiner une autre. */
+.pr-sols-tete { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.pr-sols-tete span { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; }
+.pr-sols { max-height: 560px; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 0; }
+.pr-attente { padding: 10px 15px; font-size: 12.5px; color: var(--ink-faint); }
 
 @media (max-width: 900px) { .side { display: none; } }
 </style>
@@ -1457,14 +1459,23 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" id="pr-fin" title="Dernier coup">⏭</button>
         </div>
         <div class="pr-coup" id="pr-coup"></div>
-        <!-- TOUTES LES SOLUTIONS DU COUP, refaites par le serveur a la demande :
-             le top et ses isotops d'abord, les sous-tops ensuite. C'est ce
-             qu'on vient etudier apres coup. -->
-        <h2 class="pr-titre-sol">Solutions du coup</h2>
-        <div class="pr-paliers" id="pr-paliers"></div>
       </div>
 
-      <div class="pr-droite">
+      <!-- LES SOLUTIONS DU COUP, dans le rejeu et lui seul. Elles reprennent
+           exactement la liste du rejeu d'un salon : le top et ses isotops en
+           gras, la reference, les points, l'ecart. Cent lignes au plus. -->
+      <div class="pr-droite" id="pr-bloc-solutions">
+        <div class="pr-sols-tete">
+          <h2>Solutions du coup</h2>
+          <span id="pr-sols-compte"></span>
+        </div>
+        <div class="sols pr-sols" id="pr-sols"><div class="sols-piste" id="pr-piste"></div></div>
+      </div>
+
+      <!-- LA FEUILLE DE ROUTE, dans son mode a elle et lui seul. Les deux modes
+           ne montrent pas la meme chose : l'un donne la partie d'un coup d'oeil,
+           l'autre fait etudier un coup. -->
+      <div class="pr-droite" id="pr-bloc-route">
         <h2>Feuille de route</h2>
         <div class="pr-route" id="pr-route"></div>
       </div>
