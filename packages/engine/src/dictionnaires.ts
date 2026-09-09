@@ -187,6 +187,16 @@ export function distributionDuSac(d: Dictionnaire, sacs = 1): Record<string, num
 /** Celui qu'on joue quand rien ne dit lequel : les parties d'avant en sont la. */
 export const DICO_PAR_DEFAUT = "ods9";
 
+/**
+ * TOUS LES LEXIQUES CONFONDUS, et ce n'est pas un lexique.
+ *
+ * Cette valeur ne se joue pas : une partie se joue avec UNE liste de mots, et
+ * un salon qui en melangerait deux n'aurait plus de regle. Elle n'existe que
+ * pour la page des records, ou l'on veut voir les cent meilleurs temps du site
+ * toutes langues confondues -- et savoir qui mene.
+ */
+export const LEXIQUE_TOUS = "tous";
+
 /** Le dictionnaire choisi par une langue. */
 export const DICO_PAR_LANGUE: Readonly<Record<Langue, string>> = {
   fr: "ods9",

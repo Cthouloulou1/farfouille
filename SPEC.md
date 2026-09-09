@@ -695,6 +695,31 @@ Un mot invalide affiche **« mot non valide »**.
 
 Le tirage est **toujours en ordre alphabétique**, dans tous les cas.
 
+#### Les caramels envoyés attendent la réponse à l'écran
+
+`Entrée` effaçait les caramels sur-le-champ, et le serveur reposait les mêmes
+cinquante millisecondes plus tard : **un clignotement à chaque top trouvé**,
+précisément au moment où l'on regarde ce qu'on vient de poser. Le pire des cas
+était celui où l'on avait **raison**.
+
+Les caramels restent donc en place, **avec l'aspect exact qu'ils avaient sous la
+main**, jusqu'à la réponse. C'était le top : l'état les reprend à l'identique, et
+rien ne bouge. Ce ne l'était pas : ils s'en vont, ce qui est l'information.
+
+Ce n'est **pas un pari sur le résultat**. On ne les dessine pas comme des
+caramels *posés* — on les laisse tels qu'on les tenait. Rien n'affirme qu'ils
+sont acceptés : ils attendent, comme le joueur.
+
+L'ordre des messages fait le reste : le serveur **diffuse la pose avant de
+répondre** à l'essai, et une liaison en conserve l'ordre. Les caramels en
+attente sont donc devenus de vrais caramels au moment où l'on cesse de les
+dessiner. Mesuré : la grille porte les quatre caramels de `NUIT` avant l'envoi,
+et **les porte encore** dans l'instant qui suit `Entrée`.
+
+Trois choses les effacent — la pose diffusée, la réponse à l'essai, un numéro de
+coup qui change — et un délai de sécurité de quatre secondes, pour qu'une réponse
+perdue ne laisse pas des caramels sur la grille jusqu'à la fin de la partie.
+
 ### L'échelle s'efface devant la case désignée
 
 Cliquer une case allume sa colonne et sa ligne dans les règles graduées. Loin de
@@ -4414,13 +4439,28 @@ fréquents à une même table — tombaient sinon sur des teintes voisines.
 **Un pseudo se clique**, partout où il paraît dans les tableaux : il ouvre la
 fiche de son joueur, par-dessus la page, qui reste où elle est.
 
-**Au-delà de trois noms, on compte au lieu d'énumérer, et le compte s'ouvre.**
-Une partie se joue à autant de joueurs qu'elle a de coups — c'est la seule borne,
-et une 2 sur 2 en a compté cinquante-huit. Trois noms tiennent dans la colonne,
-six s'y chevauchent. Le « +6 » est donc un **bouton** : il ouvre la tablée
-entière, un joueur par ligne avec ses tops, chacun menant à sa fiche. L'infobulle
-contenait déjà la liste, mais une infobulle ne se lit ni au doigt ni au clavier,
-ne défile pas, et ne mène nulle part.
+**Passé ce que la ligne peut porter, on compte au lieu d'énumérer, et le compte
+s'ouvre.** Une partie se joue à autant de joueurs qu'elle a de coups — c'est la
+seule borne, et une 2 sur 2 en a compté cinquante-huit.
+
+**Deux limites, et c'est la première atteinte qui compte** : cinq noms, et la
+place d'une ligne. Un nombre seul ne suffisait pas — cinq pseudos courts tiennent,
+cinq « Pierre-Antoine » non. On compte donc aussi les **caractères**, la mention
+« (invité) » comprise, qui pèse à elle seule autant qu'un pseudo court. C'est elle
+qui coûte le plus cher dans cette cellule : à cinq invités on n'en montre que
+trois, à cinq comptes on montre les cinq. Elle disparaîtra d'elle-même quand les
+comptes seront la règle.
+
+Le premier nom passe toujours, aussi long soit-il : une cellule qui ne montrerait
+que « +1 » ne dirait rien.
+
+Et la cellule **reste sur une ligne**. Les noms passaient à la ligne suivante, ce
+qui faisait des rangées deux fois plus hautes que les autres au milieu du tableau.
+
+Le « +6 » est un **bouton** : il ouvre la tablée entière, un joueur par ligne avec
+ses tops, chacun menant à sa fiche. L'infobulle contenait déjà la liste, mais une
+infobulle ne se lit ni au doigt ni au clavier, ne défile pas, et ne mène nulle
+part.
 
 ### Seuls les grands formats se complètent au négatif
 
@@ -4433,6 +4473,23 @@ négatifs**, dans un bloc visiblement séparé.
 nombre, et mêler les deux ferait passer pour un record une partie où l'on a raté
 un top. Les tableaux de « Pas beaucoup » et de « Normal » s'arrêtent donc à ce
 qui a été topé, fût-ce une seule ligne.
+
+#### « Tous » les lexiques, et ce n'est pas un lexique
+
+Le filtre des lexiques porte une valeur de plus : **Tous**. Elle ne se joue pas —
+une partie se joue avec **une** liste de mots, et un salon qui en mélangerait deux
+n'aurait plus de règle. Elle n'existe que sur la page des records, et pour une
+seule raison : voir les cent meilleurs temps du site **toutes langues
+confondues**, et savoir qui mène.
+
+Pour les classements et les tableaux annexes, il n'y a rien à faire : ne pas
+filtrer sur le lexique, c'est déjà les prendre tous.
+
+Pour les **mots**, les compteurs s'additionnent. Le même mot vit souvent dans
+plusieurs listes, et il n'y a alors qu'un seul mot à classer. La table confondue
+ne se garde pas, elle vaut le temps d'une lecture : la garder obligerait à
+l'invalider à chaque coup joué, pour un tableau qu'on regarde une fois par jour.
+**WU et QI ne bougent pas** : ils n'existent qu'en ODS, « Tous » n'y change rien.
 
 Le **négatif d'une manche** est la somme, sur les coups non trouvés, de l'écart
 entre le top et la meilleure solution soumise — le score entier du top quand
@@ -4813,6 +4870,19 @@ Trois fils au plus, rendus après un quart d'heure sans lecture : chacun coûte 
 rejeu navigue — coup 7, coup 8, retour au 7 — et que chaque demande a besoin de
 la partie entière pour savoir ce qui était posé avant.
 
+**Les cases de cette grille se joignent, au pixel d'écran.** Elles étaient
+peintes à un pixel de leur bord, ce qui laissait une bande de fond à droite et en
+bas de **chacune** : entre une case colorée et un caramel, ce pixel clair se
+voyait comme un trou dans la grille — un liséré blanc le long de chaque mot. Le
+quadrillage suffit à séparer les cases, et il se trace par-dessus.
+
+Et le côté d'une case ne tombe presque jamais sur un pixel entier — 560 divisé
+par quinze fait 37,33 — si bien que chaque bord se partageait entre deux pixels.
+Les bornes s'arrondissent donc au pixel d'écran, comme sur la grille du salon.
+Vérifié : entre une case « mot compte double » et le caramel voisin il reste
+**un** pixel, celui du bord du caramel, et **aucun** pixel clair ne touche un
+caramel sur tout le plateau.
+
 La page montre alors, **à droite de la grille**, les solutions du coup : à plat et
 par points décroissants, le top et ses isotops en gras, la référence, les points
 et l'écart. Le coup réellement joué s'y marque.
@@ -4824,14 +4894,21 @@ se lisait moins bien pour rien.
 #### Deux modes, et ils ne montrent pas la même chose
 
 **FdR** donne la partie d'un coup d'œil : tous ses coups, qui les a trouvés, pour
-combien. Elle prend toute la largeur, sans grille ni curseur — ils n'y ont rien à
-faire — et **se lit en entier**, sans ascenseur à elle : c'est la page qui défile.
+combien. **C'est un tableau, et il s'ouvre en fenêtre** — comme la feuille de
+route d'un salon, au même geste et au même dessin. Il n'a besoin ni de grille, ni
+de curseur, ni d'une page à lui : la page des records reste derrière, et il n'y a
+ni bouton retour ni configuration à retrouver en revenant. `Échap` la referme,
+comme partout ailleurs.
+
+**Cliquer une ligne ouvre ce coup dans « Revoir ».** La feuille n'a pas de grille
+à côté d'elle : ce qu'on veut en cliquant un coup, c'est le voir.
 
 **Revoir** fait étudier *un* coup : la grille telle qu'elle était, et les
-solutions qu'elle offrait. Il s'ouvre au premier coup ; la feuille de route n'y
-paraît pas.
+solutions qu'elle offrait. Celui-là **garde sa page** : une grille à gauche, cent
+solutions à droite, un curseur et les flèches ne tiennent pas dans une lucarne.
 
-Les mêler donnait une page qui faisait mal les deux.
+Les mêler donnait une page qui faisait mal les deux ; les mettre tous les deux en
+fenêtre aurait rétréci la grille jusqu'à ne plus rien lire.
 
 **Le caramel couvre sa case exactement.** Il était posé en retrait de deux
 pixels : un liseré de la case restait visible tout autour, le cerne du coup

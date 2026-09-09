@@ -816,14 +816,36 @@ export interface LigneDeMot {
  * IL NE SE RECALCULE PLUS A CHAQUE LECTURE. Le compteur est tenu au fil des
  * coups (voir `Observation.coup`) ; il ne reste ici qu'a trier ce qui y est.
  */
+/**
+ * TOUS LES LEXIQUES CONFONDUS. Voir SPEC.md §23.
+ *
+ * Le meme mot vit souvent dans plusieurs listes -- il est de l'ODS comme du CSW
+ * -- et il n'y a alors qu'un seul mot a classer : les compteurs s'additionnent.
+ * La table ne se garde pas, elle vaut le temps d'une lecture : la garder
+ * obligerait a l'invalider a chaque coup joue, pour un tableau qu'on regarde
+ * une fois par jour.
+ */
+function compteursConfondus(): Map<string, CompteurDeMot> {
+  const t = new Map<string, CompteurDeMot>();
+  for (const table of mots.values()) {
+    for (const [mot, e] of table) {
+      const deja = t.get(mot);
+      if (deja === undefined) t.set(mot, { trouves: e.trouves, rates: e.rates });
+      else { deja.trouves += e.trouves; deja.rates += e.rates; }
+    }
+  }
+  return t;
+}
+
 function classerLesMots(
-  lexique: string,
+  /** `null` : tous les lexiques confondus. */
+  lexique: string | null,
   longueur: number | undefined,
   cle: (e: CompteurDeMot) => number,
   garder: (e: CompteurDeMot) => boolean,
 ): LigneDeMot[] {
   const lignes: LigneDeMot[] = [];
-  for (const [mot, e] of compteurs(lexique)) {
+  for (const [mot, e] of lexique === null ? compteursConfondus() : compteurs(lexique)) {
     if (longueur !== undefined && mot.length !== longueur) continue;
     if (!garder(e)) continue;
     const fois = e.trouves + e.rates;
@@ -851,7 +873,7 @@ function classerLesMots(
  * UN MOT JAMAIS RATE N'A RIEN A FAIRE DANS LES RATES. Il y figurait, tout en
  * bas, avec un zero : c'est un tableau des mots vus, pas des mots rates.
  */
-export function motsRates(lexique: string, longueur?: number): LigneDeMot[] {
+export function motsRates(lexique: string | null, longueur?: number): LigneDeMot[] {
   return classerLesMots(lexique, longueur, (e) => e.rates, (e) => e.rates > 0);
 }
 
@@ -861,7 +883,7 @@ export function motsRates(lexique: string, longueur?: number): LigneDeMot[] {
  * Un mot rate une seule fois n'est pas un mot que la table connait : il sort
  * des trouves, meme s'il a par ailleurs ete trouve dix fois.
  */
-export function motsTrouves(lexique: string, longueur?: number): LigneDeMot[] {
+export function motsTrouves(lexique: string | null, longueur?: number): LigneDeMot[] {
   return classerLesMots(lexique, longueur, (e) => e.trouves,
     (e) => e.trouves > 0 && e.rates === 0);
 }

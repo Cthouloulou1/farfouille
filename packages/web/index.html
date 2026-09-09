@@ -1131,7 +1131,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    ne defile jamais lateralement. */
 .rc-tableau { margin-top: 4px; overflow-x: auto; }
 .rc-tableau table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
-.rc-tableau th { padding: 9px 10px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; border-bottom: 1px solid var(--rule); }
+.rc-tableau th { padding: 9px 7px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap; border-bottom: 1px solid var(--rule); }
 .rc-tableau th.g, .rc-tableau td.g { text-align: left; }
 .rc-tableau th.c, .rc-tableau td.c { text-align: center; }
 /* La colonne qui fait le classement se voit : « la plus chere » et « la plus
@@ -1142,7 +1142,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    rang jusqu'au dernier chiffre sans se tromper de rangee. */
 .rc-tableau tbody tr:nth-child(odd) { background: var(--field); }
 .rc-tableau tbody tr:hover { background: var(--hover); }
-.rc-tableau td { padding: 8px 10px; text-align: right; color: var(--ink-soft); white-space: nowrap; }
+.rc-tableau td { padding: 8px 7px; text-align: right; color: var(--ink-soft); white-space: nowrap; }
 .rc-tableau td.g { text-align: left; }
 .rc-tableau td.fort { color: var(--ink); font-weight: 500; }
 
@@ -1157,7 +1157,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 /* LES JOUEURS, chacun de sa couleur. Elle se derive du nom : rien a
    enregistrer, et le meme joueur garde la sienne d'un tableau a l'autre. */
-.rc-joueurs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 24em; white-space: normal; }
+/* LES NOMS TIENNENT SUR UNE LIGNE. Ils passaient a la ligne suivante, ce qui
+   faisait des rangees deux fois plus hautes que les autres au milieu du
+   tableau. Le nombre de noms montres s'y adapte -- voir `nomsQuiTiennent`. */
+.rc-joueurs { display: flex; flex-wrap: nowrap; align-items: center; gap: 7px; max-width: 28em; white-space: nowrap; }
 .rc-joueur { display: inline-flex; align-items: baseline; gap: 4px; font-weight: 500; }
 .rc-joueur .pastille-couleur { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
 .rc-joueur i { font-style: normal; font-size: .82em; color: var(--ink-faint); font-weight: 400; }
@@ -1201,7 +1204,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 @media (max-width: 720px) {
   .rc-declinaisons { gap: 14px; }
-  .rc-joueurs { max-width: 12em; }
+  .rc-joueurs { max-width: 14em; }
 }
 
 /* ---------------------------------------------- UNE PARTIE ARCHIVEE, RELUE
@@ -1221,8 +1224,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 @media (max-width: 980px) { .pr-corps { grid-template-columns: minmax(0, 1fr); } }
 /* LA FEUILLE DE ROUTE PREND TOUTE LA LARGEUR. Elle donne la partie d'un coup
    d'oeil ; la grille et son curseur n'ont rien a y faire. */
-.pr-seule .pr-corps { grid-template-columns: minmax(0, 1fr); }
-.pr-seule .pr-gauche { display: none; }
 
 #pr-grille { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--field); border-radius: 4px; }
 .pr-nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
@@ -1237,9 +1238,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pr-coup .pr-rien { color: var(--ink-faint); }
 
 .pr-droite h2 { margin-bottom: 8px; }
-/* LA FEUILLE SE LIT EN ENTIER, sans deroulement a elle. L'aligner sur la
-   hauteur de la grille obligeait a faire defiler une lucarne pour lire une
-   partie de vingt-sept coups : c'est la page qui defile, pas la feuille. */
+/* LA FEUILLE DE ROUTE VIT DANS UNE FENETRE, et non dans la page : c'est un
+   tableau, il n'a besoin ni de grille ni de curseur a cote de lui. Ses en-tetes
+   collent en haut, sinon on perd le nom des colonnes des la dixieme ligne. */
+.fenetre-route { width: min(940px, 96vw); }
+.fr-tete { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
+.fr-tete h2 { margin: 0; }
+.fenetre-route .pr-route { max-height: 62vh; overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--rule); border-radius: 4px; }
+.fenetre-route .pr-route th { position: sticky; top: 0; z-index: 1; }
+.fenetre-route .valider { width: auto; margin-top: 16px; padding: 10px 22px; }
 .pr-route { overflow-x: auto; }
 .pr-route table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pr-route th { padding: 7px 9px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
@@ -1466,7 +1473,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
        route. Les deux sont ici, et rien d'autre ne bouge. -->
   <div class="corps partie-relue" id="corps-partie" hidden>
     <div class="pr-tete">
-      <button type="button" class="pr-retour" id="pr-retour">← Records</button>
+      <button type="button" class="pr-retour" id="pr-retour">← Retour</button>
       <h1 id="pr-titre">Partie</h1>
       <span class="pr-detail" id="pr-detail"></span>
     </div>
@@ -1487,7 +1494,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <!-- LES SOLUTIONS DU COUP, dans le rejeu et lui seul. Elles reprennent
            exactement la liste du rejeu d'un salon : le top et ses isotops en
            gras, la reference, les points, l'ecart. Cent lignes au plus. -->
-      <div class="pr-droite" id="pr-bloc-solutions">
+      <div class="pr-droite">
         <div class="pr-sols-tete">
           <h2>Solutions du coup</h2>
           <span id="pr-sols-compte"></span>
@@ -1495,13 +1502,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="sols pr-sols" id="pr-sols"><div class="sols-piste" id="pr-piste"></div></div>
       </div>
 
-      <!-- LA FEUILLE DE ROUTE, dans son mode a elle et lui seul. Les deux modes
-           ne montrent pas la meme chose : l'un donne la partie d'un coup d'oeil,
-           l'autre fait etudier un coup. -->
-      <div class="pr-droite" id="pr-bloc-route">
-        <h2>Feuille de route</h2>
-        <div class="pr-route" id="pr-route"></div>
-      </div>
     </div>
   </div>
 
@@ -1595,6 +1595,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    ELLE VIT A LA RACINE, ET NON DANS L'ACCUEIL : l'accueil est masque des
    qu'on entre dans un salon, et tout ce qu'il contient avec lui. Posee
    dedans, elle s'ouvrait sans jamais rien montrer. -->
+<!-- LA FEUILLE DE ROUTE D'UNE PARTIE ARCHIVEE, EN FENETRE. Voir SPEC.md §23.
+
+     C'est un tableau : il n'a besoin de rien autour, et le salon en a deja une
+     exactement comme ca (Ctrl+R). Meme geste, meme dessin, et la page des
+     records reste derriere -- ni bouton retour, ni configuration a retrouver.
+
+     « Revoir », lui, garde sa page : grille a gauche, cent solutions a droite,
+     un curseur et les fleches ne tiennent pas dans une lucarne. -->
+<div class="voile" id="voile-route" hidden>
+  <div class="pseudo fenetre-route">
+    <div class="fr-tete">
+      <h2>Feuille de route</h2>
+      <span class="pr-detail" id="fr-detail"></span>
+    </div>
+    <div class="pr-route" id="pr-route"></div>
+    <button class="valider" id="fr-close" type="button">Fermer</button>
+  </div>
+</div>
+
 <!-- LA TABLEE D'UNE PARTIE, quand elle ne tient pas dans sa cellule. -->
 <div class="voile" id="voile-tablee" hidden>
   <div class="pseudo tablee">

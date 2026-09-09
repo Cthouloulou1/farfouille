@@ -42,7 +42,7 @@ import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import { dawgPath } from "../../engine/src/paths.ts";
 import {
-  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaireConnu, type Langue,
+  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, LEXIQUE_TOUS, dictionnaireConnu, type Langue,
 } from "../../engine/src/dictionnaires.ts";
 import { Seau, seauDeRafale, SOUMISSIONS_PAR_SECONDE, MESSAGES_PAR_SECONDE } from "./debit.ts";
 import { lireLeRapport, enregistrerLeRapport } from "./bugs.ts";
@@ -761,21 +761,27 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
 
   if (url === "/api/records/mots" && req.method === "GET") {
     const p = parametres(req);
-    // Le lexique n'est pas optionnel : deux lexiques n'ont pas les memes mots,
-    // et les melanger ferait un tableau qui ne veut rien dire.
+    // « Tous » additionne les compteurs de toutes les listes : le meme mot y
+    // vit souvent deux fois, et il n'y a qu'un mot a classer (SPEC.md §23).
+    const confondus = p.get("lexique") === LEXIQUE_TOUS;
     const lexique = dictionnaireConnu(p.get("lexique")) ? p.get("lexique")! : DICO_PAR_DEFAUT;
     // WU et QI ne se comptent que dans le lexique officiel du jeu francophone :
     // « WU » n'existe pas en anglais.
     if (p.get("sens") === "wuqi") {
+      // WU et QI n'existent qu'en ODS : « tous les lexiques » ne change rien.
       json(res, 200, { lexique, wuqi: compteurWuQi(lexique) });
       return;
     }
     const brute = Number(p.get("longueur"));
     const longueur = Number.isInteger(brute) && brute >= 2 && brute <= 15 ? brute : undefined;
+    const quel = confondus ? null : lexique;
     const lignes = p.get("sens") === "trouves"
-      ? motsTrouves(lexique, longueur)
-      : motsRates(lexique, longueur);
-    json(res, 200, { lexique, longueur: longueur ?? null, lignes });
+      ? motsTrouves(quel, longueur)
+      : motsRates(quel, longueur);
+    json(res, 200, {
+      lexique: confondus ? LEXIQUE_TOUS : lexique,
+      longueur: longueur ?? null, lignes,
+    });
     return;
   }
 

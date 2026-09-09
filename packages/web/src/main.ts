@@ -14,7 +14,8 @@ import {
   type ConfigPartie, type ConfigSerialisee,
 } from "../../engine/src/config.ts";
 import {
-  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tailleDuSac, tousLesDictionnaires,
+  DICO_PAR_DEFAUT, DICO_PAR_LANGUE, LEXIQUE_TOUS, dictionnaire, tailleDuSac,
+  tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import { CATEGORIES, TAILLES, type Taille } from "../../engine/src/categories.ts";
 import { LAYOUTS, type LayoutFn } from "../../engine/src/bonus.ts";
@@ -1093,12 +1094,17 @@ function draw() {
   // LE MOT QU'ON TAPE EST UN MOT, pas une file de lettres : ses caramels colles
   // ne portent pas de bord entre eux. Ils se voient par-dessus la grille, donc
   // leurs voisins sont les leurs, et non ceux du plateau.
+  //
+  // Le mot ENVOYE prend la meme place et le meme aspect, le temps de la
+  // reponse (voir `attente`) : les deux ne coexistent jamais.
   const tapees = typedCells();
-  const sousLaMain = new Set(tapees.map((c) => `${c.x},${c.y}`));
-  for (const c of tapees) {
-    const isBlank = blanks.has(`${c.x},${c.y}`);
-    caramel(c.x, c.y, c.letter, isBlank, isBlank ? C.jface : C.face,
-      isBlank ? C.jedge : C.cursor, undefined, cotesDe(sousLaMain, c.x, c.y));
+  const enMain = tapees.length > 0
+    ? tapees.map((c) => ({ ...c, blank: blanks.has(`${c.x},${c.y}`) }))
+    : attente;
+  const sousLaMain = new Set(enMain.map((c) => `${c.x},${c.y}`));
+  for (const c of enMain) {
+    caramel(c.x, c.y, c.letter, c.blank, c.blank ? C.jface : C.face,
+      c.blank ? C.jedge : C.cursor, undefined, cotesDe(sousLaMain, c.x, c.y));
   }
 
   if (ghost !== null && !ghostCache && cell >= 6) {
@@ -2011,6 +2017,38 @@ function placeDuJoueur(
   if (!ailleurs || sien === undefined) return `<span class="place"></span>`;
   const ou = noteCoup(sien.dir, sien.x, sien.y, cfg.bornes);
   return `<button type="button" class="place" title="voir ${echapper(sien.word)} en ${ou}">${ou}</button>`;
+}
+
+/**
+ * LE MOT QU'ON VIENT D'ENVOYER, ENCORE A L'ECRAN.
+ *
+ * Le mot tape disparaissait a la seconde ou l'on appuyait sur Entree, et le
+ * serveur reposait les memes caramels cinquante millisecondes plus tard : un
+ * clignotement a chaque top trouve, precisement au moment ou l'on regarde ce
+ * qu'on vient de poser. C'etait le pire des cas quand on avait RAISON.
+ *
+ * Les caramels restent donc en place, avec l'aspect exact qu'ils avaient sous
+ * la main, jusqu'a la reponse. Si c'etait le top, l'etat les reprend a
+ * l'identique et rien ne bouge ; sinon ils s'en vont, ce qui est l'information.
+ *
+ * Ce n'est pas un pari sur le resultat : on ne les dessine pas comme des
+ * caramels POSES, on les laisse tels qu'on les tenait. Rien n'affirme qu'ils
+ * sont acceptes -- ils attendent, comme le joueur.
+ */
+let attente: { x: number; y: number; letter: string; blank: boolean }[] = [];
+let attenteMinuteur = 0;
+/**
+ * Au-dela, on renonce a attendre.
+ *
+ * Une reponse perdue -- liaison coupee au mauvais moment -- laisserait sinon
+ * des caramels sur la grille pour le reste de la partie.
+ */
+const ATTENTE_MAX_MS = 4000;
+
+function oublierLAttente(): void {
+  if (attente.length === 0) return;
+  attente = [];
+  clearTimeout(attenteMinuteur);
 }
 
 /** Le mot en cours de frappe et son score, mis a jour a chaque lettre. */
@@ -4237,6 +4275,7 @@ addEventListener("keydown", (e) => {
   // les raccourcis du jeu n'ont pas cours tant qu'on n'est pas dans un salon.
   if (!$("join").hidden) {
     if (e.key !== "Escape") return;
+    if (!$("voile-route").hidden) { fermerLaFeuille(); return; }
     if (!$("voile-tablee").hidden) { $("voile-tablee").hidden = true; return; }
     if (!$("voile-joueur").hidden) { $("voile-joueur").hidden = true; return; }
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
@@ -4471,6 +4510,7 @@ function submit() {
     flash(r.error === "TROP_DE_CARAMELS"
       ? t2("C'est une partie {x} sur {y}", { x: cfg.jouables, y: cfg.tirage })
       : t(PLAY_MESSAGE[r.error]), "bad");
+    oublierLAttente();
     typed = ""; paintRack(); paintCurrent(); draw();
     return;
   }
@@ -4482,6 +4522,14 @@ function submit() {
   if (best === null || r.move.score > best.score) {
     best = { word: r.move.word, score: r.move.score, dir: r.move.dir, x: r.move.x, y: r.move.y };
   }
+  // Les caramels tapes restent a l'ecran le temps de la reponse : voir
+  // `attente`. A relever AVANT de vider `typed`, qui les decrit.
+  const jokers = blankPositions();
+  attente = typedCells().map((q) => ({
+    x: q.x, y: q.y, letter: q.letter, blank: jokers.has(`${q.x},${q.y}`),
+  }));
+  clearTimeout(attenteMinuteur);
+  attenteMinuteur = window.setTimeout(() => { attente = []; draw(); }, ATTENTE_MAX_MS);
   envoyer({ t: "try", dir: c.dir, x: c.x, y: c.y, typed: c.typed });
   typed = ""; paintRack(); paintSide(); draw();
 }
@@ -4900,6 +4948,10 @@ function applyState(s: {
   // recentre tout : la grille sursaute. Sa presence ne depend donc plus de son
   // CONTENU -- qui change a chaque coup et finit vide -- mais de la variante,
   // qui ne change pas de la partie.
+  // UN COUP QUI TOMBE REND INUTILE LE MOT QU'ON ATTENDAIT : ou il vient d'etre
+  // pose, ou il ne le sera plus. Garde-fou en plus de `placed` et de `result`,
+  // pour le cas ou l'etat arriverait seul.
+  if (s.moveNumber !== moveNumber) oublierLAttente();
   const sac = s.sac ?? "";
   $("rb-dico").textContent = dictionnaire(cfg.dictionnaire).nom;
   $("sac").hidden = cfg.pioche === "probabilites";
@@ -5165,6 +5217,9 @@ function connect() {
       // changer, et certains sont peut-etre jouables maintenant.
       motsRefuses = [];
       typed = "";
+      // Les caramels en attente viennent d'etre poses pour de vrai, ou ne le
+      // seront jamais : dans les deux cas l'etat les remplace.
+      oublierLAttente();
       // EN REJEU, LE MOT EN EVIDENCE EST CE QU'ON EXAMINE. Un coup qui tombe
       // ailleurs ne doit pas l'effacer -- on regarde le passe, pas le direct.
       // La regle datait des parties closes, ou aucun coup ne tombe plus ; elle
@@ -5195,9 +5250,20 @@ function connect() {
       return;
     }
 
+    // LA REPONSE A NOTRE ESSAI. Elle arrive APRES le coup, quand c'etait le top
+    // -- le serveur diffuse la pose avant de repondre, et l'ordre des messages
+    // est garanti : les caramels en attente sont deja devenus de vrais caramels
+    // quand on cesse de les dessiner. C'est ce qui fait qu'on ne voit rien.
+    //
     // Le serveur parle francais : ses messages passent par la table comme les
     // autres. Un message inconnu d'elle s'affiche tel quel.
-    if (m.t === "result" && !m.ok) flash(t(m.message), "bad");
+    if (m.t === "result") {
+      const restait = attente.length > 0;
+      oublierLAttente();
+      if (!m.ok) flash(t(m.message), "bad");
+      if (restait) draw();
+      return;
+    }
   });
 }
 
@@ -5480,7 +5546,7 @@ addEventListener("popstate", () => {
     const p = new URLSearchParams(location.search);
     const id = p.get("partie");
     if (id !== null) {
-      void ouvrirLaPartie(id, p.get("mode") === "rejeu" ? "rejeu" : "route");
+      void ouvrirLaPartie(id, Math.max(1, Number(p.get("coup")) || 1));
       return;
     }
   }
@@ -7953,10 +8019,40 @@ function chronoDeManche(c: number | null): string {
  * Combien de pseudos une cellule montre avant de compter les autres.
  *
  * UNE PARTIE PEUT SE JOUER A AUTANT DE JOUEURS QU'ELLE A DE COUPS : c'est la
- * seule borne, et une 2 sur 2 en a compte cinquante-huit. Trois noms tiennent
- * dans la colonne, six s'y chevauchent et ne se lisent plus du tout.
+ * seule borne, et une 2 sur 2 en a compte cinquante-huit.
+ *
+ * DEUX LIMITES, ET C'EST LA PREMIERE ATTEINTE QUI COMPTE. Un nombre seul ne
+ * suffit pas : cinq pseudos courts tiennent sur une ligne, cinq comme
+ * « Pierre-Antoine » non. On compte donc aussi les CARACTERES -- la mention
+ * « (invité) » comprise, qui en pese neuf -- et l'on s'arrete au premier des
+ * deux plafonds. Le premier nom passe toujours, aussi long soit-il : une
+ * cellule qui ne montrerait que « +1 » ne dirait rien.
  */
-const NOMS_MONTRES = 3;
+const NOMS_MONTRES = 5;
+const CARACTERES_MONTRES = 40;
+
+/**
+ * Ce que ce nom occupe, en largeur de caractere ordinaire.
+ *
+ * La mention de l'invite compte pour sept et non pour ses neuf signes : elle
+ * s'ecrit en plus petit. C'est elle qui coute le plus cher dans cette cellule
+ * -- cinq invites ne tiennent pas sur une ligne, cinq comptes si.
+ */
+function placeDuNom(j: { nom: string; invite: boolean }): number {
+  return j.nom.length + (j.invite ? 7 : 0);
+}
+
+/** Combien de noms tiennent sur la ligne, avant de compter les autres. */
+function nomsQuiTiennent(joueurs: readonly { nom: string; invite: boolean }[]): number {
+  let n = 0, place = 0;
+  for (const j of joueurs) {
+    if (n >= NOMS_MONTRES) break;
+    place += placeDuNom(j);
+    if (n > 0 && place > CARACTERES_MONTRES) break;
+    n++;
+  }
+  return Math.max(1, n);
+}
 
 /** Un pseudo de sa couleur, cliquable : il mene a la fiche de son joueur. */
 function pseudoCliquable(nom: string): HTMLButtonElement {
@@ -8019,7 +8115,8 @@ function cellulesDesJoueurs(joueurs: LigneDeRecord["joueurs"]): HTMLElement {
     boite.appendChild(el("span", "rc-de-plus", "—"));
     return boite;
   }
-  for (const j of joueurs.slice(0, NOMS_MONTRES)) {
+  const tiennent = nomsQuiTiennent(joueurs);
+  for (const j of joueurs.slice(0, tiennent)) {
     const un = el("span", "rc-joueur");
     const point = el("span", "pastille-couleur");
     point.style.background = couleurDuJoueur(j.nom);
@@ -8028,9 +8125,9 @@ function cellulesDesJoueurs(joueurs: LigneDeRecord["joueurs"]): HTMLElement {
     if (j.invite) un.appendChild(el("i", "", t("(invité)")));
     boite.appendChild(un);
   }
-  if (joueurs.length > NOMS_MONTRES) {
+  if (joueurs.length > tiennent) {
     const plus = el("button", "rc-plus",
-      `+${joueurs.length - NOMS_MONTRES}`) as HTMLButtonElement;
+      `+${joueurs.length - tiennent}`) as HTMLButtonElement;
     plus.type = "button";
     plus.title = t("Voir tous les joueurs");
     plus.addEventListener("click", (e) => { e.stopPropagation(); ouvrirLaTablee(joueurs); });
@@ -8099,16 +8196,18 @@ function tableauVide(quoi: string): HTMLElement {
 function outilsDeLigne(partie: string): HTMLElement[] {
   const feuille = el("button", "rc-outil", t("FdR")) as HTMLButtonElement;
   feuille.title = t("La feuille de route de cette partie");
+  feuille.type = "button";
+  feuille.addEventListener("click", (e) => {
+    e.stopPropagation();
+    void ouvrirLaFeuille(partie);
+  });
   const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
   revoir.title = t("Revoir la partie, coup par coup");
-  for (const [b, mode] of
-       [[feuille, "route"], [revoir, "rejeu"]] as [HTMLButtonElement, "route" | "rejeu"][]) {
-    b.type = "button";
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      void ouvrirLaPartie(partie, mode);
-    });
-  }
+  revoir.type = "button";
+  revoir.addEventListener("click", (e) => {
+    e.stopPropagation();
+    void ouvrirLaPartie(partie);
+  });
   return [feuille, revoir];
 }
 
@@ -8157,6 +8256,7 @@ function ligneDePartie(
 
 /** Le nom court d'un lexique, tel que les reglages l'ecrivent. */
 function nomCourtDuDico(id: string): string {
+  if (id === LEXIQUE_TOUS) return t("Tous");
   return tousLesDictionnaires().find((d) => d.id === id)?.nom ?? id;
 }
 
@@ -8432,6 +8532,21 @@ function peindreLesDeclinaisons(): void {
 function peindreLesLexiques(): void {
   const boite = $("rc-lexique");
   boite.replaceChildren();
+  // TOUS LES LEXIQUES CONFONDUS, en tete de la rangee. Ce n'est pas un lexique
+  // -- on ne joue pas avec, une partie se joue avec UNE liste de mots -- mais
+  // c'est le seul endroit ou les cent meilleurs temps du site se comparent
+  // toutes langues melees (SPEC.md §23).
+  const tous = el("button", "", t("Tous")) as HTMLButtonElement;
+  tous.type = "button";
+  tous.dataset["v"] = LEXIQUE_TOUS;
+  tous.title = t("Toutes les listes de mots, à la même table");
+  tous.setAttribute("aria-pressed", String(rcLexique === LEXIQUE_TOUS));
+  tous.addEventListener("click", () => {
+    rcLexique = LEXIQUE_TOUS;
+    peindreLesLexiques();
+    void chargerLesRecords();
+  });
+  boite.appendChild(tous);
   for (const d of tousLesDictionnaires()) {
     const b = el("button", "", d.nom) as HTMLButtonElement;
     b.type = "button";
@@ -8583,14 +8698,13 @@ let prPartie: PartieRelue | null = null;
 /** Le coup qu'on regarde, de 0 (grille vide) au dernier. */
 let prVu = 0;
 /**
- * LES DEUX MODES NE MONTRENT PAS LA MEME CHOSE, et c'est pour cela qu'ils sont
- * deux. La feuille de route donne la partie d'un coup d'oeil : tous ses coups,
- * qui les a trouves, pour combien. Le rejeu fait etudier UN coup : la grille
- * telle qu'elle etait, et toutes les solutions qu'elle offrait.
+ * LA PARTIE DONT LA FEUILLE DE ROUTE EST OUVERTE EN FENETRE.
  *
- * Melanger les deux donnait une page qui faisait mal les deux.
+ * Elle est a part de `prPartie` : la feuille s'ouvre par-dessus la page des
+ * records, sans y toucher, et les deux peuvent porter sur deux parties
+ * differentes -- on lit une feuille, on la ferme, on en rejoue une autre.
  */
-let prMode: "route" | "rejeu" = "route";
+let frPartie: PartieRelue | null = null;
 
 /** Le pavage de la partie relue, retrouve par son nom. */
 function prPavage(): LayoutFn {
@@ -8631,23 +8745,39 @@ function prDessiner(): void {
   g.fillStyle = C.field;
   g.fillRect(0, 0, taille, taille);
 
-  // Les cases, et leurs primes.
+  /**
+   * LES CASES SE JOIGNENT, AU PIXEL D'ECRAN.
+   *
+   * Elles etaient peintes a `c - 1`, ce qui laissait un pixel de fond a droite
+   * et en bas de CHACUNE : entre une case coloree et un caramel, ce pixel clair
+   * se voyait comme un trou dans la grille. Le quadrillage suffit a separer les
+   * cases, et il se trace par-dessus.
+   *
+   * Et le cote d'une case ne tombe presque jamais sur un pixel entier -- 560
+   * divise par quinze fait 37,33 -- si bien que chaque bord se partageait entre
+   * deux pixels. Les bornes s'arrondissent donc au pixel d'ecran, comme sur la
+   * grille du salon (§9).
+   */
+  const bord = (i: number): number => Math.round(i * c * dpr) / dpr;
+
   const pavage = prPavage();
   for (let i = 0; i < cotes; i++) {
     for (let j = 0; j < cotes; j++) {
-      const x = i - bornes, y = j - bornes;
-      const cle = pavage(x, y);
+      const cle = pavage(i - bornes, j - bornes);
       const teinte = (C as Record<string, string>)[cle];
       g.fillStyle = teinte ?? C.field;
-      g.fillRect(i * c, j * c, c - 1, c - 1);
+      g.fillRect(bord(i), bord(j), bord(i + 1) - bord(i), bord(j + 1) - bord(j));
     }
   }
   g.strokeStyle = C.line;
   g.lineWidth = 1;
+  g.beginPath();
   for (let i = 0; i <= cotes; i++) {
-    g.beginPath(); g.moveTo(i * c, 0); g.lineTo(i * c, taille); g.stroke();
-    g.beginPath(); g.moveTo(0, i * c); g.lineTo(taille, i * c); g.stroke();
+    const q = bord(i) + .5;
+    g.moveTo(q, 0); g.lineTo(q, taille);
+    g.moveTo(0, q); g.lineTo(taille, q);
   }
+  g.stroke();
 
   // Les caramels, jusqu'au coup regarde. Ceux du coup lui-meme se cernent :
   // c'est la seule chose qu'on cherche en avancant d'un coup.
@@ -8664,31 +8794,32 @@ function prDessiner(): void {
     for (const p of prPartie.coups[k]?.placements ?? []) {
       const i = p.x + bornes, j = p.y + bornes;
       if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
-      // LE CARAMEL COUVRE SA CASE EXACTEMENT. Il etait pose en retrait de deux
-      // pixels, si bien qu'un liseré de la case restait visible tout autour et
-      // que le cerne du coup regarde ne recouvrait pas le bord. Le fond prend
-      // la case entiere, et le trait se pose SUR son bord.
+      // LE CARAMEL COUVRE SA CASE EXACTEMENT, aux memes bornes que la case
+      // elle-meme : c'est ce qui garantit qu'aucun pixel de fond ne subsiste
+      // entre les deux.
+      const px = bord(i), py = bord(j);
+      const w = bord(i + 1) - px, h = bord(j + 1) - py;
       const joker = p.blank === true;
       const neuf = neufs.has(`${p.x},${p.y}`);
       g.fillStyle = joker ? C.jface : C.face;
-      g.fillRect(i * c, j * c, c, c);
+      g.fillRect(px, py, w, h);
       g.strokeStyle = neuf ? C.accent : (joker ? C.jedge : C.edge);
       g.lineWidth = neuf ? 2 : 1;
       g.beginPath();
-      cheminDuCaramel(g, i * c, j * c, c, c, 0,
+      cheminDuCaramel(g, px, py, w, h, 0,
         cotesDe(poses, p.x, p.y), g.lineWidth / 2);
       g.stroke();
       g.fillStyle = C.ink;
       g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(p.letter, i * c + c / 2, j * c + c / 2 - c * 0.02);
+      g.fillText(p.letter, px + w / 2, py + h / 2 - h * 0.02);
       // La valeur du caramel, en petit et DANS le caramel : elle debordait.
       const v = joker ? 0 : (valeurs[p.letter] ?? 0);
       g.font = `500 ${Math.round(c * 0.24)}px "IBM Plex Mono", monospace`;
       g.textAlign = "right";
       g.textBaseline = "alphabetic";
-      g.fillText(String(v), i * c + c - c * 0.12, j * c + c - c * 0.12);
+      g.fillText(String(v), px + w - w * 0.12, py + h - h * 0.12);
     }
   }
 }
@@ -8734,7 +8865,8 @@ function prPeindreLeCoup(): void {
 /** La feuille de route de la partie relue : un coup par ligne. */
 function prPeindreLaRoute(): void {
   const boite = $("pr-route");
-  if (prPartie === null) { boite.replaceChildren(); return; }
+  const partie = frPartie;
+  if (partie === null) { boite.replaceChildren(); return; }
   const table = el("table");
   const thead = el("thead");
   const tr = el("tr");
@@ -8746,9 +8878,8 @@ function prPeindreLaRoute(): void {
   table.appendChild(thead);
 
   const corps = el("tbody");
-  prPartie.coups.forEach((m, i) => {
+  partie.coups.forEach((m, i) => {
     const l = el("tr");
-    if (i + 1 === prVu) l.classList.add("pr-vu");
     l.appendChild(el("td", "", String(m.n)));
     l.appendChild(el("td", "g", m.notation || m.rack));
     // LE MOT REELLEMENT POSE SE LIT A COTE DU MOT RETENU. Le logiciel tire au
@@ -8763,7 +8894,7 @@ function prPeindreLaRoute(): void {
       mot.appendChild(el("i", "pr-sien", ` (${m.playerWord})`));
     }
     l.appendChild(mot);
-    const bornes = prPartie?.config.bornes ?? null;
+    const bornes = partie.config.bornes ?? null;
     const ref = el("td", "g", noteCoup(m.dir, m.x, m.y, bornes));
     if (m.playerDir !== undefined && m.playerX !== undefined && m.playerY !== undefined
         && (m.playerDir !== m.dir || m.playerX !== m.x || m.playerY !== m.y)) {
@@ -8781,9 +8912,13 @@ function prPeindreLaRoute(): void {
       par.appendChild(nom);
     }
     l.appendChild(par);
-    // CLIQUER UNE LIGNE MENE LA GRILLE A CE COUP : c'est ce qu'on attend d'une
-    // feuille de route posee a cote d'un plateau.
-    l.addEventListener("click", () => prAller(i + 1));
+    // CLIQUER UNE LIGNE OUVRE CE COUP DANS « REVOIR ». La feuille n'a pas de
+    // grille a cote d'elle : ce qu'on veut en cliquant un coup, c'est le voir.
+    l.addEventListener("click", () => {
+      const id = partie.partie;
+      fermerLaFeuille();
+      void ouvrirLaPartie(id, i + 1);
+    });
     corps.appendChild(l);
   });
   table.appendChild(corps);
@@ -8861,9 +8996,6 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
 
 /** Va chercher les solutions du coup, si on ne les a pas deja. */
 async function prChercherLesPaliers(n: number): Promise<void> {
-  // Elles n'ont d'objet que dans le rejeu : la feuille de route ne les montre
-  // pas, et les chercher pour rien ferait travailler le serveur a chaque ligne.
-  if (prMode !== "rejeu") return;
   if (prPartie === null || n === 0) { prPeindreLesPaliers(n, []); return; }
   const deja = prPaliers.get(n);
   if (deja !== undefined) { prPeindreLesPaliers(n, deja); return; }
@@ -8894,64 +9026,95 @@ function prAller(n: number): void {
   prDessiner();
   prPeindreLeCoup();
   void prChercherLesPaliers(prVu);
-  if (prMode !== "route") return;
-  for (const l of $("pr-route").querySelectorAll("tr.pr-vu")) l.classList.remove("pr-vu");
-  const active = $("pr-route").querySelectorAll("tbody tr")[prVu - 1];
-  if (active !== undefined) active.classList.add("pr-vu");
 }
 
 /**
  * Ouvre une partie archivee. `auDebut` distingue les deux boutons : « Revoir »
  * la reprend au premier coup, « FdR » la montre finie, ce qu'on lit d'abord.
  */
-async function ouvrirLaPartie(id: string, mode: "route" | "rejeu"): Promise<void> {
-  prMode = mode;
-  $("corps-records").hidden = true;
-  $("corps-partie").hidden = false;
-  // Chaque mode montre sa colonne, et rien d'autre.
-  $("pr-bloc-solutions").hidden = mode !== "rejeu";
-  $("pr-bloc-route").hidden = mode !== "route";
-  $("corps-partie").classList.toggle("pr-seule", mode === "route");
-  $("pr-titre").textContent = t("chargement…");
-  $("pr-detail").textContent = "";
-  $("pr-route").replaceChildren();
-  $("pr-coup").replaceChildren();
-  window.history.pushState({ page: "partie", id, mode },
-    "", `?page=partie&partie=${encodeURIComponent(id)}&mode=${mode}`);
-
-  let data: PartieRelue;
+/** Va chercher une partie archivee. Rend le message d'erreur, ou la partie. */
+async function chercherLaPartie(id: string): Promise<PartieRelue | string> {
   try {
     const r = await fetch(`/api/partie/${encodeURIComponent(id)}`);
     const brut = await r.json();
     if (!r.ok) {
-      $("pr-titre").textContent = typeof brut?.message === "string"
-        ? brut.message : t("serveur injoignable");
-      return;
+      return typeof brut?.message === "string" ? brut.message : t("serveur injoignable");
     }
-    data = brut as PartieRelue;
+    return brut as PartieRelue;
   } catch {
-    $("pr-titre").textContent = t("serveur injoignable");
-    return;
+    return t("serveur injoignable");
   }
-  prPartie = data;
+}
 
-  const cat = CATEGORIES.find((c) => c.id === data.manche.categorie);
-  $("pr-titre").textContent = t(cat?.nom ?? data.manche.categorie);
-  const joueurs = data.manche.joueurs
+/** Ce qu'on dit d'une partie sous son titre : qui, combien de coups, quand. */
+function resumeDeLaPartie(d: PartieRelue): string {
+  const joueurs = d.manche.joueurs
     .map((j) => j.invite ? `${j.nom} ${t("(invité)")}` : j.nom).join(", ");
-  $("pr-detail").textContent = [
+  return [
     joueurs || t("personne"),
-    `${data.coups.length} ${data.coups.length > 1 ? t("coups") : t("coup")}`,
-    `${data.manche.cumul} ${t("points")}`,
-    new Date(data.manche.at).toLocaleDateString(langue() === "en" ? "en-GB" : "fr-FR",
+    `${d.coups.length} ${d.coups.length > 1 ? t("coups") : t("coup")}`,
+    `${d.manche.cumul} ${t("points")}`,
+    new Date(d.manche.at).toLocaleDateString(langue() === "en" ? "en-GB" : "fr-FR",
       { day: "numeric", month: "short", year: "numeric" }),
   ].join(" · ");
+}
+
+/**
+ * LA FEUILLE DE ROUTE S'OUVRE EN FENETRE, par-dessus la page des records.
+ *
+ * C'est un tableau : il n'a besoin ni de grille, ni de curseur, ni de page a
+ * lui. Le salon en a deja une exactement comme ca (Ctrl+R), et la page des
+ * records reste derriere -- rien a retrouver en revenant.
+ */
+async function ouvrirLaFeuille(id: string): Promise<void> {
+  frPartie = null;
+  $("pr-route").replaceChildren();
+  $("fr-detail").textContent = t("chargement…");
+  $("voile-route").hidden = false;
+  const d = await chercherLaPartie(id);
+  // Fermee entre-temps : on ne repeint pas une fenetre qu'on a quittee.
+  if ($("voile-route").hidden) return;
+  if (typeof d === "string") { $("fr-detail").textContent = d; return; }
+  frPartie = d;
+  const cat = CATEGORIES.find((c) => c.id === d.manche.categorie);
+  $("fr-detail").textContent = `${t(cat?.nom ?? d.manche.categorie)} · ${resumeDeLaPartie(d)}`;
+  prPeindreLaRoute();
+}
+
+function fermerLaFeuille(): void {
+  $("voile-route").hidden = true;
+  // Une partie relue, ce sont des centaines de placements : on ne la garde pas
+  // derriere une fenetre fermee.
+  frPartie = null;
+  $("pr-route").replaceChildren();
+}
+
+$("fr-close").addEventListener("click", fermerLaFeuille);
+$("voile-route").addEventListener("click", (e) => {
+  if (e.target === $("voile-route")) fermerLaFeuille();
+});
+
+/** « Revoir » : la grille coup par coup, et les solutions de chacun. */
+async function ouvrirLaPartie(id: string, coup = 1): Promise<void> {
+  $("corps-records").hidden = true;
+  $("corps-partie").hidden = false;
+  $("pr-titre").textContent = t("chargement…");
+  $("pr-detail").textContent = "";
+  $("pr-coup").replaceChildren();
+  window.history.pushState({ page: "partie", id, coup },
+    "", `?page=partie&partie=${encodeURIComponent(id)}&coup=${coup}`);
+
+  const d = await chercherLaPartie(id);
+  if (typeof d === "string") { $("pr-titre").textContent = d; return; }
+  prPartie = d;
+
+  const cat = CATEGORIES.find((c) => c.id === d.manche.categorie);
+  $("pr-titre").textContent = t(cat?.nom ?? d.manche.categorie);
+  $("pr-detail").textContent = resumeDeLaPartie(d);
 
   const curseur = $("pr-curseur") as HTMLInputElement;
-  curseur.max = String(data.coups.length);
-  if (mode === "route") prPeindreLaRoute();
-  // Le rejeu s'ouvre au premier coup, la feuille sur la partie finie.
-  prAller(mode === "rejeu" ? 1 : data.coups.length);
+  curseur.max = String(d.coups.length);
+  prAller(Math.max(1, Math.min(d.coups.length, coup)));
 }
 
 function fermerLaPartie(pousser = true): void {
@@ -8963,7 +9126,6 @@ function fermerLaPartie(pousser = true): void {
   prPartie = null;
   prPaliers.clear();
   prVu = 0;
-  $("pr-route").replaceChildren();
   $("pr-piste").replaceChildren();
   $("pr-coup").replaceChildren();
   $("pr-sols-compte").textContent = "";

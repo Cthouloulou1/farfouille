@@ -468,6 +468,8 @@ export const EN: Readonly<Record<string, string>> = {
   "Revoir": "Replay",
   "(invité)": "(guest)",
   "Joueurs de la partie": "Players in this game",
+  "Toutes les listes de mots, à la même table": "Every word list, at the same table",
+  "← Retour": "← Back",
   "Voir tous les joueurs": "See every player",
   "{n} top": "{n} top",
   "{n} tops": "{n} tops",
