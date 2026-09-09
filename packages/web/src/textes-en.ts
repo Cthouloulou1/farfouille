@@ -505,4 +505,5 @@ export const EN: Readonly<Record<string, string>> = {
   "Cette partie n'est plus sur le disque": "This game is no longer on disk",
   "Journal illisible": "Unreadable log",
   "personne": "nobody",
+  "Référence": "Reference",
 };

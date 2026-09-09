@@ -4667,6 +4667,29 @@ liste des solutions de chaque coup.
 **FdR et Revoir ouvrent la même page**, à deux endroits : la feuille de route la
 montre finie, ce qu'on lit d'abord ; le rejeu la reprend au premier coup.
 
+**La feuille se lit en entier**, sans ascenseur à elle. L'aligner sur la hauteur
+de la grille obligeait à faire défiler une lucarne pour lire une partie de
+vingt-sept coups : c'est la page qui défile, pas la feuille. La grille, elle,
+reste sous les yeux tant qu'il y a deux colonnes.
+
+**Le caramel couvre sa case exactement.** Il était posé en retrait de deux
+pixels : un liseré de la case restait visible tout autour, le cerne du coup
+regardé ne recouvrait pas le bord, et la valeur de la lettre semblait déborder.
+Le fond prend la case entière, et le trait se pose *sur* son bord.
+
+#### Le mot du joueur se lit à côté du mot retenu
+
+Le logiciel tire au sort parmi les isotops (§5). Un joueur qui a trouvé `WUS`
+lisait donc `WU`, à une case où il n'a rien joué.
+
+Les deux figurent maintenant, le retenu d'abord et le sien entre parenthèses —
+colonne **Top** : `WU (WUS)`, colonne **Référence** : `A1 (12H)`. La parenthèse
+ne paraît que quand les deux diffèrent, ce qui arrive aussi sur la seule case :
+un même mot posé ailleurs.
+
+> Les colonnes s'appelaient « Mot » et « Case ». *Top* et *Référence* sont les
+> mots du jeu.
+
 ### La triche, et ce qu'on en fait
 
 Un tableau de records rend un solveur attirant, et le §8 le dit déjà : la
@@ -4681,6 +4704,20 @@ pas une ligne d'un fichier en ajout seul :
 ```
 { "t": "invalide", "manche": "…", "par": "…", "raison": "…", "at": … }
 ```
+
+**Rien n'est jamais effacé, et c'est ce qui rend la triche réparable.** Un
+tricheur qui signerait les cent meilleurs temps ne détruirait aucun record : il
+les **déplacerait** hors des cent lignes affichées. Le journal, lui, les garde
+tous. Invalider les manches suspectes les fait remonter à leur rang d'origine,
+intact.
+
+**Une seule chose ne se défait pas : les compteurs de mots.** Ils ne viennent pas
+des manches mais d'un compte tenu à part, et l'invalidation ne les touche pas —
+un mot raté l'a été, quoi qu'on pense ensuite de la partie où il est sorti. Une
+triche massive laisserait donc des trouvailles en trop dans le tableau des mots.
+C'est le seul dégât irréparable, et il est mineur ; le réparer demanderait de
+rejouer tous les lots de mots en sautant ceux des parties invalidées, ce qui se
+fera le jour où le cas se présentera.
 
 ### Ce qui reste ouvert
 

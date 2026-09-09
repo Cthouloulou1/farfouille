@@ -1186,7 +1186,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pr-retour:hover { color: var(--ink); border-color: var(--rule); background: var(--hover); }
 .pr-detail { margin-left: auto; font-size: 12.5px; color: var(--ink-faint); }
 
-.pr-corps { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 24px; padding-top: 16px; align-items: start; }
+.pr-corps { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 24px; padding-top: 16px; align-items: start; }
+/* La grille reste sous les yeux pendant qu'on parcourt la feuille -- MAIS
+   seulement tant qu'il y a deux colonnes. Sur une colonne, une grille collee
+   en haut recouvre la feuille qui defile dessous. */
+@media (min-width: 981px) { .pr-gauche { position: sticky; top: 12px; } }
 @media (max-width: 980px) { .pr-corps { grid-template-columns: minmax(0, 1fr); } }
 
 #pr-grille { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--field); border-radius: 4px; }
@@ -1202,10 +1206,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pr-coup .pr-rien { color: var(--ink-faint); }
 
 .pr-droite h2 { margin-bottom: 8px; }
-/* La feuille defile de son cote : la page, jamais. */
-.pr-route { max-height: 560px; overflow-y: auto; scrollbar-gutter: stable; }
+/* LA FEUILLE SE LIT EN ENTIER, sans deroulement a elle. L'aligner sur la
+   hauteur de la grille obligeait a faire defiler une lucarne pour lire une
+   partie de vingt-sept coups : c'est la page qui defile, pas la feuille. */
+.pr-route { overflow-x: auto; }
 .pr-route table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.pr-route th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; text-align: right; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
+.pr-route th { padding: 6px 8px; text-align: right; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
 .pr-route th.g, .pr-route td.g { text-align: left; }
 .pr-route td { padding: 5px 8px; text-align: right; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
 .pr-route tbody tr:nth-child(odd) { background: var(--field); }
@@ -1215,6 +1221,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pr-route tbody tr.pr-vu td { color: var(--ink); }
 .pr-route .pr-mot { color: var(--ink); font-weight: 500; }
 .pr-route .pr-non { color: var(--ink-faint); font-style: italic; }
+/* Le mot et la case du joueur, quand le logiciel a retenu un autre isotop. */
+.pr-sien { font-style: normal; color: var(--ink-faint); font-weight: 400; }
 
 @media (max-width: 900px) { .side { display: none; } }
 </style>

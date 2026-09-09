@@ -8323,6 +8323,9 @@ interface CoupRelu {
   ms: number;
   placements: { x: number; y: number; letter: string; blank?: boolean }[];
   playerWord?: string;
+  playerDir?: "H" | "V";
+  playerX?: number;
+  playerY?: number;
   trouveurs?: string[];
 }
 
@@ -8410,22 +8413,29 @@ function prDessiner(): void {
     for (const p of prPartie.coups[k]?.placements ?? []) {
       const i = p.x + bornes, j = p.y + bornes;
       if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
+      // LE CARAMEL COUVRE SA CASE EXACTEMENT. Il etait pose en retrait de deux
+      // pixels, si bien qu'un liseré de la case restait visible tout autour et
+      // que le cerne du coup regarde ne recouvrait pas le bord. Le fond prend
+      // la case entiere, et le trait se pose SUR son bord.
       const joker = p.blank === true;
+      const neuf = neufs.has(`${p.x},${p.y}`);
       g.fillStyle = joker ? C.jface : C.face;
-      g.fillRect(i * c + 1, j * c + 1, c - 3, c - 3);
-      g.strokeStyle = neufs.has(`${p.x},${p.y}`) ? C.accent : (joker ? C.jedge : C.edge);
-      g.lineWidth = neufs.has(`${p.x},${p.y}`) ? 2 : 1;
-      g.strokeRect(i * c + 1.5, j * c + 1.5, c - 4, c - 4);
+      g.fillRect(i * c, j * c, c, c);
+      g.strokeStyle = neuf ? C.accent : (joker ? C.jedge : C.edge);
+      g.lineWidth = neuf ? 2 : 1;
+      const d = g.lineWidth / 2;
+      g.strokeRect(i * c + d, j * c + d, c - g.lineWidth, c - g.lineWidth);
       g.fillStyle = C.ink;
-      g.font = `600 ${Math.round(c * 0.52)}px Archivo, system-ui, sans-serif`;
+      g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(p.letter, i * c + c / 2, j * c + c / 2 + c * 0.03);
-      // La valeur du caramel, en petit. Un joker vaut toujours zero (§6).
+      g.fillText(p.letter, i * c + c / 2, j * c + c / 2 - c * 0.02);
+      // La valeur du caramel, en petit et DANS le caramel : elle debordait.
       const v = joker ? 0 : (valeurs[p.letter] ?? 0);
-      g.font = `500 ${Math.round(c * 0.26)}px "IBM Plex Mono", monospace`;
+      g.font = `500 ${Math.round(c * 0.24)}px "IBM Plex Mono", monospace`;
       g.textAlign = "right";
-      g.fillText(String(v), i * c + c - 3, j * c + c - 4);
+      g.textBaseline = "alphabetic";
+      g.fillText(String(v), i * c + c - c * 0.12, j * c + c - c * 0.12);
     }
   }
 }
@@ -8449,6 +8459,9 @@ function prPeindreLeCoup(): void {
   const mot = el("b", "", m.word);
   mot.style.color = m.player === null ? "" : couleurDuJoueur(m.player);
   ligne.appendChild(mot);
+  if (m.playerWord !== undefined && m.playerWord !== m.word) {
+    ligne.appendChild(el("i", "pr-sien", ` (${m.playerWord})`));
+  }
   ligne.appendChild(el("span", "pr-pts", ` ${m.score}`));
   boite.appendChild(ligne);
 
@@ -8473,7 +8486,7 @@ function prPeindreLaRoute(): void {
   const thead = el("thead");
   const tr = el("tr");
   for (const [texte, classe] of [
-    ["#", ""], [t("Tirage"), "g"], [t("Mot"), "g"], [t("Case"), "g"],
+    ["#", ""], [t("Tirage"), "g"], [t("Top"), "g"], [t("Référence"), "g"],
     [t("Points"), ""], [t("Temps"), ""], [t("Trouvé par"), "g"],
   ] as [string, string][]) tr.appendChild(el("th", classe, texte));
   thead.appendChild(tr);
@@ -8485,8 +8498,23 @@ function prPeindreLaRoute(): void {
     if (i + 1 === prVu) l.classList.add("pr-vu");
     l.appendChild(el("td", "", String(m.n)));
     l.appendChild(el("td", "g", m.notation || m.rack));
-    l.appendChild(el("td", "g pr-mot", m.word));
-    l.appendChild(el("td", "g", noteCoup(m.dir, m.x, m.y, prPartie?.config.bornes ?? null)));
+    // LE MOT REELLEMENT POSE SE LIT A COTE DU MOT RETENU. Le logiciel tire au
+    // sort parmi les isotops (SPEC.md §5) : un joueur qui a trouve WUS lisait
+    // WU a une case ou il n'a rien joue. Les deux figurent donc, le retenu
+    // d'abord et le sien entre parentheses.
+    const mot = el("td", "g pr-mot", m.word);
+    if (m.playerWord !== undefined && m.playerWord !== m.word) {
+      mot.appendChild(el("i", "pr-sien", ` (${m.playerWord})`));
+    }
+    l.appendChild(mot);
+    const bornes = prPartie?.config.bornes ?? null;
+    const ref = el("td", "g", noteCoup(m.dir, m.x, m.y, bornes));
+    if (m.playerDir !== undefined && m.playerX !== undefined && m.playerY !== undefined
+        && (m.playerDir !== m.dir || m.playerX !== m.x || m.playerY !== m.y)) {
+      ref.appendChild(el("i", "pr-sien",
+        ` (${noteCoup(m.playerDir, m.playerX, m.playerY, bornes)})`));
+    }
+    l.appendChild(ref);
     l.appendChild(el("td", "", String(m.score)));
     l.appendChild(el("td", "", m.player === null ? "—" : `${(m.ms / 1000).toFixed(2)} s`));
     const par = el("td", "g");

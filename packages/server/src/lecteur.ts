@@ -69,8 +69,19 @@ export interface CoupRelu {
   ms: number;
   /** Les cases que ce coup a posees, refaites depuis la grille d'avant. */
   placements: Placement[];
-  /** Le mot que le joueur a reellement tape, quand il differe du mot retenu. */
+  /**
+   * CE QUE LE JOUEUR A REELLEMENT POSE, quand le logiciel a retenu un autre
+   * isotop (SPEC.md §5). Absent des parties d'avant son enregistrement, et des
+   * coups ou le mot retenu est celui qui a ete tape.
+   *
+   * La feuille de route les montre entre parenthèses : « WU (WUS) » a la
+   * reference « A1 (12H) ». Sans eux, un joueur qui a isotope lit un mot et une
+   * case qu'il n'a jamais joues.
+   */
   playerWord?: string;
+  playerDir?: Dir;
+  playerX?: number;
+  playerY?: number;
   /** DUPLICATE : ceux qui ont trouve le top. */
   trouveurs?: string[];
 }
@@ -171,6 +182,9 @@ export function relire(fichier: string): PartieRelue | null {
       ms: Math.max(0, (m["ms"] as number) ?? 0),
       placements,
       ...(typeof m["playerWord"] === "string" ? { playerWord: m["playerWord"] } : {}),
+      ...(typeof m["playerDir"] === "string" ? { playerDir: m["playerDir"] as Dir } : {}),
+      ...(typeof m["playerX"] === "number" ? { playerX: m["playerX"] } : {}),
+      ...(typeof m["playerY"] === "number" ? { playerY: m["playerY"] } : {}),
       ...(Array.isArray(m["trouveurs"]) ? { trouveurs: m["trouveurs"] as string[] } : {}),
     });
   }
