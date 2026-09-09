@@ -369,28 +369,43 @@ const SEUL: Cotes = { g: false, d: false, h: false, b: false };
  * couture, qu'on prenait pour des trous dans la grille. Un coin ne s'arrondit
  * donc que s'il donne sur du vide.
  *
- * LE TRAIT COMMUN NE SE TRACE QU'UNE FOIS, ET SUR UN PIXEL ENTIER. Deux voisins
- * en tracaient deux, accoles : le bord commun paraissait deux fois plus epais
- * que les autres, tres visible en vert sur le mot qu'on propose. Le poser
- * exactement SUR la limite ne suffit pas -- un trait d'un pixel centre sur une
- * limite entiere se partage entre les deux pixels qui l'encadrent, et rend une
- * ligne floue de deux pixels au lieu d'une nette d'un seul.
+ * LE TRAIT SE POSE SUR LE PIXEL DE LA LIMITE, DES QUATRE COTES, ET TOUJOURS DE
+ * LA MEME FACON.
  *
- * Les deux caramels le posent donc dans le MEME pixel : celui de droite le
- * rentre chez lui, celui de gauche le laisse deborder d'autant. Ils dessinent
- * alors la meme ligne, pleine, et il n'en reste qu'une.
+ * Le quadrillage occupe le PREMIER pixel de chaque case (trace a `X + .5`).
+ * C'est donc ce pixel-la que le bord d'un caramel doit couvrir, en haut et a
+ * gauche chez lui, en bas et a droite chez son voisin. Un trait d'un pixel
+ * centre sur la limite ne le couvrirait qu'a moitie : il se partagerait entre
+ * les deux pixels qui l'encadrent, et rendrait une ligne floue de deux pixels
+ * au lieu d'une nette d'un seul.
+ *
+ * LA GEOMETRIE NE DEPEND PAS DES VOISINS, et c'est le point important. Elle en
+ * dependait : un caramel qui avait un voisin a droite y poussait son bord, un
+ * caramel qui n'en avait pas le gardait chez lui. Sa face visible faisait donc
+ * un pixel de plus ou de moins SELON SON VOISINAGE -- une lettre en bout de mot
+ * n'avait pas la meme largeur qu'une lettre du milieu, et une rangee de
+ * caramels paraissait decalee. C'est ce qu'on voyait sur la super grille des
+ * qu'un mot croisait une lettre deja posee.
+ *
+ * Deux voisins tombent maintenant d'accord sans se concerter : le bord commun
+ * est le meme pixel pour les deux, il n'y en a qu'un, et il est plein.
+ *
+ * Les voisins ne decident plus que de L'ARRONDI : un coin ne s'arrondit que
+ * s'il donne sur du vide, sinon la case en dessous se voyait aux deux bouts de
+ * chaque couture -- des taches claires alignees qu'on prenait pour des trous.
  *
  * `retrait` est la moitie de l'epaisseur du trait, pour que celui-ci tienne
  * entierement dans un pixel. Zero pour un remplissage, qui doit couvrir sa case
- * en entier.
+ * en entier -- et zero aussi pour un trait qu'on veut CENTRE sur la limite,
+ * comme le cerne epais du coup qu'on examine dans une partie relue.
  */
 function cheminDuCaramel(
   g: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number, r: number,
   cotes: Cotes = SEUL, retrait = 0,
 ): void {
-  const x0 = x + retrait, x1 = x + w - (cotes.d ? -retrait : retrait);
-  const y0 = y + retrait, y1 = y + h - (cotes.b ? -retrait : retrait);
+  const x0 = x + retrait, x1 = x + w + retrait;
+  const y0 = y + retrait, y1 = y + h + retrait;
   const coin = (a: boolean, b: boolean): number => a || b ? 0 : r;
   const hg = coin(cotes.h, cotes.g), hd = coin(cotes.h, cotes.d);
   const bd = coin(cotes.b, cotes.d), bg = coin(cotes.b, cotes.g);
@@ -958,7 +973,12 @@ function draw() {
       const marque = hl.has(`${q.x},${q.y}`);
       const edge = marque ? C.accent : q.b === 1 ? C.jedge : C.edge;
       const ink = marque ? C.accent : q.b === 1 ? C.jedge : C.ink;
-      const trait = marque ? 2 : 1;
+      // UN PIXEL, POUR TOUT LE MONDE. Le dernier top portait un trait de deux :
+      // il debordait alors d'un pixel chez son voisin d'un cote et pas de
+      // l'autre, ce qui decalait son cadre par rapport a sa case. C'est
+      // l'ENCRE qui le distingue -- contour, lettre et valeur en couleur
+      // d'accent -- et elle se lit de plus loin qu'un lisere.
+      const trait = 1;
       const k = `${face}|${edge}|${ink}|${trait}`;
       const l = groupes.get(k);
       if (l === undefined) groupes.set(k, { face, edge, ink, trait, t: [q] }); else l.t.push(q);
@@ -8806,8 +8826,14 @@ function prDessiner(): void {
       g.strokeStyle = neuf ? C.accent : (joker ? C.jedge : C.edge);
       g.lineWidth = neuf ? 2 : 1;
       g.beginPath();
+      // LE CERNE DU COUP QU'ON EXAMINE EST CENTRE SUR LA LIMITE, et non rentre
+      // d'un cote : un trait de deux pixels pose comme celui d'un pixel
+      // deborderait chez le voisin de droite sans deborder chez celui de
+      // gauche, et son cadre paraitrait decale d'un pixel. Centre, il mord
+      // d'un pixel des quatre cotes. C'est le seul marqueur de ce coup ici --
+      // la lettre garde son encre ordinaire -- donc il reste epais.
       cheminDuCaramel(g, px, py, w, h, 0,
-        cotesDe(poses, p.x, p.y), g.lineWidth / 2);
+        cotesDe(poses, p.x, p.y), neuf ? 0 : 0.5);
       g.stroke();
       g.fillStyle = C.ink;
       g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
