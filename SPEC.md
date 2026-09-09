@@ -4617,25 +4617,55 @@ records n'est jamais effacée**, quoi qu'il arrive à son salon.
 
 ### Rejouer une partie archivée
 
-Le rejeu ne fonctionne aujourd'hui que dans un salon ouvert : il lui faut un
-`Game`, un fil de calcul et un verrou. Une partie archivée est un fichier inerte,
-et c'est précisément ce qu'une ligne de record désigne.
+Le rejeu du salon ne fonctionne que dans un salon **ouvert** : il lui faut un
+`Game`, un fil de calcul, un verrou et une liaison, et il va chercher les paliers
+de chaque coup au serveur. Une partie citée par un record est un fichier inerte,
+que plus aucun salon ne tient — les boutons **FdR** et **Revoir** n'avaient rien
+à ouvrir.
 
 **Le journal suffit.** Il porte la graine, la configuration, et pour chaque coup
 le tirage, le mot, sa direction, sa case, son score, qui l'a trouvé, en combien de
 temps et quels caramels étaient des jokers. Rejouer les placements dans l'ordre
 reconstruit la grille exacte (§11) : ni sac, ni solveur, ni verrou, ni fil.
+Vérifié sur une partie de vingt-trois coups : **101 caramels, identiques case par
+case** à ce que la partie avait sur sa grille.
 
-Un **lecteur de partie** en lecture seule sert donc la partie entière sur
-`/api/partie/<id>`, et le client l'affiche avec la feuille de route et le rejeu
-qu'il a déjà. C'est aussi ce qui donne un lien permanent par partie.
+**Un lecteur en lecture seule** sert donc la partie entière sur
+`/api/partie/<id>`.
 
-Les **paliers** sont la seule chose que le journal d'une partie bornée ne porte
-pas : elle ne les garde pas, ils se refont en 19 ms (§10). Ils se recalculent à la
-demande, sur un fil partagé, exactement comme le rejeu en direct le fait déjà.
+**Il ne sert que les parties citées au journal des records.** C'est la règle de
+sûreté de ce fichier : servir un journal quelconque par son nom donnerait le
+moyen de lire une partie **en cours**, donc le top que tout le monde cherche. Une
+manche n'existant que pour une partie terminée, la condition suffit.
 
-> C'est un outil qui vaut au-delà des records : relire une partie enregistrée est
-> ce qui permet d'étudier son propre historique.
+**Une partie se retrouve par sa graine, pas par son nom.** Une relance l'archive
+sous un nom horodaté — `salon.1788…` — et le nom seul cesse de la désigner. La
+graine, elle, ne bouge pas : la manche la garde, et le lecteur s'en sert pour
+reconnaître le bon fichier parmi les archives d'un même salon.
+
+**Les lexiques chargés sont gardés**, indexés par fichier. `loadDict` relit
+0,45 Mo à chaque appel ; une page qui ouvre trois parties de suite le relisait
+trois fois.
+
+#### Ce que la page montre, et ce qu'elle ne montre pas
+
+Une page à part, avec la grille à gauche et la feuille de route à droite. On
+avance coup par coup — boutons, curseur, flèches — et cliquer une ligne de la
+feuille mène la grille à ce coup.
+
+**Un rendu à part, et volontairement simple.** Le canevas de la partie sait faire
+bien plus — panoramique, zoom, curseur, aperçu, fantômes — et il lit une douzaine
+de variables du direct. Le reprendre ici, c'est risquer de casser ce sur quoi on
+joue. Celui de la page des records ne sait qu'une chose : dessiner un plateau
+borné et des caramels dessus.
+
+**Pas de paliers.** Une partie bornée ne les garde pas, et les refaire
+demanderait le solveur. Le rejeu d'une partie archivée montre la grille, les
+tirages, les mots et leurs trouveurs — ce qu'on vient y chercher — et non la
+liste des solutions de chaque coup.
+
+**FdR et Revoir ouvrent la même page**, à deux endroits : la feuille de route la
+montre finie, ce qu'on lit d'abord ; le rejeu la reprend au premier coup.
 
 ### La triche, et ce qu'on en fait
 

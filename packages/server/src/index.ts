@@ -28,9 +28,10 @@ import {
 } from "../../engine/src/config.ts";
 import { categorie, estPartieNormale } from "../../engine/src/categories.ts";
 import {
-  annexe, compteurWuQi, coupsExtremes, motsRates, motsTrouves, observer, ouvrirLesRecords,
-  tableau, type Annexe,
+  annexe, compteurWuQi, coupsExtremes, mancheDe, motsRates, motsTrouves, observer,
+  ouvrirLesRecords, tableau, type Annexe,
 } from "./records.ts";
+import { journalDeLaPartie, relire } from "./lecteur.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
 const ANNEXES: readonly Annexe[] = [
@@ -707,6 +708,35 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       return;
     }
     json(res, 200, { lignes: annexe(quoi as Annexe, filtre) });
+    return;
+  }
+
+  // UNE PARTIE ARCHIVEE, EN LECTURE SEULE (SPEC.md §23).
+  //
+  // On ne sert QUE les parties citees au journal des records. Servir un journal
+  // quelconque par son nom donnerait le moyen de lire une partie EN COURS,
+  // donc le top que tout le monde cherche.
+  if (url.startsWith("/api/partie/") && req.method === "GET") {
+    const id = decodeURIComponent(url.slice("/api/partie/".length));
+    const m = mancheDe(id);
+    if (m === undefined) { json(res, 404, { message: "Cette partie n'est pas au tableau" }); return; }
+    const fichier = journalDeLaPartie(m.partie, m.graine);
+    if (fichier === null) {
+      json(res, 404, { message: "Cette partie n'est plus sur le disque" });
+      return;
+    }
+    const p = relire(fichier);
+    if (p === null) { json(res, 404, { message: "Journal illisible" }); return; }
+    // La graine ne sort pas : elle dirait comment refaire les tirages.
+    json(res, 200, {
+      partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
+      fin: p.fin, coups: p.coups,
+      manche: {
+        categorie: m.categorie, grille: m.grille, lexique: m.lexique,
+        chrono: m.chrono, at: m.at, temps: m.temps, cumul: m.cumul,
+        topee: m.topee, negatif: m.negatif, joueurs: m.joueurs, solo: m.solo,
+      },
+    });
     return;
   }
 

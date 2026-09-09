@@ -496,4 +496,13 @@ export const EN: Readonly<Record<string, string>> = {
   "6 sur 6": "6 of 6",
   "6 sur 6 joker": "6 of 6, blank",
   "Ni WU ni QI n'ont encore été joués.": "Neither WU nor QI has been played yet.",
+  "← Records": "← Records",
+  "La feuille de route de cette partie": "This game's move sheet",
+  "Revoir la partie, coup par coup": "Replay the game, move by move",
+  "Grille vide, avant le premier coup.": "Empty board, before the first move.",
+  "Personne n'a trouvé ce top.": "Nobody found this top.",
+  "Cette partie n'est pas au tableau": "This game is not in the records",
+  "Cette partie n'est plus sur le disque": "This game is no longer on disk",
+  "Journal illisible": "Unreadable log",
+  "personne": "nobody",
 };

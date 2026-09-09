@@ -1177,6 +1177,45 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   .rc-joueurs { max-width: 12em; }
 }
 
+/* ---------------------------------------------- UNE PARTIE ARCHIVEE, RELUE
+   Voir SPEC.md §23. La grille a gauche, la feuille de route a droite. */
+.partie-relue { padding-top: 14px; width: min(100%, max(70vw, 1100px)); margin: 0 auto; }
+.pr-tete { display: flex; align-items: baseline; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+.pr-tete h1 { margin: 0; font-size: 19px; font-weight: 600; }
+.pr-retour { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.pr-retour:hover { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+.pr-detail { margin-left: auto; font-size: 12.5px; color: var(--ink-faint); }
+
+.pr-corps { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 24px; padding-top: 16px; align-items: start; }
+@media (max-width: 980px) { .pr-corps { grid-template-columns: minmax(0, 1fr); } }
+
+#pr-grille { display: block; width: 100%; height: auto; aspect-ratio: 1; background: var(--field); border-radius: 4px; }
+.pr-nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.pr-nav button { padding: 5px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; line-height: 1.2; }
+.pr-nav button:hover:not(:disabled) { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+.pr-nav button:disabled { opacity: .4; }
+.pr-nav input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+/* Le coup regarde, en une ligne : c'est ce qu'on lit sous la grille. */
+.pr-coup { margin-top: 10px; min-height: 40px; font-size: 13.5px; color: var(--ink-soft); }
+.pr-coup b { color: var(--ink); font-weight: 500; }
+.pr-coup .pr-pts { font-family: "IBM Plex Mono", monospace; color: var(--ink); }
+.pr-coup .pr-rien { color: var(--ink-faint); }
+
+.pr-droite h2 { margin-bottom: 8px; }
+/* La feuille defile de son cote : la page, jamais. */
+.pr-route { max-height: 560px; overflow-y: auto; scrollbar-gutter: stable; }
+.pr-route table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pr-route th { position: sticky; top: 0; z-index: 1; padding: 6px 8px; text-align: right; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
+.pr-route th.g, .pr-route td.g { text-align: left; }
+.pr-route td { padding: 5px 8px; text-align: right; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.pr-route tbody tr:nth-child(odd) { background: var(--field); }
+.pr-route tbody tr:hover { background: var(--hover); }
+/* Le coup qu'on regarde se voit dans la liste, et la liste le suit. */
+.pr-route tbody tr.pr-vu { background: var(--accent-bg); }
+.pr-route tbody tr.pr-vu td { color: var(--ink); }
+.pr-route .pr-mot { color: var(--ink); font-weight: 500; }
+.pr-route .pr-non { color: var(--ink-faint); font-style: italic; }
+
 @media (max-width: 900px) { .side { display: none; } }
 </style>
 </head>
@@ -1369,6 +1408,40 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
     <div class="rc-tableau" id="rc-tableau"></div>
 
+  </div>
+
+  <!-- UNE PARTIE ARCHIVEE, EN LECTURE SEULE. Voir SPEC.md §23.
+
+       Ce n'est PAS le rejeu du salon : celui-la est soude au direct -- il lui
+       faut un salon ouvert, un fil de calcul et une liaison. Une partie citee
+       par un record est un fichier inerte, et ce qu'on vient y chercher tient
+       en deux choses : la grille telle qu'elle s'est remplie, et la feuille de
+       route. Les deux sont ici, et rien d'autre ne bouge. -->
+  <div class="corps partie-relue" id="corps-partie" hidden>
+    <div class="pr-tete">
+      <button type="button" class="pr-retour" id="pr-retour">← Records</button>
+      <h1 id="pr-titre">Partie</h1>
+      <span class="pr-detail" id="pr-detail"></span>
+    </div>
+
+    <div class="pr-corps">
+      <div class="pr-gauche">
+        <canvas id="pr-grille" width="560" height="560"></canvas>
+        <div class="pr-nav">
+          <button type="button" id="pr-debut" title="Premier coup">⏮</button>
+          <button type="button" id="pr-avant" title="Coup précédent">◀</button>
+          <input type="range" id="pr-curseur" min="0" max="0" value="0">
+          <button type="button" id="pr-apres" title="Coup suivant">▶</button>
+          <button type="button" id="pr-fin" title="Dernier coup">⏭</button>
+        </div>
+        <div class="pr-coup" id="pr-coup"></div>
+      </div>
+
+      <div class="pr-droite">
+        <h2>Feuille de route</h2>
+        <div class="pr-route" id="pr-route"></div>
+      </div>
+    </div>
   </div>
 
   <!-- LE REGLEMENT EST DE ZULU, MOT POUR MOT. Il l'a epure lui-meme ; ce n'est

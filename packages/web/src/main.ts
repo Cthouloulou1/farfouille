@@ -10,12 +10,14 @@
 import { Dict } from "../../engine/src/dictionary.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import {
-  configParDefaut, deserialiser, valeurDe, type ConfigPartie,
+  configParDefaut, deserialiser, valeurDe,
+  type ConfigPartie, type ConfigSerialisee,
 } from "../../engine/src/config.ts";
 import {
   DICO_PAR_DEFAUT, DICO_PAR_LANGUE, dictionnaire, tailleDuSac, tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import { CATEGORIES, TAILLES, type Taille } from "../../engine/src/categories.ts";
+import { LAYOUTS, type LayoutFn } from "../../engine/src/bonus.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
   plusDeJokers, rallongesArriere, rallongesAvant, solutions as motsSolutions, squelette,
@@ -5298,6 +5300,7 @@ function peindreOngletsDuCompte(): void {
  */
 function ouvrirLeProfil(pousser = true): void {
   if (moiCompte === null) { ouvrirLeCompte(); return; }
+  $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
@@ -5337,6 +5340,7 @@ function fermerLeProfil(pousser = true): void {
  * seulement, jamais a plusieurs) reste a construire.
  */
 function ouvrirLeSolveur(pousser = true): void {
+  $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
@@ -5363,9 +5367,14 @@ addEventListener("popstate", () => {
   const page = new URLSearchParams(location.search).get("page");
   if (page === "compte" && moiCompte !== null) { ouvrirLeProfil(false); return; }
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
-  if (page === "records") { ouvrirLesRecords(false); return; }
+  if (page === "records") { fermerLaPartie(false); ouvrirLesRecords(false); return; }
+  if (page === "partie") {
+    const id = new URLSearchParams(location.search).get("partie");
+    if (id !== null) { void ouvrirLaPartie(id, false); return; }
+  }
   fermerLeProfil(false);
   fermerLeSolveur(false);
+  fermerLaPartie(false);
   fermerLesRecords(false);
 });
 
@@ -7336,6 +7345,7 @@ $("quitter").addEventListener("click", quitterSalon);
 $("site-nom").addEventListener("click", () => {
   if (!$("corps-profil").hidden) { fermerLeProfil(); return; }
   if (!$("corps-solveur").hidden) { fermerLeSolveur(); return; }
+  if (!$("corps-partie").hidden) { fermerLaPartie(); return; }
   if (!$("corps-records").hidden) { fermerLesRecords(); return; }
   if ($("join").hidden) quitterSalon();
 });
@@ -7865,18 +7875,20 @@ function tableauVide(quoi: string): HTMLElement {
 /**
  * Les deux outils de fin de ligne : la feuille de route, et le rejeu.
  *
- * DESACTIVES TANT QUE LE LECTEUR DE PARTIE ARCHIVEE N'EXISTE PAS. Le rejeu ne
- * fonctionne aujourd'hui que dans un salon ouvert, et une partie citee par un
- * record est un fichier inerte. Les boutons sont la, a leur place, et disent
- * pourquoi ils ne repondent pas encore.
+ * LES DEUX OUVRENT LA MEME PAGE, a deux endroits differents : « FdR » la montre
+ * finie, ce qu'on lit d'abord ; « Revoir » la reprend au premier coup.
  */
-function outilsDeLigne(): HTMLElement[] {
+function outilsDeLigne(partie: string): HTMLElement[] {
   const feuille = el("button", "rc-outil", t("FdR")) as HTMLButtonElement;
+  feuille.title = t("La feuille de route de cette partie");
   const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
-  for (const b of [feuille, revoir]) {
+  revoir.title = t("Revoir la partie, coup par coup");
+  for (const [b, auDebut] of [[feuille, false], [revoir, true]] as [HTMLButtonElement, boolean][]) {
     b.type = "button";
-    b.disabled = true;
-    b.title = t("Le rejeu d'une partie archivée reste à construire");
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void ouvrirLaPartie(partie, auDebut);
+    });
   }
   return [feuille, revoir];
 }
@@ -7919,7 +7931,7 @@ function ligneDePartie(
   tr.appendChild(lex);
 
   const outils = el("td", "c");
-  for (const b of outilsDeLigne()) outils.appendChild(b);
+  for (const b of outilsDeLigne(l.partie)) outils.appendChild(b);
   tr.appendChild(outils);
   return tr;
 }
@@ -8243,6 +8255,7 @@ function peindreLesLongueurs(): void {
  * l'accueil, ou il n'y a rien a interrompre.
  */
 function ouvrirLesRecords(pousser = true): void {
+  $("corps-partie").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
   $("corps-solveur").hidden = true;
@@ -8283,3 +8296,307 @@ for (const [id, poser] of [
 }
 
 $("rc-regles").addEventListener("click", () => { $("voile-regles").hidden = false; });
+
+// ------------------------------------------------ UNE PARTIE ARCHIVEE, RELUE
+//
+// Voir SPEC.md §23. « FdR » et « Revoir » ouvrent cette page.
+//
+// CE N'EST PAS LE REJEU DU SALON, et c'est deliberé. Celui-la est soude au
+// direct : il lui faut un salon ouvert, un fil de calcul et une liaison, et il
+// va chercher les paliers de chaque coup au serveur. Une partie citee par un
+// record est un fichier inerte, que plus aucun salon ne tient.
+//
+// Ce qu'on vient y chercher tient en deux choses : la grille telle qu'elle
+// s'est remplie, et la feuille de route. Les deux sont ici, dessinees a part,
+// sans toucher a une seule variable de la partie en cours.
+
+interface CoupRelu {
+  n: number;
+  rack: string;
+  notation: string;
+  word: string;
+  dir: "H" | "V";
+  x: number;
+  y: number;
+  score: number;
+  player: string | null;
+  ms: number;
+  placements: { x: number; y: number; letter: string; blank?: boolean }[];
+  playerWord?: string;
+  trouveurs?: string[];
+}
+
+interface PartieRelue {
+  partie: string;
+  layout: string;
+  createdAt: number;
+  config: ConfigSerialisee;
+  fin: string | null;
+  coups: CoupRelu[];
+  manche: {
+    categorie: string; grille: string; lexique: string; chrono: number | null;
+    at: number; temps: number; cumul: number; topee: boolean; negatif: number;
+    joueurs: { nom: string; tops: number; invite: boolean }[]; solo: string | null;
+  };
+}
+
+let prPartie: PartieRelue | null = null;
+/** Le coup qu'on regarde, de 0 (grille vide) au dernier. */
+let prVu = 0;
+
+/** Le pavage de la partie relue, retrouve par son nom. */
+function prPavage(): LayoutFn {
+  const nom = prPartie?.config.pavageNom ?? "classique15";
+  return (LAYOUTS as Record<string, LayoutFn>)[nom] ?? LAYOUTS.classique15;
+}
+
+/**
+ * Peint la grille telle qu'elle etait apres le coup `prVu`.
+ *
+ * UN RENDU A PART, ET VOLONTAIREMENT SIMPLE. Le canevas de la partie sait
+ * faire bien plus -- panoramique, zoom, curseur, apercu, fantomes -- et il lit
+ * une douzaine de variables du direct. Le reprendre ici, c'est risquer de
+ * casser ce sur quoi Zulu joue. Celui-ci ne sait qu'une chose : dessiner un
+ * plateau borne et des caramels dessus.
+ */
+function prDessiner(): void {
+  const cv = $<HTMLCanvasElement>("pr-grille");
+  const g = cv.getContext("2d");
+  if (g === null || prPartie === null) return;
+  const bornes = prPartie.config.bornes ?? 7;
+  const cotes = bornes * 2 + 1;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const taille = cv.getBoundingClientRect().width || 560;
+  cv.width = Math.round(taille * dpr);
+  cv.height = Math.round(taille * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const c = taille / cotes;
+
+  const C = {
+    field: css("--field"), line: css("--field-line"),
+    face: css("--tile-face"), edge: css("--tile-edge"), ink: css("--tile-ink"),
+    jface: css("--joker-face"), jedge: css("--joker-edge"),
+    accent: css("--accent"),
+    T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
+    Q: css("--mcq"), q: css("--lcq"),
+  };
+  g.fillStyle = C.field;
+  g.fillRect(0, 0, taille, taille);
+
+  // Les cases, et leurs primes.
+  const pavage = prPavage();
+  for (let i = 0; i < cotes; i++) {
+    for (let j = 0; j < cotes; j++) {
+      const x = i - bornes, y = j - bornes;
+      const cle = pavage(x, y);
+      const teinte = (C as Record<string, string>)[cle];
+      g.fillStyle = teinte ?? C.field;
+      g.fillRect(i * c, j * c, c - 1, c - 1);
+    }
+  }
+  g.strokeStyle = C.line;
+  g.lineWidth = 1;
+  for (let i = 0; i <= cotes; i++) {
+    g.beginPath(); g.moveTo(i * c, 0); g.lineTo(i * c, taille); g.stroke();
+    g.beginPath(); g.moveTo(0, i * c); g.lineTo(taille, i * c); g.stroke();
+  }
+
+  // Les caramels, jusqu'au coup regarde. Ceux du coup lui-meme se cernent :
+  // c'est la seule chose qu'on cherche en avancant d'un coup.
+  const valeurs = prPartie.config.valeurs ?? {};
+  const dernier = prVu > 0 ? prPartie.coups[prVu - 1] : undefined;
+  const neufs = new Set((dernier?.placements ?? []).map((p) => `${p.x},${p.y}`));
+  for (let k = 0; k < prVu; k++) {
+    for (const p of prPartie.coups[k]?.placements ?? []) {
+      const i = p.x + bornes, j = p.y + bornes;
+      if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
+      const joker = p.blank === true;
+      g.fillStyle = joker ? C.jface : C.face;
+      g.fillRect(i * c + 1, j * c + 1, c - 3, c - 3);
+      g.strokeStyle = neufs.has(`${p.x},${p.y}`) ? C.accent : (joker ? C.jedge : C.edge);
+      g.lineWidth = neufs.has(`${p.x},${p.y}`) ? 2 : 1;
+      g.strokeRect(i * c + 1.5, j * c + 1.5, c - 4, c - 4);
+      g.fillStyle = C.ink;
+      g.font = `600 ${Math.round(c * 0.52)}px Archivo, system-ui, sans-serif`;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(p.letter, i * c + c / 2, j * c + c / 2 + c * 0.03);
+      // La valeur du caramel, en petit. Un joker vaut toujours zero (§6).
+      const v = joker ? 0 : (valeurs[p.letter] ?? 0);
+      g.font = `500 ${Math.round(c * 0.26)}px "IBM Plex Mono", monospace`;
+      g.textAlign = "right";
+      g.fillText(String(v), i * c + c - 3, j * c + c - 4);
+    }
+  }
+}
+
+/** Le coup regarde, en une ligne sous la grille. */
+function prPeindreLeCoup(): void {
+  const boite = $("pr-coup");
+  boite.replaceChildren();
+  if (prPartie === null) return;
+  if (prVu === 0) {
+    boite.appendChild(el("span", "pr-rien", t("Grille vide, avant le premier coup.")));
+    return;
+  }
+  const m = prPartie.coups[prVu - 1];
+  if (m === undefined) return;
+  const ligne = el("div");
+  ligne.appendChild(el("span", "", `${t("Coup")} ${m.n} · `));
+  const tirage = el("b", "", m.notation || m.rack);
+  ligne.appendChild(tirage);
+  ligne.appendChild(el("span", "", " · "));
+  const mot = el("b", "", m.word);
+  mot.style.color = m.player === null ? "" : couleurDuJoueur(m.player);
+  ligne.appendChild(mot);
+  ligne.appendChild(el("span", "pr-pts", ` ${m.score}`));
+  boite.appendChild(ligne);
+
+  const qui = el("div");
+  if (m.player === null) {
+    qui.appendChild(el("span", "pr-rien", t("Personne n'a trouvé ce top.")));
+  } else {
+    qui.appendChild(el("span", "", `${t("Trouvé par")} `));
+    const nom = el("b", "", m.player);
+    nom.style.color = couleurDuJoueur(m.player);
+    qui.appendChild(nom);
+    if (m.ms > 0) qui.appendChild(el("span", "", ` ${t("en")} ${(m.ms / 1000).toFixed(2)} s`));
+  }
+  boite.appendChild(qui);
+}
+
+/** La feuille de route de la partie relue : un coup par ligne. */
+function prPeindreLaRoute(): void {
+  const boite = $("pr-route");
+  if (prPartie === null) { boite.replaceChildren(); return; }
+  const table = el("table");
+  const thead = el("thead");
+  const tr = el("tr");
+  for (const [texte, classe] of [
+    ["#", ""], [t("Tirage"), "g"], [t("Mot"), "g"], [t("Case"), "g"],
+    [t("Points"), ""], [t("Temps"), ""], [t("Trouvé par"), "g"],
+  ] as [string, string][]) tr.appendChild(el("th", classe, texte));
+  thead.appendChild(tr);
+  table.appendChild(thead);
+
+  const corps = el("tbody");
+  prPartie.coups.forEach((m, i) => {
+    const l = el("tr");
+    if (i + 1 === prVu) l.classList.add("pr-vu");
+    l.appendChild(el("td", "", String(m.n)));
+    l.appendChild(el("td", "g", m.notation || m.rack));
+    l.appendChild(el("td", "g pr-mot", m.word));
+    l.appendChild(el("td", "g", noteCoup(m.dir, m.x, m.y, prPartie?.config.bornes ?? null)));
+    l.appendChild(el("td", "", String(m.score)));
+    l.appendChild(el("td", "", m.player === null ? "—" : `${(m.ms / 1000).toFixed(2)} s`));
+    const par = el("td", "g");
+    if (m.player === null) par.appendChild(el("span", "pr-non", t("non trouvé")));
+    else {
+      const nom = el("span", "", m.player);
+      nom.style.color = couleurDuJoueur(m.player);
+      par.appendChild(nom);
+    }
+    l.appendChild(par);
+    // CLIQUER UNE LIGNE MENE LA GRILLE A CE COUP : c'est ce qu'on attend d'une
+    // feuille de route posee a cote d'un plateau.
+    l.addEventListener("click", () => prAller(i + 1));
+    corps.appendChild(l);
+  });
+  table.appendChild(corps);
+  boite.replaceChildren(table);
+}
+
+/** Mene la vue au coup `n` : la grille, la ligne, le curseur. */
+function prAller(n: number): void {
+  if (prPartie === null) return;
+  prVu = Math.max(0, Math.min(prPartie.coups.length, n));
+  ($("pr-curseur") as HTMLInputElement).value = String(prVu);
+  ($("pr-debut") as HTMLButtonElement).disabled = prVu === 0;
+  ($("pr-avant") as HTMLButtonElement).disabled = prVu === 0;
+  ($("pr-apres") as HTMLButtonElement).disabled = prVu >= prPartie.coups.length;
+  ($("pr-fin") as HTMLButtonElement).disabled = prVu >= prPartie.coups.length;
+  prDessiner();
+  prPeindreLeCoup();
+  for (const l of $("pr-route").querySelectorAll("tr.pr-vu")) l.classList.remove("pr-vu");
+  const lignes = $("pr-route").querySelectorAll("tbody tr");
+  const active = lignes[prVu - 1];
+  if (active !== undefined) {
+    active.classList.add("pr-vu");
+    active.scrollIntoView({ block: "nearest" });
+  }
+}
+
+/**
+ * Ouvre une partie archivee. `auDebut` distingue les deux boutons : « Revoir »
+ * la reprend au premier coup, « FdR » la montre finie, ce qu'on lit d'abord.
+ */
+async function ouvrirLaPartie(id: string, auDebut: boolean): Promise<void> {
+  $("corps-records").hidden = true;
+  $("corps-partie").hidden = false;
+  $("pr-titre").textContent = t("chargement…");
+  $("pr-detail").textContent = "";
+  $("pr-route").replaceChildren();
+  $("pr-coup").replaceChildren();
+  window.history.pushState({ page: "partie", id },
+    "", `?page=partie&partie=${encodeURIComponent(id)}`);
+
+  let data: PartieRelue;
+  try {
+    const r = await fetch(`/api/partie/${encodeURIComponent(id)}`);
+    const brut = await r.json();
+    if (!r.ok) {
+      $("pr-titre").textContent = typeof brut?.message === "string"
+        ? brut.message : t("serveur injoignable");
+      return;
+    }
+    data = brut as PartieRelue;
+  } catch {
+    $("pr-titre").textContent = t("serveur injoignable");
+    return;
+  }
+  prPartie = data;
+
+  const cat = CATEGORIES.find((c) => c.id === data.manche.categorie);
+  $("pr-titre").textContent = t(cat?.nom ?? data.manche.categorie);
+  const joueurs = data.manche.joueurs
+    .map((j) => j.invite ? `${j.nom} ${t("(invité)")}` : j.nom).join(", ");
+  $("pr-detail").textContent = [
+    joueurs || t("personne"),
+    `${data.coups.length} ${data.coups.length > 1 ? t("coups") : t("coup")}`,
+    `${data.manche.cumul} ${t("points")}`,
+    new Date(data.manche.at).toLocaleDateString(langue() === "en" ? "en-GB" : "fr-FR",
+      { day: "numeric", month: "short", year: "numeric" }),
+  ].join(" · ");
+
+  const curseur = $("pr-curseur") as HTMLInputElement;
+  curseur.max = String(data.coups.length);
+  prPeindreLaRoute();
+  prAller(auDebut ? 1 : data.coups.length);
+}
+
+function fermerLaPartie(pousser = true): void {
+  $("corps-partie").hidden = true;
+  $("corps-records").hidden = false;
+  // On ne garde pas une partie entiere derriere une page fermee.
+  prPartie = null;
+  $("pr-route").replaceChildren();
+  if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
+}
+
+$("pr-retour").addEventListener("click", () => fermerLaPartie());
+$("pr-debut").addEventListener("click", () => prAller(1));
+$("pr-avant").addEventListener("click", () => prAller(prVu - 1));
+$("pr-apres").addEventListener("click", () => prAller(prVu + 1));
+$("pr-fin").addEventListener("click", () => prAller(prPartie?.coups.length ?? 0));
+$("pr-curseur").addEventListener("input", (e) => {
+  prAller(Number((e.target as HTMLInputElement).value));
+});
+// Les fleches parcourent la partie, comme dans le rejeu du salon.
+addEventListener("keydown", (e) => {
+  if ($("corps-partie").hidden) return;
+  if (e.key === "ArrowLeft") { prAller(prVu - 1); e.preventDefault(); }
+  if (e.key === "ArrowRight") { prAller(prVu + 1); e.preventDefault(); }
+});
+// Le plateau se redessine quand la fenetre change de taille : il est en
+// pourcentage, et un canevas ne se remet pas a l'echelle tout seul.
+addEventListener("resize", () => { if (!$("corps-partie").hidden) prDessiner(); });

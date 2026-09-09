@@ -310,6 +310,20 @@ function deltaDAncienneManche(ev: { lexique?: string; vus?: unknown }): DeltaDeM
   return d;
 }
 
+/**
+ * La manche d'une partie, invalidee ou non.
+ *
+ * C'EST LA CLE DU REJEU, et sa garde : le lecteur ne sert que les parties
+ * citees ici. Servir un journal quelconque par son nom donnerait le moyen de
+ * lire une partie EN COURS, donc le top que tout le monde cherche.
+ *
+ * Une manche invalidee reste lisible : la partie a bien ete jouee, on lui a
+ * seulement retire son rang.
+ */
+export function mancheDe(partie: string): Manche | undefined {
+  return manches.find((m) => m.partie === partie);
+}
+
 /** Les manches qui comptent : tout ce qui n'a pas ete invalide. */
 export function manchesValides(): Manche[] {
   return manches.filter((m) => !invalidees.has(m.partie));
