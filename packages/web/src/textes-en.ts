@@ -525,12 +525,12 @@ export const EN: Readonly<Record<string, string>> = {
   // aussi pour le panneau. « Stage » plutot que « step » : une etape de
   // montante est une partie entiere, pas un pas.
   "Montante terminée": "Ladder complete",
-  "Les six étapes": "The six stages",
-  "Les six étapes de cette montante": "The six stages of this ladder",
+  "Les six parties": "The six games",
+  "Les six parties de cette montante": "The six games of this ladder",
   "Six parties à la suite, du plus simple au plus difficile":
     "Six games in a row, from the easiest to the hardest",
   "Étape": "Stage",
-  "Étapes": "Stages",
+  "Parties": "Games",
   "Étape suivante": "Next stage",
   "Étape {n} sur {t}": "Stage {n} of {t}",
   "Étape {n} : {f}": "Stage {n}: {f}",

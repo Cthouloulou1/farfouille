@@ -8578,13 +8578,13 @@ function tableauVide(quoi: string): HTMLElement {
  * LES DEUX OUVRENT LA MEME PAGE, a deux endroits differents : « FdR » la montre
  * finie, ce qu'on lit d'abord ; « Revoir » la reprend au premier coup.
  */
-function outilsDeLigne(partie: string): HTMLElement[] {
+function outilsDeLigne(partie: string, retourEtapes: LigneDeRecord | null = null): HTMLElement[] {
   const feuille = el("button", "rc-outil", t("FdR")) as HTMLButtonElement;
   feuille.title = t("La feuille de route de cette partie");
   feuille.type = "button";
   feuille.addEventListener("click", (e) => {
     e.stopPropagation();
-    void ouvrirLaFeuille(partie);
+    void ouvrirLaFeuille(partie, retourEtapes);
   });
   const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
   revoir.title = t("Revoir la partie, coup par coup");
@@ -8592,7 +8592,10 @@ function outilsDeLigne(partie: string): HTMLElement[] {
   revoir.addEventListener("click", (e) => {
     e.stopPropagation();
     // Le rejeu prend la page entiere : la fenetre ouverte par-dessus n'a plus
-    // d'objet, et la laisser la ferait flotter au-dessus de la grille.
+    // d'objet, et la laisser la ferait flotter au-dessus de la grille -- ce qui
+    // vaut aussi pour « Les six parties » d'ou l'on a pu venir : on ne revient
+    // pas dessus, on la quitte pour de bon.
+    frRetourEtapes = null;
     fermerLaFeuille();
     void ouvrirLaPartie(partie);
   });
@@ -8611,9 +8614,11 @@ function nomDeCategorie(id: string): string {
  * « Revoir » n'auraient rien a ouvrir. Le bouton ouvre donc la liste des
  * etapes, et chacune y porte ses deux outils a elle.
  */
+let frRetourEtapes: LigneDeRecord | null = null;
+
 function boutonDesEtapes(l: LigneDeRecord): HTMLElement {
-  const b = el("button", "rc-outil", t("Étapes")) as HTMLButtonElement;
-  b.title = t("Les six étapes de cette montante");
+  const b = el("button", "rc-outil", t("Parties")) as HTMLButtonElement;
+  b.title = t("Les six parties de cette montante");
   b.type = "button";
   b.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -8632,7 +8637,8 @@ function boutonDesEtapes(l: LigneDeRecord): HTMLElement {
  */
 function ouvrirLesEtapes(l: LigneDeRecord): void {
   frPartie = null;
-  $("fr-titre").textContent = t("Les six étapes");
+  frRetourEtapes = null;
+  $("fr-titre").textContent = t("Les six parties");
   $("voile-route").hidden = false;
   const joueurs = l.joueurs
     .map((j) => j.invite ? `${j.nom} ${t("(invité)")}` : j.nom).join(", ");
@@ -8660,9 +8666,9 @@ function ouvrirLesEtapes(l: LigneDeRecord): void {
     tr.appendChild(format);
     tr.appendChild(el("td", "", String(e.coups)));
     tr.appendChild(el("td", "fort", tempsDeManche(e.temps)));
-    tr.appendChild(el("td", e.topee ? "" : "fort", e.topee ? "—" : `-${e.negatif}`));
+    tr.appendChild(el("td", e.topee ? "" : "fort", e.topee ? t("Top") : `-${e.negatif}`));
     const outils = el("td", "c");
-    for (const b of outilsDeLigne(e.ref)) outils.appendChild(b);
+    for (const b of outilsDeLigne(e.ref, l)) outils.appendChild(b);
     tr.appendChild(outils);
     corps.appendChild(tr);
   }
@@ -8683,6 +8689,15 @@ function ligneDePartie(
   l: LigneDeRecord, opts: { negatif?: boolean; farfouilles?: boolean } = {},
 ): HTMLElement {
   const tr = el("tr");
+  // A PARTIR DE DEUX JOUEURS, LA LIGNE ENTIERE OUVRE LA TABLEE. Un seul nom
+  // n'a rien de plus a montrer ; des deux, la fenetre dit qui a trouve quoi.
+  // Les elements cliquables de la ligne (pseudos, "+N", outils) arretent la
+  // propagation de leur propre clic : voir `cellulesDesJoueurs` et
+  // `outilsDeLigne`.
+  if (l.joueurs.length >= 2) {
+    tr.classList.add("rc-cliquable");
+    tr.addEventListener("click", () => ouvrirLaTablee(l.joueurs));
+  }
   tr.appendChild(celluleDuRang(l.rang, l.topee));
 
   const joueurs = el("td", "g");
@@ -8693,7 +8708,7 @@ function ligneDePartie(
   if (opts.negatif === true) {
     // LE NEGATIF EST NEGATIF. C'est un manque, pas un gain : une partie ou
     // l'on a laisse sept points au top affiche -7, et non +7.
-    const neg = el("td", l.topee ? "" : "fort", l.topee ? "—" : `-${l.negatif}`);
+    const neg = el("td", l.topee ? "" : "fort", l.topee ? t("Top") : `-${l.negatif}`);
     tr.appendChild(neg);
   }
   tr.appendChild(el("td", "", chronoDeManche(l.chrono)));
@@ -9540,10 +9555,11 @@ function resumeDeLaPartie(d: PartieRelue): string {
  * lui. Le salon en a deja une exactement comme ca (Ctrl+R), et la page des
  * records reste derriere -- rien a retrouver en revenant.
  */
-async function ouvrirLaFeuille(id: string): Promise<void> {
+async function ouvrirLaFeuille(id: string, retourEtapes: LigneDeRecord | null = null): Promise<void> {
   frPartie = null;
+  frRetourEtapes = retourEtapes;
   // La meme fenetre a pu servir aux etapes d'une montante : on lui rend son
-  // titre, sinon une feuille de route s'ouvrirait sous « Les six etapes ».
+  // titre, sinon une feuille de route s'ouvrirait sous « Les six parties ».
   $("fr-titre").textContent = t("Feuille de route");
   $("pr-route").replaceChildren();
   $("fr-detail").textContent = t("chargement…");
@@ -9559,6 +9575,15 @@ async function ouvrirLaFeuille(id: string): Promise<void> {
 }
 
 function fermerLaFeuille(): void {
+  // OUVERTE DEPUIS « LES SIX PARTIES », UNE FDR Y REVIENT EN SE FERMANT. Les
+  // deux partagent la meme fenetre ; la refermer purement et simplement
+  // effacait jusqu'a la liste qu'on venait de quitter pour y regarder un coup.
+  if (frRetourEtapes !== null) {
+    const l = frRetourEtapes;
+    frRetourEtapes = null;
+    ouvrirLesEtapes(l);
+    return;
+  }
   $("voile-route").hidden = true;
   // Une partie relue, ce sont des centaines de placements : on ne la garde pas
   // derriere une fenetre fermee.

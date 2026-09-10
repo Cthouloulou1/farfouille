@@ -98,13 +98,24 @@ export interface Montante {
    * reste a l'ecran.
    */
   pause: boolean;
+  /**
+   * LA PAUSE EN COURS EST-ELLE CELLE DU RATE, OU CELLE DE L'HOTE ?
+   *
+   * Vrai tant que la pause allumee n'est due qu'a un rate au dernier coup, et
+   * a rien d'autre. Recommencer l'etape l'eteint alors avec elle -- sans quoi
+   * un rate imposerait une pause a toutes les tentatives suivantes, ce que
+   * l'hote n'a jamais demande. Un geste manuel sur l'interrupteur, dans un sens
+   * comme dans l'autre, l'efface aussitot : la pause devient alors un choix, et
+   * un choix survit a la reprise.
+   */
+  pauseAuto: boolean;
   creeLe: number;
 }
 
 export function nouvelleMontante(): Montante {
   return {
     id: randomUUID(), rang: 1, essai: 1, essais: [],
-    close: false, finie: false, pause: false, creeLe: Date.now(),
+    close: false, finie: false, pause: false, pauseAuto: false, creeLe: Date.now(),
   };
 }
 
@@ -176,7 +187,8 @@ export function totaux(m: Montante, enCours?: EtapeObservee): TotauxDeMontante {
  * c'est ce qui lui laisse le temps de regarder la grille, de compter ce qu'il a
  * laisse, et de cliquer sur la reprise s'il le veut (SPEC.md §23).
  *
- * UN RATE AU DERNIER COUP COCHE LA PAUSE TOUTE SEULE.
+ * UN RATE AU DERNIER COUP COCHE LA PAUSE TOUTE SEULE -- SI ELLE NE L'ETAIT PAS
+ * DEJA.
  *
  * Sans elle, l'enchainement automatique filerait vers l'etape suivante deux
  * secondes plus tard, sans laisser le temps de choisir -- et une montante doit
@@ -184,6 +196,12 @@ export function totaux(m: Montante, enCours?: EtapeObservee): TotauxDeMontante {
  * pretendre encore. La pause se coche donc d'elle-meme, comme si l'hote venait
  * de l'allumer : les deux boutons paraissent alors cote a cote, reprendre ou
  * continuer quand meme.
+ *
+ * MAIS SI L'HOTE L'AVAIT DEJA ALLUMEE LUI-MEME, ce rate ne doit pas se
+ * l'approprier : `pauseAuto` reste tel quel, et la reprise qui suivra la
+ * laissera allumee (voir `reprendreLEtape`). Se l'approprier quand meme
+ * effacerait, a la prochaine reprise, un choix que l'hote avait fait avant
+ * meme que le rate n'arrive.
  */
 export function cloreLEtape(m: Montante, e: EtapeObservee): void {
   if (m.close) return;
@@ -196,7 +214,7 @@ export function cloreLEtape(m: Montante, e: EtapeObservee): void {
     tops: e.tops, valide: e.valide, retenu: true,
     coupCher: e.coupCher, coupPasCher: e.coupPasCher,
   });
-  if (e.rateAuDernierCoup) m.pause = true;
+  if (e.rateAuDernierCoup && !m.pause) { m.pause = true; m.pauseAuto = true; }
 }
 
 /** Reste-t-il une etape apres celle-ci ? */
@@ -265,6 +283,11 @@ export function reprendreLEtape(
   m: Montante, rang: number, enCours?: EtapeObservee,
 ): number | null {
   if (etapeReprenable(m, enCours) !== rang) return null;
+  // LA PAUSE QUE LE RATE AVAIT COCHEE NE SURVIT PAS A LA REPRISE. Elle a fait
+  // son office -- laisser le temps de choisir -- et la tentative qui repart
+  // n'a pas a en heriter. Celle que l'hote a allumee lui-meme, en revanche,
+  // reste : ce n'est plus le rate qui parle, mais son choix.
+  if (m.pauseAuto) { m.pause = false; m.pauseAuto = false; }
   // RECOMMENCER L'ETAPE 1, C'EST RECOMMENCER LA MONTANTE. Rien n'a encore ete
   // accompli : le chrono repart de zero, et non pas « tout sauf le negatif ».
   // C'est la seule exception a « le temps compte tout » -- et elle n'en est pas

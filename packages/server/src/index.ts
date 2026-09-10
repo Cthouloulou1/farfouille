@@ -1681,7 +1681,11 @@ wss.on("connection", (ws, req) => {
       // LA PAUSE : l'hote decide si la montante s'arrete entre deux parties.
       // L'eteindre alors qu'une etape close attend relance la suite aussitot.
       if (msg.t === "montante-pause") {
+        // UN GESTE DE L'HOTE N'EST PLUS UNE PAUSE AUTOMATIQUE, qu'il l'allume
+        // ou qu'il l'eteigne : c'est desormais son choix, et une reprise
+        // d'etape ne l'effacera plus (voir `reprendreLEtape`, SPEC.md §23).
         m.pause = msg.pause === true;
+        m.pauseAuto = false;
         console.log(`[montante] "${s.nom}" pause entre les parties : `
           + `${m.pause ? "oui" : "non"}`);
         broadcast(s.id, { t: "state", state: publicState(s) });

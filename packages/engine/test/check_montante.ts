@@ -119,6 +119,20 @@ for (const e of ETAPES) {
     && cfg.primes[7] === primesParDefaut()[7]);
 }
 
+// ------------------------------------------------ le decompte n'est qu'au depart
+console.log("\n  --- le decompte ne vaut que pour la premiere etape ---\n");
+
+const avecDecompte = avec(base(), { decompte: true });
+verifie("l'etape 1 recoit le decompte si l'hote l'a coche",
+  configDeLEtape(avecDecompte, 1).decompte);
+verifie("les cinq suivantes en sont privees",
+  ETAPES.filter((e) => e.rang > 1)
+    .every((e) => !configDeLEtape(avecDecompte, e.rang).decompte));
+
+const sansDecompte = avec(base(), { decompte: false });
+verifie("eteint chez l'hote, il reste eteint partout",
+  ETAPES.every((e) => !configDeLEtape(sansDecompte, e.rang).decompte));
+
 // ------------------------------------------------------- la grille sans fin
 console.log("\n  --- la grille sans fin n'a pas de bout ---\n");
 

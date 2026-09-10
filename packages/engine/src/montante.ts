@@ -62,6 +62,12 @@ export function etapeMontante(rang: number): EtapeMontante {
  * le lexique et la grille sont au joueur : ils traversent la montante sans
  * changer, et c'est pour cela qu'une montante se compare a une autre.
  *
+ * LE DECOMPTE, LUI, NE VAUT QUE POUR LA PREMIERE. Il donne le depart -- utile
+ * une fois, au tout debut de la montante ; repete a chaque etape, il ferait
+ * attendre trois secondes avant chaque partie d'une suite qui ne s'arrete deja
+ * plus. Seule l'etape 1 le recoit si l'hote l'a coche ; les cinq suivantes
+ * demarrent sans lui, quel que soit le reglage.
+ *
  * Le reste -- le sac du commerce, un joker par tirage, le mode topping, pas de
  * terme ajoute, les primes du jeu -- n'est pas un choix : c'est ce que
  * `reglagesRecevables` exige d'une partie qui veut porter un record, et chaque
@@ -73,7 +79,7 @@ export function configDeLEtape(base: ConfigPartie, rang: number): ConfigPartie {
   return avec(base, {
     tirage: e.tirage, jouables: e.jouables, joker: e.joker, jokersParCoup: 1,
     pioche: "sac102", mode: "topping", coupsMax: null, dureeMax: null,
-    primes: primesParDefaut(),
+    primes: primesParDefaut(), decompte: rang === 1 ? base.decompte : false,
   });
 }
 

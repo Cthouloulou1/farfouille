@@ -4775,6 +4775,12 @@ Un bouton **Montante** dans les réglages avancés, sous « Double joker ». Il 
 le format et le joker — c'est la suite qui les impose — et ne laisse réglables que
 le chrono, le lexique et la grille.
 
+**Le décompte de départ (§16), lui, ne vaut que pour la première étape.** Coché,
+il donne le départ — utile une fois, au tout début de la montante ; répété à
+chaque étape, il ferait attendre trois secondes avant chaque partie d'une suite
+qui ne s'arrête déjà plus. Seule l'étape 1 le reçoit ; les cinq suivantes
+démarrent sans lui, quel que soit le réglage.
+
 **Le plancher du chrono est celui de l'étape la plus chère, pas de la première.**
 La partie normale descend à une seconde par coup, parce que c'est là que se joue
 le record de chrono (voir plus bas) ; les cinq autres étapes restent à quinze. Une
@@ -4903,6 +4909,13 @@ continuer malgré le raté — clôt définitivement la fenêtre : le raté rest
 compteur, assumé, et cette étape ne se reprend plus. Sans quoi on pourrait
 remonter toute la montante depuis sa dernière étape, et la suite n'aurait plus
 d'ordre.
+
+**Recommencer l'étape éteint la pause, si c'est elle qui l'avait allumée.** Une
+pause que le raté a cochée toute seule ne doit pas peser sur la tentative
+suivante : la suite reprend son rythme normal dès qu'on relance. Mais si l'hôte
+avait lui-même touché l'interrupteur — avant le raté, ou après, pour la
+confirmer ou l'éteindre — la reprise n'y touche plus : c'est son choix, et il
+tient jusqu'à ce qu'il le change lui-même.
 
 #### L'étape suivante est prête avant qu'on en ait besoin
 
@@ -5207,6 +5220,13 @@ comme partout ailleurs.
 
 **Cliquer une ligne ouvre ce coup dans « Revoir ».** La feuille n'a pas de grille
 à côté d'elle : ce qu'on veut en cliquant un coup, c'est le voir.
+
+**Une feuille de route ouverte depuis « Les six parties » d'une montante y
+revient en se fermant**, plutôt que de fermer la fenêtre entière : les deux
+partagent la même fenêtre, et la refermer purement et simplement effaçait
+jusqu'à la liste qu'on venait de quitter pour y regarder un coup. « Revoir »,
+lui, quitte la fenêtre pour de bon dans les deux cas — il prend la page
+entière, rien n'y reste à retrouver derrière.
 
 **Revoir** fait étudier *un* coup : la grille telle qu'elle était, et les
 solutions qu'elle offrait. Celui-là **garde sa page** : une grille à gauche, cent

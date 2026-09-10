@@ -323,7 +323,7 @@ body.redimensionne.colonne { cursor: col-resize; }
 .icon[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
 
 .word { font-family: "IBM Plex Mono", monospace; font-size: calc(17.5px * var(--z, 1)); font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
-.word .pts { margin-left: auto; font-size: calc(18.5px * var(--z, 1)); color: var(--accent); font-weight: 500; }
+.word .pts { margin-left: auto; font-size: calc(24px * var(--z, 1)); color: var(--accent); font-weight: 600; }
 .word.none { color: var(--ink-faint); font-size: calc(14px * var(--z, 1)); letter-spacing: 0; }
 /* Un top que personne n'a trouve : le mot reste lisible -- c'est lui qu'on veut
    voir -- mais ses points passent au rouge, et un jeton le dit en toutes lettres. */
@@ -1164,6 +1164,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    rang jusqu'au dernier chiffre sans se tromper de rangee. */
 .rc-tableau tbody tr:nth-child(odd) { background: var(--field); }
 .rc-tableau tbody tr:hover { background: var(--hover); }
+.rc-tableau tbody tr.rc-cliquable { cursor: pointer; }
 .rc-tableau td { padding: 8px 7px; text-align: right; color: var(--ink-soft); white-space: nowrap; }
 .rc-tableau td.g { text-align: left; }
 .rc-tableau td.fort { color: var(--ink); font-weight: 500; }

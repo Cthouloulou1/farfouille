@@ -211,6 +211,43 @@ console.log("\n  --- la fenetre du bouton de reprise ---\n");
     totaux(b).negatif > 0, String(totaux(b).negatif));
 }
 
+// ------------------- la pause automatique ne survit pas a la reprise, l'autre si
+console.log("\n  --- la pause automatique s'eteint a la reprise, celle de l'hote non ---\n");
+{
+  // Un rate au dernier coup coche la pause toute seule ; la reprendre efface
+  // cette pause avec elle -- elle a fait son office, et ne doit pas peser sur
+  // la tentative suivante.
+  const auto = nouvelleMontante();
+  etapeEntiere(auto, vue({ temps: 10_000 }));                        // 1, propre
+  cloreLEtape(auto, vue({ temps: 9_000, rates: 1, dernier: true }));  // 2, ratee
+  verifie("la pause s'est cochee toute seule", auto.pause);
+  verifie("... et elle est marquee automatique", auto.pauseAuto);
+  verifie("l'etape se reprend", reprendreLEtape(auto, 2) === 2);
+  verifie("la pause automatique s'est eteinte a la reprise", !auto.pause);
+  verifie("... et elle n'est plus marquee automatique", !auto.pauseAuto);
+
+  // Une pause que l'hote a allumee LUI-MEME, avant meme le rate, n'est pas
+  // automatique -- et elle survit donc a la reprise qui suit.
+  const hote = nouvelleMontante();
+  hote.pause = true;   // le geste du message "montante-pause", hors auto
+  etapeEntiere(hote, vue({ temps: 10_000 }));                        // 1, propre
+  cloreLEtape(hote, vue({ temps: 9_000, rates: 1, dernier: true }));  // 2, ratee
+  verifie("le rate ne s'approprie pas la pause de l'hote", !hote.pauseAuto);
+  verifie("l'etape se reprend", reprendreLEtape(hote, 2) === 2);
+  verifie("la pause de l'hote survit a la reprise", hote.pause);
+
+  // Le rate coche la pause automatique ; l'hote la CONFIRME ensuite d'un geste
+  // manuel (il recoche la case, comme le fait le message "montante-pause") --
+  // elle cesse alors d'etre automatique, et survivra desormais a une reprise.
+  const confirmee = nouvelleMontante();
+  etapeEntiere(confirmee, vue({ temps: 10_000 }));                        // 1, propre
+  cloreLEtape(confirmee, vue({ temps: 9_000, rates: 1, dernier: true }));  // 2, ratee
+  verifie("la pause s'est cochee toute seule", confirmee.pauseAuto);
+  confirmee.pause = true; confirmee.pauseAuto = false;   // le geste manuel de l'hote
+  verifie("l'etape se reprend", reprendreLEtape(confirmee, 2) === 2);
+  verifie("la pause confirmee par l'hote survit a la reprise", confirmee.pause);
+}
+
 // ------------------------------------------------------ le prix d'une reprise
 console.log("\n  --- le prix d'une reprise ---\n");
 {
