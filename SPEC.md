@@ -720,6 +720,57 @@ Trois choses les effacent — la pose diffusée, la réponse à l'essai, un num�
 coup qui change — et un délai de sécurité de quatre secondes, pour qu'une réponse
 perdue ne laisse pas des caramels sur la grille jusqu'à la fin de la partie.
 
+**On peut taper pendant l'attente**, et sans rien attendre. Le mot en cours est
+vidé à la seconde où l'on valide : le clavier et le chevalet sont libres tout de
+suite, et les caramels laissés sur la grille ne sont qu'un dessin — ils ne
+retiennent rien. La première lettre d'un mot neuf prend leur place et ils s'en
+vont. C'est aussi pourquoi le chevalet n'est pas grisé : ses lettres doivent être
+réutilisables immédiatement.
+
+#### Ce qui clignotait encore, et pourquoi
+
+Laisser les caramels ne suffisait pas : il restait un saut, léger mais réel, à la
+seconde où le serveur confirmait. Quatre causes, toutes de la même famille — deux
+dessins censés être identiques et qui ne l'étaient pas au pixel près.
+
+**Le curseur venait se poser sur la première lettre.** Il cherche la première
+case libre ; le mot en cours étant vidé, cette case était celle où le mot qu'on
+venait d'envoyer commençait. Un cadre sombre et une flèche apparaissaient donc
+par-dessus le premier caramel, le temps de la réponse, puis sautaient ailleurs
+quand les cases devenaient vraiment occupées. **Le mot envoyé occupe ses cases**
+pour le curseur comme pour le reste.
+
+Les trois autres tenaient à ce qu'un mot pas encore posé avait **sa propre
+routine de dessin**, distincte de celle des caramels du plateau :
+
+| | mot en main | caramel posé |
+|---|---|---|
+| position | arrondie au pixel de **mise en page** | arrondie au pixel **d'écran**, sur la grille de l'image de côté |
+| taille de la lettre | calculée sur la hauteur **arrondie** de la case | calculée sur la taille de case **exacte** |
+| arrondi des coins, seuil du chiffre | toujours arrondi, seuil sur la hauteur de la case | carré au dézoom, seuil sur la taille de case |
+
+À 100 % les positions coïncident ; à 125 %, elles peuvent différer d'un pixel
+d'écran. Et une hauteur de case arrondie à l'entier donne une police d'un pixel
+de plus ou de moins qu'une taille de case fractionnaire, une ligne sur deux.
+
+**Il n'y a plus qu'une routine.** Le mot qu'on tape, celui qu'on vient d'envoyer
+et le fantôme d'une solution passent par celle des caramels posés, sur la même
+grille et avec les mêmes mesures. Le désaccord n'est plus possible : il n'y a plus
+deux dessins à mettre d'accord.
+
+Les voisins d'un mot en main **comptent le plateau**, aussi : un mot qui
+s'accroche à une lettre déjà posée y est collé dès la frappe, sinon le coin
+s'arrondissait à la jonction et se carrait à la confirmation.
+
+Mesuré : l'empreinte des caramels sur la grille compte 5 093 pixels avant
+`Entrée` et **exactement les mêmes 5 093** juste après, aucun perdu, aucun ajouté.
+Et les caramels en main comme les caramels posés occupent tous `[trait + 1,
+trait suivant − 1]` : la même case, au pixel.
+
+Reste **le changement de couleur** : un top confirmé porte la couleur d'accent,
+contour, lettre et valeur. Celui-là est voulu — c'est ainsi que le dernier top se
+distingue sur une grille dense — et il ne déplace rien.
+
 ### L'échelle s'efface devant la case désignée
 
 Cliquer une case allume sa colonne et sa ligne dans les règles graduées. Loin de

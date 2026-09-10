@@ -545,7 +545,14 @@ function typedCells(): { x: number; y: number; letter: string }[] {
 function nextFree(): { x: number; y: number } | null {
   if (cursor === null) return null;
   const { dx, dy } = pasDuCurseur();
-  const busy = new Set(typedCells().map((c) => `${c.x},${c.y}`));
+  // LE MOT ENVOYE OCCUPE SES CASES, LUI AUSSI. Sans cela, la seconde ou l'on
+  // appuie sur Entree vidait le mot en cours, et le curseur -- qui cherche la
+  // premiere case libre -- venait se poser SUR la premiere lettre du mot qu'on
+  // venait d'envoyer : un cadre noir et une fleche par-dessus le caramel, le
+  // temps de la reponse du serveur, puis un saut quand les vraies cases
+  // devenaient occupees. C'est le clignotement qui restait a la validation.
+  const busy = new Set(
+    [...typedCells(), ...attente].map((c) => `${c.x},${c.y}`));
   let px = cursor.x, py = cursor.y, guard = 0;
   while (guard++ < 40) {
     if (board.at(px, py) === undefined && !busy.has(`${px},${py}`)) return { x: px, y: py };
@@ -796,29 +803,6 @@ function draw() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const caramel = (x: number, y: number, letter: string, blank: boolean, face: string,
-                   edge: string, encre?: string, cotes: Cotes = SEUL) => {
-    const px = eX(x) + gap, py = eY(y) + gap;
-    const w = eX(x + 1) - eX(x) - gap * 2, h = eY(y + 1) - eY(y) - gap * 2;
-    ctx.beginPath();
-    cheminDuCaramel(ctx, px, py, w, h, rad, cotes);
-    ctx.fillStyle = face; ctx.fill();
-    ctx.beginPath();
-    cheminDuCaramel(ctx, px, py, w, h, rad, cotes, .5);
-    ctx.lineWidth = 1; ctx.strokeStyle = edge; ctx.stroke();
-    ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink);
-    ctx.font = `700 ${Math.round(h * .62)}px Archivo, system-ui, sans-serif`;
-    ctx.fillText(letter, px + w / 2, py + h * .53);
-    // Un joker vaut zero, et il l'affiche : le 0 dit ce qu'il rapporte.
-    const v = blank ? 0 : valeurDe(cfg, letter);
-    if (h >= 18) {
-      ctx.fillStyle = encre ?? (blank ? C.jedge : C.ink); ctx.globalAlpha = blank ? .8 : .6;
-      ctx.font = `500 ${Math.round(h * .27)}px "IBM Plex Mono", monospace`;
-      ctx.textAlign = "right";
-      ctx.fillText(String(v), px + w - w * .1, py + h * .84);
-      ctx.textAlign = "center"; ctx.globalAlpha = 1;
-    }
-  };
 
   /**
    * Un lot de caramels de meme couleur, en un seul chemin.
@@ -899,6 +883,49 @@ function draw() {
     }
     g.globalAlpha = 1;
     g.textAlign = "center";
+  };
+
+  /**
+   * UN MOT QUI N'EST PAS ENCORE POSE : celui qu'on tape, celui qu'on vient
+   * d'envoyer, ou le fantome d'une solution.
+   *
+   * IL PASSE PAR LA MEME ROUTINE QUE LES CARAMELS POSES, et c'est tout l'objet
+   * de cette fonction. Il avait la sienne, et les deux ne tombaient pas
+   * d'accord au pixel pres :
+   *
+   * - la position s'arrondissait au pixel de MISE EN PAGE d'un cote, au pixel
+   *   D'ECRAN de l'autre. A 100 % les deux coincident ; a 125 %, elles peuvent
+   *   differer d'un pixel d'ecran ;
+   * - la taille de la lettre se calculait sur la hauteur ARRONDIE de la case
+   *   d'un cote, sur la taille de case exacte de l'autre : un pixel de police
+   *   d'ecart une ligne sur deux ;
+   * - l'arrondi des coins et le seuil d'affichage du chiffre ne suivaient pas
+   *   les memes regles.
+   *
+   * Le mot sautait donc imperceptiblement a la seconde ou le serveur le
+   * confirmait -- le clignotement qui restait. Une seule routine, et il ne
+   * bouge plus d'un pixel : seule sa COULEUR change, celle du dernier top.
+   *
+   * LES VOISINS COMPTENT LE PLATEAU. Un mot qui s'accroche a une lettre deja
+   * posee doit y etre colle des la frappe : sinon le coin s'arrondissait a la
+   * jonction et se carrait a la confirmation.
+   */
+  const peindreLeMot = (
+    lot: readonly Tile[], face: string, edge: string, ink: string,
+    jface = face, jedge = edge, jink = ink,
+  ): void => {
+    if (lot.length === 0) return;
+    const occupe = new Set(lot.map((q) => `${q.x},${q.y}`));
+    for (const q of lot) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const k = `${q.x + dx},${q.y + dy}`;
+        if (!occupe.has(k) && board.at(q.x + dx, q.y + dy) !== undefined) occupe.add(k);
+      }
+    }
+    caramels(ctx, lot.filter((q) => q.b === 0), face, edge, ink,
+      1, orgEcranX, orgEcranY, occupe);
+    caramels(ctx, lot.filter((q) => q.b === 1), jface, jedge, jink,
+      1, orgEcranX, orgEcranY, occupe);
   };
 
   // Pendant le rejeu, on ne montre que ce qui etait pose AVANT le coup examine.
@@ -992,6 +1019,18 @@ function draw() {
     }
     g.restore();
   };
+
+  /**
+   * L'ORIGINE, A L'ECRAN, DE LA CASE (0,0) TELLE QUE LES CARAMELS VIENNENT
+   * D'ETRE POSES.
+   *
+   * Ce n'est pas `ox` : les caramels du plateau passent par une image de cote,
+   * peinte a son origine a elle et recopiee a l'ecran a un decalage arrondi au
+   * pixel d'ecran. Un mot pas encore pose doit se dessiner sur CETTE grille-la,
+   * pas sur celle de la camera, sans quoi il saute d'un pixel au moment ou il
+   * devient un vrai mot. Voir `peindreLeMot`.
+   */
+  let orgEcranX = ox, orgEcranY = oy;
 
   if (exportEnCours) {
     // Une image d'exportation fait plusieurs milliers de pixels de cote : lui
@@ -1095,10 +1134,14 @@ function draw() {
     // en page ne suffit pas quand l'ecran n'est pas a 100 %.
     const auPixel = (v: number) => Math.round(v * dpr) / dpr;
     if (cell === cacheCell) {
-      ctx.drawImage(
-        cache, 0, 0, cache.width, cache.height,
-        auPixel(-cacheMarge + (ox - cacheOx)), auPixel(-cacheMarge + (oy - cacheOy)), cw, ch,
-      );
+      const posX = auPixel(-cacheMarge + (ox - cacheOx));
+      const posY = auPixel(-cacheMarge + (oy - cacheOy));
+      ctx.drawImage(cache, 0, 0, cache.width, cache.height, posX, posY, cw, ch);
+      // La grille sur laquelle les caramels sont reellement tombes. Le
+      // decalage est un nombre entier de pixels d'ecran, donc s'ajoute sans
+      // rien deplacer.
+      orgEcranX = cacheOx + cacheMarge + posX;
+      orgEcranY = cacheOy + cacheMarge + posY;
     } else {
       // L'image a ete peinte a une autre echelle : on l'etire de sorte que la
       // case (0,0) retombe la ou la camera la place maintenant.
@@ -1121,25 +1164,23 @@ function draw() {
   const enMain = tapees.length > 0
     ? tapees.map((c) => ({ ...c, blank: blanks.has(`${c.x},${c.y}`) }))
     : attente;
-  const sousLaMain = new Set(enMain.map((c) => `${c.x},${c.y}`));
-  for (const c of enMain) {
-    caramel(c.x, c.y, c.letter, c.blank, c.blank ? C.jface : C.face,
-      c.blank ? C.jedge : C.cursor, undefined, cotesDe(sousLaMain, c.x, c.y));
-  }
+  peindreLeMot(
+    enMain.map((c) => ({ x: c.x, y: c.y, l: c.letter, b: (c.blank ? 1 : 0) as 0 | 1, n: 0 })),
+    C.face, C.cursor, C.ink, C.jface, C.jedge, C.jedge,
+  );
 
   if (ghost !== null && !ghostCache && cell >= 6) {
     const { word, dir, x: gx, y: gy, jokers } = ghost;
     const { dx, dy } = step(dir);
-    // Meme raison que pour le mot tape : le fantome est un mot, et son bord
-    // vert doit faire le tour de l'ensemble, pas de chaque lettre.
-    const fantome = new Set<string>();
-    for (let i = 0; i < word.length; i++) fantome.add(`${gx + dx * i},${gy + dy * i}`);
+    const lot: Tile[] = [];
     for (let i = 0; i < word.length; i++) {
       const x = gx + dx * i, y = gy + dy * i;
       if (x < gx0 || x > gx1 || y < gy0 || y > gy1) continue;
-      caramel(x, y, word[i]!, jokers[i] === true, C.gface, C.gedge, C.gink,
-        cotesDe(fantome, x, y));
+      lot.push({ x, y, l: word[i]!, b: jokers[i] === true ? 1 : 0, n: 0 });
     }
+    // Le fantome ne distingue pas le joker par sa face : il a la sienne, verte,
+    // et le joker ne s'y lit qu'a sa valeur nulle.
+    peindreLeMot(lot, C.gface, C.gedge, C.gink);
   }
 
   // Le curseur et les cases partagees appartiennent a CELUI QUI REGARDE, pas a
