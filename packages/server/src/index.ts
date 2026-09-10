@@ -28,9 +28,16 @@ import {
 } from "../../engine/src/config.ts";
 import { categorie, estPartieNormale } from "../../engine/src/categories.ts";
 import {
-  annexe, compteurWuQi, coupsExtremes, mancheDe, motsRates, motsTrouves, observer,
-  ouvrirLesRecords, tableau, type Annexe,
+  ajouterUneManche, annexe, compteurWuQi, coupsExtremes, mancheDe, motsRates,
+  motsTrouves, observer, ouvrirLesRecords, tableau,
+  type Annexe, type EtapeObservee,
 } from "./records.ts";
+import {
+  cloreLEtape, etapeReprenable, ilResteUneEtape, mancheDeLaMontante,
+  montanteAchevable, montanteFinieDElleMeme, montantePublique, nouvelleMontante,
+  passerALEtapeSuivante, reprendreLEtape,
+} from "./montante.ts";
+import { configDeLEtape, etapeMontante, montantePossible } from "../../engine/src/montante.ts";
 import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lecteur.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
@@ -366,6 +373,11 @@ function publicState(s: Salon) {
     lancementA: g.lancementA,
     coupsMax: g.cfg.coupsMax,
     dureeMax: g.cfg.dureeMax,
+    // LA MONTANTE DU SALON, ou `null`. Ses cumuls sont ceux de la suite
+    // entiere, pas de l'etape en cours : c'est le total qui s'affiche, et c'est
+    // le total qui fait le record (SPEC.md §23).
+    montante: s.montante === null ? null
+      : montantePublique(s.montante, s.vue?.etape()),
     debutDeLaPartie: g.debutDeLaPartie,
     decompteJusqua: g.decompteJusqua,
     servedAt: g.servedAt,
@@ -430,11 +442,92 @@ function surveiller(s: Salon): void {
   }));
   // Le moteur parle aussi : la liste des trouveurs du duplicate vient de lui.
   s.partie.onChat((m) => broadcast(s.id, { t: "said", msg: m }));
-  // LE SALON OBSERVE SA PROPRE PARTIE (SPEC.md §23). Sans effet si ses reglages
-  // ne peuvent porter aucun record -- une grille sans fin, un duplicate, un sac
-  // qui ne s'epuise pas. C'est ici, et nulle part ailleurs, que se decide ce
-  // qui entrera au tableau.
-  observer(s.partie);
+  // LE SALON OBSERVE SA PROPRE PARTIE (SPEC.md §23). N'ecrit rien si ses
+  // reglages ne peuvent porter aucun record -- une grille sans fin, un
+  // duplicate, un sac qui ne s'epuise pas. C'est ici, et nulle part ailleurs,
+  // que se decide ce qui entrera au tableau.
+  //
+  // L'OBSERVATION SE GARDE, maintenant : la montante y lit ses cumuls pendant
+  // qu'on joue, et ne peut pas attendre la fin de l'etape pour les connaitre.
+  //
+  // ELLE NE RECOIT LE RAPPEL QUE S'IL Y A UNE MONTANTE. C'est lui qui fait
+  // observer une partie qu'aucun tableau n'accueille : sans montante, la grille
+  // mondiale retiendrait ses onze mille coups pour personne.
+  s.vue = observer(s.partie,
+    s.montante === null ? undefined : (e) => cloreLEtapeDeLaMontante(s, e));
+}
+
+/**
+ * Relance la partie du salon, et remet tout le monde dedans.
+ *
+ * Trois chemins y menent maintenant -- les reglages valides, l'etape suivante
+ * d'une montante, la reprise d'une etape ratee -- et ils doivent faire
+ * exactement la meme chose : rebrancher l'observation, rendre a la partie neuve
+ * la liste des presents, la reveiller, la demarrer, et renvoyer a chaque client
+ * de quoi tout redessiner.
+ */
+async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]> {
+  const archives = await relancer(s, cfg);
+  surveiller(s);
+  // La partie neuve nait endormie ET ignorante de qui est la : on lui rend les
+  // deux, sinon le duplicate ne compterait personne sur son premier coup.
+  for (const nom of occupants(s.id)) s.partie.presents.add(nom);
+  if (occupants(s.id).length > 0) await s.partie.reveiller();
+  await s.partie.demarrer();
+  for (const [c, v] of clients) {
+    if (v.salon !== s.id) continue;
+    send(c, {
+      t: "relance",
+      tiles: s.partie.tiles(),
+      moves: [],
+      chat: s.partie.chat,
+      config: serialiser(s.partie.cfg),
+      state: publicState(s),
+    });
+  }
+  return archives;
+}
+
+/**
+ * L'etape d'une montante vient de se terminer.
+ *
+ * ELLE NE PASSE PAS A LA SUIVANTE ICI : c'est l'hote qui lance la suite. Ce qui
+ * se decide a cet instant, c'est seulement si la montante est finie -- les six
+ * etapes derriere elle, et plus rien a reprendre.
+ */
+function cloreLEtapeDeLaMontante(s: Salon, e: EtapeObservee): void {
+  const m = s.montante;
+  if (m === null) return;
+  cloreLEtape(m, e);
+  console.log(`[montante] "${s.nom}" etape ${m.rang} (essai ${m.essai}) : `
+    + `${e.coups} coups, ${(e.temps / 1000).toFixed(2)} s, `
+    + `${e.rates === 0 ? "topee" : `${e.rates} rate(s), negatif ${e.negatif}`}`);
+  if (montanteFinieDElleMeme(m)) acheverLaMontante(s);
+}
+
+/**
+ * La montante se termine : sa ligne part au journal si elle en merite une.
+ *
+ * UNE LIGNE POUR LA MONTANTE, ET UNE PAR ETAPE (SPEC.md §23). Les six lignes
+ * d'etape sont deja parties, chacune a la fin de sa partie ; celle-ci est la
+ * septieme, et porte les cumuls.
+ */
+function acheverLaMontante(s: Salon): void {
+  const m = s.montante;
+  if (m === null || !montanteAchevable(m)) return;
+  m.finie = true;
+  const ligne = mancheDeLaMontante(m, s.partie.cfg);
+  if (ligne === null) {
+    console.log(`[montante] "${s.nom}" achevee, hors tableau `
+      + `(${m.essais.length} essai(s) sur ${m.rang} etape(s))`);
+    return;
+  }
+  ajouterUneManche(ligne);
+  const qui = ligne.joueurs.map((j) => j.invite ? `${j.nom} (invité)` : j.nom);
+  console.log(
+    `[records] montante · ${ligne.coups} coups en ${(ligne.temps / 1000).toFixed(2)} s · `
+    + `${ligne.topee ? "topée" : `négatif ${ligne.negatif}`} · ${qui.join(", ") || "personne"}`,
+  );
 }
 
 // ---------------------------------------------------------------- ouverture
@@ -732,6 +825,9 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
       fin: p.fin, coups: p.coups,
       manche: {
+        // LA REFERENCE SORT, LA GRAINE NON. La premiere designe la manche dans
+        // une adresse ; la seconde dirait comment refaire ses tirages.
+        ref: m.ref,
         categorie: m.categorie, grille: m.grille, lexique: m.lexique,
         chrono: m.chrono, at: m.at, temps: m.temps, cumul: m.cumul,
         topee: m.topee, negatif: m.negatif, joueurs: m.joueurs, solo: m.solo,
@@ -1441,6 +1537,19 @@ wss.on("connection", (ws, req) => {
       const jokersParCoup = bornes === null ? 1 : Math.min(jokersDemandes, Math.max(1, tirage - 1));
       // Le sac sans fin ne vaut que sur une grille infinie.
       const pioch = bornes !== null && pioche === "sac102boucle" ? "sac102" : pioche;
+      // LA MONTANTE : six parties en topping, a la suite (SPEC.md §23). Elle
+      // impose le format et le joker de chaque etape, et ne laisse reglables
+      // que le chrono, le lexique et la grille.
+      const montante = msg.montante === true;
+      // Une grille sans fin n'a pas de bout, donc pas d'etape suivante. Le
+      // client eteint deja le bouton ; ceci est la regle.
+      if (montante && !montantePossible(bornes)) {
+        send(ws, {
+          t: "result", ok: false,
+          message: "La montante demande une grille bornée : elle va jusqu'au bout du sac.",
+        });
+        return;
+      }
       // Un plateau borne s'arrete quand le sac se vide, et le sac de 102 aussi :
       // leur poser un terme en donnerait DEUX, et la partie s'arreterait au
       // premier atteint sans qu'on sache lequel. Ces deux-la n'en ont pas.
@@ -1454,6 +1563,11 @@ wss.on("connection", (ws, req) => {
         chrono: Number.isFinite(chrono as number) ? chrono : null,
         primes: Object.keys(primes).length > 0 ? primes : base.primes,
       });
+      // L'ETAPE 1 PAR-DESSUS LE RESTE. Ce que le panneau a envoye comme format,
+      // comme joker, comme primes ou comme terme ne survit pas au lancement
+      // d'une montante : la suite les impose, et chaque etape doit pouvoir
+      // porter un record.
+      const cfgVoulue = montante ? configDeLEtape(voulue, 1) : voulue;
       // UN CHRONO TRES COURT COUTE CHER AU SERVEUR, PAS AU JOUEUR : chaque coup
       // demande un calcul de top complet, et quinze secondes par coup, c'est
       // deja quatre calculs par minute et par salon. L'administration garde la
@@ -1464,8 +1578,14 @@ wss.on("connection", (ws, req) => {
       // donc ICI, sur la configuration entiere, et non sur le chrono seul --
       // il ne se decide pas sans savoir quelle grille et quel format
       // l'accompagnent.
-      const plancher = estPartieNormale(voulue) ? CHRONO_MINIMUM_RECORD : CHRONO_MINIMUM;
-      if (!estAdmin && voulue.chrono !== null && voulue.chrono < plancher) {
+      //
+      // LA MONTANTE PREND LE PLANCHER DE SON ETAPE LA PLUS CHERE, et non celui
+      // de la premiere. Son etape 1 EST la partie normale : sans cette ligne,
+      // elle ouvrirait a une seconde par coup une 7 et 8 joker qu'aucun reglage
+      // ne permet par ailleurs.
+      const plancher = !montante && estPartieNormale(cfgVoulue)
+        ? CHRONO_MINIMUM_RECORD : CHRONO_MINIMUM;
+      if (!estAdmin && cfgVoulue.chrono !== null && cfgVoulue.chrono < plancher) {
         send(ws, {
           t: "result", ok: false,
           message: `Le temps par coup ne descend pas sous ${plancher} seconde`
@@ -1473,28 +1593,88 @@ wss.on("connection", (ws, req) => {
         });
         return;
       }
-      const archives = await relancer(s, voulue);
-      surveiller(s);
-      // La partie neuve nait endormie ET ignorante de qui est la : on lui rend
-      // les deux, sinon le duplicate ne compterait personne sur son premier coup.
-      for (const nom of occupants(s.id)) s.partie.presents.add(nom);
-      if (occupants(s.id).length > 0) await s.partie.reveiller();
-      // Valider les reglages, c'est lancer la partie.
-      await s.partie.demarrer();
-      console.log(`[salon] "${s.nom}" relance par ${moi.nom} : ${jouables} sur ${tirage}, ` +
-        `pioche ${pioche}, ${dico}` +
-        `${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
-      for (const [c, v] of clients) {
-        if (v.salon !== s.id) continue;
-        send(c, {
-          t: "relance",
-          tiles: s.partie.tiles(),
-          moves: [],
-          chat: s.partie.chat,
-          config: serialiser(s.partie.cfg),
-          state: publicState(s),
-        });
+      // LA MONTANTE SE POSE AVANT LA RELANCE : c'est elle qui met sa marque
+      // dans l'en-tete du journal de l'etape qui demarre. Valider des reglages
+      // sans montante en termine une : la suite n'a pas de sens si sa variante
+      // change en chemin.
+      s.montante = montante ? nouvelleMontante() : null;
+      const archives = await relancerEtDiffuser(s, cfgVoulue);
+      console.log(`[salon] "${s.nom}" relance par ${moi.nom} : `
+        + `${montante ? `montante, etape 1 (${etapeMontante(1).nom})`
+          : `${cfgVoulue.jouables} sur ${cfgVoulue.tirage}`}, `
+        + `pioche ${pioche}, ${dico}`
+        + `${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
+      return;
+    }
+
+    // ------------------------------------------------------------ la montante
+    //
+    // TROIS GESTES, ET TOUS LES TROIS SONT A L'HOTE. Lancer l'etape suivante,
+    // recommencer une etape ratee, terminer la suite. Voir SPEC.md §23.
+    if (msg.t === "montante-suivante" || msg.t === "montante-reprendre"
+        || msg.t === "montante-terminer") {
+      const m = s.montante;
+      if (m === null) {
+        send(ws, { t: "result", ok: false, message: "ce salon ne joue pas de montante" });
+        return;
       }
+      if (estPermanent(s) || s.proprietaire === null || s.gerant !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul l'hôte mène la montante" });
+        return;
+      }
+
+      // TERMINER : la sixieme etape est close, et l'hote renonce a reprendre
+      // celle qui lui etait offerte. La ligne part au journal telle quelle.
+      if (msg.t === "montante-terminer") {
+        if (!montanteAchevable(m)) {
+          send(ws, { t: "result", ok: false, message: "la montante n'est pas à son terme" });
+          return;
+        }
+        acheverLaMontante(s);
+        broadcast(s.id, { t: "state", state: publicState(s) });
+        return;
+      }
+
+      // REPRENDRE : l'etape la plus ancienne qui porte encore un coup rate.
+      if (msg.t === "montante-reprendre") {
+        const vue = s.vue?.etape();
+        const rang = etapeReprenable(m, vue);
+        if (rang === null) {
+          send(ws, {
+            t: "result", ok: false,
+            message: "cette étape ne se reprend plus",
+          });
+          return;
+        }
+        // LE TEMPS DE LA TENTATIVE ABANDONNEE RESTE AU COMPTEUR (SPEC.md §23).
+        // Une etape reprise en pleine partie ne passe pas par `onFin` : son
+        // essai n'existerait donc pas, et son temps s'evaporerait -- ce qui
+        // rendrait la reprise gratuite, et le tableau ne classerait plus que
+        // la patience.
+        if (!m.close && vue !== undefined) cloreLEtape(m, vue);
+        if (reprendreLEtape(m, rang, vue) === null) {
+          send(ws, { t: "result", ok: false, message: "cette étape ne se reprend plus" });
+          return;
+        }
+        await relancerEtDiffuser(s, configDeLEtape(s.partie.cfg, rang));
+        console.log(`[montante] "${s.nom}" reprend l'etape ${rang} `
+          + `(${etapeMontante(rang).nom}), essai ${m.essai}`);
+        return;
+      }
+
+      // SUIVANTE : l'etape en cours est close, et il en reste une.
+      if (!m.close || !ilResteUneEtape(m)) {
+        send(ws, { t: "result", ok: false, message: "l'étape en cours n'est pas terminée" });
+        return;
+      }
+      const rang = passerALEtapeSuivante(m);
+      if (rang === null) {
+        send(ws, { t: "result", ok: false, message: "la montante est terminée" });
+        return;
+      }
+      await relancerEtDiffuser(s, configDeLEtape(s.partie.cfg, rang));
+      console.log(`[montante] "${s.nom}" passe a l'etape ${rang} `
+        + `(${etapeMontante(rang).nom})`);
       return;
     }
 

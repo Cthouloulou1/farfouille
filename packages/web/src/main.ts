@@ -18,6 +18,7 @@ import {
   tousLesDictionnaires,
 } from "../../engine/src/dictionnaires.ts";
 import { CATEGORIES, TAILLES, type Taille } from "../../engine/src/categories.ts";
+import { ETAPES, ETAPES_MONTANTE } from "../../engine/src/montante.ts";
 import { LAYOUTS, type LayoutFn } from "../../engine/src/bonus.ts";
 import {
   analyserSaisie, benjamins, estUnMotAvecJokers, JOKERS_MAX, LONGUEUR_MAX_SAISIE, motsFormables,
@@ -146,6 +147,34 @@ let debutDeLaPartie = 0;
 let tempsJoue = 0;
 /** Cette partie laisse-t-elle revoir ses coups avant d'etre finie ? */
 let rejeuOuvert = false;
+
+/**
+ * LA MONTANTE DU SALON, ou `null` : six parties en topping a la suite
+ * (SPEC.md §23).
+ *
+ * Tout vient du serveur, cumuls compris : la montante est une suite de parties,
+ * et le client ne voit qu'une partie a la fois -- il ne pourrait pas additionner
+ * ce qu'il n'a pas vu.
+ */
+interface MontanteVue {
+  id: string;
+  rang: number;
+  etapes: number;
+  essai: number;
+  nom: string;
+  suivante: string | null;
+  temps: number;
+  negatif: number;
+  rates: number;
+  coups: number;
+  cumul: number;
+  reprenable: number | null;
+  nomReprenable: string | null;
+  close: boolean;
+  finie: boolean;
+  perdue: boolean;
+}
+let montante: MontanteVue | null = null;
 
 /** Instant ou CE fichier a ete compile, grave par tools/build.mjs. */
 declare const __COMPILE_A__: number;
@@ -2197,6 +2226,95 @@ function monVerdict(): { top: boolean; mot: string; score: number; ecart: number
   return { top: false, mot: sien.word, score: sien.score, ecart: last.score - sien.score };
 }
 
+/**
+ * LA MONTANTE : ses compteurs dans la barre, son panneau a droite.
+ *
+ * TOUT VIENT DU SERVEUR, cumuls compris. Le client ne voit qu'une partie a la
+ * fois : il ne saurait pas additionner ce qu'il n'a pas vu.
+ *
+ * LES TROIS GESTES SONT A L'HOTE, lui seul. Les autres joueurs lisent où en est
+ * la suite et ce qu'elle a coute -- ils jouent la meme montante, elle ne leur
+ * appartient simplement pas.
+ */
+function peindreLaMontante(): void {
+  const m = montante;
+  const enJeu = m !== null && rejeu === null;
+  $("rb-mont-wrap").hidden = !enJeu;
+  $("rb-mont-neg-wrap").hidden = !enJeu;
+  $("montante-wrap").hidden = !enJeu;
+  // LE TEMPS DU BANDEAU REDEVIENT CELUI DE LA PARTIE quand la montante s'en va,
+  // et perd son rouge avec elle.
+  if (!enJeu) { $("age").classList.remove("rouge"); return; }
+  const mm = m!;
+
+  $("rb-mont").textContent = `${mm.rang} / ${mm.etapes}`;
+  $("rb-mont-wrap").title = mm.essai > 1
+    ? t2("{f}, essai {n}", { f: t(mm.nom), n: mm.essai })
+    : t(mm.nom);
+  // LE NEGATIF DE LA SUITE, PAS CELUI DE L'ETAPE. « Top » tant qu'aucun coup
+  // n'a echappe a la table : c'est la meme lecture que le negatif personnel.
+  $("rb-mont-neg").textContent = mm.negatif === 0 ? t("Top") : `−${mm.negatif}`;
+  $("rb-mont-neg").classList.toggle("rouge", mm.rates > 0);
+  // DES QU'UN COUP EST RATE, LE TOTAL PASSE AU ROUGE (SPEC.md §23). C'est le
+  // temps qui fait le record de vitesse : c'est donc lui qui doit dire qu'il n'y
+  // concourt plus.
+  $("age").classList.toggle("rouge", mm.rates > 0);
+
+  // Les six etapes, et où l'on en est.
+  const chips = $("mt-etapes");
+  chips.replaceChildren();
+  for (const e of ETAPES) {
+    const c = el("span", "mt-etape");
+    c.appendChild(el("i", "", `${e.rang}. `));
+    c.appendChild(document.createTextNode(t(e.nom)));
+    if (e.rang === mm.rang && !mm.finie) c.classList.add("ici");
+    else if (e.rang < mm.rang || mm.finie) c.classList.add("faite");
+    chips.appendChild(c);
+  }
+
+  const points = mm.cumul.toLocaleString("fr");
+  $("mt-etat").textContent = mm.finie
+    ? [
+      t2("{n} étapes", { n: mm.etapes }),
+      t2("{n} coups", { n: mm.coups }),
+      t2("{n} points", { n: points }),
+      mm.rates === 0 ? t("topée") : t2("négatif -{n}", { n: mm.negatif }),
+    ].join(" · ")
+    : [
+      t2("Étape {n} sur {t}", { n: mm.rang, t: mm.etapes }),
+      t(mm.nom),
+      ...(mm.essai > 1 ? [t2("essai {n}", { n: mm.essai })] : []),
+      ...(mm.perdue ? [t("hors tableau")] : []),
+    ].join(" · ");
+  $("mt-titre").textContent = mm.finie ? t("Montante terminée") : t("Montante");
+
+  // LES BOUTONS SONT A L'HOTE. Sur une grille permanente il n'y a pas de
+  // montante du tout, mais la regle se redit plutot que de se supposer.
+  const aMoi = gerant === me && !permanent;
+  const suivante = aMoi && mm.close && !mm.finie && mm.suivante !== null;
+  const terminer = aMoi && mm.close && !mm.finie && mm.suivante === null;
+  const reprendre = aMoi && mm.reprenable !== null && !mm.finie;
+  $("mt-suivante").hidden = !suivante;
+  $("mt-terminer").hidden = !terminer;
+  $("mt-neuve").hidden = !(aMoi && mm.finie);
+  $("mt-reprendre").hidden = !reprendre;
+  $("mt-boutons").hidden = !(suivante || terminer || reprendre || (aMoi && mm.finie));
+  if (suivante) {
+    $("mt-suivante").textContent =
+      t2("Étape {n} : {f}", { n: mm.rang + 1, f: t(mm.suivante!) });
+  }
+  if (reprendre) {
+    $("mt-reprendre").textContent =
+      t2("Recommencer l'étape {n} ({f})",
+        { n: mm.reprenable!, f: t(mm.nomReprenable ?? "") });
+    // LE PRIX EST DIT AVANT LE CLIC. Le temps deja passe reste au compteur ;
+    // seul le negatif s'efface. Sans ce prix, on recommencerait jusqu'a tomber
+    // sur une grille facile.
+    $("mt-reprendre").title =
+      t("Le temps déjà joué reste au compteur ; le négatif de la tentative abandonnée est oublié.");
+  }
+}
+
 function paintSide() {
   // Le numero du coup suivant s'affiche MEME pendant le calcul : le faire
   // disparaitre le temps d'un solveur lent donne l'impression d'un jeu casse.
@@ -2220,7 +2338,12 @@ function paintSide() {
   $("fin").hidden = !finie;
   // Le bouton ne s'affiche qu'a qui peut s'en servir : le gerant du salon, et
   // seulement sur une partie close qui n'est pas une grille permanente.
-  $("rejouer-wrap").hidden = !finie || gerant !== me || permanent;
+  //
+  // PAS PENDANT UNE MONTANTE : la suite a ses propres boutons, et « Rejouer »
+  // y relancerait une partie seule, ce qui mettrait fin a la montante sans le
+  // dire. Qui veut en sortir passe par les reglages, et le voit.
+  $("rejouer-wrap").hidden = !finie || gerant !== me || permanent || montante !== null;
+  peindreLaMontante();
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
@@ -2254,7 +2377,10 @@ function paintSide() {
   //
   // En solitaire il garde son sens : c'est ce qu'on a su prendre sur la partie
   // du jour, et il n'y a personne d'autre a qui le comparer.
-  $("rb-score-wrap").hidden = rejeu !== null || enGroupe
+  // ET NI L'UN NI L'AUTRE PENDANT UNE MONTANTE. Ce qui compte est le negatif de
+  // la SUITE, affiche a cote : deux cases « Negatif » cote a cote, l'une pour
+  // l'etape et l'autre pour la montante, ne se lisent pas.
+  $("rb-score-wrap").hidden = rejeu !== null || enGroupe || montante !== null
     || monScore === 0 && monNegatif === 0;
   $("rb-score").textContent = String(monScore);
   // LE NEGATIF SUIT LE SCORE, ET POUR LA MEME RAISON. Il dit ce qu'on a laisse
@@ -2263,7 +2389,7 @@ function paintSide() {
   // mesure de ce qu'on a manque. A plusieurs en topping, la grille n'avance que
   // parce que quelqu'un a trouve le top : le travail est commun, et un ecart
   // personnel n'y mesure rien.
-  $("rb-neg-wrap").hidden = rejeu !== null || enGroupe
+  $("rb-neg-wrap").hidden = rejeu !== null || enGroupe || montante !== null
     || (monScore === 0 && monNegatif === 0);
   // LE SOLVEUR NE S'UTILISE PAS PENDANT UNE PARTIE A PLUSIEURS : ce serait
   // presque tenter les joueurs a tricher. « Seul » se compte sur la partie
@@ -4631,6 +4757,29 @@ $("rejouer").addEventListener("click", () => {
   });
 });
 
+/**
+ * LES TROIS GESTES DE LA MONTANTE, ET LE QUATRIEME QUI EN RELANCE UNE.
+ *
+ * Tous a l'hote. Le serveur le verifie de son cote : un bouton cache est un
+ * garde-fou, pas une regle.
+ */
+$("mt-suivante").addEventListener("click", () => envoyer({ t: "montante-suivante" }));
+$("mt-reprendre").addEventListener("click", () => envoyer({ t: "montante-reprendre" }));
+$("mt-terminer").addEventListener("click", () => envoyer({ t: "montante-terminer" }));
+
+/**
+ * Une montante neuve, sur les memes reglages : le chrono, le lexique et la
+ * grille. Le format, lui, repart de l'etape 1 -- c'est le serveur qui l'impose,
+ * et il n'y a rien a lui envoyer pour cela.
+ */
+$("mt-neuve").addEventListener("click", () => {
+  envoyer({
+    t: "relancer", montante: true,
+    chrono: cfg.chrono, bornes: cfg.bornes, dictionnaire: cfg.dictionnaire,
+    pioche: cfg.pioche, decompte: cfg.decompte,
+  });
+});
+
 // ------------------------------------------------- sections du panneau
 
 /**
@@ -4958,7 +5107,12 @@ setInterval(() => {
   // chrono repart a plein au premier arrivant -- le total reculerait.
   const enCours = solving || finie || !demarree || endormi || decompteJusqua > now
     ? 0 : Math.max(0, now - servedAt);
-  $("age").textContent = demarree ? fmtSecondes(tempsJoue + enCours) : "—";
+  // LE TEMPS ET LE NEGATIF SONT CEUX DE LA MONTANTE ENTIERE, pas de l'etape en
+  // cours (SPEC.md §23). C'est le total qui s'affiche, et c'est le total qui
+  // fait le record. Le serveur additionne les etapes closes -- abandons compris
+  // -- et l'on y ajoute ici le coup en cours, comme pour une partie seule.
+  $("age").textContent = montante !== null ? fmtSecondes(montante.temps + enCours)
+    : demarree ? fmtSecondes(tempsJoue + enCours) : "—";
   if (finie) { $("elapsed").textContent = "—"; return; }
   if (dureeMax !== null && debutDeLaPartie !== 0 && demarree) {
     const reste = Math.max(0, debutDeLaPartie + dureeMax * 1000 - now);
@@ -4991,6 +5145,7 @@ function applyState(s: {
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
   tops?: Record<string, number>;
+  montante?: MontanteVue | null;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   rack = s.rack ?? "";
@@ -5021,6 +5176,9 @@ function applyState(s: {
   endormi = s.actif === false;
   duplicate = s.mode === "duplicate";
   nonTrouves = s.nonTrouves ?? 0;
+  // LA MONTANTE VIENT ENTIERE DU SERVEUR, cumuls compris. Absente de l'etat,
+  // c'est qu'il n'y en a pas : ce salon joue des parties seules.
+  montante = s.montante ?? null;
   // Les manettes changent de mains sans qu'on se reconnecte : le bouton des
   // reglages suit l'etat, pas le seul message d'accueil.
   gerant = s.gerant ?? null;
@@ -6917,6 +7075,15 @@ let cJoker = false;
  */
 let cJokers = 1;
 /**
+ * LA MONTANTE, en cours d'edition : six parties en topping a la suite.
+ *
+ * Elle n'est pas un format de plus : c'est une SUITE de formats, et elle les
+ * impose. Allumee, le format, le joker, la pioche et les primes ne se reglent
+ * plus -- ils ne se lisent -- et la grille sans fin s'eteint.
+ */
+let cMontante = false;
+
+/**
  * Le format en cours d'edition, dans la fenetre simple.
  *
  * Trois formats se nomment -- ce sont ceux qu'on joue en club -- et le
@@ -7199,6 +7366,17 @@ for (const b of $("r-chrono").querySelectorAll("button")) {
 /** Duree la plus courte acceptee, en secondes. */
 const CHRONO_MIN = 1;
 
+/**
+ * Le plancher du chrono d'une montante, en secondes.
+ *
+ * C'est celui de son etape la plus chere, et non de la premiere. La partie
+ * normale descend a une seconde par coup parce que c'est la que se joue le
+ * record de chrono ; les cinq autres etapes restent a quinze. Le serveur refuse
+ * en dessous : le panneau remonte donc le chrono plutot que de laisser valider
+ * un reglage qui sera rejete.
+ */
+const CHRONO_MONTANTE = 15;
+
 ($("r-perso") as HTMLInputElement).addEventListener("input", () => {
   const champ = $("r-perso") as HTMLInputElement;
   // Rien que des chiffres : une lettre tapee la n'a aucun sens, et la laisser
@@ -7410,6 +7588,59 @@ function peuplerJoker(): void {
   $("r-joker2").setAttribute("aria-pressed", String(cJoker && cJokers === 2));
 }
 
+/**
+ * L'interrupteur de la montante, et les six etapes qu'il affiche.
+ *
+ * Elles ne se reglent pas : elles se lisent. Cacher le bloc du format sans rien
+ * mettre a la place laisserait un joueur sans savoir ce qu'il va jouer.
+ */
+function peuplerMontante(): void {
+  $("r-montante").setAttribute("aria-pressed", String(cMontante));
+  const boite = $("r-montante-etapes");
+  boite.replaceChildren();
+  for (const e of ETAPES) {
+    const c = el("span", "mt-etape");
+    c.appendChild(el("i", "", `${e.rang}. `));
+    c.appendChild(document.createTextNode(t(e.nom)));
+    boite.appendChild(c);
+  }
+}
+
+$("r-montante").addEventListener("click", () => {
+  cMontante = !cMontante;
+  if (cMontante) {
+    // LA MONTANTE IMPOSE CE QU'ELLE IMPOSE, ET LE PANNEAU LE MONTRE plutot que
+    // de laisser le serveur corriger en silence : l'etape 1 est la partie
+    // normale, en topping, au sac du commerce, aux primes du jeu.
+    cMode = "topping";
+    cFormat = "7/7";
+    cTirage = 7;
+    cJouables = 7;
+    cJoker = false;
+    cJokers = 1;
+    cPioche = "sac102";
+    cPrimes = {};
+    cCoupsMax = null;
+    cDureeMax = null;
+    // Une grille sans fin n'a pas de bout : on retombe sur le plateau normal.
+    if (cBornes === null) cBornes = 7;
+    // Le plancher du chrono de la montante est celui de son etape la plus
+    // chere, quinze secondes : le serveur refuserait moins.
+    if (cChrono !== null && cChrono < CHRONO_MONTANTE) cChrono = CHRONO_MONTANTE;
+  }
+  peuplerMontante();
+  peuplerMode();
+  peuplerJoker();
+  peuplerGrille();
+  peuplerFormat();
+  peuplerNombres();
+  peuplerPioche();
+  peuplerChrono();
+  peuplerCoups();
+  appliquerLeModeDeReglages();
+  avertirSiExplosif();
+});
+
 /** Zero, un ou deux jokers par tirage. Un clic sur le mode allume choisit zero. */
 function choisirLesJokers(combien: number): void {
   const deja = cJoker && cJokers === combien;
@@ -7435,10 +7666,31 @@ $("r-joker2").addEventListener("click", () => choisirLesJokers(2));
 function appliquerLeModeDeReglages(): void {
   const avance = prefs.avance;
   $("r-avance").setAttribute("aria-pressed", String(avance));
-  $("r-pioche-bloc").hidden = !avance;
-  $("r-primes-bloc").hidden = !avance;
-  $("r-format-bloc").hidden = avance;
-  $("r-nombres-bloc").hidden = !avance && cFormat !== "perso";
+  // CE QUE LA MONTANTE DECIDE NE SE REGLE PLUS. Le format, le joker, la pioche
+  // et les primes appartiennent a la suite ; le chrono, le lexique et la grille
+  // restent au joueur. Les six etapes prennent la place du bloc du format : un
+  // reglage qui disparait sans rien dire laisserait ignorer ce qu'on va jouer.
+  const mont = cMontante;
+  $("r-montante").setAttribute("aria-pressed", String(mont));
+  $("r-montante").hidden = cBornes === null || (!avance && !mont);
+  $("r-montante-bloc").hidden = !mont;
+  $("r-pioche-bloc").hidden = !avance || mont;
+  $("r-primes-bloc").hidden = !avance || mont;
+  $("r-format-bloc").hidden = avance || mont;
+  $("r-nombres-bloc").hidden = mont || (!avance && cFormat !== "perso");
+  // Le joker et le duplicate s'eteignent SANS DISPARAITRE : la rangee garderait
+  // un trou, et l'on ne verrait plus que la montante les a decides.
+  for (const b of [$("r-joker"), $("r-joker2")]) {
+    (b as HTMLButtonElement).disabled = mont;
+  }
+  for (const b of $("r-mode").querySelectorAll("button")) {
+    (b as HTMLButtonElement).disabled = mont && (b as HTMLElement).dataset["v"] !== "topping";
+  }
+  // Une grille sans fin n'a pas de bout, donc pas d'etape suivante.
+  for (const b of $("r-grille").querySelectorAll("button")) {
+    const infinie = (b as HTMLElement).dataset["v"] === "infinie";
+    (b as HTMLButtonElement).disabled = mont && infinie;
+  }
   // LA SUPER GRILLE SE MONTRE QUAND MEME SI L'ON Y JOUE. Cacher le reglage que
   // la partie en cours utilise laisserait le panneau sans aucun bouton allume,
   // et le premier clic ailleurs changerait de plateau sans le dire.
@@ -7448,7 +7700,7 @@ function appliquerLeModeDeReglages(): void {
   // Le double joker demande les reglages avances ET une grille bornee. Sur une
   // grille sans fin il n'existe pas du tout : ce n'est pas une option cachee,
   // c'est une option qui n'a pas cours.
-  $("r-joker2").hidden = cBornes === null || (!avance && cJokers !== 2);
+  $("r-joker2").hidden = cBornes === null || mont || (!avance && cJokers !== 2);
   // Quinze secondes par coup, c'est un reglage de joueur aguerri : il coute
   // cher au serveur et ne laisse le temps de rien a qui decouvre.
   for (const b of $("r-chrono").querySelectorAll("button[data-avance]")) {
@@ -7494,6 +7746,9 @@ function ouvrirReglages(): void {
   cDico = cfg.dictionnaire;
   cJoker = cfg.joker === true;
   cJokers = cfg.jokersParCoup === 2 ? 2 : 1;
+  // Le panneau s'ouvre sur l'etat du salon : une montante en cours y est
+  // allumee, et la refermer sans y toucher ne l'eteint pas.
+  cMontante = montante !== null;
   cPrimes = { ...cfg.primes };
   cChrono = cfg.chrono;
   cBornes = cfg.bornes;
@@ -7508,6 +7763,7 @@ function ouvrirReglages(): void {
   peuplerGrille();
   avertirSiExplosif();
   peuplerJoker();
+  peuplerMontante();
   $("r-primes").hidden = true;
   $("r-primes-open").textContent = t("Primes de farfouilles");
   cFormat = formatDe(cTirage, cJouables);
@@ -7552,6 +7808,9 @@ $("r-appliquer").addEventListener("click", () => {
     dictionnaire: cDico,
     joker: cJoker,
     jokersParCoup: cJokers,
+    // VALIDER SANS LA MONTANTE MET FIN A CELLE QUI COURT : une suite dont la
+    // variante changerait en chemin ne serait plus une suite.
+    montante: cMontante,
     primes: cPrimes,
     chrono: cChrono,
     bornes: cBornes,
@@ -7916,6 +8175,16 @@ void lireLeCompte().then(() => {
     ouvrirLeProfil(false);
   }
   if (new URLSearchParams(location.search).get("page") === "solveur") ouvrirLeSolveur(false);
+  // UNE ADRESSE DE RECORD S'OUVRE AU CHARGEMENT, ET PAS SEULEMENT AU RETOUR
+  // ARRIERE. Ces deux pages-la se poussaient a l'historique -- c'est ce qui
+  // fait un lien qu'on partage -- mais seul `popstate` les relisait : coller
+  // l'adresse dans une barre d'adresse rendait le mur de salons. La partie
+  // s'ouvre par sa REFERENCE (SPEC.md §23), qui ne designe qu'une manche.
+  const ou = new URLSearchParams(location.search);
+  if (ou.get("page") === "records") ouvrirLesRecords(false);
+  if (ou.get("page") === "partie" && ou.get("partie") !== null) {
+    void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1));
+  }
   // Retour du lien de confirmation : on le dit, et on nettoie l'adresse pour
   // qu'un rafraichissement ne rejoue pas le message.
   const retourMail = new URLSearchParams(location.search).get("email");
@@ -7945,8 +8214,28 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw
 // n'ouvre un fichier de partie : une ligne reste lisible meme si la partie
 // qu'elle designe a disparu du disque.
 
+/** Une etape, telle que la ligne d'une montante la porte. */
+interface EtapeDeLigne {
+  rang: number;
+  ref: string;
+  categorie: string;
+  coups: number;
+  temps: number;
+  negatif: number;
+  topee: boolean;
+  essai: number;
+}
+
 interface LigneDeRecord {
   rang: number;
+  /**
+   * LA REFERENCE DE LA MANCHE, et son identite (SPEC.md §23).
+   *
+   * C'est par elle qu'on la relit et qu'on la cite. Le nom du salon ne suffit
+   * plus : deux parties enregistrees au meme endroit le partagent, et une
+   * montante en joue six d'affilee.
+   */
+  ref: string;
   partie: string;
   at: number;
   categorie: string;
@@ -7962,6 +8251,8 @@ interface LigneDeRecord {
   negatif: number;
   joueurs: { nom: string; tops: number; invite: boolean }[];
   solo: string | null;
+  /** Les six etapes, sur une ligne de montante, et rien ailleurs. */
+  etapes?: EtapeDeLigne[];
 }
 
 interface LigneDeCoup {
@@ -8267,9 +8558,83 @@ function outilsDeLigne(partie: string): HTMLElement[] {
   revoir.type = "button";
   revoir.addEventListener("click", (e) => {
     e.stopPropagation();
+    // Le rejeu prend la page entiere : la fenetre ouverte par-dessus n'a plus
+    // d'objet, et la laisser la ferait flotter au-dessus de la grille.
+    fermerLaFeuille();
     void ouvrirLaPartie(partie);
   });
   return [feuille, revoir];
+}
+
+/** Le nom d'une categorie, tel que les onglets l'ecrivent. */
+function nomDeCategorie(id: string): string {
+  return t(CATEGORIES.find((c) => c.id === id)?.nom ?? id);
+}
+
+/**
+ * LE BOUTON D'UNE MONTANTE : ses six etapes, et non une feuille de route.
+ *
+ * Une montante n'a pas un journal, elle en a six (SPEC.md §23) : « FdR » et
+ * « Revoir » n'auraient rien a ouvrir. Le bouton ouvre donc la liste des
+ * etapes, et chacune y porte ses deux outils a elle.
+ */
+function boutonDesEtapes(l: LigneDeRecord): HTMLElement {
+  const b = el("button", "rc-outil", t("Étapes")) as HTMLButtonElement;
+  b.title = t("Les six étapes de cette montante");
+  b.type = "button";
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ouvrirLesEtapes(l);
+  });
+  return b;
+}
+
+/**
+ * Les six etapes d'une montante, dans la fenetre de la feuille de route.
+ *
+ * ELLES VIENNENT DE LA LIGNE, et d'aucun fichier. C'est la regle du journal des
+ * records : la ligne porte tout ce qui s'affiche, et un record reste lisible
+ * meme si ses parties ont disparu du disque. Les deux outils de chaque etape,
+ * eux, demandent bien son journal -- et le diront s'il n'y est plus.
+ */
+function ouvrirLesEtapes(l: LigneDeRecord): void {
+  frPartie = null;
+  $("fr-titre").textContent = t("Les six étapes");
+  $("voile-route").hidden = false;
+  const joueurs = l.joueurs
+    .map((j) => j.invite ? `${j.nom} ${t("(invité)")}` : j.nom).join(", ");
+  $("fr-detail").textContent = [
+    nomDeCategorie(l.categorie),
+    joueurs || t("personne"),
+    tempsDeManche(l.temps),
+    l.topee ? t("topée") : t2("négatif -{n}", { n: l.negatif }),
+    dateDeManche(l.at),
+  ].join(" · ");
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: t("Étape") }, { texte: t("Format"), classe: "g" },
+    { texte: t("Coups") }, { texte: t("Temps") }, { texte: t("Négatif") },
+    { texte: "", classe: "c" },
+  ]));
+  const corps = el("tbody");
+  for (const e of l.etapes ?? []) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "", String(e.rang)));
+    const format = el("td", "g fort", nomDeCategorie(e.categorie));
+    // L'ESSAI SE DIT QUAND IL Y EN A EU PLUSIEURS. Une etape reprise a coute du
+    // temps a la montante, et c'est la seule trace qu'il en reste.
+    if (e.essai > 1) format.appendChild(el("i", "pr-sien", ` (${t2("essai {n}", { n: e.essai })})`));
+    tr.appendChild(format);
+    tr.appendChild(el("td", "", String(e.coups)));
+    tr.appendChild(el("td", "fort", tempsDeManche(e.temps)));
+    tr.appendChild(el("td", e.topee ? "" : "fort", e.topee ? "—" : `-${e.negatif}`));
+    const outils = el("td", "c");
+    for (const b of outilsDeLigne(e.ref)) outils.appendChild(b);
+    tr.appendChild(outils);
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("pr-route").replaceChildren(table);
 }
 
 /**
@@ -8310,7 +8675,10 @@ function ligneDePartie(
   tr.appendChild(lex);
 
   const outils = el("td", "c");
-  for (const b of outilsDeLigne(l.partie)) outils.appendChild(b);
+  // Une montante ouvre ses six etapes ; une partie, sa feuille de route.
+  const boutons = l.etapes !== undefined && l.etapes.length > 0
+    ? [boutonDesEtapes(l)] : outilsDeLigne(l.ref);
+  for (const b of boutons) outils.appendChild(b);
   tr.appendChild(outils);
   return tr;
 }
@@ -8749,6 +9117,8 @@ interface PartieRelue {
   fin: string | null;
   coups: CoupRelu[];
   manche: {
+    /** La reference de la manche : c'est elle qui la designe partout. */
+    ref: string;
     categorie: string; grille: string; lexique: string; chrono: number | null;
     at: number; temps: number; cumul: number; topee: boolean; negatif: number;
     joueurs: { nom: string; tops: number; invite: boolean }[]; solo: string | null;
@@ -8982,7 +9352,9 @@ function prPeindreLaRoute(): void {
     // CLIQUER UNE LIGNE OUVRE CE COUP DANS « REVOIR ». La feuille n'a pas de
     // grille a cote d'elle : ce qu'on veut en cliquant un coup, c'est le voir.
     l.addEventListener("click", () => {
-      const id = partie.partie;
+      // LA REFERENCE, ET NON LE NOM DU SALON : c'est elle qui designe la manche
+      // dans une adresse, et deux parties du meme salon la partageaient.
+      const id = partie.manche.ref;
       fermerLaFeuille();
       void ouvrirLaPartie(id, i + 1);
     });
@@ -9069,7 +9441,8 @@ async function prChercherLesPaliers(n: number): Promise<void> {
   const mien = ++prAttente;
   prPeindreLesPaliers(n, null);
   try {
-    const r = await fetch(`/api/paliers/${encodeURIComponent(prPartie.partie)}/${n}`);
+    const r = await fetch(
+    `/api/paliers/${encodeURIComponent(prPartie.manche.ref)}/${n}`);
     const d = await r.json();
     if (mien !== prAttente) return;
     const paliers = (d.paliers ?? []) as PalierRelu[];
@@ -9135,6 +9508,9 @@ function resumeDeLaPartie(d: PartieRelue): string {
  */
 async function ouvrirLaFeuille(id: string): Promise<void> {
   frPartie = null;
+  // La meme fenetre a pu servir aux etapes d'une montante : on lui rend son
+  // titre, sinon une feuille de route s'ouvrirait sous « Les six etapes ».
+  $("fr-titre").textContent = t("Feuille de route");
   $("pr-route").replaceChildren();
   $("fr-detail").textContent = t("chargement…");
   $("voile-route").hidden = false;

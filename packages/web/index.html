@@ -376,6 +376,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    redit donc au meme niveau de precision. */
 #rejeu-wrap, #rejouer-wrap { display: flex; justify-content: center; }
 #rejeu-wrap[hidden], #rejouer-wrap[hidden] { display: none; }
+/* LA MONTANTE : six parties en topping, a la suite (SPEC.md §23).
+   Le compteur de la barre porte le rang de l'etape ; le negatif de la suite se
+   pose a cote, et le TEMPS passe au rouge des qu'un coup est rate -- c'est le
+   temps qui fait le record, et c'est donc lui qui doit dire qu'il ne compte
+   plus pour le classement de vitesse. */
+.stat.suite { min-width: 118px; }
+.stat b.rouge { color: var(--warn); }
+#montante-wrap { display: flex; flex-direction: column; gap: 8px; }
+#montante-wrap[hidden] { display: none; }
+.mt-etapes { display: flex; flex-wrap: wrap; gap: 5px; }
+.mt-etape { padding: 3px 8px; font-size: 11.5px; color: var(--ink-faint); border: 1px solid var(--rule); border-radius: 3px; }
+.mt-etape.ici { color: var(--accent); border-color: var(--accent); }
+.mt-etape.faite { color: var(--ink); }
+.mt-etape i { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: .86em; color: var(--ink-faint); }
+.mt-boutons { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-boutons button { flex: 1 1 auto; }
+/* Recommencer coute du temps : le bouton le dit de sa couleur, sans crier. */
+#mt-reprendre { color: var(--warn); border-color: var(--warn); }
+#mt-reprendre:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
 /* « REVOIR LA PARTIE » PREND LE TRAITEMENT « PORTE » DU CHEVALET DE FIN
    (`.chevalet-fin` ci-dessus) : tout le bloc se clique, s'allume en vert au
    survol, et porte son raccourci en toutes lettres -- Rejouer reste, pour
@@ -1606,7 +1625,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="voile" id="voile-route" hidden>
   <div class="pseudo fenetre-route">
     <div class="fr-tete">
-      <h2>Feuille de route</h2>
+      <!-- LA MEME FENETRE SERT AUX SIX ETAPES D'UNE MONTANTE : une montante n'a
+           pas une feuille de route, elle en a six, et c'est la liste qu'on
+           ouvre. Le titre le dit. -->
+      <h2 id="fr-titre">Feuille de route</h2>
       <span class="pr-detail" id="fr-detail"></span>
     </div>
     <div class="pr-route" id="pr-route"></div>
@@ -1689,6 +1711,11 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <div class="stat" id="rb-reste-wrap" hidden><span>Reste</span><b id="rb-reste">—</b></div>
   <div class="stat" id="rb-neg-wrap" hidden><span>Négatif</span><b id="rb-neg">0</b></div>
   <div class="stat" id="rb-score-wrap" hidden><span>Score</span><b id="rb-score">0</b></div>
+  <!-- LA MONTANTE. Ses cumuls sont ceux de la suite entiere, pas de l'etape en
+       cours : c'est le total qui s'affiche, et c'est le total qui fait le
+       record (SPEC.md §23). -->
+  <div class="stat suite" id="rb-mont-wrap" hidden><span>Montante</span><b id="rb-mont">1 / 6</b></div>
+  <div class="stat" id="rb-mont-neg-wrap" hidden><span>Négatif</span><b id="rb-mont-neg">0</b></div>
   <div class="stat chrono">
     <div><span>Coup</span><b id="elapsed">—</b></div>
     <div><span>Temps</span><b id="age">—</b></div>
@@ -1728,6 +1755,20 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
       <div class="block" id="rejouer-wrap" hidden>
         <button id="rejouer">Rejouer</button>
+      </div>
+      <!-- LA MONTANTE : trois gestes, et tous les trois sont a l'hote. Lancer
+           l'etape suivante, recommencer une etape ratee, terminer la suite.
+           Les autres joueurs y lisent où en est la montante. -->
+      <div class="block" id="montante-wrap" hidden>
+        <div class="head"><h2 id="mt-titre">Montante</h2></div>
+        <div class="mt-etapes" id="mt-etapes"></div>
+        <div class="sub" id="mt-etat"></div>
+        <div class="mt-boutons" id="mt-boutons">
+          <button type="button" id="mt-suivante" hidden>Étape suivante</button>
+          <button type="button" id="mt-terminer" hidden>Terminer la montante</button>
+          <button type="button" id="mt-neuve" hidden>Nouvelle montante</button>
+          <button type="button" id="mt-reprendre" hidden>Recommencer l'étape</button>
+        </div>
       </div>
       <div class="block">
         <div class="word none" id="cur-word">—</div>
@@ -1877,6 +1918,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
                   title="Deux jokers à chaque tirage, au lieu d'un">
             Double joker
           </button>
+          <!-- LA MONTANTE : six parties en topping, a la suite (SPEC.md §23).
+               Elle fige le format et le joker -- c'est la suite qui les impose
+               -- et ne laisse reglables que le chrono, le lexique et la grille.
+               Jamais sur la grille sans fin : six formats jusqu'au bout du sac
+               demandent un bout de sac. -->
+          <button type="button" class="interrupteur" id="r-montante" data-avance aria-pressed="false"
+                  title="Six parties à la suite, du plus simple au plus difficile">
+            Montante
+          </button>
         </div>
       </div>
 
@@ -1888,6 +1938,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           <button type="button" data-v="8/8">7 et 8<em>8 posables sur 8</em></button>
           <button type="button" data-v="perso">Personnalisé</button>
         </div>
+      </div>
+
+      <!-- LES SIX ETAPES, quand la montante est allumee. Le format ne se regle
+           plus : il se lit. -->
+      <div class="reglage" id="r-montante-bloc" hidden>
+        <label>Les six étapes</label>
+        <div class="mt-etapes" id="r-montante-etapes"></div>
       </div>
 
       <div class="reglage" id="r-nombres-bloc">

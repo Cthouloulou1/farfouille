@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   annexe, classementAuNegatif, classementDeVitesse, compteurWuQi, coupsExtremes,
-  invaliderLaManche, motsRates, motsTrouves, ouvrirLesRecords, tableau,
+  invaliderLaManche, motsRates, motsTrouves, ouvrirLesRecords, refDeLaGraine, tableau,
   type CoupObserve, type Manche,
 } from "../src/records.ts";
 
@@ -65,9 +65,13 @@ function manche(e: Esquisse): Manche {
   for (const c of vus) if (c.par !== null) tops.set(c.par, (tops.get(c.par) ?? 0) + 1);
   const topee = vus.every((c) => c.par !== null);
   const chers = [...vus].sort((a, b) => b.score - a.score);
+  const graine = `graine-de-${e.partie}`;
   return {
+    // La reference est celle que la relecture recalculerait : ces manches
+    // passent par le journal, comme les vraies.
+    ref: refDeLaGraine(graine),
     partie: e.partie,
-    graine: `graine-de-${e.partie}`,
+    graine,
     at: e.at ?? horloge++,
     categorie: e.categorie ?? "normale",
     grille: e.grille ?? "normale",
@@ -381,7 +385,9 @@ console.log("\n  --- une manche invalidee ---\n");
   );
   verifie("la suspecte mene le classement",
     classementDeVitesse({ categorie: "normale" })[0]?.partie === "suspecte");
-  invaliderLaManche("suspecte", "zulu", "temps invraisemblables");
+  // ON INVALIDE PAR LA REFERENCE, pas par le nom du salon : deux parties du
+  // meme salon en portent une chacune.
+  invaliderLaManche(refDeLaGraine("graine-de-suspecte"), "zulu", "temps invraisemblables");
   const apres = classementDeVitesse({ categorie: "normale" });
   verifie("une fois invalidee, elle disparait du tableau",
     apres.length === 1 && apres[0]?.partie === "propre",

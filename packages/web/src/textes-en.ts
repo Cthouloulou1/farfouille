@@ -518,4 +518,34 @@ export const EN: Readonly<Record<string, string>> = {
   "Aucun coup joué.": "No move played.",
   "{n} solution": "{n} solution",
   "{n} solutions": "{n} solutions",
+
+  // ------------------------------------------------------------- la montante
+  //
+  // « Montante » est deja plus haut : c'est le nom de la categorie, et il vaut
+  // aussi pour le panneau. « Stage » plutot que « step » : une etape de
+  // montante est une partie entiere, pas un pas.
+  "Montante terminée": "Ladder complete",
+  "Les six étapes": "The six stages",
+  "Les six étapes de cette montante": "The six stages of this ladder",
+  "Six parties à la suite, du plus simple au plus difficile":
+    "Six games in a row, from the easiest to the hardest",
+  "Étape": "Stage",
+  "Étapes": "Stages",
+  "Étape suivante": "Next stage",
+  "Étape {n} sur {t}": "Stage {n} of {t}",
+  "Étape {n} : {f}": "Stage {n}: {f}",
+  "Terminer la montante": "End the ladder",
+  "Nouvelle montante": "New ladder",
+  "Recommencer l'étape": "Restart the stage",
+  "Recommencer l'étape {n} ({f})": "Restart stage {n} ({f})",
+  "Le temps déjà joué reste au compteur ; le négatif de la tentative abandonnée est oublié.":
+    "The time already played stays on the clock; the abandoned attempt's negative is dropped.",
+  "essai {n}": "attempt {n}",
+  "{f}, essai {n}": "{f}, attempt {n}",
+  "{n} étapes": "{n} stages",
+  "{n} coups": "{n} moves",
+  "{n} points": "{n} points",
+  "négatif -{n}": "negative -{n}",
+  "hors tableau": "off the table",
+  "topée": "topped",
 };

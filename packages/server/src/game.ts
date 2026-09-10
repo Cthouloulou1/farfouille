@@ -724,9 +724,26 @@ export class Game {
   private surFin: ((raison: RaisonDeFin) => void)[] = [];
   private surArret: (() => void)[] = [];
 
-  constructor(gameId: string, layout: LayoutName, cfg?: ConfigPartie) {
+  /**
+   * LA MARQUE DE LA MONTANTE, s'il y en a une.
+   *
+   * Une montante est une SUITE de parties, pas une partie (SPEC.md §23) : rien
+   * du modele de partie ne change pour elle. Chaque etape garde son journal, sa
+   * graine et sa variante ; elle porte seulement, dans son en-tete, de quoi
+   * dire de quelle suite elle est la troisieme etape et le deuxieme essai.
+   *
+   * La partie ne s'en sert pour rien. C'est une inscription, et elle vaut pour
+   * qui relira le journal plus tard.
+   */
+  readonly montante: { id: string; etape: number; essai: number } | null;
+
+  constructor(
+    gameId: string, layout: LayoutName, cfg?: ConfigPartie,
+    montante?: { id: string; etape: number; essai: number } | null,
+  ) {
     this.gameId = gameId;
     this.layout = layout;
+    this.montante = montante ?? null;
     setLayout(layout);
     this.cfg = cfg ?? configParDefaut();
     // Le lexique de la partie, pas celui du serveur : deux salons voisins
@@ -1139,6 +1156,9 @@ export class Game {
         t: "grille", gameId: this.gameId, layout: this.layout,
         seed: this.seed, createdAt: this.createdAt, config: serialiser(this.cfg),
         paliers: this.paliersGardes, rng: this.rngAlgo,
+        // Absente sur une partie ordinaire : la cle ne parait que sur une etape
+        // de montante, et le journal ne porte pas de champ vide.
+        ...(this.montante === null ? {} : { montante: this.montante }),
       });
       // Migration : une partie qui n'avait qu'un instantane se voit dotee d'un
       // journal complet, retroactivement.

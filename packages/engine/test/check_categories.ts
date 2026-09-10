@@ -52,8 +52,15 @@ console.log("  --- la table ---\n");
   verifie("douze grands formats", grandes.length === 12, "de 10 sur 10 a 15 sur 15 joker");
   verifie("les trois tailles couvrent la table",
     petites.length + normales.length + grandes.length === CATEGORIES.length);
-  verifie("seuls les grands formats se completent au negatif",
-    CATEGORIES.every((c) => completeAuNegatif(c) === (c.taille === "grand")));
+  // LES GRANDS FORMATS, ET LA MONTANTE. Les uns parce qu'a dix caramels une
+  // partie topee est rare ; l'autre parce que toper six parties d'affilee l'est
+  // bien davantage, et qu'une montante ratee ne concourt qu'au negatif
+  // (SPEC.md §23).
+  verifie("les grands formats et la montante se completent au negatif",
+    CATEGORIES.every((c) =>
+      completeAuNegatif(c) === (c.taille === "grand" || c.montante)),
+    CATEGORIES.filter((c) => completeAuNegatif(c) && c.taille !== "grand")
+      .map((c) => c.id).join(" "));
   verifie("la categorie reine vient en tete des normales",
     normales[0]!.id === "normale");
   verifie("le solo la suit", normales[1]!.id === "normale-solo"

@@ -41,9 +41,19 @@ export const TAILLES: readonly { id: Taille; nom: string }[] = [
   { id: "grand", nom: "Supérieur" },
 ];
 
-/** Seule la grande taille complete ses tableaux au negatif (SPEC.md §23). */
+/**
+ * Ce tableau se complete-t-il au negatif quand il n'a pas cent parties topees ?
+ *
+ * LES GRANDS FORMATS, parce qu'a dix caramels et plus une partie topee est rare
+ * et qu'un tableau de trois lignes n'apprend rien (SPEC.md §23).
+ *
+ * ET LA MONTANTE, pour une raison voisine : toper six parties d'affilee est bien
+ * plus rare que d'en toper une, et le §23 le dit deja autrement -- qui ne
+ * recommence pas continue, sa montante s'acheve avec son rouge, et elle ne
+ * concourt qu'au negatif. Sans cette ligne, elle ne concourrait a rien.
+ */
 export function completeAuNegatif(c: Categorie | undefined): boolean {
-  return c?.taille === "grand";
+  return c?.taille === "grand" || c?.montante === true;
 }
 
 export interface Categorie {

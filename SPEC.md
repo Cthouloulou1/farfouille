@@ -2124,6 +2124,21 @@ partie sans le dire.
 de l'une à l'autre se retient (`prefs.avance`) : qui a demandé les réglages
 avancés ne veut pas les redemander à chaque salon.
 
+**La montante fige ce qu'elle décide, et le panneau le montre.** C'est un
+interrupteur des réglages avancés, à côté de ceux du joker (§23). Allumé : le
+format, le nombre de lettres, la pioche et les primes disparaissent — la suite
+les impose, et chaque étape doit pouvoir porter un record — le joker et le
+duplicate s'éteignent **sans disparaître**, et la grille sans fin s'éteint aussi.
+
+À la place du bloc du format, **les six étapes** : un réglage qui s'en va sans
+rien dire laisserait ignorer ce qu'on va jouer. Le joker et le duplicate, eux,
+gardent leur bouton parce qu'un trou dans la rangée ne dirait pas que la montante
+en a décidé.
+
+Le panneau **remonte le chrono** au plancher de la montante s'il était plus bas :
+le serveur refuserait, et laisser valider un réglage qui sera rejeté est le pire
+des deux mondes.
+
 ### Une grille permanente par langue
 
 `mondiale` joue en français, `mondiale-en` — « The Infinite Grid » — en anglais.
@@ -4697,9 +4712,21 @@ Six parties en topping, à la suite, sans reprendre son souffle :
 | 5 | 8 sur 8 |
 | 6 | 8 sur 8 joker |
 
+Les deux dernières s'affichent sous le nom que le site leur donne partout
+ailleurs : **« 7 et 8 »** et « 7 et 8 joker ». C'est le même format — huit
+posables sur huit — et un joueur qui lit « 7 et 8 » dans les réglages ne doit pas
+découvrir un autre nom au milieu d'une montante.
+
 Un bouton **Montante** dans les réglages avancés, sous « Double joker ». Il fige
 le format et le joker — c'est la suite qui les impose — et ne laisse réglables que
 le chrono, le lexique et la grille.
+
+**Le plancher du chrono est celui de l'étape la plus chère, pas de la première.**
+La partie normale descend à une seconde par coup, parce que c'est là que se joue
+le record de chrono (voir plus bas) ; les cinq autres étapes restent à quinze. Une
+montante qui prendrait le plancher de son étape 1 offrirait donc une 7 et 8 joker
+à une seconde par coup, ce qu'aucun réglage ne permet par ailleurs. Le plancher de
+la montante est quinze secondes, sur les six étapes.
 
 **Sur les deux grilles bornées, jamais sur la grille sans fin.** Le concept est le
 même en 15×15 et sur la super grille : six formats, dans l'ordre, jusqu'au bout du
@@ -4708,6 +4735,31 @@ est éteint.
 
 **Le temps et le négatif sont ceux de la montante entière**, pas de l'étape en
 cours. C'est le total qui s'affiche, et c'est le total qui fait le record.
+
+#### L'étape suivante part au clic de l'hôte
+
+**La montante s'enchaîne, mais elle ne s'enchaîne pas toute seule.** Le bouton
+« Rejouer » s'efface — il relancerait une partie seule, donc mettrait fin à la
+suite sans le dire — et un panneau de montante prend sa place, en haut du tableau
+de bord : les six étapes, où l'on en est, et les boutons de l'hôte. « Étape
+suivante » y nomme le format qui vient, et l'hôte le lance quand la table est
+prête. Trois raisons, et la première suffirait :
+
+- **la grille de fin d'étape se regarde.** Une bascule automatique l'emporterait
+  au moment précis où l'on compte ce qu'on vient de laisser ;
+- **la pause ne coûte rien.** Le temps de la montante est la somme des temps de
+  ses coups, comme le temps d'une partie (§16) : ce qui se passe entre deux
+  étapes n'est compté par personne ;
+- **le bouton de reprise a besoin de cet instant.** Un raté au dernier coup clôt
+  l'étape ; si la suivante partait d'elle-même, il n'y aurait vraiment plus le
+  temps de cliquer.
+
+La sixième étape n'offre pas de suivante. Si rien n'y est à reprendre, la montante
+**se termine d'elle-même** : sa ligne part au journal, le panneau affiche le total
+et propose une montante neuve. S'il reste une étape à reprendre — un raté dans
+cette sixième, ou au dernier coup de la cinquième — la montante **attend** : c'est
+précisément le moment où le choix compte le plus, effacer ce négatif au prix du
+temps déjà passé. L'hôte reprend, ou clôt la montante d'un bouton.
 
 **Une montante est une suite de parties, pas une partie.** Chaque étape garde son
 journal, sa graine, sa variante ; toutes portent le même identifiant de suite dans
@@ -4730,7 +4782,8 @@ montante entière.
 Ce qui se passe alors :
 
 - le **chrono ne s'arrête pas**. Le temps de la tentative abandonnée reste au
-  compteur ;
+  compteur — celui de ses **coups joués** : le coup en cours, qui n'est pas
+  clos, n'a jamais compté pour personne, ici comme dans une partie seule (§16) ;
 - le **négatif de la tentative abandonnée est oublié**, et le rouge s'éteint avec
   lui : la montante n'a plus de coup raté à son actif.
 
@@ -4757,6 +4810,10 @@ Une fois cette fenêtre passée, l'étape est close et ne se reprend plus. Sans 
 on pourrait remonter toute la montante depuis sa dernière étape, et la suite
 n'aurait plus d'ordre.
 
+La bascule au clic rend ce cas plus rare qu'il n'y paraît : la fin d'une étape
+montre les deux boutons côte à côte, reprendre et continuer. La règle vaut pour
+l'hôte qui enchaîne sans regarder.
+
 #### L'étape suivante est prête avant qu'on en ait besoin
 
 Mesuré : monter un fil de calcul neuf et obtenir le premier top d'une 15×15 vide
@@ -4780,6 +4837,69 @@ montante :
 
 Rien ne fuit : la graine et le tirage préparés ne sortent pas du serveur, comme
 les coups d'avance du §17.
+
+> **Aucune des trois n'est construite.** La montante s'enchaîne au clic de
+> l'hôte, et paie donc ces 201 ms à chaque étape, comme n'importe quelle relance
+> de salon. C'est un temps mort à l'écran, pas un temps compté : il ne touche ni
+> le total de la montante, ni aucun record. À reprendre quand une montante aura
+> été jouée et qu'on saura si ces deux dixièmes se remarquent.
+
+#### Ce que la montante enregistre
+
+**Une ligne pour la montante, et une par étape.** Une étape est une partie
+entière, terminée, dans un format qui a sa catégorie : elle entre à son tableau
+comme n'importe quelle autre, et l'en écarter parce qu'elle a été jouée dans une
+suite serait arbitraire. La montante ajoute une septième ligne, la sienne, écrite
+quand la sixième étape se termine.
+
+Cette ligne porte les cumuls : **le temps de tous les essais**, abandons compris,
+puis le négatif, le cumul, les coups et les farfouilles des seuls essais retenus,
+et les tops de chacun additionnés sur les six étapes. Elle est **topée** si aucun
+essai retenu ne porte de raté. Le solo se lit comme ailleurs : un seul joueur a
+trouvé tous les tops des six étapes.
+
+**Elle porte aussi ses six étapes**, chacune avec sa référence, son format, ses
+coups, son temps et son négatif. C'est ce qui permet de la relire : une montante
+n'a pas un journal, elle en a six, et une ligne de record ne va jamais chercher
+dans un fichier de partie ce qu'elle peut porter elle-même.
+
+**Le tableau de la montante se complète au négatif**, comme ceux des grands
+formats. Topée six fois de suite est bien plus rare que topée une fois, et le §23
+le dit déjà autrement : qui ne recommence pas continue, et sa montante ne concourt
+qu'au négatif. Un tableau qui n'accueillerait que les montantes parfaites resterait
+vide.
+
+**Une montante que le serveur perd est perdue.** Elle vit en mémoire, dans le
+salon, comme l'observation dont elle se nourrit. Un serveur qui redémarre en cours
+de partie rend déjà cette partie inéligible ; la montante suit la même règle, et
+pour la même raison : ce qu'il faudrait écrire pour la sauver est exactement ce
+que le journal d'une partie ne dit pas.
+
+#### Une manche se désigne par sa référence, et non par son salon
+
+Une manche s'identifiait par le **nom de son salon**, qui est aussi le nom de son
+fichier. Deux parties enregistrées au même endroit portaient donc la même
+identité : « Revoir » ouvrait la première des deux, et invalider l'une invalidait
+l'autre. Cela se voyait peu — il faut jouer deux parties complètes dans le même
+salon — et une montante en joue six d'affilée.
+
+La graine, elle, est unique et ne change jamais. Mais **elle ne sort pas** : elle
+dirait comment refaire les tirages. Chaque manche porte donc une **référence** :
+douze caractères tirés de l'empreinte de sa graine, unique, stable, publique, et
+qui ne dit rien de la graine. C'est elle qui désigne une manche dans une adresse,
+et c'est elle qu'on invalide.
+
+Les lignes déjà écrites n'en portent pas : leur référence se recalcule à la
+relecture, depuis la graine qu'elles portent. Le journal n'est pas réécrit. Les
+adresses de rejeu changent donc de forme, et un lien vers une partie donné avant
+ce changement ne s'ouvre plus ; la page des records, elle, les refait à chaque
+lecture.
+
+**Et cette adresse s'ouvre enfin.** Les records et le rejeu se poussaient déjà à
+l'historique — c'est ce qui fait un lien qu'on partage — mais seul le bouton
+« précédent » les relisait : coller l'adresse dans une barre d'adresse rendait le
+mur de salons. Un lien de record ouvre maintenant son tableau, et un lien de
+partie ouvre son coup.
 
 ### Le journal des records
 

@@ -78,8 +78,42 @@ export interface CoupObserve {
   negatif: number;
 }
 
+/** Une etape de montante, telle que la ligne de la montante la porte. */
+export interface EtapeDeMontante {
+  /** Le rang de l'etape, de 1 a 6. */
+  rang: number;
+  /** La reference de la manche de cette etape : c'est par elle qu'on la relit. */
+  ref: string;
+  /** Sa categorie, donc son format : « 7 sur 8 », « 7 et 8 joker »... */
+  categorie: string;
+  coups: number;
+  temps: number;
+  negatif: number;
+  topee: boolean;
+  /** Combien de fois cette etape a ete reprise avant celle-ci. */
+  essai: number;
+}
+
 /** Une manche : une partie valide, jouee, terminee. */
 export interface Manche {
+  /**
+   * LA REFERENCE PUBLIQUE DE LA MANCHE, ET SON IDENTITE.
+   *
+   * Une manche s'identifiait par le nom de son salon, qui est aussi le nom de
+   * son fichier. Deux parties enregistrees au meme endroit portaient donc la
+   * meme identite : « Revoir » ouvrait la premiere des deux, et invalider l'une
+   * invalidait l'autre. Cela se voyait peu -- il faut jouer deux parties
+   * completes dans le meme salon -- et une montante en joue six d'affilee.
+   *
+   * La graine, elle, est unique et ne change jamais, mais ELLE NE SORT PAS :
+   * elle dirait comment refaire les tirages. La reference est donc douze
+   * caracteres de son empreinte -- unique, stable, publique, et qui ne dit rien
+   * de la graine.
+   *
+   * Les lignes deja ecrites n'en portent pas : elle se recalcule a la
+   * relecture, depuis la graine (voir `refDeLaGraine`).
+   */
+  ref: string;
   /**
    * Le salon ou elle s'est jouee, qui est aussi le nom de son fichier AU
    * MOMENT DE L'ENREGISTREMENT. Une relance l'archive sous un nom horodate,
@@ -135,6 +169,16 @@ export interface Manche {
    */
   coupCher: CoupNote | null;
   coupPasCher: CoupNote | null;
+  /**
+   * Les six etapes, sur la ligne d'une montante, et rien ailleurs.
+   *
+   * UNE MONTANTE N'A PAS UN JOURNAL, ELLE EN A SIX. Sa ligne porte donc de quoi
+   * les retrouver et les resumer, plutot que d'aller le chercher dans les
+   * manches des etapes -- qui peuvent avoir ete invalidees separement, et qui
+   * ne sont de toute facon pas ce qu'une ligne de record va lire (voir l'entete
+   * de ce fichier).
+   */
+  etapes?: EtapeDeMontante[];
 }
 
 /** Un coup retenu pour lui-meme : son mot, ses points, qui l'a trouve. */
@@ -179,7 +223,15 @@ export interface DeltaDeMots {
 type Evenement =
   | ({ t: "manche" } & Manche)
   | ({ t: "mots" } & DeltaDeMots)
-  | { t: "invalide"; partie: string; par: string; raison: string; at: number };
+  | {
+    t: "invalide";
+    /** La manche visee. Les lignes d'avant les references portaient `partie`. */
+    ref: string;
+    partie: string;
+    par: string;
+    raison: string;
+    at: number;
+  };
 
 // ------------------------------------------------------------- l'empreinte
 
@@ -202,6 +254,20 @@ export function empreinteDuLexique(id: string): string {
   } catch { /* un lexique qu'on ne sait pas lire n'empeche pas de jouer */ }
   empreintes.set(id, e);
   return e;
+}
+
+/**
+ * La reference publique d'une manche, tiree de sa graine.
+ *
+ * Douze caracteres suffisent : le journal comptera des dizaines de milliers de
+ * lignes, pas des milliards, et une collision sur douze caracteres d'un
+ * condense en demanderait bien davantage.
+ *
+ * ELLE NE DIT RIEN DE LA GRAINE, ce qui est tout l'objet : la graine dirait
+ * comment refaire les tirages d'une partie, et ne sort donc jamais.
+ */
+export function refDeLaGraine(graine: string): string {
+  return createHash("sha256").update(`manche:${graine}`).digest("hex").slice(0, 12);
 }
 
 // ---------------------------------------------------------------- le journal
@@ -274,7 +340,11 @@ export function ouvrirLesRecords(): void {
     let ev: any;
     try { ev = JSON.parse(ligne) as Evenement; } catch { cassees++; continue; }
     if (ev.t === "manche") {
-      manches.push(ev as Manche);
+      // UNE LIGNE D'AVANT LES REFERENCES N'EN PORTE PAS. Elle se recalcule ici,
+      // depuis la graine que la ligne porte : le journal n'est pas reecrit.
+      const m = ev as Manche;
+      if (typeof m.ref !== "string" || m.ref === "") m.ref = refDeLaGraine(m.graine);
+      manches.push(m);
       // UN JOURNAL D'AVANT LES COMPTEURS porte le detail de ses coups. On le
       // lit pour ne rien perdre, et on n'en ecrit plus de pareil.
       if (Array.isArray(ev.vus)) { deltas++; appliquer(deltaDAncienneManche(ev)); }
@@ -286,7 +356,7 @@ export function ouvrirLesRecords(): void {
       deltas++;
       appliquer(deltaDAncienneManche(ev));
     } else if (ev.t === "invalide") {
-      invalidees.add(ev.partie);
+      invalidees.add(ev.ref ?? ev.partie);
     }
   }
   if (cassees > 0) console.warn(`[records] ${cassees} ligne(s) illisible(s), ignorees`);
@@ -320,13 +390,13 @@ function deltaDAncienneManche(ev: { lexique?: string; vus?: unknown }): DeltaDeM
  * Une manche invalidee reste lisible : la partie a bien ete jouee, on lui a
  * seulement retire son rang.
  */
-export function mancheDe(partie: string): Manche | undefined {
-  return manches.find((m) => m.partie === partie);
+export function mancheDe(ref: string): Manche | undefined {
+  return manches.find((m) => m.ref === ref);
 }
 
 /** Les manches qui comptent : tout ce qui n'a pas ete invalide. */
 export function manchesValides(): Manche[] {
-  return manches.filter((m) => !invalidees.has(m.partie));
+  return manches.filter((m) => !invalidees.has(m.ref));
 }
 
 /**
@@ -336,12 +406,13 @@ export function manchesValides(): Manche[] {
  * elle-meme un evenement, et le journal garde la trace de ce qui a ete retire,
  * par qui et pourquoi.
  */
-export function invaliderLaManche(partie: string, par: string, raison: string): boolean {
-  if (!manches.some((m) => m.partie === partie)) return false;
-  if (invalidees.has(partie)) return true;
-  invalidees.add(partie);
-  inscrire({ t: "invalide", partie, par, raison, at: Date.now() });
-  console.log(`[records] manche "${partie}" invalidee par ${par} : ${raison}`);
+export function invaliderLaManche(ref: string, par: string, raison: string): boolean {
+  const m = manches.find((x) => x.ref === ref);
+  if (m === undefined) return false;
+  if (invalidees.has(ref)) return true;
+  invalidees.add(ref);
+  inscrire({ t: "invalide", ref, partie: m.partie, par, raison, at: Date.now() });
+  console.log(`[records] manche ${ref} ("${m.partie}") invalidee par ${par} : ${raison}`);
   return true;
 }
 
@@ -356,6 +427,65 @@ export function remettreLesRecordsAZero(): string | null {
   return archive;
 }
 
+/**
+ * CE QU'UNE PARTIE LAISSE A LA MONTANTE QUI L'A LANCEE.
+ *
+ * C'est l'observation, resumee, et lisible A TOUT MOMENT : la montante affiche
+ * ses cumuls pendant qu'on joue, et ne peut donc pas attendre la fin de
+ * l'etape pour les connaitre. Les mots n'y sont pas -- ils vivent dans leur
+ * compteur, et une montante n'en fait rien.
+ *
+ * Rien ici ne suppose que la partie soit terminee ni recevable : `valide` le
+ * dit, et c'est la montante qui en tire les consequences.
+ */
+export interface EtapeObservee {
+  /** Le salon, et la graine, pour retrouver le journal de cette etape. */
+  partie: string;
+  graine: string;
+  /** La reference de sa manche, si elle en ecrit une. */
+  ref: string;
+  /** Sa categorie, donc son format, ou `null` si aucun tableau ne l'accueille. */
+  categorie: string | null;
+  coups: number;
+  /** Somme des coups, en millisecondes. */
+  temps: number;
+  cumul: number;
+  farfouilles: number;
+  /** L'ecart au top cumule sur les coups que personne n'a trouves. */
+  negatif: number;
+  /** Combien de coups personne n'a trouves. */
+  rates: number;
+  /**
+   * Le DERNIER coup joue a-t-il ete rate ?
+   *
+   * C'est ce qui decide de la fenetre du bouton de reprise : un rate au dernier
+   * coup clot l'etape sur-le-champ, et le bouton doit alors paraitre dans
+   * l'etape suivante (SPEC.md §23).
+   */
+  rateAuDernierCoup: boolean;
+  /** Combien de tops chacun a trouves. */
+  tops: Record<string, number>;
+  /** Quelqu'un a-t-il joue au moins un coup de cette etape ? */
+  joue: boolean;
+  /**
+   * Cette etape compte-t-elle pour la montante ?
+   *
+   * Il faut tout : une observation complete depuis le premier coup, une
+   * categorie, une partie allee au bout de son sac, et quelqu'un pour la jouer.
+   * Une seule qui manque, et la montante ne portera pas de record -- elle se
+   * joue quand meme jusqu'a la sixieme etape.
+   */
+  valide: boolean;
+  coupCher: CoupNote | null;
+  coupPasCher: CoupNote | null;
+}
+
+/** Ce qu'un salon peut demander a l'observation de sa partie. */
+export interface Lecture {
+  /** L'etape telle qu'elle se presente en cet instant. */
+  etape(): EtapeObservee;
+}
+
 // ------------------------------------------------------------ l'observation
 
 /**
@@ -367,7 +497,16 @@ export function remettreLesRecordsAZero(): string | null {
 class Observation {
   private readonly vus: CoupObserve[] = [];
   private readonly partie: Game;
-  private readonly categorie: Categorie;
+  /**
+   * La categorie de la partie, ou `null` si aucun tableau ne l'accueille.
+   *
+   * UNE PARTIE HORS CATEGORIE S'OBSERVE QUAND MEME, DEPUIS LA MONTANTE. Elle
+   * n'ecrit ni manche ni mot -- le compteur de mots ne regarde que la ou le
+   * journal des records regarde (SPEC.md §13) -- mais une montante veut savoir
+   * ce que son etape a fait, ne serait-ce que pour afficher ses cumuls et pour
+   * cesser de pretendre a un record.
+   */
+  private readonly categorie: Categorie | null;
   /** L'observation est complete depuis le premier coup. */
   private entiere: boolean;
   /**
@@ -379,7 +518,7 @@ class Observation {
    */
   private readonly delta: DeltaDeMots;
 
-  constructor(partie: Game, categorie: Categorie) {
+  constructor(partie: Game, categorie: Categorie | null) {
     this.partie = partie;
     this.categorie = categorie;
     this.delta = {
@@ -426,6 +565,9 @@ class Observation {
     // distingue un mot vraiment difficile d'un mot que personne ne regardait.
     // Et un coup compte UNE FOIS, quel que soit le nombre de joueurs -- six
     // joueurs qui ratent le meme top ne font pas six rates.
+    // NI COMPTEUR NI DELTA POUR UNE PARTIE HORS CATEGORIE. Les coups, eux, sont
+    // deja retenus au-dessus : la montante les lui demandera.
+    if (this.categorie === null) return;
     if (!actif) return;
     const trouve = m.player !== null;
     for (const mot of mots) {
@@ -434,8 +576,50 @@ class Observation {
     }
   }
 
+  /**
+   * L'etape telle qu'elle se presente MAINTENANT, finie ou non.
+   *
+   * `raison` n'est connue qu'a la fin ; sans elle, l'etape ne peut pas etre
+   * valide -- une partie en cours n'est pas allee au bout de son sac.
+   */
+  etape(raison?: RaisonDeFin): EtapeObservee {
+    const tops: Record<string, number> = {};
+    for (const c of this.vus) {
+      if (c.par === null) continue;
+      tops[c.par] = (tops[c.par] ?? 0) + 1;
+    }
+    const dernier = this.vus[this.vus.length - 1];
+    const trouves = this.vus.filter((c) => c.par !== null)
+      .sort((a, b) => b.score - a.score);
+    const note = (c: CoupObserve | undefined): CoupNote | null =>
+      c === undefined ? null : { mot: c.mots[0] ?? "", score: c.score, par: c.par };
+    // Le meme jugement que `manche`, aux memes conditions : c'est la meme
+    // question, posee par la montante au lieu du journal.
+    const complete = raison === "sac" || raison === "injouable";
+    return {
+      partie: this.partie.gameId,
+      graine: this.partie.seed,
+      ref: refDeLaGraine(this.partie.seed),
+      categorie: this.categorie?.id ?? null,
+      coups: this.vus.length,
+      temps: this.vus.reduce((a, c) => a + c.ms, 0),
+      cumul: this.vus.reduce((a, c) => a + c.score, 0),
+      farfouilles: this.vus.filter((c) => c.poses >= this.partie.cfg.jouables).length,
+      negatif: this.vus.reduce((a, c) => a + c.negatif, 0),
+      rates: this.vus.filter((c) => c.par === null).length,
+      rateAuDernierCoup: dernier !== undefined && dernier.par === null,
+      tops,
+      joue: this.vus.some((c) => c.actif),
+      valide: this.entiere && this.categorie !== null && complete
+        && this.vus.length > 0 && this.vus.some((c) => c.actif),
+      coupCher: note(trouves[0]),
+      coupPasCher: note(trouves[trouves.length - 1]),
+    };
+  }
+
   /** La partie s'arrete. Rend la manche a enregistrer, ou `null`. */
   manche(raison: RaisonDeFin): Manche | null {
+    if (this.categorie === null) return null;
     if (!this.entiere) {
       console.log(`[records] "${this.partie.gameId}" ecartee : observation incomplete`);
       return null;
@@ -488,6 +672,7 @@ class Observation {
 
     const cfg = this.partie.cfg;
     return {
+      ref: refDeLaGraine(this.partie.seed),
       partie: this.partie.gameId,
       graine: this.partie.seed,
       at: Date.now(),
@@ -517,10 +702,27 @@ class Observation {
  * Sans categorie, on n'observe pas : garder une liste de coups pour une grille
  * sans fin, c'est accumuler des milliers d'entrees que personne ne lira jamais.
  */
-export function observer(partie: Game): void {
+export function observer(
+  partie: Game, surEtape?: (e: EtapeObservee) => void,
+): Lecture {
+  // LA PARTIE HORS CATEGORIE S'OBSERVE SI UNE MONTANTE LA REGARDE, ET RIEN DE
+  // PLUS.
+  //
+  // Elle ne s'observait pas du tout : rien ne sortait de ce module pour une
+  // grille sans fin ou un duplicate. Une montante, elle, veut connaitre ses
+  // cumuls meme si son etape ne peut porter aucun record -- ne serait-ce que
+  // pour cesser de pretendre au tableau plutot que de s'arreter en silence.
+  //
+  // MAIS RIEN NE S'OBSERVE QUAND RIEN NE REGARDE. La grille mondiale porte des
+  // milliers de coups et ne peut porter aucun record : lui retenir chaque coup
+  // et ses isotops serait des megaoctets gardes pour personne.
+  //
+  // Ce qui n'est pas ecrit reste non ecrit : ni manche, ni mot. Le compteur de
+  // mots ne compte que la ou le journal des records regarde (SPEC.md §13), et
+  // `Observation` le tient de son cote.
   const categorie = categorieDesReglages(partie.cfg);
-  if (categorie === null) return;
   const vue = new Observation(partie, categorie);
+  if (categorie === null && surEtape === undefined) return { etape: () => vue.etape() };
   /** Ce que cette partie a deja ecrit : on n'ecrit pas deux fois. */
   let ecrit = false;
   partie.onMove((m) => vue.coup(m));
@@ -533,6 +735,9 @@ export function observer(partie: Game): void {
   };
 
   partie.onFin((raison) => {
+    // LA MONTANTE EST SERVIE LA PREMIERE, et avant toute ecriture : c'est elle
+    // qui decide s'il y a une septieme ligne a ajouter apres les six.
+    if (surEtape !== undefined) surEtape(vue.etape(raison));
     const m = vue.manche(raison);
     if (!ouvert) ouvrirLesRecords();
     // LES MOTS PARTENT DANS TOUS LES CAS, la manche seulement si elle compte.
@@ -563,6 +768,22 @@ export function observer(partie: Game): void {
     console.log(`[records] "${partie.gameId}" abandonnée : `
       + `${d.trouves.length} mot(s) trouvé(s), ${d.rates.length} raté(s) au compteur`);
   });
+
+  return { etape: () => vue.etape() };
+}
+
+/**
+ * Ajoute une manche au journal et aux tableaux, telle quelle.
+ *
+ * Pour la MONTANTE, et pour elle seule : sa ligne ne nait pas d'une partie mais
+ * de six, et c'est le salon qui l'assemble (`server/src/montante.ts`). Le reste
+ * du fichier n'a pas d'autre porte d'entree, et n'en veut pas : une manche qui
+ * ne vient pas d'une observation ne serait pas verifiable.
+ */
+export function ajouterUneManche(m: Manche): void {
+  if (!ouvert) ouvrirLesRecords();
+  manches.push(m);
+  inscrire({ t: "manche", ...m });
 }
 
 // ------------------------------------------------------------ les classements
@@ -572,6 +793,8 @@ export function observer(partie: Game): void {
  * regarde pas les clients : sa graine, et le detail de ses coups.
  */
 export interface LigneDeRecord {
+  /** La reference de la manche : c'est par elle qu'on la relit et qu'on la cite. */
+  ref: string;
   /**
    * Le rang, avec les ex aequo.
    *
@@ -596,6 +819,8 @@ export interface LigneDeRecord {
   negatif: number;
   joueurs: { nom: string; tops: number; invite: boolean }[];
   solo: string | null;
+  /** Les six etapes, sur une ligne de montante, et rien ailleurs. */
+  etapes?: EtapeDeMontante[];
 }
 
 function pourLAffichage(m: Manche, rang: number): LigneDeRecord {

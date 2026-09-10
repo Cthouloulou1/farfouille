@@ -13,6 +13,8 @@ import { mkdirSync, openSync, writeSync, fsyncSync, readFileSync, existsSync, re
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Game } from "./game.ts";
+import { marqueDeLaMontante, type Montante } from "./montante.ts";
+import type { Lecture } from "./records.ts";
 import { serialiser, deserialiser, type ConfigPartie, type ConfigSerialisee } from "../../engine/src/config.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 
@@ -55,6 +57,24 @@ export interface Salon {
   prive: boolean;
   layout: LayoutName;
   partie: Game;
+  /**
+   * LA MONTANTE DU SALON, ou `null` : six parties en topping a la suite
+   * (SPEC.md §23).
+   *
+   * Elle vit ICI, et pas dans la partie : une montante est une suite de
+   * parties, et chacune de ses etapes est une partie ordinaire qui ne sait rien
+   * de la suite. Ce qui est nouveau -- l'etape courante, les essais, les cumuls
+   * -- appartient donc au lieu, comme le nom du salon et son chat.
+   *
+   * Elle ne survit pas a un redemarrage du serveur, pas plus que l'observation
+   * dont elle se nourrit.
+   */
+  montante: Montante | null;
+  /**
+   * L'observation de la partie en cours, telle que le journal des records la
+   * tient. La montante y lit ses cumuls en cours de route.
+   */
+  vue: Lecture | null;
   creeLe: number;
 }
 
@@ -187,7 +207,8 @@ export async function ouvrirSalon(opts: {
   const s: Salon = {
     id: opts.id, nom: opts.nom, proprietaire: opts.proprietaire,
     gerant: opts.proprietaire, prive: opts.prive,
-    layout: opts.layout, partie, creeLe: opts.creeLe ?? Date.now(),
+    layout: opts.layout, partie, montante: null, vue: null,
+    creeLe: opts.creeLe ?? Date.now(),
   };
   salons.set(s.id, s);
   if (opts.nouveau) {
@@ -220,7 +241,13 @@ export async function relancer(s: Salon, cfg?: ConfigPartie): Promise<string[]> 
   s.partie.releaseLock();
   await s.partie.stop();
   const archives = archiver(s.id);
-  s.partie = new Game(s.id, s.layout, cfg ?? s.partie.cfg);
+  // L'ETAPE QUI DEMARRE PORTE LA MARQUE DE SA SUITE. Le salon connait son
+  // rang et son numero d'essai avant de relancer : c'est lui qui les a
+  // avances, et l'en-tete du journal en garde la trace.
+  s.partie = new Game(s.id, s.layout, cfg ?? s.partie.cfg,
+    s.montante === null ? null : marqueDeLaMontante(s.montante));
+  // L'observation de l'ancienne partie ne dit plus rien de celle qui commence.
+  s.vue = null;
   await s.partie.start();
   return archives;
 }

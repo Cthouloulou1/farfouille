@@ -319,10 +319,18 @@ nettoyer(ID5);
 // ------------------------------------------------- 6. l'invalidation
 console.log("\n  --- l'invalidation ---\n");
 {
+  // UNE MANCHE SE DESIGNE PAR SA REFERENCE, PLUS PAR SON SALON (SPEC.md §23).
+  // Deux parties enregistrees dans le meme salon portaient la meme identite :
+  // « Revoir » ouvrait la premiere des deux, et invalider l'une invalidait
+  // l'autre. Une montante en joue six d'affilee.
+  const ref = manchesValides()[0]?.ref ?? "";
+  verifie("la manche porte une reference qui n'est pas son salon",
+    ref !== "" && ref !== ID, `${ref} (salon "${ID}")`);
   verifie("une manche inconnue ne s'invalide pas",
     !invaliderLaManche("cette-partie-n-existe-pas", "zulu", "essai"));
+  verifie("le nom du salon n'invalide plus rien", !invaliderLaManche(ID, "zulu", "essai"));
   verifie("la manche enregistree s'invalide",
-    invaliderLaManche(ID, "zulu", "temps invraisemblables"));
+    invaliderLaManche(ref, "zulu", "temps invraisemblables"));
   verifie("le tableau est vide", manchesValides().length === 0);
 
   // Le journal fait foi : on le relit, et l'invalidation tient.
