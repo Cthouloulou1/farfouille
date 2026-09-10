@@ -620,6 +620,32 @@ export interface TopResult {
 }
 
 /**
+ * COMBIEN DE JOKERS CE COUP PERDRAIT, vu ce qu'il reste dans le sac.
+ *
+ * Un joker qui joue un R fait sortir un VRAI R du sac, et revient au tirage :
+ * il est conserve. S'il n'y a plus de R, le joker se pose lui-meme, a zero pour
+ * toujours, et la reserve perd une unite (SPEC.md §16).
+ *
+ * Le compte est glouton et suit l'ordre des caramels poses, exactement comme la
+ * substitution du serveur : deux jokers qui jouent la meme lettre demandent
+ * DEUX exemplaires, et le second se perd s'il n'y en a qu'un.
+ */
+function jokersPerdus(
+  m: Move, reliquat: Readonly<Record<string, number>>,
+): number {
+  let perdus = 0;
+  let reste: Record<string, number> | null = null;
+  for (const p of m.placements) {
+    if (!p.blank) continue;
+    if (reste === null) reste = { ...reliquat };
+    const dispo = reste[p.letter] ?? 0;
+    if (dispo > 0) reste[p.letter] = dispo - 1;
+    else perdus++;
+  }
+  return perdus;
+}
+
+/**
  * Le top et ses isotops. Le departage est un TIRAGE AU SORT DETERMINISTE :
  * la graine vient de (idPartie, numeroDeCoup), sans quoi l'historique n'est pas
  * rejouable et deux serveurs divergent (SPEC.md §5).
@@ -627,14 +653,30 @@ export interface TopResult {
 export function pickTop(
   moves: readonly Move[], random: () => number,
   /**
-   * Partie joker : a score egal, on retient un coup qui n'emploie PAS le joker
-   * plutot qu'un coup qui l'emploie (SPEC.md §16). Ce n'est plus un departage
-   * arbitraire -- garder le joker a des consequences sur toute la suite.
+   * Partie joker : a score egal, on retient le coup qui CONSERVE le joker
+   * (SPEC.md §16). Ce n'est pas un departage arbitraire -- garder le joker a
+   * des consequences sur toute la suite.
    *
-   * Les isotops employant le joker restent listes : ils existent, ils sont
+   * Les isotops qui le perdent restent listes : ils existent, ils sont
    * simplement moins bons a jouer.
    */
   menagerLeJoker = false,
+  /**
+   * CE QU'IL RESTE DANS LE SAC, par lettre, ou `null` si la pioche n'a pas de
+   * stock a defendre -- un sac qui boucle, des probabilites ponderees : la
+   * lettre du joker y nait, et aucun joker ne s'y perd jamais.
+   *
+   * SANS LUI, LE SOLVEUR CHOISISSAIT A L'AVEUGLE. Il ne savait pas si l'emploi
+   * du joker le consommerait vraiment, et se contentait de preferer les isotops
+   * qui ne l'employaient pas du tout. Quand ils l'employaient TOUS, il tirait
+   * au sort : sur AEEMRR? il a pose GERMERAS avec un joker en G alors qu'il n'y
+   * avait plus de G au sac et qu'il restait des C -- CREMERAS valait le meme
+   * score et rendait le joker.
+   *
+   * `undefined` garde l'ancienne prudence : c'est ce que voient les appels qui
+   * n'ont pas de sac sous la main (paliers d'une partie relue, bancs d'essai).
+   */
+  reliquat?: Readonly<Record<string, number>> | null,
 ): TopResult | null {
   if (moves.length === 0) return null;
   let bestScore = -1;
@@ -647,10 +689,23 @@ export function pickTop(
       ? a.x !== b.x ? a.x - b.x : a.y !== b.y ? a.y - b.y : a.word < b.word ? -1 : a.word > b.word ? 1 : 0
       : a.dir < b.dir ? -1 : 1,
   );
+  // DEUX PREFERENCES, DANS CET ORDRE, et seulement en partie joker.
+  //
+  // 1. LE MOINS DE JOKERS PERDUS. C'est la regle : a score egal, on retient la
+  //    solution qui conserve le joker. Elle ne se decide qu'avec le sac sous les
+  //    yeux -- un joker employe n'est perdu que si sa lettre n'y est plus.
+  // 2. CELUI QUI NE L'EMPLOIE PAS DU TOUT, entre deux coups qui n'en perdent
+  //    aucun. Jamais pire, et c'est ce que faisait deja le solveur aveugle.
   const candidats = menagerLeJoker
     ? (() => {
-        const sans = isotops.filter((m) => !m.placements.some((p) => p.blank));
-        return sans.length > 0 ? sans : isotops;
+        let restants = isotops;
+        if (reliquat !== undefined && reliquat !== null) {
+          const perdus = isotops.map((m) => jokersPerdus(m, reliquat));
+          const moins = Math.min(...perdus);
+          restants = isotops.filter((_, i) => perdus[i] === moins);
+        }
+        const sans = restants.filter((m) => !m.placements.some((p) => p.blank));
+        return sans.length > 0 ? sans : restants;
       })()
     : isotops;
   const top = candidats[Math.floor(random() * candidats.length)]!;

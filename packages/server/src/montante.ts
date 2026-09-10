@@ -86,13 +86,25 @@ export interface Montante {
   close: boolean;
   /** Les six etapes sont derriere, et la ligne est ecrite. */
   finie: boolean;
+  /**
+   * PAUSE ENTRE LES PARTIES, decidee par l'hote et eteinte par defaut.
+   *
+   * Eteinte, l'etape suivante part d'elle-meme des que la precedente se termine
+   * : c'est une montante, on ne reprend pas son souffle. Allumee, la montante
+   * attend l'hote -- c'est le seul moyen de regarder la feuille de route ou de
+   * revoir les coups d'une etape qu'on vient de finir.
+   *
+   * La sixieme ne s'enchaine jamais : il n'y a rien apres, et la derniere grille
+   * reste a l'ecran.
+   */
+  pause: boolean;
   creeLe: number;
 }
 
 export function nouvelleMontante(): Montante {
   return {
     id: randomUUID(), rang: 1, essai: 1, essais: [],
-    close: false, finie: false, creeLe: Date.now(),
+    close: false, finie: false, pause: false, creeLe: Date.now(),
   };
 }
 
@@ -247,6 +259,18 @@ export function reprendreLEtape(
   m: Montante, rang: number, enCours?: EtapeObservee,
 ): number | null {
   if (etapeReprenable(m, enCours) !== rang) return null;
+  // RECOMMENCER L'ETAPE 1, C'EST RECOMMENCER LA MONTANTE. Rien n'a encore ete
+  // accompli : le chrono repart de zero, et non pas « tout sauf le negatif ».
+  // C'est la seule exception a « le temps compte tout » -- et elle n'en est pas
+  // vraiment une, puisqu'il n'y a rien avant l'etape 1 a garder au compteur.
+  if (rang === 1) {
+    const essais = Math.max(essaisDuRang(m, 1), m.close ? 0 : m.essai);
+    m.essais = [];
+    m.rang = 1;
+    m.essai = essais + 1;
+    m.close = false;
+    return 1;
+  }
   for (const e of m.essais) {
     if (e.rang >= rang) e.retenu = false;
   }
@@ -369,6 +393,8 @@ export interface MontantePublique {
   nomReprenable: string | null;
   /** L'etape en cours est close : l'hote peut lancer la suite. */
   close: boolean;
+  /** L'hote a demande une pause entre les parties. */
+  pause: boolean;
   /** Les six etapes sont derriere. */
   finie: boolean;
   /** La montante ne pretend plus a un record. */
@@ -393,6 +419,7 @@ export function montantePublique(m: Montante, enCours?: EtapeObservee): Montante
     reprenable: repris,
     nomReprenable: repris === null ? null : etapeMontante(repris).nom,
     close: m.close,
+    pause: m.pause,
     finie: m.finie,
     perdue: montantePerdue(m),
   };

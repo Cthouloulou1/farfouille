@@ -171,6 +171,7 @@ interface MontanteVue {
   reprenable: number | null;
   nomReprenable: string | null;
   close: boolean;
+  pause: boolean;
   finie: boolean;
   perdue: boolean;
 }
@@ -2291,7 +2292,13 @@ function peindreLaMontante(): void {
   // LES BOUTONS SONT A L'HOTE. Sur une grille permanente il n'y a pas de
   // montante du tout, mais la regle se redit plutot que de se supposer.
   const aMoi = gerant === me && !permanent;
-  const suivante = aMoi && mm.close && !mm.finie && mm.suivante !== null;
+  // LA CASE DE PAUSE EST A L'HOTE AUSSI, et disparait avec la montante.
+  $("mt-pause-wrap").hidden = !aMoi || mm.finie;
+  ($("mt-pause") as HTMLInputElement).checked = mm.pause;
+  // « ETAPE SUIVANTE » N'EXISTE QUE SOUS PAUSE. Sans elle, la suite part
+  // d'elle-meme deux secondes apres le dernier coup : un bouton qui parait pour
+  // disparaitre aussitot ne sert a personne.
+  const suivante = aMoi && mm.pause && mm.close && !mm.finie && mm.suivante !== null;
   const terminer = aMoi && mm.close && !mm.finie && mm.suivante === null;
   const reprendre = aMoi && mm.reprenable !== null && !mm.finie;
   $("mt-suivante").hidden = !suivante;
@@ -4766,6 +4773,14 @@ $("rejouer").addEventListener("click", () => {
 $("mt-suivante").addEventListener("click", () => envoyer({ t: "montante-suivante" }));
 $("mt-reprendre").addEventListener("click", () => envoyer({ t: "montante-reprendre" }));
 $("mt-terminer").addEventListener("click", () => envoyer({ t: "montante-terminer" }));
+
+/**
+ * La pause entre les parties. L'eteindre alors qu'une etape close attend relance
+ * la suite aussitot -- c'est le serveur qui s'en charge.
+ */
+$("mt-pause").addEventListener("change", () => {
+  envoyer({ t: "montante-pause", pause: ($("mt-pause") as HTMLInputElement).checked });
+});
 
 /**
  * Une montante neuve, sur les memes reglages : le chrono, le lexique et la
@@ -8270,7 +8285,25 @@ let rcCategorie = "normale";
 /** L'axe « Lettres » : combien de caramels au chevalet. */
 let rcTaille: Taille = "normal";
 let rcGrille: "normale" | "super" = "normale";
-let rcLexique = DICO_PAR_DEFAUT;
+let rcLexique: string = LEXIQUE_TOUS;
+
+/**
+ * LE LEXIQUE SUR LEQUEL LA PAGE DES RECORDS S'OUVRE.
+ *
+ * Celui de la langue du COMPTE : un francophone ne veut pas commencer par
+ * chercher son tableau, et un anglophone encore moins -- le francais serait
+ * arrive le premier.
+ *
+ * « Tous » pour qui n'a pas de compte. La langue du site suffirait a deviner,
+ * mais elle se devine justement : elle vient du navigateur, pas d'un choix. Un
+ * visiteur voit donc les cent meilleurs temps du site, toutes langues
+ * confondues, et choisit ensuite s'il veut restreindre.
+ */
+function lexiqueDesRecords(): string {
+  const l = moiCompte?.langue;
+  if (l === "fr" || l === "en") return DICO_PAR_LANGUE[l];
+  return LEXIQUE_TOUS;
+}
 let rcSolo = false;
 let rcVue: VueDesRecords = "classement";
 let rcAnnexe = "chrono";
@@ -8961,34 +8994,32 @@ function peindreLesDeclinaisons(): void {
 function peindreLesLexiques(): void {
   const boite = $("rc-lexique");
   boite.replaceChildren();
-  // TOUS LES LEXIQUES CONFONDUS, en tete de la rangee. Ce n'est pas un lexique
-  // -- on ne joue pas avec, une partie se joue avec UNE liste de mots -- mais
-  // c'est le seul endroit ou les cent meilleurs temps du site se comparent
-  // toutes langues melees (SPEC.md §23).
-  const tous = el("button", "", t("Tous")) as HTMLButtonElement;
-  tous.type = "button";
-  tous.dataset["v"] = LEXIQUE_TOUS;
-  tous.title = t("Toutes les listes de mots, à la même table");
-  tous.setAttribute("aria-pressed", String(rcLexique === LEXIQUE_TOUS));
-  tous.addEventListener("click", () => {
-    rcLexique = LEXIQUE_TOUS;
+  const choisir = (id: string): void => {
+    rcLexique = id;
     peindreLesLexiques();
     void chargerLesRecords();
-  });
-  boite.appendChild(tous);
+  };
   for (const d of tousLesDictionnaires()) {
     const b = el("button", "", d.nom) as HTMLButtonElement;
     b.type = "button";
     b.dataset["v"] = d.id;
     b.title = d.detail;
     b.setAttribute("aria-pressed", String(d.id === rcLexique));
-    b.addEventListener("click", () => {
-      rcLexique = d.id;
-      peindreLesLexiques();
-      void chargerLesRecords();
-    });
+    b.addEventListener("click", () => choisir(d.id));
     boite.appendChild(b);
   }
+  // TOUS LES LEXIQUES CONFONDUS, EN DERNIER. Ce n'est pas un lexique -- on ne
+  // joue pas avec, une partie se joue avec UNE liste de mots -- et le mettre en
+  // tete le faisait passer pour le premier de la rangee. Il vient donc apres les
+  // vraies listes, comme ce qu'il est : la table ou elles se rejoignent
+  // (SPEC.md §23).
+  const tous = el("button", "", t("Tous")) as HTMLButtonElement;
+  tous.type = "button";
+  tous.dataset["v"] = LEXIQUE_TOUS;
+  tous.title = t("Toutes les listes de mots, à la même table");
+  tous.setAttribute("aria-pressed", String(rcLexique === LEXIQUE_TOUS));
+  tous.addEventListener("click", () => choisir(LEXIQUE_TOUS));
+  boite.appendChild(tous);
 }
 
 /** Les longueurs de mots : toutes, puis deux a quinze lettres. */
@@ -9024,6 +9055,9 @@ function ouvrirLesRecords(pousser = true): void {
   $("corps-solveur").hidden = true;
   $("corps-records").hidden = false;
   $("join").hidden = false;
+  // LE LEXIQUE SE REPOSE A CHAQUE OUVERTURE : le compte a pu se connecter, ou
+  // changer de langue, depuis la derniere fois.
+  rcLexique = lexiqueDesRecords();
   peindreLesTailles();
   peindreLesCategories();
   peindreLesLexiques();
@@ -9050,7 +9084,7 @@ function fermerLesRecords(pousser = true): void {
   rcCategorie = "normale";
   rcTaille = "normal";
   rcGrille = "normale";
-  rcLexique = DICO_PAR_DEFAUT;
+  rcLexique = lexiqueDesRecords();
   rcSolo = false;
   rcVue = "classement";
   rcAnnexe = "chrono";

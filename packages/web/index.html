@@ -391,6 +391,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .mt-etape.faite { color: var(--ink); }
 .mt-etape i { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: .86em; color: var(--ink-faint); }
 .mt-boutons { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-pause { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: 12px; cursor: pointer; }
+.mt-pause[hidden] { display: none; }
+.mt-pause input { width: auto; margin: 0; }
 .mt-boutons button { flex: 1 1 auto; }
 /* Recommencer coute du temps : le bouton le dit de sa couleur, sans crier. */
 #mt-reprendre { color: var(--warn); border-color: var(--warn); }
@@ -1260,12 +1263,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LA FEUILLE DE ROUTE VIT DANS UNE FENETRE, et non dans la page : c'est un
    tableau, il n'a besoin ni de grille ni de curseur a cote de lui. Ses en-tetes
    collent en haut, sinon on perd le nom des colonnes des la dixieme ligne. */
-.fenetre-route { width: min(940px, 96vw); }
-.fr-tete { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
+.fenetre-route { width: min(1040px, 96vw); padding: 20px 24px 18px; }
+.fr-tete { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
 .fr-tete h2 { margin: 0; }
-.fenetre-route .pr-route { max-height: 62vh; overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--rule); border-radius: 4px; }
+/* UNE PARTIE NORMALE TIENT SANS ASCENSEUR. Elle fait une vingtaine de coups, et
+   jusqu'a trente en comptant les longues : c'est la mesure que la fenetre doit
+   servir. A 62 vh et aux lignes de la page des records, on defilait des la
+   quinzieme. Elle prend donc toute la hauteur qui reste -- l'entete, le pied et
+   le voile mis a part -- et ses lignes se serrent un peu. */
+.fenetre-route .pr-route { max-height: calc(100vh - 176px); overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--rule); border-radius: 4px; }
+.fenetre-route .pr-route table { font-size: 13px; }
+.fenetre-route .pr-route th { padding: 5px 8px; }
+/* 22 pixels par ligne : trente coups tiennent dans 688, et il y a 724 sur un
+   ecran de 900. Mesure faite, et c'est elle qui fixe ces trois valeurs. */
+.fenetre-route .pr-route td { padding: 2px 8px; line-height: 1.4; }
 .fenetre-route .pr-route th { position: sticky; top: 0; z-index: 1; }
-.fenetre-route .valider { width: auto; margin-top: 16px; padding: 10px 22px; }
+.fenetre-route .valider { width: auto; margin-top: 12px; padding: 8px 20px; }
 .pr-route { overflow-x: auto; }
 .pr-route table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pr-route th { padding: 7px 9px; text-align: right; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); background: var(--ground); border-bottom: 1px solid var(--rule); }
@@ -1763,6 +1776,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="head"><h2 id="mt-titre">Montante</h2></div>
         <div class="mt-etapes" id="mt-etapes"></div>
         <div class="sub" id="mt-etat"></div>
+        <!-- ETEINTE PAR DEFAUT : une montante s'enchaine sans reprendre son
+             souffle. Allumee, elle attend l'hote entre deux parties -- c'est le
+             seul moyen de revoir les coups d'une etape qu'on vient de finir. -->
+        <label class="mt-pause" id="mt-pause-wrap" hidden>
+          <input type="checkbox" id="mt-pause"> Pause entre les parties
+        </label>
         <div class="mt-boutons" id="mt-boutons">
           <button type="button" id="mt-suivante" hidden>Étape suivante</button>
           <button type="button" id="mt-terminer" hidden>Terminer la montante</button>

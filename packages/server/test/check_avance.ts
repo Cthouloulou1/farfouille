@@ -187,7 +187,12 @@ const plateauJ = new Board(dawg, cfgJ);
 let fauxJ = 0, premierFauxJ = "";
 for (const m of j.moves) {
   const gen = generateMoves(plateauJ, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
-  const top = pickTop(gen.moves, aleaDuCoup(j, m.n), cfgJ.joker);
+  // LE SAC ENTRE DANS LE CHOIX DE L'ISOTOP, en partie joker : a score egal on
+  // retient celui qui CONSERVE le joker, et cela ne se decide qu'avec le sac
+  // sous les yeux (SPEC.md §16). Le coup garde donc, en memoire, ce que le
+  // solveur avait devant lui -- sans quoi ce juge de paix ne pourrait plus
+  // refaire le meme choix, et se plaindrait d'un ecart qui n'en est pas un.
+  const top = pickTop(gen.moves, aleaDuCoup(j, m.n), cfgJ.joker, m.reliquatDuSac);
   const attendu = top === null ? null : top.top;
   const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
     && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;

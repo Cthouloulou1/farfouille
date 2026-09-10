@@ -2445,16 +2445,56 @@ second. `check_joker_sac.ts` vérifie l'invariant sur ce sac — sac plus cheval
 plus grille égale toujours cent caramels — et, sur les deux autres pioches,
 qu'aucun joker ne reste jamais sur la grille.
 
-> ⚠️ **Règle d'isotop propre à cette variante.** Entre deux coups de même score
-> dont l'un emploie le joker et l'autre non, on retient **systématiquement celui
-> qui ne l'emploie pas**. Ce n'est plus un départage arbitraire : garder le
-> joker a des conséquences sur toute la suite.
+#### À score égal, on garde le joker
+
+**C'est la règle d'isotop propre à cette variante**, et elle n'a rien d'un
+départage arbitraire : garder le joker a des conséquences sur toute la suite.
+Deux préférences, dans cet ordre.
+
+**1. Le moins de jokers perdus.** Un joker employé n'est perdu que si sa lettre
+n'est **plus au sac** : sinon une vraie lettre en sort, elle se pose, et le joker
+revient au tirage. C'est donc le sac qui décide, et lui seul.
+
+**2. Entre deux coups qui n'en perdent aucun, celui qui ne l'emploie pas du
+tout.** Jamais pire, et c'est ce que faisait déjà le solveur.
+
+Les isotops qui perdent le joker **restent listés** : ils existent, ils sont
+seulement moins bons à jouer.
+
+**Combien de fois cela mord.** Mesuré sur huit parties joker complètes, 149 coups
+(`mesure_joker.ts`) : 121 coups dont le top emploie le joker, **6 coups** où le
+choix diffère de celui du solveur aveugle, et **4 jokers sauvés**. Un jeu n'en a
+que deux en réserve : en sauver un repousse d'autant le moment où le chevalet
+retombe à sept vraies lettres.
+
+> **Le solveur choisissait à l'aveugle.** Il ne voyait pas le sac — il ne pouvait
+> donc pas savoir si l'emploi du joker le **consommerait** vraiment — et se
+> contentait de la seconde préférence : les isotops qui ne l'emploient pas du
+> tout. Prudence utile, mais muette dès que **tous** les isotops l'emploient.
 >
-> Le solveur ignore ce qu'il reste dans le sac — il ne peut donc pas savoir si
-> l'emploi du joker le **consommera** vraiment. Il préfère donc, plus largement,
-> les isotops qui ne l'emploient pas du tout : jamais pire, et cela couvre le
-> cas visé. Les isotops employant le joker restent listés, ils sont simplement
-> moins bons à jouer.
+> Le cas réel : tirage `AEEMRR?`, un S sur la grille, deux isotops au même score.
+> **GERMERAS** avec le joker en G, **CREMERAS** avec le joker en C. Plus un seul
+> G au sac, mais il restait des C. Le tirage au sort a donné GERMERAS : le joker
+> n'a trouvé aucun G, il s'est posé lui-même — à zéro pour toujours — et la
+> réserve a perdu une unité. Pour rien.
+>
+> Le fil de calcul reçoit maintenant **ce qu'il reste dans le sac, par lettre**,
+> avec chaque demande. Il ne tient pas le sac — il ne pioche pas, il cherche —
+> c'est donc la partie qui le lui dit, coup par coup. Sur une pioche **sans stock
+> à défendre** (sac qui boucle, probabilités pondérées) elle envoie `null` : la
+> lettre du joker y naît, aucun joker ne s'y perd jamais, et il n'y a rien à
+> préférer.
+>
+> Le compte est **glouton et suit l'ordre des caramels posés**, exactement comme
+> la substitution : deux jokers qui jouent la même lettre demandent **deux**
+> exemplaires, et le second se perd s'il n'y en a qu'un.
+>
+> **Le coup joué garde en mémoire le sac que le solveur avait sous les yeux.** Ni
+> le journal ni l'instantané ne le portent — vingt-six nombres par coup pour une
+> chose qui se recalcule en rejouant la partie. C'est ce qui permet à
+> `check_avance.ts` de refaire exactement le même choix, maintenant qu'il dépend
+> du sac. `check_joker_isotop.ts` pose le cas de Zulu à la main, avec le sac vide,
+> la pioche sans stock, le double joker et le compte des exemplaires.
 
 ### Le double joker
 
@@ -4736,30 +4776,51 @@ est éteint.
 **Le temps et le négatif sont ceux de la montante entière**, pas de l'étape en
 cours. C'est le total qui s'affiche, et c'est le total qui fait le record.
 
-#### L'étape suivante part au clic de l'hôte
+#### L'étape suivante part d'elle-même
 
-**La montante s'enchaîne, mais elle ne s'enchaîne pas toute seule.** Le bouton
-« Rejouer » s'efface — il relancerait une partie seule, donc mettrait fin à la
-suite sans le dire — et un panneau de montante prend sa place, en haut du tableau
-de bord : les six étapes, où l'on en est, et les boutons de l'hôte. « Étape
-suivante » y nomme le format qui vient, et l'hôte le lance quand la table est
-prête. Trois raisons, et la première suffirait :
+**Une montante s'enchaîne sans reprendre son souffle.** L'étape suivante démarre
+dès que la précédente se termine, sans que personne ait à cliquer. C'est la
+définition de la chose.
 
-- **la grille de fin d'étape se regarde.** Une bascule automatique l'emporterait
-  au moment précis où l'on compte ce qu'on vient de laisser ;
-- **la pause ne coûte rien.** Le temps de la montante est la somme des temps de
-  ses coups, comme le temps d'une partie (§16) : ce qui se passe entre deux
-  étapes n'est compté par personne ;
-- **le bouton de reprise a besoin de cet instant.** Un raté au dernier coup clôt
-  l'étape ; si la suivante partait d'elle-même, il n'y aurait vraiment plus le
-  temps de cliquer.
+Le bouton « Rejouer » s'efface — il relancerait une partie seule, donc mettrait
+fin à la suite sans le dire — et un **panneau de montante** prend sa place, en
+haut du tableau de bord : les six étapes, où l'on en est, et les boutons de
+l'hôte.
 
-La sixième étape n'offre pas de suivante. Si rien n'y est à reprendre, la montante
-**se termine d'elle-même** : sa ligne part au journal, le panneau affiche le total
-et propose une montante neuve. S'il reste une étape à reprendre — un raté dans
-cette sixième, ou au dernier coup de la cinquième — la montante **attend** : c'est
-précisément le moment où le choix compte le plus, effacer ce négatif au prix du
-temps déjà passé. L'hôte reprend, ou clôt la montante d'un bouton.
+**Deux secondes séparent les deux parties**, et pas zéro. Le dernier top de
+l'étape vient d'être diffusé ; sans ce délai, le message de relance arrive dans la
+même foulée et le caramel ne s'est pas encore posé à l'écran. Elles ne coûtent
+rien : le temps de la montante est la somme des temps de ses coups, comme le temps
+d'une partie (§16), et ce qui se passe entre deux étapes n'est compté par
+personne.
+
+**La sixième ne s'enchaîne pas.** Il n'y a rien après elle : la montante s'arrête,
+sa dernière grille reste à l'écran, et l'on peut la regarder tout son temps. Si
+rien n'y est à reprendre, la montante **se termine d'elle-même** — sa ligne part
+au journal, le panneau affiche le total et propose une montante neuve. S'il reste
+une étape à reprendre — un raté dans cette sixième, ou au dernier coup de la
+cinquième — la montante **attend** : c'est précisément le moment où le choix
+compte le plus, effacer ce négatif au prix du temps déjà passé. L'hôte reprend, ou
+clôt la montante d'un bouton.
+
+#### « Pause entre les parties », et elle est éteinte
+
+Une case à cocher, chez l'hôte, **éteinte par défaut**. Allumée, la montante
+s'arrête au bout de chaque étape et attend qu'il lance la suivante — « Étape
+suivante » nomme alors le format qui vient.
+
+**C'est le seul moyen de regarder une étape qu'on vient de finir** : sa feuille de
+route, ses coups un à un, sa grille. Deux secondes n'y suffisent pas, et une
+montante qui s'arrêterait à chaque fois ne serait plus une montante. Le choix
+revient donc à la table, et le défaut est celui du jeu.
+
+**L'éteindre pendant qu'une étape close attend relance la suite aussitôt.** Ce
+serait sinon un réglage qui ne prend effet qu'à l'étape d'après, et l'on
+cliquerait deux fois sans savoir pourquoi.
+
+Le bouton « Étape suivante » **n'existe que sous pause**. Sans elle, la suite part
+d'elle-même deux secondes après le dernier coup : un bouton qui paraît pour
+disparaître aussitôt ne sert à personne.
 
 **Une montante est une suite de parties, pas une partie.** Chaque étape garde son
 journal, sa graine, sa variante ; toutes portent le même identifiant de suite dans
@@ -4799,6 +4860,13 @@ bout, et elle ne concourt qu'au négatif.
 montante y repart, et tout ce qui a été joué depuis est abandonné : son temps
 reste au compteur, son négatif s'efface avec le reste.
 
+**Une exception, et une seule : l'étape 1 repart de zéro.** Recommencer la partie
+normale, c'est recommencer la montante — rien n'a encore été accompli, et il n'y a
+rien avant elle à garder au compteur. Le chrono revient à zéro, les coups et le
+négatif avec. Seul le **numéro d'essai** avance, et il avance au journal de
+chaque étape : deux parties de la même suite ne portent jamais le même « étape 4,
+essai 1 » dans leur en-tête.
+
 **Il vit une étape, et une seule.** Raté au milieu d'une 7 sur 8, il reste jusqu'à
 la fin de cette 7 sur 8 puis disparaît. Mais un raté **au dernier coup** clôt
 l'étape sur-le-champ, sans laisser le temps de cliquer : le bouton apparaît alors
@@ -4810,9 +4878,10 @@ Une fois cette fenêtre passée, l'étape est close et ne se reprend plus. Sans 
 on pourrait remonter toute la montante depuis sa dernière étape, et la suite
 n'aurait plus d'ordre.
 
-La bascule au clic rend ce cas plus rare qu'il n'y paraît : la fin d'une étape
-montre les deux boutons côte à côte, reprendre et continuer. La règle vaut pour
-l'hôte qui enchaîne sans regarder.
+C'est le cas ordinaire, pas un cas d'école : la suite part d'elle-même deux
+secondes après le dernier coup, et deux secondes ne suffisent à personne. Sous
+pause, en revanche, la fin d'étape montre les deux boutons côte à côte —
+reprendre, ou continuer.
 
 #### L'étape suivante est prête avant qu'on en ait besoin
 
@@ -4838,11 +4907,26 @@ montante :
 Rien ne fuit : la graine et le tirage préparés ne sortent pas du serveur, comme
 les coups d'avance du §17.
 
-> **Aucune des trois n'est construite.** La montante s'enchaîne au clic de
-> l'hôte, et paie donc ces 201 ms à chaque étape, comme n'importe quelle relance
-> de salon. C'est un temps mort à l'écran, pas un temps compté : il ne touche ni
-> le total de la montante, ni aucun record. À reprendre quand une montante aura
-> été jouée et qu'on saura si ces deux dixièmes se remarquent.
+> **Aucune des trois n'est construite.** La montante paie ces 201 ms à chaque
+> étape, comme n'importe quelle relance de salon. C'est un temps mort à l'écran,
+> pas un temps compté : il ne touche ni le total de la montante, ni aucun record,
+> et il se perd dans les deux secondes qui séparent déjà deux étapes.
+>
+> **La première ne servirait à rien seule**, et c'est ce qui a été manqué en
+> l'écrivant : les 145 ms sont lues **dans le fil de calcul**, et un fil neuf part
+> toujours d'un cache vide. Garder les lexiques chargés n'y fait gagner quelque
+> chose que si le FIL est recyclé — la deuxième décision. Les deux n'en font donc
+> qu'une, et c'est elle qui vaut les 145 ms.
+>
+> **Ce qui est fait, en revanche : le lexique du FIL PRINCIPAL est gardé.** Le
+> constructeur de `Game` lit lui aussi le DAWG — 0,45 Mo, pour valider un mot
+> tapé — et il le relisait à chaque relance, en figeant le serveur pendant ce
+> temps. Un lexique compilé ne change jamais en cours d'exécution et ne se lit
+> qu'en lecture : un cache par chemin de fichier suffit, et il sert maintenant
+> aux parties comme au lecteur des parties archivées.
+>
+> Le reste à reprendre quand une montante aura été jouée et qu'on saura si ces
+> deux dixièmes se remarquent.
 
 #### Ce que la montante enregistre
 
@@ -4900,6 +4984,35 @@ l'historique — c'est ce qui fait un lien qu'on partage — mais seul le bouton
 « précédent » les relisait : coller l'adresse dans une barre d'adresse rendait le
 mur de salons. Un lien de record ouvre maintenant son tableau, et un lien de
 partie ouvre son coup.
+
+#### La page s'ouvre sur sa propre liste de mots
+
+Le filtre des lexiques s'ouvrait sur le français, pour tout le monde. Un
+anglophone commençait donc par chercher son tableau, derrière celui d'une langue
+qu'il ne joue pas.
+
+**Il s'ouvre sur le lexique de la langue du compte**, et se repose à chaque
+ouverture de la page — le compte a pu se connecter, ou changer de langue, depuis
+la dernière fois.
+
+**« Tous » pour qui n'a pas de compte.** La langue du site ferait un défaut
+plausible, mais elle se **devine** : elle vient du navigateur, pas d'un choix. Un visiteur voit donc les cent meilleurs temps du site, toutes langues
+confondues, et restreint ensuite s'il le veut.
+
+**Et « Tous » passe en dernier**, après les vraies listes. En tête de rangée il
+passait pour le premier des lexiques ; il vient après, comme ce qu'il est : la
+table où elles se rejoignent.
+
+#### La feuille de route tient trente coups
+
+Une partie normale fait une vingtaine de coups, et jusqu'à trente en comptant les
+longues : c'est la mesure que la fenêtre doit servir. À 62 % de la hauteur de
+l'écran et aux lignes de la page des records, on défilait dès la quinzième.
+
+La fenêtre prend donc **toute la hauteur qui reste** — l'entête, le pied et le
+voile mis à part — et ses lignes se serrent à 22 pixels. Mesuré sur un écran de
+900 pixels : **trente et une lignes** tiennent sans ascenseur, la trente-deuxième
+en demande un.
 
 ### Le journal des records
 

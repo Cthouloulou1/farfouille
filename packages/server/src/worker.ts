@@ -46,6 +46,19 @@ export interface SolveRequest {
   moveNumber: number;
   /** Paliers de sous-tops a renvoyer, pour l'inspection. */
   tiers: number;
+  /**
+   * CE QU'IL RESTE DANS LE SAC, par lettre, ou `null` si la pioche n'a pas de
+   * stock a defendre.
+   *
+   * Le solveur en a besoin pour une seule decision, et elle compte : a score
+   * egal, retenir l'isotop qui CONSERVE le joker (SPEC.md §16). Sans le sac il
+   * choisissait a l'aveugle, et pouvait poser un joker en G alors qu'il n'y
+   * avait plus de G et qu'un C, encore disponible, valait le meme score.
+   *
+   * Le fil de calcul ne tient pas le sac : il ne pioche pas, il cherche. C'est
+   * donc la partie qui le lui dit, coup par coup.
+   */
+  reliquat?: Record<string, number> | null;
 }
 export interface PlaceRequest {
   t: "place";
@@ -76,6 +89,8 @@ export interface AvanceRequest {
   rack: string;
   moveNumber: number;
   tiers: number;
+  /** Le sac du DOUBLE, tel qu'il est apres ce tirage-la. Voir `SolveRequest`. */
+  reliquat?: Record<string, number> | null;
 }
 
 /**
@@ -165,7 +180,8 @@ parentPort!.on(
   }
   const t0 = performance.now();
   const gen = generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
-  const top = pickTop(gen.moves, aleaDuCoup(msg.moveNumber), board.cfg.joker);
+  const top = pickTop(gen.moves, aleaDuCoup(msg.moveNumber), board.cfg.joker,
+    msg.reliquat);
   const result = top === null ? null : {
     top: top.top,
     bestScore: top.bestScore,

@@ -44,6 +44,20 @@ import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lect
 const ANNEXES: readonly Annexe[] = [
   "chrono", "chere", "pasChere", "courte", "longue", "farfouilles", "peuDeFarfouilles",
 ];
+
+/**
+ * Le temps qu'une etape de montante reste a l'ecran avant que la suivante
+ * commence, en millisecondes.
+ *
+ * ZERO SERAIT TROP COURT. Le dernier top de l'etape vient d'etre diffuse ; sans
+ * ce delai, le message de relance arrive dans la meme foulee et le caramel ne
+ * s'est pas encore pose a l'ecran. Deux secondes suffisent pour le lire.
+ *
+ * ELLES NE COUTENT RIEN : le temps de la montante est la somme des temps de ses
+ * coups (§16), et ce qui se passe entre deux etapes n'est compte par personne.
+ * Qui veut vraiment regarder la grille allume la pause.
+ */
+const DELAI_ENTRE_ETAPES_MS = 2000;
 import { setLayout } from "../../engine/src/bonus.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
 import type { Dir } from "../../engine/src/coords.ts";
@@ -502,7 +516,43 @@ function cloreLEtapeDeLaMontante(s: Salon, e: EtapeObservee): void {
   console.log(`[montante] "${s.nom}" etape ${m.rang} (essai ${m.essai}) : `
     + `${e.coups} coups, ${(e.temps / 1000).toFixed(2)} s, `
     + `${e.rates === 0 ? "topee" : `${e.rates} rate(s), negatif ${e.negatif}`}`);
-  if (montanteFinieDElleMeme(m)) acheverLaMontante(s);
+  if (montanteFinieDElleMeme(m)) { acheverLaMontante(s); return; }
+  // LA SIXIEME NE S'ENCHAINE PAS. Il n'y a rien apres elle : la montante
+  // s'arrete, sa derniere grille reste a l'ecran, et l'hote choisit -- reprendre
+  // cette etape s'il en a le droit, ou clore la suite.
+  if (!ilResteUneEtape(m)) return;
+  enchainerLEtapeSuivante(s);
+}
+
+/**
+ * L'ETAPE SUIVANTE PART D'ELLE-MEME. C'est une montante : on ne reprend pas son
+ * souffle entre deux parties.
+ *
+ * Sauf si l'hote a demande une pause -- c'est alors lui qui lance la suite, et
+ * c'est le seul moyen de revoir les coups d'une etape qu'on vient de finir.
+ *
+ * LE MINUTEUR VERIFIE TOUT A NOUVEAU EN SE DECLENCHANT. Deux secondes suffisent
+ * a ce que l'hote allume la pause, reprenne l'etape, valide d'autres reglages ou
+ * ferme le salon : la montante qu'il retrouve peut n'etre plus la meme.
+ */
+function enchainerLEtapeSuivante(s: Salon): void {
+  const m = s.montante;
+  if (m === null || m.pause || !m.close || !ilResteUneEtape(m)) return;
+  setTimeout(() => {
+    void (async () => {
+      // LE MEME SALON, ET LA MEME MONTANTE DANS LE MEME ETAT : sinon ce
+      // minuteur n'a plus rien a lancer. Deux secondes suffisent a fermer le
+      // salon, et relancer une partie dans un salon ferme rouvrirait des
+      // fichiers qu'on vient de retirer.
+      if (salon(s.id) !== s) return;
+      if (s.montante !== m || m.pause || !m.close || !ilResteUneEtape(m)) return;
+      const rang = passerALEtapeSuivante(m);
+      if (rang === null) return;
+      await relancerEtDiffuser(s, configDeLEtape(s.partie.cfg, rang));
+      console.log(`[montante] "${s.nom}" enchaine l'etape ${rang} `
+        + `(${etapeMontante(rang).nom})`);
+    })();
+  }, DELAI_ENTRE_ETAPES_MS);
 }
 
 /**
@@ -1612,7 +1662,7 @@ wss.on("connection", (ws, req) => {
     // TROIS GESTES, ET TOUS LES TROIS SONT A L'HOTE. Lancer l'etape suivante,
     // recommencer une etape ratee, terminer la suite. Voir SPEC.md §23.
     if (msg.t === "montante-suivante" || msg.t === "montante-reprendre"
-        || msg.t === "montante-terminer") {
+        || msg.t === "montante-terminer" || msg.t === "montante-pause") {
       const m = s.montante;
       if (m === null) {
         send(ws, { t: "result", ok: false, message: "ce salon ne joue pas de montante" });
@@ -1620,6 +1670,17 @@ wss.on("connection", (ws, req) => {
       }
       if (estPermanent(s) || s.proprietaire === null || s.gerant !== moi.nom) {
         send(ws, { t: "result", ok: false, message: "seul l'hôte mène la montante" });
+        return;
+      }
+
+      // LA PAUSE : l'hote decide si la montante s'arrete entre deux parties.
+      // L'eteindre alors qu'une etape close attend relance la suite aussitot.
+      if (msg.t === "montante-pause") {
+        m.pause = msg.pause === true;
+        console.log(`[montante] "${s.nom}" pause entre les parties : `
+          + `${m.pause ? "oui" : "non"}`);
+        broadcast(s.id, { t: "state", state: publicState(s) });
+        if (!m.pause) enchainerLEtapeSuivante(s);
         return;
       }
 

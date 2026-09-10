@@ -103,6 +103,8 @@ console.log("  --- le depart ---\n");
   const m = nouvelleMontante();
   verifie("elle commence a l'etape 1, premier essai",
     m.rang === 1 && m.essai === 1 && !m.close && !m.finie);
+  // ETEINTE PAR DEFAUT : une montante s'enchaine sans reprendre son souffle.
+  verifie("la pause entre les parties est eteinte", !m.pause);
   verifie("son identifiant est un vrai identifiant", m.id.length >= 16);
   const p = montantePublique(m);
   verifie("l'etat public annonce six etapes", p.etapes === ETAPES_MONTANTE);
@@ -227,6 +229,8 @@ console.log("\n  --- le prix d'une reprise ---\n");
 
   const t = totaux(m);
   // LE TEMPS COMPTE TOUT.
+  // ET CE N'EST PAS L'ETAPE 1 : le temps de l'essai abandonne reste. Seule
+  // l'etape 1 remet le chrono a zero, parce qu'il n'y a rien avant elle.
   verifie("le temps de l'essai abandonne reste au compteur",
     t.temps === 42_000, `${t.temps} ms`);
   // LE NEGATIF NE COMPTE QUE CE QUI RESTE.
@@ -271,6 +275,34 @@ console.log("\n  --- reprendre en arriere abandonne la suite ---\n");
   etapeEntiere(m, vue({ temps: 8_000 }), false);
   verifie("l'etape 3 revient en deuxieme essai",
     passerALEtapeSuivante(m) === 3 && m.essai === 2, `essai ${m.essai}`);
+}
+
+// ------------------------------- recommencer l'etape 1, c'est repartir de zero
+console.log("\n  --- recommencer l'etape 1 ---\n");
+{
+  // RIEN N'A ENCORE ETE ACCOMPLI. Le chrono repart de zero, et non pas « tout
+  // sauf le negatif » : c'est comme recommencer la montante.
+  const m = nouvelleMontante();
+  const abandon = vue({ temps: 24_000, rates: 3, negatif: 140 });
+  cloreLEtape(m, abandon);
+  verifie("l'etape 1 se reprend", reprendreLEtape(m, 1) === 1);
+  const t = totaux(m);
+  verifie("le chrono repart de zero", t.temps === 0, `${t.temps} ms`);
+  verifie("et tout le reste avec", t.negatif === 0 && t.rates === 0 && t.coups === 0);
+  verifie("c'est le deuxieme essai de l'etape 1", m.rang === 1 && m.essai === 2);
+  verifie("il ne reste aucun essai derriere", m.essais.length === 0);
+  verifie("elle pretend de nouveau au tableau", !montantePerdue(m));
+
+  // Un troisieme essai porte bien le numero 3.
+  cloreLEtape(m, vue({ temps: 11_000, rates: 1 }));
+  verifie("l'etape 1 se reprend encore", reprendreLEtape(m, 1) === 1);
+  verifie("et c'est le troisieme essai", m.essai === 3, `essai ${m.essai}`);
+  verifie("le chrono repart de zero une fois de plus", totaux(m).temps === 0);
+
+  // Puis la montante se joue normalement : le temps recompte a partir de la.
+  etapeEntiere(m, vue({ temps: 13_000 }));
+  verifie("l'etape 1 reussie compte son temps", totaux(m).temps === 13_000,
+    `${totaux(m).temps} ms`);
 }
 
 // ---------------------------------------------- la montante qui ne se reprend pas

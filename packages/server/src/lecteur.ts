@@ -32,7 +32,7 @@ import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 import { Dict } from "../../engine/src/dictionary.ts";
-import { loadDict } from "../../engine/src/dictionary_node.ts";
+import { lexiqueGarde } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
 import { setLayout, LAYOUTS, type LayoutName } from "../../engine/src/bonus.ts";
@@ -43,20 +43,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 
 /**
- * LES LEXIQUES CHARGES SONT GARDES.
+ * LES LEXIQUES CHARGES SONT GARDES, et le cache vit maintenant dans le moteur
+ * (`dictionary_node.ts`) : les parties du serveur s'en servent aussi.
  *
  * `loadDict` relit le fichier a chaque appel : 0,45 Mo pour le DAWG francais.
- * Une page de records qui ouvre trois parties de suite le relisait trois fois,
- * et chaque relance de partie le paie deja (SPEC.md §23). Ils ne changent
- * jamais en cours d'execution : un cache par fichier suffit.
+ * Une page de records qui ouvre trois parties de suite le relisait trois fois.
+ * Ils ne changent jamais en cours d'execution : un cache par fichier suffit.
  */
-const lexiques = new Map<string, Dict>();
-
 export function lexique(id: string): Dict {
-  const chemin = dawgPath(id);
-  let d = lexiques.get(chemin);
-  if (d === undefined) { d = loadDict(chemin); lexiques.set(chemin, d); }
-  return d;
+  return lexiqueGarde(dawgPath(id));
 }
 
 /**

@@ -536,6 +536,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Étape {n} : {f}": "Stage {n}: {f}",
   "Terminer la montante": "End the ladder",
   "Nouvelle montante": "New ladder",
+  "Pause entre les parties": "Pause between games",
   "Recommencer l'étape": "Restart the stage",
   "Recommencer l'étape {n} ({f})": "Restart stage {n} ({f})",
   "Le temps déjà joué reste au compteur ; le négatif de la tentative abandonnée est oublié.":

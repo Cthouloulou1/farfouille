@@ -27,7 +27,7 @@ import { dirname, join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 import type { Dict } from "../../engine/src/dictionary.ts";
-import { loadDict } from "../../engine/src/dictionary_node.ts";
+import { lexiqueGarde } from "../../engine/src/dictionary_node.ts";
 import { Board, type Placement } from "../../engine/src/board.ts";
 import { Bag, type BagConfig } from "../../engine/src/bag.ts";
 import { BLANK, rangerLeTirage } from "../../engine/src/alphabet.ts";
@@ -147,6 +147,18 @@ export interface PlayedMove {
    * sorties, et sa composition derivait.
    */
   jokers?: { sortis: string[]; restes: number };
+  /**
+   * EN MEMOIRE SEULEMENT : ce que le sac contenait quand le top a ete choisi.
+   *
+   * Le journal ne le porte pas -- ce sont vingt-six nombres par coup pour une
+   * chose qui se recalcule en rejouant la partie. Il sert a deux choses : dire
+   * ce que le solveur avait sous les yeux, et permettre a `check_avance.ts` de
+   * refaire EXACTEMENT le meme choix d'isotop, maintenant que ce choix depend
+   * du sac (SPEC.md §16).
+   *
+   * `null` quand la pioche n'a pas de stock a defendre.
+   */
+  reliquatDuSac?: Readonly<Record<string, number>> | null;
 }
 
 /**
@@ -321,6 +333,8 @@ interface CoupPret {
    */
   jokersSortis: string[];
   jokersRestes: number;
+  /** Le sac du double au moment du choix. Voir `PlayedMove.reliquatDuSac`. */
+  reliquatDuSac: Readonly<Record<string, number>> | null;
 }
 
 /**
@@ -520,6 +534,18 @@ export class Game {
   isotops = 0;
   tiers: Tier[] = [];
   private canonicalTop: Move | null = null;
+
+  /**
+   * CE QUE LE SAC CONTENAIT QUAND LE TOP DU COUP EN COURS A ETE CHOISI.
+   *
+   * En partie joker, le choix de l'isotop en depend : a score egal on retient
+   * celui qui CONSERVE le joker, et « conserver » veut dire « sa lettre est
+   * encore au sac » (SPEC.md §16). On le garde pour pouvoir le dire au coup
+   * joue, et pour qu'un test puisse refaire exactement le meme choix.
+   *
+   * `null` quand la pioche n'a pas de stock a defendre.
+   */
+  private reliquatDuTop: Readonly<Record<string, number>> | null = null;
   /** Instant ou le tirage courant a ete diffuse. Le chrono du coup part de la. */
   servedAt = 0;
   /**
@@ -748,7 +774,10 @@ export class Game {
     this.cfg = cfg ?? configParDefaut();
     // Le lexique de la partie, pas celui du serveur : deux salons voisins
     // peuvent jouer l'un en francais et l'autre en anglais.
-    this.dawg = loadDict(dawgPath(this.cfg.dictionnaire));
+    // LE LEXIQUE NE SE RELIT PAS D'UNE PARTIE A L'AUTRE. Il est lu ICI, sur le
+    // fil principal : le relire a chaque relance figeait le serveur le temps de
+    // 0,45 Mo, pour un fichier qui ne change jamais.
+    this.dawg = lexiqueGarde(dawgPath(this.cfg.dictionnaire));
     this.board = new Board(this.dawg, this.cfg);
     this.file = join(DATA_DIR, `${gameId}.json`);
     this.journal = join(DATA_DIR, `${gameId}.journal.jsonl`);
@@ -1606,6 +1635,11 @@ export class Game {
     this.emit();
 
     const id = this.nextId++;
+    // LE SAC SE LIT AVANT LA DEMANDE, ET SE GARDE. C'est celui d'apres le
+    // tirage, donc celui que la substitution consultera au moment de poser le
+    // coup : rien ne le touche entre les deux.
+    const reliquatDuSac = Game.reliquatPourLeSolveur(this.bag);
+    this.reliquatDuTop = reliquatDuSac;
     const reply: any = await new Promise((res) => {
       this.pending.set(id, res);
       // ON NE CALCULE QUE CE QU'ON GARDE.
@@ -1619,6 +1653,7 @@ export class Game {
       this.worker.postMessage({
         t: "solve", id, rack: this.rack, moveNumber: this.moveNumber + 1,
         tiers: this.paliersGardes,
+        reliquat: reliquatDuSac,
       });
     });
 
@@ -1828,6 +1863,7 @@ export class Game {
       bestScore: this.bestScore, isotops: this.isotops, tiers: this.tiers,
       ms: this.msDuTop, reliquatApres,
       jokersSortis: jokers.sorties, jokersRestes: jokers.restes,
+      reliquatDuSac: this.reliquatDuTop,
     };
     this.worker.postMessage({ t: "place", placements: top.placements });
     this.posesSolveur++;
@@ -1876,6 +1912,8 @@ export class Game {
         ? this.reliquatAvance.filter((c) => c !== BLANK)
         : this.reliquatAvance;
       const draw = sac.draw(sansJoker);
+      // Le sac du double APRES son tirage, comme en direct.
+      const reliquatDuSac = Game.reliquatPourLeSolveur(sac);
       const auTirage = BLANK.repeat(servis);
       const rack = rangerLeTirage(servis > 0 ? [...draw.rack, ...auTirage] : draw.rack);
       const notation = servis > 0 ? `${draw.notation}+${auTirage}` : draw.notation;
@@ -1884,6 +1922,9 @@ export class Game {
         this.pending.set(id, res);
         this.worker.postMessage({
           t: "avance", id, rack, moveNumber: n, tiers: this.paliersGardes,
+          // Le sac du DOUBLE, apres son tirage : c'est celui que
+          // `deciderLesJokers` consultera quelques lignes plus bas.
+          reliquat: reliquatDuSac,
         });
       });
       // Le solveur dit combien de coups sa grille porte. Un ecart voudrait dire
@@ -1930,6 +1971,7 @@ export class Game {
         reliquatApres,
         jokersSortis: jokers.sorties,
         jokersRestes: jokers.restes,
+        reliquatDuSac,
       });
       this.reliquatAvance = reliquatApres;
       return true;
@@ -2188,6 +2230,9 @@ export class Game {
       ...(Object.keys(propositions).length > 0 ? { propositions } : {}),
       ...(duplicate ?? {}),
       ...(demiPoint ? { demiPoint } : {}),
+      // EN MEMOIRE SEULEMENT, et jamais au journal : ce que le solveur avait
+      // sous les yeux quand il a choisi cet isotop-la.
+      reliquatDuSac: this.pretCourant?.reliquatDuSac ?? this.reliquatDuTop,
     };
     // La trace des jokers est posee APRES la substitution, plus bas : c'est
     // elle qui la produit. L'objet `move` n'est ecrit au journal qu'ensuite.
@@ -2433,6 +2478,20 @@ export class Game {
    * qu'un W. Un sac qui boucle retrouve sa composition d'origine des qu'il
    * s'appauvrit, et des probabilites ponderees n'ont jamais rien eu a retirer.
    */
+  /**
+   * CE QU'IL RESTE DANS CETTE PIOCHE, tel que le solveur doit le voir.
+   *
+   * `null` dit « pas de stock a defendre » : sur un sac qui boucle et sur des
+   * probabilites ponderees, la lettre du joker NAIT, et aucun joker ne s'y perd
+   * jamais. Un sac fini rend son contenu, meme vide -- vide, plus aucun joker
+   * ne trouve sa lettre, et c'est une information.
+   */
+  private static reliquatPourLeSolveur(
+    pioche: Pioche,
+  ): Record<string, number> | null {
+    return Game.preleveLesLettres(pioche) ? { ...pioche.restant() } : null;
+  }
+
   private static preleveLesLettres(pioche: Pioche): boolean {
     const sac = pioche as SacFini;
     return typeof sac.retirer === "function" && sac.recharge !== true;
@@ -2450,7 +2509,10 @@ export class Game {
    * Seuls les jokers ne se devinent pas : leur rang est ecrit a part.
    */
   private static pourLeJournal(move: PlayedMove): Record<string, unknown> {
-    const { placements, ...reste } = move;
+    // LE SAC NE S'ECRIT PAS. `reliquatDuSac` est vingt-six nombres par coup
+    // pour une chose qui se recalcule en rejouant la partie : il vit en
+    // memoire, comme les placements, et pour la meme raison.
+    const { placements, reliquatDuSac: _sac, ...reste } = move;
     const blancs: number[] = [];
     placements.forEach((p, i) => { if (p.blank) blancs.push(i); });
     return blancs.length > 0 ? { ...reste, blancs } : reste;
@@ -2642,7 +2704,10 @@ export class Game {
       gameId: this.gameId, layout: this.layout, seed: this.seed,
       config: serialiser(this.cfg),
       createdAt: this.createdAt,
-      moves: this.moves, players: this.players, chat: this.chat,
+      // Le sac de chaque coup ne s'ecrit pas non plus ici : il vit en memoire,
+      // comme au journal (voir `pourLeJournal`).
+      moves: this.moves.map(({ reliquatDuSac: _sac, ...m }) => m),
+      players: this.players, chat: this.chat,
     };
     // Ecriture atomique : une coupure de courant ne doit pas laisser un fichier
     // a moitie ecrit, qui rendrait la partie irrecuperable.
