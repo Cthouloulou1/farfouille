@@ -577,6 +577,28 @@ class Observation {
   }
 
   /**
+   * LA PARTIE A-T-ELLE ETE VRAIMENT JOUEE, ET PAS SEULEMENT SUBIE ?
+   *
+   * DEUX CONDITIONS, ET LES DEUX COMPTENT.
+   *
+   * 1. QUELQU'UN A SOUMIS QUELQUE CHOSE SUR CHAQUE COUP. Un seul mot tape sur
+   *    toute une super grille laissait vingt coups sans personne, et la partie
+   *    entrait quand meme au tableau -- il suffisait d'un coup actif parmi
+   *    tous les autres. Un tirage que personne n'a regarde ne dit rien de la
+   *    table, et un negatif qui compte des coups abandonnes ne mesure rien.
+   *
+   * 2. AU MOINS UN TOP A ETE TROUVE. Sans lui la colonne « joueurs » reste
+   *    vide : rien a montrer dans un tableau qui nomme un joueur a cote d'un
+   *    temps. C'etait le cas exact du bug -- un seul sous-top soumis, aucun
+   *    top trouve, et une ligne sans personne dedans.
+   */
+  private vraimentJouee(): boolean {
+    if (this.vus.length === 0) return false;
+    if (!this.vus.every((c) => c.actif)) return false;
+    return this.vus.some((c) => c.par !== null);
+  }
+
+  /**
    * L'etape telle qu'elle se presente MAINTENANT, finie ou non.
    *
    * `raison` n'est connue qu'a la fin ; sans elle, l'etape ne peut pas etre
@@ -611,7 +633,7 @@ class Observation {
       tops,
       joue: this.vus.some((c) => c.actif),
       valide: this.entiere && this.categorie !== null && complete
-        && this.vus.length > 0 && this.vus.some((c) => c.actif),
+        && this.vraimentJouee(),
       coupCher: note(trouves[0]),
       coupPasCher: note(trouves[trouves.length - 1]),
     };
@@ -629,10 +651,12 @@ class Observation {
     // complete.
     if (raison !== "sac" && raison !== "injouable") return null;
     if (this.vus.length === 0) return null;
-    // AU MOINS UN JOUEUR ACTIF. Un onglet reste ouvert fait defiler une partie
-    // chronometree tout seul, et ce n'est pas une partie jouee.
-    if (!this.vus.some((c) => c.actif)) {
-      console.log(`[records] "${this.partie.gameId}" ecartee : personne n'a joue`);
+    // VRAIMENT JOUEE : quelqu'un a soumis quelque chose sur CHAQUE coup, et au
+    // moins un top a ete trouve (voir `vraimentJouee`). Sans cela, un seul mot
+    // tape sur une grille de vingt coups suffisait a l'inscrire au tableau des
+    // negatifs, avec une colonne « joueurs » vide.
+    if (!this.vraimentJouee()) {
+      console.log(`[records] "${this.partie.gameId}" ecartee : pas assez jouee`);
       return null;
     }
     const grille = grilleDeBornes(this.partie.cfg.bornes);

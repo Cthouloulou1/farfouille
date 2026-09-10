@@ -4337,7 +4337,7 @@ tableau.
 | **primes de farfouilles inchangées** | elles sont réglables ; une table bricolée donne des cumuls incomparables |
 | **aucune borne en coups ni en durée** | la partie va au bout de son sac, sans quoi on comparerait des parties tronquées |
 | **mode topping** | le duplicate ne se termine pas sur un top trouvé |
-| **au moins un joueur actif** | voir plus bas |
+| **vraiment jouée** | voir plus bas |
 | **partie topée** | pour tous les classements de vitesse et pour les tableaux annexes |
 
 Ce qui reste **libre**, et figure en colonne plutôt qu'en condition : le
@@ -4361,8 +4361,22 @@ le salon **sait déjà** ce qu'il faut savoir. Il regarde passer sa propre parti
 - qui est **présent** au tirage de chaque coup ;
 - qui a **soumis au moins un mot** pendant ce coup.
 
-À la fin de la partie, il en tire une ligne, une seule, dans le journal des
-records. Le journal de la partie, lui, ne change pas.
+**Une partie est vraiment jouée à deux conditions, et les deux comptent.**
+
+1. **Quelqu'un a soumis quelque chose sur CHAQUE coup.** Il ne suffisait pas
+   qu'un seul coup, n'importe où dans la partie, ait vu quelqu'un s'y essayer —
+   c'était la règle avant, et elle laissait passer un seul mot tapé sur toute
+   une super grille de vingt coups : dix-neuf tirages livrés à eux-mêmes, et la
+   manche entrait quand même au tableau des négatifs.
+2. **Au moins un top a été trouvé.** Sans lui, la colonne « joueurs » — celle
+   qui nomme qui a trouvé quoi — reste **vide** : rien à montrer dans un
+   tableau qui nomme un joueur à côté d'un temps. C'est le cas exact du bug
+   signalé : un sous-top soumis, aucun top trouvé, une ligne sans personne
+   dedans.
+
+À la fin de la partie, et si les deux tiennent, le salon en tire une ligne, une
+seule, dans le journal des records. Le journal de la partie, lui, ne change
+pas.
 
 **Un serveur qui redémarre en cours de partie perd cette observation.** La partie
 cesse alors d'être éligible, et le salon le dit. C'est le prix de ne rien écrire
@@ -4856,8 +4870,8 @@ plus que la patience.
 Qui ne recommence pas continue : la montante s'achève, le rouge reste jusqu'au
 bout, et elle ne concourt qu'au négatif.
 
-**Le bouton désigne l'étape la plus ancienne qui porte encore un coup raté.** La
-montante y repart, et tout ce qui a été joué depuis est abandonné : son temps
+**Le bouton ne désigne jamais qu'une seule étape : celle qu'on a sous les yeux.**
+La montante y repart, et tout ce qui a été joué depuis est abandonné : son temps
 reste au compteur, son négatif s'efface avec le reste.
 
 **Une exception, et une seule : l'étape 1 repart de zéro.** Recommencer la partie
@@ -4868,20 +4882,27 @@ chaque étape : deux parties de la même suite ne portent jamais le même « ét
 essai 1 » dans leur en-tête.
 
 **Il vit une étape, et une seule.** Raté au milieu d'une 7 sur 8, il reste jusqu'à
-la fin de cette 7 sur 8 puis disparaît. Mais un raté **au dernier coup** clôt
-l'étape sur-le-champ, sans laisser le temps de cliquer : le bouton apparaît alors
-dans l'étape **suivante**, et il propose toujours de rejouer l'étape ratée. On
-rate le dernier coup de la 7 sur 7 joker, la 7 sur 8 démarre, et c'est un bouton
-« rejouer la 7 sur 7 joker » qui s'y affiche.
+la fin de cette 7 sur 8 puis disparaît.
 
-Une fois cette fenêtre passée, l'étape est close et ne se reprend plus. Sans quoi
-on pourrait remonter toute la montante depuis sa dernière étape, et la suite
-n'aurait plus d'ordre.
+**Un raté au DERNIER coup coche la pause toute seule**, plutôt que de faire
+glisser le bouton dans l'étape suivante — la première version de la règle. Un
+raté au dernier coup clôt l'étape sur-le-champ, sans laisser le temps de
+cliquer ; mais un bouton qui change d'étape en cours de route désigne une partie
+qu'on ne regarde déjà plus. À la fin d'une montante de six, il proposait de
+reprendre la cinquième alors qu'on venait tout juste de rater la sixième.
 
-C'est le cas ordinaire, pas un cas d'école : la suite part d'elle-même deux
-secondes après le dernier coup, et deux secondes ne suffisent à personne. Sous
-pause, en revanche, la fin d'étape montre les deux boutons côte à côte —
-reprendre, ou continuer.
+C'est donc l'enchaînement qu'il fallait arrêter, pas le bouton qu'il fallait
+faire courir après lui : dès qu'un dernier coup est raté, la pause **se coche
+d'elle-même**, exactement comme si l'hôte venait de l'allumer. La suite ne part
+plus toute seule, et le bouton reste sur l'étape qu'on vient de perdre — jamais
+sur une autre. Les deux boutons paraissent alors côte à côte, comme sous
+n'importe quelle pause : reprendre, ou continuer quand même.
+
+Passer à l'étape suivante — de son plein gré, une fois qu'on a choisi de
+continuer malgré le raté — clôt définitivement la fenêtre : le raté reste au
+compteur, assumé, et cette étape ne se reprend plus. Sans quoi on pourrait
+remonter toute la montante depuis sa dernière étape, et la suite n'aurait plus
+d'ordre.
 
 #### L'étape suivante est prête avant qu'on en ait besoin
 
@@ -5245,7 +5266,6 @@ fera le jour où le cas se présentera.
 
 | Sujet | Question |
 |---|---|
-| Le bouton de reprise et les ratés qui s'accumulent | Il vit une étape. Rater au dernier coup de deux étapes de suite laisse donc le premier raté derrière soi. Écrit ainsi faute d'un cas réel ; à revoir quand une montante aura été jouée. |
 | Une mise à jour de lexique | Les records passés ont été établis contre un autre lexique. La colonne le dit ; faut-il pour autant repartir de zéro, ou faire coexister deux listes ? |
 | Le classement des joueurs | Écarté pour l'instant : afficher un pourcentage de tops trouvés change la façon dont on joue, et pas dans le bon sens. |
 | Le ping | Il départage structurellement des coups trouvés à quelques dixièmes près (§8), et un tableau de records en fait un enjeu. Non résolu. |

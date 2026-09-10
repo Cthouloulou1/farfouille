@@ -14,8 +14,10 @@
  * tableau ne classerait plus que la patience.
  *
  * Il eprouve aussi LA FENETRE DU BOUTON, qui est la regle la plus subtile de la
- * montante : il vit une etape, sauf pour un rate au DERNIER coup, qui clot
- * l'etape sur-le-champ et fait paraitre le bouton dans la suivante.
+ * montante : elle ne vit QUE l'etape en cours, meme un rate au dernier coup --
+ * celui-la coche la pause toute seule plutot que de laisser l'enchainement
+ * filer sans donner le choix, et le bouton ne quitte donc jamais l'etape qu'on
+ * a sous les yeux.
  *
  * Rien n'est ecrit sur le disque : la montante est un etat en memoire, et ce
  * test ne fait que le faire avancer. Seule la derniere partie ouvre le journal
@@ -186,31 +188,27 @@ console.log("\n  --- la fenetre du bouton de reprise ---\n");
   verifie("l'etape suivante commencee, elle a disparu",
     etapeReprenable(m) === null, String(etapeReprenable(m)));
 
-  // Un rate au DERNIER coup clot l'etape sur-le-champ : le bouton parait dans
-  // la suivante, et propose toujours de rejouer l'etape ratee.
+  // UN RATE AU DERNIER COUP COCHE LA PAUSE TOUTE SEULE, et le bouton reste sur
+  // CETTE etape (la deuxieme, ici) -- jamais sur la precedente, jamais sur la
+  // suivante.
   const b = nouvelleMontante();
-  etapeEntiere(b, vue({ temps: 10_000 }));
-  cloreLEtape(b, vue({ temps: 9_000, rates: 1, dernier: true }));
-  passerALEtapeSuivante(b);
-  verifie("un rate au dernier coup suit dans l'etape suivante",
+  etapeEntiere(b, vue({ temps: 10_000 }));                        // etape 1, propre
+  verifie("la pause est encore eteinte avant le rate", !b.pause);
+  cloreLEtape(b, vue({ temps: 9_000, rates: 1, dernier: true }));  // etape 2, ratee
+  verifie("le rate au dernier coup coche la pause toute seule", b.pause);
+  verifie("le bouton propose l'etape EN COURS, pas une autre",
     etapeReprenable(b) === 2, String(etapeReprenable(b)));
   verifie("et le format propose est celui de l'etape 2",
     montantePublique(b).nomReprenable === etapeMontante(2).nom,
     montantePublique(b).nomReprenable ?? "aucun");
-  // Une etape de plus, et la fenetre est passee pour de bon.
-  etapeEntiere(b, vue({ temps: 7_000 }));
-  verifie("deux etapes plus loin, plus rien a reprendre",
-    etapeReprenable(b) === null, String(etapeReprenable(b)));
 
-  // LA PLUS ANCIENNE D'ABORD. Un rate au dernier coup de l'etape 2 et un rate
-  // dans l'etape 3 : c'est l'etape 2 que le bouton designe.
-  const c = nouvelleMontante();
-  etapeEntiere(c, vue({ temps: 10_000 }));
-  cloreLEtape(c, vue({ temps: 9_000, rates: 1, dernier: true }));
-  passerALEtapeSuivante(c);
-  verifie("entre deux etapes ratees, la plus ancienne",
-    etapeReprenable(c, vue({ temps: 3_000, rates: 2 })) === 2,
-    String(etapeReprenable(c, vue({ temps: 3_000, rates: 2 }))));
+  // L'hote peut choisir de continuer quand meme : la fenetre se ferme alors
+  // pour de bon, sans laisser de trace dans l'etape suivante.
+  verifie("l'hote passe outre", passerALEtapeSuivante(b) === 3);
+  verifie("rien ne reste a reprendre dans l'etape suivante",
+    etapeReprenable(b) === null, String(etapeReprenable(b)));
+  verifie("et son negatif reste au compteur, assume",
+    totaux(b).negatif > 0, String(totaux(b).negatif));
 }
 
 // ------------------------------------------------------ le prix d'une reprise
@@ -247,34 +245,38 @@ console.log("\n  --- le prix d'une reprise ---\n");
 }
 
 // -------------------------- reprendre une etape en abandonne les suivantes
-console.log("\n  --- reprendre en arriere abandonne la suite ---\n");
+console.log("\n  --- une etape depassee ne se reprend plus ---\n");
 {
+  // AVANT LA PAUSE AUTOMATIQUE, un rate au dernier coup de l'etape 2 aurait
+  // laisse le bouton suivre jusque dans l'etape 3, et remonter y reprendre
+  // l'etape 2 y restait possible. Ce n'est plus le cas : la pause se coche
+  // toute seule, et si l'hote choisit malgre tout de continuer, la fenetre de
+  // l'etape 2 se ferme pour de bon des qu'on la quitte.
   const m = nouvelleMontante();
   etapeEntiere(m, vue({ temps: 20_000 }));                        // 1, propre
-  cloreLEtape(m, vue({ temps: 15_000, rates: 1, negatif: 40, dernier: true }));
-  passerALEtapeSuivante(m);                                       // on est en 3
-  // On joue l'etape 3 et on la termine, puis on revient sur l'etape 2.
-  const trois = vue({ temps: 9_000, rates: 1, negatif: 25 });
-  verifie("l'etape 2 reste reprenable pendant l'etape 3",
-    etapeReprenable(m, trois) === 2, String(etapeReprenable(m, trois)));
-  cloreLEtape(m, trois);
-  verifie("on reprend l'etape 2", reprendreLEtape(m, 2) === 2);
-  const t = totaux(m);
-  verifie("le temps garde tout, etape 3 comprise",
-    t.temps === 44_000, `${t.temps} ms`);
-  verifie("le negatif ne garde que l'etape 1",
-    t.negatif === 0 && t.rates === 0, `${t.negatif} / ${t.rates}`);
-  verifie("et l'on rejoue bien l'etape 2", m.rang === 2 && m.essai === 2);
-  verifie("les deux essais abandonnes sont marques",
-    m.essais.filter((e) => !e.retenu).length === 2);
+  cloreLEtape(m, vue({ temps: 15_000, rates: 1, negatif: 40, dernier: true })); // 2, ratee
+  verifie("la pause s'est cochee toute seule", m.pause);
+  verifie("le bouton propose l'etape en cours", etapeReprenable(m) === 2);
 
-  // ON NE REDONNE PAS UN NUMERO DEJA PORTE. L'etape 3 a deja ete jouee une
-  // fois ; y revenir en fait le deuxieme essai, et non le premier -- deux
-  // parties de la meme suite marquees « etape 3, essai 1 » ne se
-  // distingueraient pas dans leur en-tete.
-  etapeEntiere(m, vue({ temps: 8_000 }), false);
-  verifie("l'etape 3 revient en deuxieme essai",
-    passerALEtapeSuivante(m) === 3 && m.essai === 2, `essai ${m.essai}`);
+  verifie("l'hote passe outre malgre le rate", passerALEtapeSuivante(m) === 3);
+  verifie("l'etape 2 ne se reprend plus, a peine quittee",
+    reprendreLEtape(m, 2) === null);
+
+  // L'etape 3 rate a son tour : c'est ELLE que le bouton designe desormais,
+  // jamais l'etape 2 -- dont le rate reste au compteur, assume.
+  const trois = vue({ temps: 9_000, rates: 1, negatif: 25 });
+  verifie("le rate de l'etape 3 n'ouvre que l'etape 3",
+    etapeReprenable(m, trois) === 3, String(etapeReprenable(m, trois)));
+  cloreLEtape(m, trois);
+  verifie("l'etape 2 reste hors d'atteinte", reprendreLEtape(m, 2) === null);
+  verifie("mais l'etape 3, elle, se reprend", reprendreLEtape(m, 3) === 3);
+  verifie("et c'est son deuxieme essai", m.rang === 3 && m.essai === 2);
+
+  const t = totaux(m);
+  verifie("le temps garde tout, etape 2 comprise",
+    t.temps === 44_000, `${t.temps} ms`);
+  verifie("le negatif de l'etape 2 assumee reste au compteur",
+    t.negatif === 40, String(t.negatif));
 }
 
 // ------------------------------- recommencer l'etape 1, c'est repartir de zero

@@ -512,10 +512,15 @@ async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]
 function cloreLEtapeDeLaMontante(s: Salon, e: EtapeObservee): void {
   const m = s.montante;
   if (m === null) return;
+  // Vue AVANT `cloreLEtape`, qui peut cocher la pause toute seule sur un rate
+  // au dernier coup (SPEC.md §23) : c'est ce qui distingue une pause qui vient
+  // de s'activer d'une pause que l'hote avait deja allumee.
+  const pauseAvant = m.pause;
   cloreLEtape(m, e);
   console.log(`[montante] "${s.nom}" etape ${m.rang} (essai ${m.essai}) : `
     + `${e.coups} coups, ${(e.temps / 1000).toFixed(2)} s, `
-    + `${e.rates === 0 ? "topee" : `${e.rates} rate(s), negatif ${e.negatif}`}`);
+    + `${e.rates === 0 ? "topee" : `${e.rates} rate(s), negatif ${e.negatif}`}`
+    + `${!pauseAvant && m.pause ? " (pause activee automatiquement)" : ""}`);
   if (montanteFinieDElleMeme(m)) { acheverLaMontante(s); return; }
   // LA SIXIEME NE S'ENCHAINE PAS. Il n'y a rien apres elle : la montante
   // s'arrete, sa derniere grille reste a l'ecran, et l'hote choisit -- reprendre
@@ -1696,7 +1701,7 @@ wss.on("connection", (ws, req) => {
         return;
       }
 
-      // REPRENDRE : l'etape la plus ancienne qui porte encore un coup rate.
+      // REPRENDRE : l'etape en cours, si elle porte encore un coup rate.
       if (msg.t === "montante-reprendre") {
         const vue = s.vue?.etape();
         const rang = etapeReprenable(m, vue);

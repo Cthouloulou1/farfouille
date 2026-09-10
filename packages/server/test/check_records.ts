@@ -9,12 +9,19 @@
  * une table de six joueurs -- en topping, il n'ecrit que le gagnant du coup, et
  * un coup rate n'y ecrit personne.
  *
- * Ce test joue donc cinq parties : une topee par un joueur qui cherche vraiment,
+ * Ce test joue donc six parties : une topee par un joueur qui cherche vraiment,
  * une que personne ne joue, une dont les reglages ne portent aucun record, une
- * reprise en cours de route, et une qu'on abandonne apres avoir rate. Une seule
- * doit entrer au tableau -- mais la derniere doit quand meme laisser ses coups
- * rates aux tableaux de mots, parce que relancer apres un rate est le geste le
- * plus courant du jeu.
+ * reprise en cours de route, une qu'on abandonne apres avoir rate, et une ou
+ * quelqu'un ne tape qu'un seul mot sur toute la grille. Une seule doit entrer
+ * au tableau -- mais celle qu'on abandonne apres un rate doit quand meme
+ * laisser ses coups rates aux tableaux de mots, parce que relancer apres un
+ * rate est le geste le plus courant du jeu.
+ *
+ * LA DERNIERE EST LE BUG EXACT REPORTE : un seul mot tape sur une super grille
+ * de vingt coups suffisait a inscrire la partie au tableau des negatifs, avec
+ * une colonne « joueurs » vide -- aucun top trouve, personne a nommer. Il faut
+ * desormais que CHAQUE coup ait vu quelqu'un s'y essayer, et qu'AU MOINS UN top
+ * ait ete trouve (voir `Observation.vraimentJouee` dans records.ts).
  *
  * LE JOURNAL DES RECORDS EXISTANT EST MIS DE COTE puis rendu : ce test ne doit
  * rien couter a la machine sur laquelle il tourne.
@@ -316,7 +323,39 @@ nettoyer(ID5);
     apres.every((l) => l.rates > 0));
 }
 
-// ------------------------------------------------- 6. l'invalidation
+// --------------------- 6. un seul mot tape ne suffit plus a entrer au tableau
+//
+// C'EST LE BUG EXACT REPORTE. Un joueur seul tape un mot sur le tout premier
+// coup d'une grande grille, ne trouve pas le top, puis laisse le reste se
+// derouler sans y toucher : dix-neuf coups sans personne. L'ancienne regle
+// n'exigeait qu'UN SEUL coup actif sur toute la partie -- celui-la suffisait,
+// et la manche entrait au tableau des negatifs avec une colonne « joueurs »
+// vide, puisqu'aucun top n'avait jamais ete trouve.
+console.log("\n  --- un seul mot tape sur toute la partie ---\n");
+const ID6 = "records-un-mot";
+nettoyer(ID6);
+{
+  const g = new Game(ID6, "classique15", partieNormale());
+  await g.start();
+  observer(g);
+  g.presents.add("solitaire");
+  await g.reveiller();
+  await g.demarrer();
+  for (let attente = 0; attente < 40 && g.tiers.length === 0; attente++) await dors(50);
+  // Un seul essai, sur le tout premier coup -- rate, mais il compte comme
+  // actif : un essai refuse reste un essai (voir `attempt`). Rien d'autre
+  // n'est tape sur le reste de la partie : elle se revele toute seule.
+  await g.attempt("solitaire", "H", 0, 0, "ZZZZ");
+  await jouer(g, null);
+
+  verifie("la partie est terminee", g.finie, `${g.moves.length} coups`);
+  verifie("aucun top n'a ete trouve", g.moves.every((m) => m.player === null));
+  verifie("un seul coup actif ne suffit plus a entrer au tableau",
+    manchesValides().length === 1, `${manchesValides().length} manche(s)`);
+  await g.stop();
+}
+
+// ------------------------------------------------- 7. l'invalidation
 console.log("\n  --- l'invalidation ---\n");
 {
   // UNE MANCHE SE DESIGNE PAR SA REFERENCE, PLUS PAR SON SALON (SPEC.md §23).

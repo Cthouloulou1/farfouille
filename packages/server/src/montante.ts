@@ -175,6 +175,15 @@ export function totaux(m: Montante, enCours?: EtapeObservee): TotauxDeMontante {
  * L'etape ne passe PAS a la suivante ici. C'est l'hote qui lance la suite, et
  * c'est ce qui lui laisse le temps de regarder la grille, de compter ce qu'il a
  * laisse, et de cliquer sur la reprise s'il le veut (SPEC.md §23).
+ *
+ * UN RATE AU DERNIER COUP COCHE LA PAUSE TOUTE SEULE.
+ *
+ * Sans elle, l'enchainement automatique filerait vers l'etape suivante deux
+ * secondes plus tard, sans laisser le temps de choisir -- et une montante doit
+ * se toper normalement : recommencer cette etape est le seul moyen d'y
+ * pretendre encore. La pause se coche donc d'elle-meme, comme si l'hote venait
+ * de l'allumer : les deux boutons paraissent alors cote a cote, reprendre ou
+ * continuer quand meme.
  */
 export function cloreLEtape(m: Montante, e: EtapeObservee): void {
   if (m.close) return;
@@ -187,6 +196,7 @@ export function cloreLEtape(m: Montante, e: EtapeObservee): void {
     tops: e.tops, valide: e.valide, retenu: true,
     coupCher: e.coupCher, coupPasCher: e.coupPasCher,
   });
+  if (e.rateAuDernierCoup) m.pause = true;
 }
 
 /** Reste-t-il une etape apres celle-ci ? */
@@ -218,34 +228,30 @@ export function passerALEtapeSuivante(m: Montante): number | null {
 /**
  * QUELLE ETAPE LE BOUTON DE REPRISE PROPOSE, ou `null` s'il ne parait pas.
  *
- * Il designe LA PLUS ANCIENNE ETAPE QUI PORTE ENCORE UN COUP RATE, et il ne vit
- * qu'une etape :
+ * C'EST TOUJOURS L'ETAPE EN COURS -- celle qu'on regarde -- des qu'un coup y
+ * est rate, et jamais une etape d'avant. Elle vit jusqu'a la fin de cette
+ * etape, close comprise : on rate au milieu d'une 7 sur 8, on a toute la
+ * 7 sur 8 pour se decider.
  *
- * - l'etape EN COURS, des qu'un coup y est rate. Il reste jusqu'a la fin de
- *   cette etape, close comprise : on rate au milieu d'une 7 sur 8, on a toute
- *   la 7 sur 8 pour se decider ;
- * - l'etape PRECEDENTE, seulement si son rate etait sur son DERNIER coup. Ce
- *   rate-la clot l'etape sur-le-champ, sans laisser le temps de cliquer : le
- *   bouton parait alors dans l'etape suivante, et propose toujours de rejouer
- *   l'etape ratee.
+ * UN RATE AU DERNIER COUP NE FAIT PLUS EXCEPTION. Il fermait autrefois
+ * l'etape et laissait le bouton se deplacer dans l'etape suivante -- mais
+ * l'enchainement automatique s'arrete desormais de lui-meme des qu'un dernier
+ * coup est rate (`cloreLEtape` coche la pause), si bien qu'on ne quitte
+ * jamais une etape ratee sans qu'on ait pu le voir. Le bouton reste donc
+ * toujours sur l'etape qu'on a sous les yeux : rien a chercher ailleurs.
  *
- * Passe cette fenetre, l'etape est close et ne se reprend plus. Sans quoi on
- * pourrait remonter toute la montante depuis sa derniere etape, et la suite
- * n'aurait plus d'ordre.
+ * Passer a l'etape suivante -- de son plein gre, une fois qu'on a decide de
+ * continuer -- clot definitivement la fenetre : le rate reste au compteur, et
+ * ne se reprend plus.
  */
 export function etapeReprenable(m: Montante, enCours?: EtapeObservee): number | null {
   if (m.finie) return null;
-  /** Le dernier essai retenu d'un rang donne. */
-  const essai = (rang: number): EssaiDEtape | undefined =>
-    [...m.essais].reverse().find((e) => e.rang === rang && e.retenu);
-  // L'etape precedente d'abord : c'est la plus ancienne des deux.
-  const avant = essai(m.rang - 1);
-  if (avant !== undefined && avant.rates > 0 && avant.rateAuDernierCoup) return avant.rang;
   // L'etape en cours, vivante ou close. Close, c'est son essai qui la dit ;
   // vivante, c'est l'observation de la partie qui tourne.
-  const ici = m.close ? essai(m.rang) : enCours;
-  if (ici !== undefined && ici.rates > 0) return m.rang;
-  return null;
+  const ici = m.close
+    ? [...m.essais].reverse().find((e) => e.rang === m.rang && e.retenu)
+    : enCours;
+  return ici !== undefined && ici.rates > 0 ? m.rang : null;
 }
 
 /**
