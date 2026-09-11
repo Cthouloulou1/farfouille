@@ -4,6 +4,8 @@ Document de référence du projet. Il consigne les décisions prises, pas les
 intentions : ce qui est ici est arbitré. Ce qui reste ouvert est rassemblé en
 fin de document, section « Reporté ».
 
+Instruction globale : il est inutile de relire les dictionnaires à chaque prompt, ce sont des outils pour le projet ils ne doivent être inspectés que si expressément demandé ('dictionnaire.txt', 'dictionnaire-csw24.txt', 'dictionnaire-eel22.txt', 'dictionnaire-nwl23.txt', ainsi que les dawg et les gaddag associés). Ne pas relire les fichiers dans packages/server/data, ce sont juste des parties enregistrées. 
+
 ---
 
 ## 1. Le principe
@@ -2144,6 +2146,10 @@ des deux mondes.
 `mondiale` joue en français, `mondiale-en` — « The Infinite Grid » — en anglais.
 L'accueil ne montre que celles de votre langue ; **« Tout afficher »** empile
 les autres dans la colonne de gauche.
+
+« The Infinite Grid » joue en **CSW 24**, pas dans l'EEL 22 par défaut d'un
+salon anglais ordinaire (§7) : c'est la grille permanente, elle vise le même
+public de joueurs confirmés que la grille française.
 
 Une grille permanente **neuve** ne démarre pas toute seule : elle n'appartient à
 personne, donc personne ne la règle. Un compte administrateur ouvre un compte à
@@ -5476,3 +5482,42 @@ la fois.
 salon** -- ces pages ne rejoignent rien côté serveur, donc n'y disputent la
 place de personne. Un deuxième onglet ouvert dessus, pendant qu'on joue dans
 le premier, ne déclenche donc jamais la reprise ci-dessus.
+
+---
+
+## 28. Le topping collaboratif
+
+Le topping ordinaire compare : chacun voit le nombre de coups que les autres
+ont remportés, et cherche sa propre meilleure solution sans savoir où en sont
+les voisins. C'est ce qui en fait une course. Une table qui préfère chercher
+ensemble, sans classement qui pèse sur l'ambiance, a maintenant une case pour
+ça.
+
+### La case, réservée au topping
+
+Dans les réglages, sur la même ligne que *Décompte*, à l'autre bout : une case
+**Topping collaboratif**. Elle n'existe qu'au topping -- le duplicate compte
+des points par nature, il n'a rien à taire au classement -- et disparaît des
+réglages dès qu'on bascule sur l'autre mode.
+
+### Ce que la case tait, et ce qu'elle montre à la place
+
+**Le classement n'affiche plus le nombre de coups remportés par chacun.** Le
+compte continue d'exister -- la feuille de route dit toujours qui a trouvé le
+top de chaque coup, et rien n'empêche de le recompter à la main en la
+parcourant -- mais il ne s'étale plus en direct sous les yeux de la table.
+
+**La case qui montrait « votre meilleure solution » montre celle de toute la
+table, en direct.** D'ordinaire elle ne parle que de ce qu'ON a soi-même
+trouvé sur le coup en cours ; en collaboratif, elle affiche la meilleure
+proposition connue, quel que soit qui l'a soumise, mise à jour à chaque
+essai qui fait mieux. Elle ne montre que le mot et son score, jamais sa
+position sur la grille : la retrouver reste le travail de la table, comme
+pour n'importe quelle solution qu'on n'a pas soi-même tapée.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| Le nom derrière la solution | La case ne dit pas qui a soumis la meilleure proposition -- non tranché si ça manque à l'usage. |
+| La montante | Une étape de montante hérite du réglage de la partie qui la précède, comme le reste de ce qui n'est pas imposé par la suite ; jamais testé en pratique. |

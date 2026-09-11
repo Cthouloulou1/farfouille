@@ -415,6 +415,10 @@ function publicState(s: Salon) {
     mode: g.cfg.mode,
     players: g.players,
     nonTrouves: g.nonTrouves,
+    // TOPPING COLLABORATIF SEULEMENT : la meilleure proposition de la table
+    // sur le coup en cours (SPEC.md §16). `null` le reste du temps -- rien ne
+    // l'ecrit hors de ce mode.
+    meilleureCollective: g.meilleureCollective,
     // POINTS, NEGATIF ET TOPS PARTENT DANS LES DEUX MODES.
     //
     // Au duplicate le classement se lit en points et en negatif -- personne ne
@@ -722,11 +726,14 @@ const MIME: Record<string, string> = {
  * La variante de la grille permanente anglaise.
  *
  * La meme que la francaise -- grille sans bord, sac du jeu classique qui se
- * recharge -- avec son lexique a elle. Une partie deja commencee garde la
+ * recharge -- avec son lexique a elle : le CSW 24, l'international
+ * anglophone, plutot que l'EEL 22 par defaut d'un salon anglais ordinaire --
+ * « The Infinite Grid » vise le meme public que la grille permanente
+ * francaise, des joueurs confirmes. Une partie deja commencee garde la
  * sienne : `ouvrirSalon` relit celle du journal avant celle-ci.
  */
 function cfgMondialeAnglaise(): ConfigPartie {
-  return avec(avecDictionnaire(configParDefaut(), DICO_PAR_LANGUE.en), {
+  return avec(avecDictionnaire(configParDefaut(), "csw24"), {
     bornes: null, pioche: "sac102boucle", chrono: null,
   });
 }
@@ -1573,6 +1580,9 @@ wss.on("connection", (ws, req) => {
       // rien n'oblige a laisser du temps au serveur.
       const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
       const decompte = msg.decompte === true;
+      // Reserve au topping : le duplicate compte des points, il n'a rien a
+      // taire au classement.
+      const toppingCollaboratif = mode === "topping" && msg.toppingCollaboratif === true;
       // Les deux bornes s'excluent : une partie a deux termes concurrents ne
       // saurait pas lequel respecter.
       const coupsMax = msg.coupsMax === null || msg.coupsMax === undefined ? null
@@ -1647,7 +1657,7 @@ wss.on("connection", (ws, req) => {
       const voulue = avec(avecDictionnaire(base, dico), {
         tirage, jouables, joker, jokersParCoup,
         pioche: pioch, sacs,
-        bornes, pavage, pavageNom, mode, decompte,
+        bornes, pavage, pavageNom, mode, decompte, toppingCollaboratif,
         coupsMax: !sansTerme && Number.isFinite(coupsMax as number) ? coupsMax : null,
         dureeMax: !sansTerme && Number.isFinite(dureeMax as number) ? dureeMax : null,
         chrono: Number.isFinite(chrono as number) ? chrono : null,

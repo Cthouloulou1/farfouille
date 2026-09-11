@@ -131,6 +131,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Le lexique nord-americain. 196 601 mots.":
     "The North American list. 196,601 words.",
   "Décompte": "Countdown",
+  "Topping collaboratif": "Collaborative topping",
   "Joker": "Blank",
   "Prime selon le nombre de lettres posées": "Bonus by number of tiles placed",
   // « Farfouille » designe ici le coup qui pose tout son chevalet. L'anglais
@@ -214,7 +215,6 @@ export const EN: Readonly<Record<string, string>> = {
 
   // ---------------------------------------- salon prive, et invitations
   "Salon privé": "Private room",
-  "Inviter…": "Invite…",
   "Inviter": "Invite",
   "Invité": "Invited",
   "Chargement…": "Loading…",

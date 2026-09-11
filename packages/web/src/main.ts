@@ -190,6 +190,11 @@ let moveNumber = 0;
 let cumul = 0;
 let solving = true;
 let players: Record<string, number> = {};
+/**
+ * TOPPING COLLABORATIF SEULEMENT : la meilleure proposition de la table sur
+ * le coup en cours, `null` sinon. Voir `cfg.toppingCollaboratif`.
+ */
+let meilleureCollective: { joueur: string; word: string; score: number } | null = null;
 /** "J'aime" recus par joueur sur toute la partie. */
 let likes: Record<string, number> = {};
 let online: string[] = [];
@@ -2185,6 +2190,18 @@ function paintCurrent() {
       ? t("Mots non valides :") : t("Mot non valide :")) + " " + motsRefuses.join(", ");
   }
 
+  // TOPPING COLLABORATIF : la case montre la meilleure solution DE LA TABLE,
+  // en direct, plutot que la seule proposition qu'on a soi-meme tapee -- voir
+  // SPEC.md §16. Elle n'a ni case ni direction : le serveur ne les envoie pas,
+  // savoir OU se joue la solution des autres serait deja un indice.
+  if (cfg.toppingCollaboratif && !duplicate && meilleureCollective !== null) {
+    w.className = "word";
+    w.innerHTML = `<span>${meilleureCollective.word}</span>` +
+      `<span class="pts">${meilleureCollective.score}</span>`;
+    meta.textContent = "meilleure solution du groupe";
+    return;
+  }
+
   if (best !== null) {
     w.className = "word";
     w.innerHTML = `<span>${best.word}</span><span class="pts">${best.score}</span>`;
@@ -2516,8 +2533,11 @@ function paintSide() {
       ? `<span class="tops">${tops[name] ?? 0}</span>` +
         `<span class="likes">${neg === 0 ? "TOP" : "−" + neg}</span>` +
         `<span class="num">${points[name] ?? 0}</span>`
+      // TOPPING COLLABORATIF : le nombre de coups remportes par chacun reste
+      // ecrit -- la feuille de route le porte toujours -- mais ne s'affiche
+      // plus a table, pour un topping moins competitif (SPEC.md §16).
       : `<span class="likes"></span>` +
-        `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
+        `<span class="num">${cfg.toppingCollaboratif ? "" : Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     const vrai = nomsPublics[name];
     const infobulle = vrai === undefined ? "" : ` title="${vrai.replace(/"/g, "&quot;")}"`;
@@ -5194,6 +5214,7 @@ function applyState(s: {
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
   tops?: Record<string, number>;
+  meilleureCollective?: { joueur: string; word: string; score: number } | null;
   montante?: MontanteVue | null;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
@@ -5297,6 +5318,7 @@ function applyState(s: {
   points = s.points ?? {};
   negatif = s.negatif ?? {};
   tops = s.tops ?? {};
+  meilleureCollective = s.meilleureCollective ?? null;
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
   // Sinon les reglages partent dans le vide et on croit a un bug du jeu.
   // Un serveur qui ne dit rien est forcement anterieur a ce controle : c'est
@@ -7329,6 +7351,7 @@ for (const b of $("r-mode").querySelectorAll("button")) {
     peuplerCoups();
     // Le duplicate a besoin d'une echeance : c'est elle qui clot le coup.
     if (cMode === "duplicate" && cChrono === null) { cChrono = 60; peuplerChrono(); }
+    appliquerLeModeDeReglages();
   });
 }
 
@@ -7763,6 +7786,9 @@ function appliquerLeModeDeReglages(): void {
   // et les primes appartiennent a la suite ; le chrono, le lexique et la grille
   // restent au joueur. Les six etapes prennent la place du bloc du format : un
   // reglage qui disparait sans rien dire laisserait ignorer ce qu'on va jouer.
+  // LE TOPPING COLLABORATIF N'EXISTE QU'AU TOPPING : le duplicate compte des
+  // points, il n'a pas de coup remporte a taire.
+  $("r-topping-collab-case").hidden = cMode !== "topping";
   const mont = cMontante;
   $("r-montante").setAttribute("aria-pressed", String(mont));
   $("r-montante").hidden = cBornes === null || (!avance && !mont);
@@ -7850,6 +7876,7 @@ function ouvrirReglages(): void {
   cDureeMax = cfg.dureeMax;
   cBorne = cfg.dureeMax !== null ? "duree" : "coups";
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
+  ($("r-topping-collab") as HTMLInputElement).checked = cfg.toppingCollaboratif === true;
   ($("r-prive") as HTMLInputElement).checked = salonPrive;
   peuplerMode();
   peuplerCoups();
@@ -7959,6 +7986,7 @@ $("r-appliquer").addEventListener("click", () => {
     coupsMax: sansTerme() || cBorne !== "coups" ? null : cCoupsMax,
     dureeMax: sansTerme() || cBorne !== "duree" ? null : cDureeMax,
     decompte: ($("r-decompte") as HTMLInputElement).checked,
+    toppingCollaboratif: ($("r-topping-collab") as HTMLInputElement).checked,
   });
   $("reglages").hidden = true;
 });

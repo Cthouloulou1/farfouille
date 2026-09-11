@@ -633,6 +633,18 @@ export class Game {
   >();
 
   /**
+   * TOPPING COLLABORATIF SEULEMENT : la meilleure proposition de la table sur
+   * le coup en cours, diffusee a tout le monde. `null` tant que personne n'a
+   * rien trouve, ou hors de ce mode -- voir `cfg.toppingCollaboratif`.
+   *
+   * Elle repart a `null` a chaque nouveau coup, comme `propositions`. Ce
+   * qu'elle NE contient jamais, c'est le coup qui remporte la partie : ce
+   * coup-la se joue et le coup suivant repart aussitot, elle n'a pas le temps
+   * d'en parler.
+   */
+  meilleureCollective: { joueur: string; word: string; score: number } | null = null;
+
+  /**
    * Ce que ce joueur a propose de mieux sur le coup en cours, ou null.
    *
    * NE SE DIFFUSE PAS. Chacun ne recoit que la sienne, a la connexion : savoir
@@ -1592,6 +1604,7 @@ export class Game {
       : this.reliquat;
     // Nouveau coup : les propositions repartent a zero, et on fige QUI est la.
     this.propositions.clear();
+    this.meilleureCollective = null;
     this.essais.clear();
     this.participants = new Set(this.presents);
     const draw = this.bag.draw(reliquatSansJoker);
@@ -2131,6 +2144,14 @@ export class Game {
     }
 
     if (r.move.score < this.bestScore) {
+      // Diffuse la meilleure proposition de la table, en direct : c'est ce qui
+      // rend le topping collaboratif moins seul. Le coup gagnant, lui, n'a pas
+      // besoin de ce chemin -- `commit` enchaine aussitot sur le coup suivant.
+      if (this.cfg.toppingCollaboratif
+          && (this.meilleureCollective === null || r.move.score > this.meilleureCollective.score)) {
+        this.meilleureCollective = { joueur: player, word: r.move.word, score: r.move.score };
+        this.emit();
+      }
       return { ok: true, message: "", word: r.move.word, score: r.move.score, top: false };
     }
     // Score du top atteint : ce joueur remporte le coup. C'est le premier

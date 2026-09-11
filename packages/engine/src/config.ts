@@ -108,6 +108,18 @@ export interface ConfigPartie {
    */
   decompte: boolean;
   /**
+   * TOPPING COLLABORATIF : un topping moins competitif.
+   *
+   * Le classement tait le nombre de coups remportes par chacun -- il reste
+   * note au fil de la partie, mais ne s'affiche plus a la table. En echange,
+   * la case qui montrait « votre meilleure solution » montre celle de TOUTE
+   * la table, en direct : chercher devient un effort commun, pas une course.
+   *
+   * Reserve au topping : le duplicate n'a pas de coup remporte, et sa lecture
+   * en points n'a rien a taire.
+   */
+  toppingCollaboratif: boolean;
+  /**
    * Duree d'un coup en secondes. `null` = pas de chrono : il faut trouver le
    * top pour avancer, comme sur le topping infini (SPEC.md §16).
    */
@@ -146,6 +158,7 @@ export function configParDefaut(): ConfigPartie {
     coupsMax: null,
     dureeMax: null,
     decompte: false,
+    toppingCollaboratif: false,
     chrono: null,
     bornes: null,
     pavage: activeLayout(),
@@ -171,6 +184,7 @@ export interface ConfigSerialisee {
   coupsMax: number | null;
   dureeMax: number | null;
   decompte: boolean;
+  toppingCollaboratif: boolean;
   chrono: number | null;
   bornes: number | null;
   pavageNom: LayoutName | "custom";
@@ -184,7 +198,7 @@ export function serialiser(cfg: ConfigPartie): ConfigSerialisee {
     pioche: cfg.pioche, sacs: cfg.sacs,
     joker: cfg.joker, jokersParCoup: cfg.jokersParCoup, mode: cfg.mode,
     coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
-    decompte: cfg.decompte, chrono: cfg.chrono,
+    decompte: cfg.decompte, toppingCollaboratif: cfg.toppingCollaboratif, chrono: cfg.chrono,
     bornes: cfg.bornes, pavageNom: cfg.pavageNom,
   };
 }
@@ -210,6 +224,7 @@ export function deserialiser(plat: ConfigSerialisee): ConfigPartie {
     coupsMax: plat.coupsMax ?? null,
     dureeMax: plat.dureeMax ?? null,
     decompte: plat.decompte === true,
+    toppingCollaboratif: plat.toppingCollaboratif === true,
     chrono: plat.chrono ?? null,
     bornes: plat.bornes ?? null,
     pavage: nomme ?? activeLayout(),

@@ -1037,6 +1037,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .reglage { min-width: 0; }
 .reglage.cote-a-cote { display: flex; gap: 26px; align-items: center; margin-top: 14px; }
 .reglage.cote-a-cote label { margin: 0; }
+.reglage.cote-a-cote #r-topping-collab-case { margin-left: auto; }
 .rg-corps label { display: block; font-size: .8em; color: var(--ink-faint); margin: 13px 0 6px; }
 .reglage > label:first-child { margin-top: 4px; }
 .rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: .85em; }
@@ -2095,7 +2096,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
         <label class="case"><input type="checkbox" id="r-prive"> Salon privé</label>
-        <button type="button" class="lien" id="r-inviter">Inviter…</button>
+        <button type="button" class="lien" id="r-inviter">Inviter</button>
+        <label class="case" id="r-topping-collab-case"><input type="checkbox" id="r-topping-collab"> Topping collaboratif</label>
       </div>
 
       <div class="reglage" id="r-primes-bloc">
