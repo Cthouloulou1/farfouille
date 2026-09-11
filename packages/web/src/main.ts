@@ -194,7 +194,8 @@ let players: Record<string, number> = {};
  * TOPPING COLLABORATIF SEULEMENT : la meilleure proposition de la table sur
  * le coup en cours, `null` sinon. Voir `cfg.toppingCollaboratif`.
  */
-let meilleureCollective: { joueur: string; word: string; score: number } | null = null;
+let meilleureCollective:
+  { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null = null;
 /** "J'aime" recus par joueur sur toute la partie. */
 let likes: Record<string, number> = {};
 let online: string[] = [];
@@ -2191,14 +2192,14 @@ function paintCurrent() {
   }
 
   // TOPPING COLLABORATIF : la case montre la meilleure solution DE LA TABLE,
-  // en direct, plutot que la seule proposition qu'on a soi-meme tapee -- voir
-  // SPEC.md §16. Elle n'a ni case ni direction : le serveur ne les envoie pas,
-  // savoir OU se joue la solution des autres serait deja un indice.
+  // place comprise, plutot que la seule proposition qu'on a soi-meme tapee --
+  // voir SPEC.md §28. La place peut mettre un autre joueur sur la voie du top,
+  // qui se trouve souvent au meme endroit.
   if (cfg.toppingCollaboratif && !duplicate && meilleureCollective !== null) {
+    const mc = meilleureCollective;
     w.className = "word";
-    w.innerHTML = `<span>${meilleureCollective.word}</span>` +
-      `<span class="pts">${meilleureCollective.score}</span>`;
-    meta.textContent = "meilleure solution du groupe";
+    w.innerHTML = `<span>${mc.word}</span><span class="pts">${mc.score}</span>`;
+    meta.textContent = `${noteCoup(mc.dir, mc.x, mc.y, cfg.bornes)} · meilleure solution du groupe`;
     return;
   }
 
@@ -5214,7 +5215,8 @@ function applyState(s: {
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>;
   tops?: Record<string, number>;
-  meilleureCollective?: { joueur: string; word: string; score: number } | null;
+  meilleureCollective?:
+    { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null;
   montante?: MontanteVue | null;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {

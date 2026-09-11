@@ -5508,12 +5508,12 @@ top de chaque coup, et rien n'empêche de le recompter à la main en la
 parcourant -- mais il ne s'étale plus en direct sous les yeux de la table.
 
 **La case qui montrait « votre meilleure solution » montre celle de toute la
-table, en direct.** D'ordinaire elle ne parle que de ce qu'ON a soi-même
-trouvé sur le coup en cours ; en collaboratif, elle affiche la meilleure
-proposition connue, quel que soit qui l'a soumise, mise à jour à chaque
-essai qui fait mieux. Elle ne montre que le mot et son score, jamais sa
-position sur la grille : la retrouver reste le travail de la table, comme
-pour n'importe quelle solution qu'on n'a pas soi-même tapée.
+table, en direct, place comprise.** D'ordinaire elle ne parle que de ce qu'ON
+a soi-même trouvé sur le coup en cours ; en collaboratif, elle affiche la
+meilleure proposition connue -- mot, score et emplacement -- quel que soit qui
+l'a soumise, mise à jour à chaque essai qui fait mieux. C'est le principe même
+de la collaboration : le top se joue souvent au même endroit qu'une bonne
+solution déjà trouvée, et la place peut mettre un autre joueur sur la voie.
 
 ### Ce qui reste ouvert
 

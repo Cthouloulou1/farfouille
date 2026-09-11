@@ -634,15 +634,17 @@ export class Game {
 
   /**
    * TOPPING COLLABORATIF SEULEMENT : la meilleure proposition de la table sur
-   * le coup en cours, diffusee a tout le monde. `null` tant que personne n'a
-   * rien trouve, ou hors de ce mode -- voir `cfg.toppingCollaboratif`.
+   * le coup en cours, diffusee a tout le monde, PLACE COMPRISE : une table qui
+   * cherche ensemble profite de savoir ou se joue une bonne solution, le top
+   * se trouvant souvent au meme endroit. `null` tant que personne n'a rien
+   * trouve, ou hors de ce mode -- voir `cfg.toppingCollaboratif`.
    *
    * Elle repart a `null` a chaque nouveau coup, comme `propositions`. Ce
    * qu'elle NE contient jamais, c'est le coup qui remporte la partie : ce
    * coup-la se joue et le coup suivant repart aussitot, elle n'a pas le temps
    * d'en parler.
    */
-  meilleureCollective: { joueur: string; word: string; score: number } | null = null;
+  meilleureCollective: { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null = null;
 
   /**
    * Ce que ce joueur a propose de mieux sur le coup en cours, ou null.
@@ -2149,7 +2151,10 @@ export class Game {
       // besoin de ce chemin -- `commit` enchaine aussitot sur le coup suivant.
       if (this.cfg.toppingCollaboratif
           && (this.meilleureCollective === null || r.move.score > this.meilleureCollective.score)) {
-        this.meilleureCollective = { joueur: player, word: r.move.word, score: r.move.score };
+        this.meilleureCollective = {
+          joueur: player, word: r.move.word, score: r.move.score,
+          dir: r.move.dir, x: r.move.x, y: r.move.y,
+        };
         this.emit();
       }
       return { ok: true, message: "", word: r.move.word, score: r.move.score, top: false };
