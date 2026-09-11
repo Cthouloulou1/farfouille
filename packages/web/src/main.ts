@@ -274,6 +274,8 @@ let gerant: string | null = null;
 let salonPermanent = false;
 /** Ce salon ne se supprime ni ne se rerelance : c'est une grille d'etude. */
 let permanent = false;
+/** Le salon est-il ferme a qui n'y est pas invite (SPEC.md §26) ? */
+let salonPrive = false;
 let marks: { x: number; y: number }[] = [];
 
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
@@ -302,6 +304,13 @@ interface Palier { score: number; moves: [string, Dir, number, number][] }
  * AVANT lui : on voit ce que voyaient les joueurs au moment de chercher.
  */
 let rejeu: { n: number; paliers: Palier[] | null } | null = null;
+
+/**
+ * Le coup a rouvrir en rejeu des que la partie qu'on vient d'abandonner
+ * (SPEC.md §25) est confirmee finie par le serveur. `null` hors de cette
+ * fenetre : ce n'est pas un etat de la partie, seulement l'intention du clic.
+ */
+let cibleDuRejeuApresAbandon: number | null = null;
 
 let cell = 30, ox = 0, oy = 0, W = 0, H = 0;
 
@@ -2425,7 +2434,7 @@ function paintSide() {
     const trouve = duplicate ? trouveursDuCoup(last).length > 0 : last.player !== null;
     lw.className = trouve ? "word" : "word rate";
     lw.innerHTML = `<span>${last.word}</span>`
-      + (trouve ? "" : `<span class="rate">non trouvé</span>`)
+      + (trouve ? "" : `<span class="rate">${t("non trouvé")}</span>`)
       + `<span class="pts">${last.score}</span>`;
     // Au duplicate, mon ecart au top sur CE coup. Il reste affiche tant que le
      // coup suivant ne l'a pas remplace : c'est le temps qu'on a de le lire.
@@ -2486,7 +2495,7 @@ function paintSide() {
       const perdu = document.createElement("div");
       perdu.className = "prow perdu";
       perdu.innerHTML = `<span class="tri"></span>` +
-        `<span class="nom">Non trouvé${n > 1 ? "s" : ""}</span>` +
+        `<span class="nom">${t(n > 1 ? "Non trouvés" : "Non trouvé")}</span>` +
         (duplicate ? `<span class="tops"></span>` : "") +
         `<span class="likes"></span>` +
         `<span class="num">${Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
@@ -2785,7 +2794,7 @@ function quiLaTrouve(m: MoveInfo, complet = false): string {
     if (complet || trouveurs.length <= 2) return trouveurs.join(", ");
     return t2("{n} joueurs", { n: trouveurs.length });
   }
-  return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : "non trouvé");
+  return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : t("non trouvé"));
 }
 
 /**
@@ -3297,8 +3306,8 @@ function enTeteDeLaRoute(): string {
   const bouts = [
     `<b>${n}</b> coup${n > 1 ? "s" : ""}`,
     `<b>${points.toLocaleString("fr")}</b> points`,
-    `<b>${trouves}</b> trouvé${trouves > 1 ? "s" : ""}`
-      + `, <b>${perdus}</b> non trouvé${perdus > 1 ? "s" : ""}`
+    `<b>${trouves}</b> ${t(trouves > 1 ? "trouvés" : "trouvé")}`
+      + `, <b>${perdus}</b> ${t(perdus > 1 ? "non trouvés" : "non trouvé")}`
       + (demis > 0 ? ` (dont <b>${demis}</b> demi-point${demis > 1 ? "s" : ""})` : ""),
   ];
   // Le cumul du temps ne vaut qu'en topping : ailleurs, c'est le chrono
@@ -3555,7 +3564,7 @@ const ICONE_IMAGE =
 function ligneDeRoute(m: MoveInfo, haut: number): string {
   // Personne n'a trouve : une croix vaut mieux qu'une duree, qui serait celle
   // de l'echeance et n'apprendrait rien.
-  const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== "non trouvé"
+  const trouve = duplicate ? (m.trouveurs ?? []).length > 0 || quiLaTrouve(m) !== t("non trouvé")
                            : m.player !== null || m.demiPoint !== undefined;
   // CE QUE VOUS AVEZ JOUE, comme sur une feuille de tournoi.
   //
@@ -3967,7 +3976,8 @@ function ligneDeChat(m: Chat): HTMLElement {
   }
   const at = document.createElement("span");
   at.className = "at";
-  at.textContent = new Date(m.at).toLocaleTimeString("fr", { hour: "2-digit", minute: "2-digit" });
+  at.textContent = new Date(m.at).toLocaleTimeString(langue() === "en" ? "en-GB" : "fr-FR",
+    { hour: "2-digit", minute: "2-digit" });
   el.appendChild(at);
   return el;
 }
@@ -4486,6 +4496,15 @@ addEventListener("keydown", (e) => {
     ($("r-appliquer") as HTMLButtonElement).click();
     return;
   }
+  // ECHAP FERME LES REGLAGES SANS LES APPLIQUER, comme son bouton de
+  // fermeture -- y compris depuis un champ de saisie a l'interieur, pour la
+  // meme raison qu'Entree les valide depuis n'importe lequel de ses champs
+  // juste au-dessus.
+  if (!$("reglages").hidden && e.key === "Escape") {
+    e.preventDefault();
+    $("reglages").hidden = true;
+    return;
+  }
   // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
   // avale par le jeu et n'effacait rien dans les champs des reglages.
   const cible = document.activeElement;
@@ -4537,6 +4556,13 @@ addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
     e.preventDefault();
     if (!$("reglages-open").hidden) ouvrirReglages();
+    return;
+  }
+  // CTRL+ENTREE ABANDONNE LE COUP EN COURS (SPEC.md §24). Meme garde-fou que
+  // le clic : le raccourci ne fait rien si le bouton n'est pas propose.
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    demanderLabandonDuCoup();
     return;
   }
   if (!$("panel-rejeu").hidden) {
@@ -5154,7 +5180,7 @@ function applyState(s: {
   likes?: Record<string, number>; sac?: string; finie?: boolean; chrono?: number | null;
   actif?: boolean; mode?: string; nonTrouves?: number; decompteJusqua?: number;
   lancementA?: number;
-  gerant?: string | null; proprietaire?: string | null;
+  gerant?: string | null; proprietaire?: string | null; prive?: boolean;
   tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
@@ -5197,6 +5223,14 @@ function applyState(s: {
   // Les manettes changent de mains sans qu'on se reconnecte : le bouton des
   // reglages suit l'etat, pas le seul message d'accueil.
   gerant = s.gerant ?? null;
+  // SALON PRIVE (SPEC.md §26) : reglage du salon, pas de la partie -- il peut
+  // changer sans que rien d'autre ne bouge. La case suit, si les reglages sont
+  // ouverts en ce moment meme.
+  salonPrive = s.prive === true;
+  if (!$("reglages").hidden) {
+    ($("r-prive") as HTMLInputElement).checked = salonPrive;
+    $("r-inviter").hidden = !salonPrive;
+  }
   if (s.proprietaire !== undefined) salonPermanent = s.proprietaire === null;
   permanent = s.permanent === true;
   // UNE GRILLE PERMANENTE NE SE REREGLE PAS. Relancer, c'est archiver la partie
@@ -5204,6 +5238,27 @@ function applyState(s: {
   // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
   $("reglages-open").hidden = gerant !== me || permanent;
+  // ABANDONNER UN COUP / LA PARTIE (SPEC.md §24-25). L'administration voit
+  // toujours les deux boutons ; pour tout le monde, ils exigent le topping sur
+  // une grille finie -- le duplicate et la grille sans fin n'ont pas la meme
+  // notion de "coup" a abandonner. `s.finie`, et non `finie` : ce dernier n'est
+  // reassigne que plus bas, et porterait encore la valeur d'avant ce message.
+  {
+    const admin = moiCompte?.admin === true;
+    const seProposeIci = !duplicate && cfg.bornes !== null;
+    const seul = (s.online ?? []).length <= 1;
+    // UN COUP EN COURS, ET NON UNE PARTIE QUI ATTEND SON DECOMPTE OU SON
+    // LANCEMENT : le tirage n'existe pas encore, `abandonnerLeCoup` n'aurait
+    // rien a clore.
+    const coupEnCours = s.demarree !== false && (s.rack ?? "") !== "";
+    $("abandon-coup").hidden =
+      s.finie === true || !coupEnCours || !(admin || (seProposeIci && seul));
+    // Reserve a l'hote (ou l'administration), et seulement une fois un coup
+    // manque -- l'historique le sait des qu'un joueur y a laisse un `player` nul.
+    const coupManque = history.some((m) => m.player === null) || s.last?.player === null;
+    $("abandon-partie").hidden =
+      s.finie === true || !(admin || (seProposeIci && gerant === me && coupManque));
+  }
   // LE DEPART D'UNE PARTIE FERME LE MINI ANAGRAMMEUR, MEME EN SOLO : passe le
   // moment de s'en servir sans arriere-pensee, une fois que ca part pour de
   // bon (ou que le decompte l'annonce) on range l'outil, comme un reflexe
@@ -5239,6 +5294,13 @@ function applyState(s: {
   // justement le cas qu'il faut attraper.
   if (s.demarreA === undefined || s.demarreA < __COMPILE_A__) {
     $("perime").hidden = false;
+  }
+  // LA PARTIE VIENT DE SE TERMINER PAR UN ABANDON QU'ON A SOI-MEME DEMANDE :
+  // le rejeu s'ouvre directement sur le coup manque, sans qu'il faille le
+  // rechercher dans une partie qu'on vient de refermer pour lui (SPEC.md §25).
+  if (!finie && s.finie === true && cibleDuRejeuApresAbandon !== null) {
+    voirLeCoup(cibleDuRejeuApresAbandon);
+    cibleDuRejeuApresAbandon = null;
   }
   finie = s.finie === true;
   online = s.online ?? [];
@@ -5498,6 +5560,13 @@ function connect() {
       if (restait) draw();
       return;
     }
+    // La reponse a "connectes" (SPEC.md §26) : la fenetre d'invitation est
+    // deja ouverte, avec son "Chargement…" a remplacer.
+    if (m.t === "connectes") { peuplerInviter(m.noms ?? []); return; }
+    // ON VIENT DE M'INVITER DANS UN SALON PRIVE, ou que je sois sur le site en
+    // ce moment. Un simple message suffit : je vais l'y rejoindre quand je le
+    // veux, rien ne m'y pousse.
+    if (m.t === "invite") { flash(t2("Invité(e) dans « {nom} »", { nom: m.nomSalon }), "ok"); return; }
   });
 }
 
@@ -7772,6 +7841,8 @@ function ouvrirReglages(): void {
   cDureeMax = cfg.dureeMax;
   cBorne = cfg.dureeMax !== null ? "duree" : "coups";
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
+  ($("r-prive") as HTMLInputElement).checked = salonPrive;
+  $("r-inviter").hidden = !salonPrive;
   peuplerMode();
   peuplerCoups();
   peuplerChrono();
@@ -7816,6 +7887,53 @@ function ouvrirReglages(): void {
 
 $("reglages-open").addEventListener("click", ouvrirReglages);
 $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
+
+// ------------------------------------------------ salon prive, et invitations
+//
+// A PART DU RESTE DES REGLAGES (SPEC.md §26) : la case agit tout de suite, sans
+// passer par "Appliquer" -- c'est un reglage DU SALON, pas de la partie, et il
+// n'y a aucune raison d'archiver une partie en cours pour la seule fermer aux
+// nouveaux venus.
+$("r-prive").addEventListener("change", () => {
+  const coche = ($("r-prive") as HTMLInputElement).checked;
+  $("r-inviter").hidden = !coche;
+  envoyer({ t: "salonPrive", prive: coche });
+});
+
+$("r-inviter").addEventListener("click", () => {
+  $("inviter-liste").replaceChildren(el("p", "", t("Chargement…")));
+  $("voile-inviter").hidden = false;
+  envoyer({ t: "connectes" });
+});
+$("inviter-close").addEventListener("click", () => { $("voile-inviter").hidden = true; });
+$("voile-inviter").addEventListener("click", (e) => {
+  if (e.target === $("voile-inviter")) $("voile-inviter").hidden = true;
+});
+
+/** Peuple la fenetre d'invitation depuis la liste des connectes (SPEC.md §26). */
+function peuplerInviter(noms: string[]): void {
+  const autres = noms.filter((n) => n !== me);
+  if (autres.length === 0) {
+    $("inviter-liste").replaceChildren(el("p", "", t("Personne d'autre n'est connecté.")));
+    return;
+  }
+  $("inviter-liste").replaceChildren(...autres.map((n) => {
+    const ligne = el("div", "ligne");
+    ligne.appendChild(el("span", "nom", n));
+    const bouton = el("button", "", t("Inviter")) as HTMLButtonElement;
+    bouton.type = "button";
+    bouton.addEventListener("click", () => {
+      envoyer({ t: "inviter", pseudo: n });
+      // OPTIMISTE : la liste des invites n'a pas de raison de revenir en
+      // arriere ici, et attendre le serveur pour un simple accuse ajouterait
+      // un aller-retour a un geste qui n'en demande pas.
+      bouton.disabled = true;
+      bouton.textContent = t("Invité");
+    });
+    ligne.appendChild(bouton);
+    return ligne;
+  }));
+}
 
 $("r-appliquer").addEventListener("click", () => {
   envoyer({
@@ -7867,6 +7985,42 @@ $("site-nom").addEventListener("click", () => {
 $("regles-close").addEventListener("click", () => { $("voile-regles").hidden = true; });
 $("voile-regles").addEventListener("click", (e) => {
   if (e.target === $("voile-regles")) $("voile-regles").hidden = true;
+});
+
+// ---------------------------------------------- abandonner un coup, ou la partie
+
+/**
+ * Confirmation Oui/Non generique (SPEC.md §24-25) : `titre` est la question
+ * posee, `oui` ce que valide une reponse positive. Rien n'y est specifique a
+ * l'abandon -- une autre confirmation future peut la reutiliser telle quelle.
+ */
+function confirmer(titre: string, oui: () => void): void {
+  $("confirmer-titre").textContent = titre;
+  ($("confirmer-oui") as HTMLButtonElement).onclick = () => {
+    $("voile-confirmer").hidden = true;
+    oui();
+  };
+  ($("confirmer-non") as HTMLButtonElement).onclick = () => { $("voile-confirmer").hidden = true; };
+  $("voile-confirmer").hidden = false;
+}
+$("voile-confirmer").addEventListener("click", (e) => {
+  if (e.target === $("voile-confirmer")) $("voile-confirmer").hidden = true;
+});
+
+function demanderLabandonDuCoup(): void {
+  if (($("abandon-coup") as HTMLButtonElement).hidden) return;
+  confirmer(t("Passer le tour ?"), () => envoyer({ t: "abandonnerCoup" }));
+}
+$("abandon-coup").addEventListener("click", demanderLabandonDuCoup);
+
+$("abandon-partie").addEventListener("click", () => {
+  if (($("abandon-partie") as HTMLButtonElement).hidden) return;
+  confirmer(t("Abandonner la partie ?"), () => {
+    // Retenu AVANT l'envoi : c'est le dernier coup connu ICI, celui que
+    // l'abandon va laisser comme dernier de la partie (SPEC.md §25).
+    cibleDuRejeuApresAbandon = history.length > 0 ? history[history.length - 1]!.n : null;
+    envoyer({ t: "abandonnerPartie" });
+  });
 });
 
 // -------------------------------------------------------- signaler un bug

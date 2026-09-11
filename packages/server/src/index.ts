@@ -19,7 +19,7 @@ import { Game, type PlayedMove } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
-  confierLesReglages, comptedesInfinies, MAX_SALONS, MAX_INFINIES, type Salon,
+  confierLesReglages, comptedesInfinies, peutEntrerDans, MAX_SALONS, MAX_INFINIES, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import {
@@ -333,6 +333,19 @@ const occupants = (salonId: string): string[] =>
     .filter((n) => n !== "");
 
 /**
+ * Qui est connecte, TOUS SALONS CONFONDUS (SPEC.md §26) : la liste que la
+ * fenetre d'invitation propose. Un onglet non encore nomme (`nom === ""`) n'y
+ * figure pas -- inviter quelqu'un qui n'a pas encore choisi de pseudo n'aurait
+ * pas de destinataire.
+ */
+const tousLesConnectes = (): string[] =>
+  [...new Set([...clients.values()].map((c) => c.nom))].filter((n) => n !== "");
+
+/** Les sockets d'un pseudo, quel que soit son salon -- pour le prevenir directement. */
+const socketsDe = (nom: string): WebSocket[] =>
+  [...clients.entries()].filter(([, v]) => v.nom === nom).map(([c]) => c);
+
+/**
  * Remet les manettes du salon dans les mains de quelqu'un qui est la.
  *
  * A appeler des que la liste des presents change -- une arrivee, un depart. On
@@ -364,6 +377,9 @@ function publicState(s: Salon) {
     proprietaire: s.proprietaire,
     // Qui REGLE le salon en ce moment, qui n'est pas toujours qui l'a cree.
     gerant: s.gerant,
+    // SALON PRIVE (SPEC.md §26) : la case suit l'etat du salon, pas celui de
+    // la partie -- elle survit donc a une relance.
+    prive: s.prive,
     moveNumber: g.moveNumber,
     // Muets pendant le decompte : la regle vit dans la partie.
     rack: g.rackPublic,
@@ -1342,14 +1358,40 @@ wss.on("connection", (ws, req) => {
         });
         return;
       }
+      // SALON PRIVE (SPEC.md §26) : le lien ne suffit plus, il faut figurer
+      // sur la liste d'invites -- ou etre le proprietaire, ou l'administration.
+      if (!peutEntrerDans(cible, nom, compte(clients.get(ws)?.compte ?? "")?.admin === true)) {
+        send(ws, { t: "refus", quoi: "salon", message: "Ce salon est privé" });
+        return;
+      }
       // Deux joueurs du meme nom rendent le classement faux et les statistiques
       // inexploitables : on ne saurait plus a qui attribuer un coup. L'unicite
-      // vaut parmi les connectes, ET parmi les pseudos inscrits -- un compte
-      // reserve son nom meme quand son porteur n'est pas la.
-      const pris = [...clients.entries()].some(([c, v]) => c !== ws && v.nom === nom);
-      if (pris) {
-        send(ws, { t: "refus", quoi: "pseudo", message: "Ce nom d'utilisateur n'est pas disponible" });
-        return;
+      // vaut PAR SALON, pas sur tout le serveur (SPEC.md §27) : deux onglets du
+      // meme compte, dans le meme salon, ne se genent pas -- comme sur la
+      // plupart des sites, ou etre connecte a son compte dans deux onglets ne
+      // pose pas de question.
+      const autres = [...clients.entries()].filter(([c, v]) => c !== ws && v.nom === nom);
+      if (inscrit === null) {
+        // INVITE (pseudo provisoire, §8) : pas d'identite stable qui permette
+        // de reconnaitre deux onglets comme la meme personne. Une connexion
+        // neuve remplace donc la precedente, ou qu'elle soit -- l'ancien
+        // onglet est prevenu plutot que de rester bloque sur un etat mort.
+        for (const [c] of autres) {
+          send(c, { t: "refus", quoi: "salon", message: "Reconnecté depuis un autre onglet" });
+          c.close();
+        }
+      } else {
+        // COMPTE INSCRIT : coexiste avec ses propres onglets DANS LE MEME
+        // salon (rien a faire ci-dessous, `ws.on("close")` sait deja garder la
+        // presence tant qu'un autre onglet du meme nom reste connecte au meme
+        // salon -- voir `occupants`). Un compte ne reste cependant que dans un
+        // seul salon a la fois : rejoindre celui-ci retire sa presence de tout
+        // autre, et l'onglet qui l'occupait y revient a l'accueil.
+        for (const [c, v] of autres) {
+          if (v.salon === cible.id) continue;
+          send(c, { t: "refus", quoi: "salon", message: "Reconnecté dans un autre salon" });
+          c.close();
+        }
       }
       clients.set(ws, { nom, salon: cible.id, compte: inscrit });
       // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
@@ -1659,6 +1701,82 @@ wss.on("connection", (ws, req) => {
           : `${cfgVoulue.jouables} sur ${cfgVoulue.tirage}`}, `
         + `pioche ${pioche}, ${dico}`
         + `${archives.length > 0 ? ` (ancienne partie archivee)` : ""}`);
+      return;
+    }
+
+    // ------------------------------------------- salon prive, et invitations
+    //
+    // Deux reglages DU SALON, pas de la partie (SPEC.md §26) : ils survivent a
+    // une relance, et n'exigent pas d'archiver la partie en cours pour
+    // prendre effet -- contrairement au reste des reglages, qui passe par
+    // "relancer" plus haut.
+    if (msg.t === "salonPrive") {
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      if (!estAdmin && s.gerant !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul l'hôte règle la confidentialité du salon" });
+        return;
+      }
+      s.prive = msg.prive === true;
+      broadcast(s.id, { t: "state", state: publicState(s) });
+      return;
+    }
+
+    if (msg.t === "connectes") {
+      // TOUS LES SALONS CONFONDUS : c'est la liste que la fenetre d'invitation
+      // propose, pas seulement qui est deja ici.
+      send(ws, { t: "connectes", noms: tousLesConnectes() });
+      return;
+    }
+
+    if (msg.t === "inviter") {
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      if (!estAdmin && s.gerant !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul l'hôte invite dans le salon" });
+        return;
+      }
+      const invite = String(msg.pseudo ?? "").trim().slice(0, 24);
+      if (invite === "" || invite === moi.nom) return;
+      s.invites.add(invite);
+      // PREVENU TOUT DE SUITE s'il est deja connecte quelque part : inutile
+      // qu'il pense lui-meme a revenir sur ce salon precis pour le decouvrir.
+      for (const c of socketsDe(invite)) send(c, { t: "invite", salon: s.id, nomSalon: s.nom });
+      send(ws, { t: "result", ok: true, message: `${invite} peut désormais rejoindre` });
+      return;
+    }
+
+    // ------------------------------------------- abandonner un coup, ou la partie
+    //
+    // Reserves au topping sur grille finie (SPEC.md §24-25) : au duplicate, ou
+    // sur une grille sans fin, le bouton ne s'affiche pas -- mais un message
+    // force reste possible, donc on revalide ici, pas seulement cote client.
+    if (msg.t === "abandonnerCoup" || msg.t === "abandonnerPartie") {
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      const cfg = s.partie.cfg;
+      const proposeIci = cfg.mode !== "duplicate" && cfg.bornes !== null;
+      if (!estAdmin && !proposeIci) {
+        send(ws, { t: "result", ok: false, message: "cette action n'est pas proposée ici" });
+        return;
+      }
+      if (msg.t === "abandonnerCoup") {
+        // SEUL : la table entiere, pas seulement celui qui demande.
+        if (!estAdmin && occupants(s.id).length > 1) {
+          send(ws, { t: "result", ok: false, message: "un autre joueur est présent" });
+          return;
+        }
+        await s.partie.abandonnerLeCoup();
+        return;
+      }
+      // ABANDONNER LA PARTIE : reserve a l'hote, ou un administrateur -- et
+      // seulement une fois un coup manque, sauf pour l'administration.
+      if (!estAdmin && s.gerant !== moi.nom) {
+        send(ws, { t: "result", ok: false, message: "seul l'hôte abandonne la partie" });
+        return;
+      }
+      if (!estAdmin && !s.partie.moves.some((m) => m.player === null)) {
+        send(ws, { t: "result", ok: false, message: "aucun coup manqué pour l'instant" });
+        return;
+      }
+      await s.partie.abandonnerLaPartie();
       return;
     }
 

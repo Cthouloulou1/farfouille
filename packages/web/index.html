@@ -177,6 +177,8 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 .rackbar .image { flex: none; padding: 7px 9px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
 .rackbar .image:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .rackbar .image:disabled { opacity: .45; cursor: default; }
+.rackbar .abandon { flex: none; padding: 7px 10px; font-size: 12px; font-family: "IBM Plex Mono", monospace; line-height: 1; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
+.rackbar .abandon:hover { color: var(--warn); border-color: var(--warn); }
 /* LA RANGEE NE TOUCHE PAS A LA HAUTEUR DE LA BARRE, ET SE CENTRE SUR LA GRILLE.
    Elle occupe une place fixe -- celle d'un caramel -- meme vide : sans cela,
    poser toutes ses lettres retractait la barre et la grille remontait d'un
@@ -1208,6 +1210,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .tablee-liste .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .tablee-liste i { font-style: normal; font-size: .84em; color: var(--ink-faint); font-weight: 400; }
 .tablee-liste .tops { flex: none; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.inviter-liste { display: flex; flex-direction: column; gap: 1px; max-height: 52vh; overflow-y: auto; margin: 14px 0 18px; }
+.inviter-liste .ligne { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 4px; }
+.inviter-liste .ligne:hover { background: var(--hover); }
+.inviter-liste .nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--ink); }
+.inviter-liste .invite { flex: none; font-size: 12.5px; color: var(--ink-faint); }
+.inviter-liste button { flex: none; padding: 5px 11px; font-size: 12.5px; background: none; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink-soft); }
+.inviter-liste button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.inviter-liste button:disabled { opacity: .5; cursor: default; }
 .rc-tableau td .rc-de-plus { color: var(--ink-faint); font-weight: 400; }
 
 .rc-tableau .rc-outil { padding: 3px 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12px; }
@@ -1674,6 +1684,29 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   </div>
 </div>
 
+<!-- INVITER DANS UN SALON PRIVE (SPEC.md §26) : la liste de qui est connecte
+     sur le site, un bouton "Inviter" en face de chaque nom. -->
+<div class="voile" id="voile-inviter" hidden>
+  <div class="pseudo">
+    <h2>Inviter</h2>
+    <div class="inviter-liste" id="inviter-liste"></div>
+    <button class="lien renoncer" id="inviter-close" type="button">Fermer</button>
+  </div>
+</div>
+
+<!-- CONFIRMATION GENERIQUE : Oui/Non sur une question posee dans le titre.
+     Sert a l'abandon d'un coup et de la partie (SPEC.md §24-25) ; rien n'y est
+     specifique a l'un ou l'autre, `confirmer()` (main.ts) branche l'action. -->
+<div class="voile" id="voile-confirmer" hidden>
+  <div class="pseudo confirmer-boite">
+    <h2 id="confirmer-titre">—</h2>
+    <div class="confirmer-boutons">
+      <button class="valider" id="confirmer-oui" type="button">Oui</button>
+      <button class="lien renoncer" id="confirmer-non" type="button">Non</button>
+    </div>
+  </div>
+</div>
+
 <!-- LE MINI SOLVEUR : une fenetre flottante et deplacable, ouverte DANS UN
      SALON, en solo seulement (SPEC : inutilisable a plusieurs, ce serait
      tenter la triche). Meme moteur que la page, en plus petit et plus rapide
@@ -1746,6 +1779,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <circle cx="9" cy="9" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4"/>
     </svg>
   </button>
+  <!-- ABANDONNER UN COUP / LA PARTIE (SPEC.md §24-25). Discrets : ce ne sont
+       pas des gestes qu'on veut sous les yeux en temps normal, et le premier
+       disparait des qu'on n'est plus seul. Les administrateurs les voient
+       toujours (main.ts en decide). -->
+  <button class="abandon" id="abandon-coup" type="button"
+    title="Passer le tour (Ctrl+Entrée)" aria-label="Passer le tour" hidden>✕</button>
+  <button class="abandon" id="abandon-partie" type="button"
+    title="Abandonner la partie" aria-label="Abandonner la partie" hidden>✕✕</button>
 </div>
 
 <div class="main">
@@ -2030,6 +2071,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
       <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
+        <label class="case"><input type="checkbox" id="r-prive"> Salon privé</label>
+        <button type="button" class="lien" id="r-inviter" hidden>Inviter…</button>
       </div>
 
       <div class="reglage" id="r-primes-bloc">

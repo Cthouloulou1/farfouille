@@ -201,12 +201,25 @@ export const EN: Readonly<Record<string, string>> = {
   // ------------------------------------------------------ tableau de bord
   "Joueurs connectés": "Players online",
   "Score": "Score",
-  "Top": "Tops",
+  "Top": "Top",
   // L'ecart au top, au duplicate. « Negative » ne se dit pas en anglais.
   "Négatif": "Gap",
   "Temps": "Time",
   "Cumul": "Total",
   "Reste": "Left",
+
+  // ------------------------------------------ abandonner un coup, la partie
+  "Passer le tour ?": "Skip this move?",
+  "Abandonner la partie ?": "Abandon the game?",
+
+  // ---------------------------------------- salon prive, et invitations
+  "Salon privé": "Private room",
+  "Inviter…": "Invite…",
+  "Inviter": "Invite",
+  "Invité": "Invited",
+  "Chargement…": "Loading…",
+  "Personne d'autre n'est connecté.": "No one else is online.",
+  "Invité(e) dans « {nom} »": "Invited to “{nom}”",
 
   // ---------------------------------------------------------------- chat
   "Chat": "Chat",
@@ -312,7 +325,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Mots non valides :": "Invalid words:",
   "C'est une partie {x} sur {y}": "This game is {x} of {y}",
   "non trouvé": "not found",
+  "non trouvés": "not found",
   "Non trouvé": "Not found",
+  "Non trouvés": "Not found",
+  "trouvé": "found",
+  "trouvés": "found",
   "Trouvé": "Found",
   "votre coup": "your move",
   "coup révélé, personne à féliciter": "move revealed, no one to congratulate",

@@ -5289,3 +5289,190 @@ fera le jour où le cas se présentera.
 | Une mise à jour de lexique | Les records passés ont été établis contre un autre lexique. La colonne le dit ; faut-il pour autant repartir de zéro, ou faire coexister deux listes ? |
 | Le classement des joueurs | Écarté pour l'instant : afficher un pourcentage de tops trouvés change la façon dont on joue, et pas dans le bon sens. |
 | Le ping | Il départage structurellement des coups trouvés à quelques dixièmes près (§8), et un tableau de records en fait un enjeu. Non résolu. |
+
+---
+
+## 24. Abandonner un coup
+
+Tout seul face à un top qu'on ne trouve pas, attendre l'échéance n'apprend
+rien : on sait déjà qu'on ne trouvera pas, et il ne reste qu'à regarder le
+chrono descendre. **Abandonner le coup** le clôt tout de suite, exactement
+comme si l'échéance était tombée.
+
+### Trois conditions, réunies
+
+Le bouton n'existe que quand les trois tiennent à la fois :
+
+- **On est en topping.** Au duplicate, un coup abandonné par l'un continuerait
+  pour les autres : la notion n'a pas de sens à plusieurs joueurs qui comptent
+  chacun leurs points.
+- **On est seul dans le salon.** Dès qu'un deuxième joueur entre, le bouton
+  disparaît -- abandonner un coup où quelqu'un d'autre cherche encore lui
+  volerait sa chance. « Seul » se compte en joueurs distincts, pas en onglets :
+  qui a deux onglets ouverts sur son propre salon reste seul (§27).
+- **La grille est finie.** Sur une grille sans fin la partie n'a de toute façon
+  pas de terme ; la restreindre aux plateaux bornés évite d'avoir à statuer sur
+  ce que « la partie » veut dire dans ce cas.
+
+Le réglage du chrono, lui, n'entre pour rien : abandonner marche aussi bien à
+trois minutes par coup qu'en temps libre. **Les comptes d'administration voient
+toujours le bouton**, sans égard à ces trois conditions : c'est un outil de
+modération, pas un droit du joueur.
+
+### Le temps compté est celui qu'aurait pris l'échéance
+
+`cloreParDefaut` (topping) sait déjà, depuis toujours, combien de temps compter
+pour un coup clos par l'échéance plutôt que par un joueur : le temps IMPARTI
+(`dureeDuCoup`, §23) et non le temps réel écoulé. Abandonner un coup revient
+donc à appeler cette même fonction avant l'heure plutôt qu'à l'heure :
+
+- **Chrono réglé** (3 minutes, par exemple) : le coup compte pour le temps
+  plein, quel que soit l'instant où l'on a cliqué. Repris dans l'exemple de
+  l'énoncé -- au coup 2 depuis 1 min, avec 1 min 25 au cumul -- abandonner
+  amène directement au coup 3 avec 3 min 25 au cumul, comme si le coup 2 avait
+  couru jusqu'à l'échéance.
+- **Chrono libre (infini)** : il n'y a pas de « temps plein » à imposer. Le
+  temps compté est alors le temps réellement écoulé depuis le tirage --
+  `dureeDuCoup` le fait déjà sans qu'il y ait rien à ajouter.
+
+Aucun nouveau calcul de temps n'est donc nécessaire : abandonner un coup, c'est
+appeler le même chemin que l'échéance, plus tôt.
+
+### Un coup abandonné disqualifie la partie des records
+
+Sans rien y changer non plus : un coup clos sans qu'un joueur l'ait trouvé
+retire déjà la partie du classement des parties topées (§23, « Une partie
+topée, et rien d'autre »). Abandonner un coup produit exactement la même trace
+qu'un coup manqué par le chrono, et compte donc comme tel pour le tableau des
+mots ratés.
+
+### L'interface
+
+Un bouton discret, en bas à droite de l'écran de jeu, portant une croix. Il ne
+s'affiche que si les trois conditions ci-dessus tiennent (ou qu'on est admin),
+et disparaît dès qu'elles cessent -- un deuxième joueur qui entre l'efface
+sans prévenir, comme le reste de l'interface qui suit la présence.
+
+**Ctrl+Entrée** fait la même chose que le clic. Dans les deux cas, une fenêtre
+de confirmation s'ouvre : *« Passer le tour ? »*, avec *Oui* et *Non*. Rien ne
+se passe sur *Non* ni sur un Échap.
+
+---
+
+## 25. Abandonner la partie
+
+Rater un coup, seul ou à plusieurs, donne souvent envie de revoir ce coup en
+rejeu tout de suite -- et comme la partie ne va de toute façon plus se topper,
+la laisser courir jusqu'au sac vide pour pouvoir enfin l'ouvrir en rejeu n'a
+rien d'agréable. **Abandonner la partie** la termine sur-le-champ.
+
+### Deux conditions, plus un droit
+
+- **On est en topping, sur une grille finie** -- les deux premières conditions
+  de l'abandon de coup (§24), sans la troisième : abandonner la partie n'exige
+  PAS d'être seul. À plusieurs, tout le monde a raté le même coup ; il n'y a
+  pas de raison que la partie s'entête.
+- **Le bouton n'agit que pour l'hôte du salon (le gérant) ou un compte
+  d'administration.** Un joueur de passage ne le voit pas, même si les deux
+  conditions ci-dessus tiennent : forcer la fin d'une partie où d'autres
+  jouent encore reste une décision de celui qui la conduit.
+- **Il n'apparaît qu'après un coup manqué** -- une partie qui roule sans accroc
+  n'a rien à abandonner. « Manqué » couvre aussi bien un coup clos par
+  l'échéance qu'un coup abandonné par le mécanisme du §24.
+
+Comme pour l'abandon de coup, **un compte d'administration voit toujours le
+bouton**, sans égard aux conditions ci-dessus.
+
+### Une fin de partie qui ne compte pas comme complète
+
+La partie s'arrête par le même chemin qu'un sac épuisé ou qu'un tirage
+injouable (`terminer`, §23), avec une raison propre (`"abandon"`). Le tableau
+des records n'accepte déjà que les raisons `"sac"` et `"injouable"` (§23,
+`manche()`) : une partie abandonnée n'y prétend donc jamais, sans qu'il y ait
+rien à écrire de plus pour ça. Ses coups joués, ratés compris, rejoignent quand
+même le tableau des mots (§23, `onArret`), exactement comme n'importe quelle
+partie interrompue en cours de route.
+
+### Le rejeu s'ouvre sur le coup manqué
+
+Depuis toujours, quitter une partie pour son rejeu demande de rouvrir et de
+chercher le bon coup. Ici, la fin étant provoquée par un coup manqué précis,
+**le rejeu qui suit un abandon de partie s'ouvre directement sur ce coup-là** --
+inutile de le rechercher dans une partie qu'on vient de refermer pour lui.
+
+### L'interface
+
+Un second bouton, à côté de celui du §24, avec une double croix. Il n'apparaît
+qu'une fois un coup manqué (voir plus haut), et seulement pour l'hôte ou un
+administrateur. Le clic ouvre une confirmation, *« Abandonner la partie ? »*,
+*Oui* / *Non*. Sur *Oui*, la partie se termine et le rejeu s'ouvre aussitôt sur
+le coup manqué.
+
+---
+
+## 26. Salons privés et invitations
+
+Un salon peut déjà porter un drapeau `prive` qui l'efface de la liste
+publique -- mais rien aujourd'hui n'empêche de le rejoindre en connaissant son
+adresse. Un salon **privé** doit désormais l'être pour de bon : personne n'y
+entre sans y avoir été invité, lien ou pas.
+
+### La case, et ce qu'elle ferme
+
+Dans les réglages du salon, à côté de la case *Décompte* : une case **Salon
+privé**. Cochée, plus personne ne peut rejoindre le salon sans figurer sur sa
+liste d'invités -- ni depuis la liste des salons (déjà masqué aujourd'hui), ni
+en ouvrant son adresse directement (nouveau).
+
+**Cocher la case sur un salon déjà occupé n'éjecte personne.** Les joueurs déjà
+présents mais non invités restent jusqu'à la fin de la partie en cours ; s'ils
+partent (ou se déconnectent), ils ne peuvent plus revenir sans invitation. Rien
+ne se passe pour ceux qui étaient déjà invités.
+
+### La liste d'invités est permanente, et vit à côté de la case
+
+Un bouton, à côté de la case, ouvre une fenêtre listant les joueurs
+actuellement connectés sur le site (la même liste que « Joueurs connectés »),
+chacun avec un bouton **Inviter** en face de son nom. Inviter quelqu'un
+l'ajoute à la liste des invités du salon, **qui reste valable tant que l'hôte
+ne l'en retire pas** -- un invité qui se déconnecte avant de rejoindre garde
+son invitation, et peut entrer plus tard en revenant sur le site.
+
+L'hôte et les administrateurs entrent toujours, invités ou non : la liste ne
+restreint que les autres.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| Retirer une invitation | La fenêtre ne prévoit pour l'instant que d'inviter, pas de désinviter quelqu'un déjà sur la liste. |
+| Un invité hors ligne | La liste des joueurs connectés ne montre que les gens présents au moment où l'hôte ouvre la fenêtre ; inviter quelqu'un actuellement absent du site demande un autre chemin (son pseudo exact, par exemple), non retenu pour l'instant. |
+
+---
+
+## 27. Une session, plusieurs onglets
+
+Le pseudo était jusqu'ici réservé à UNE connexion à la fois sur tout le
+serveur : ouvrir un deuxième onglet, recharger une page dans un nouveau, ou
+suivre un lien vers un salon pendant que l'autre onglet tournait encore s'y
+heurtait avec un message de refus. La règle change, et distingue deux cas.
+
+### Un compte inscrit peut ouvrir plusieurs onglets, dans le même salon
+
+**Deux connexions du même compte dans le même salon coexistent désormais sans
+se gêner** -- comme sur la plupart des sites, où être connecté à son compte
+dans deux onglets ne pose pas de question.
+
+**Un compte reste cependant dans un seul salon à la fois.** Se connecter à un
+second salon avec un compte déjà présent dans un premier en retire sa présence
+de ce premier salon -- l'onglet resté ouvert dessus est prévenu et revient à
+l'accueil, plutôt que de continuer à afficher un salon qu'on a quitté sans le
+savoir.
+
+### Un invité (compte provisoire) n'a qu'une connexion
+
+Un joueur sans compte, sous un pseudo temporaire (§8), n'a pas cette identité
+stable qui permettrait de reconnaître deux onglets comme la même personne.
+**Une nouvelle connexion sous ce pseudo déconnecte la précédente**, où qu'elle
+soit -- l'ancien onglet est prévenu (« reconnecté ailleurs ») plutôt que de
+rester bloqué sur un état qui ne bougera plus.

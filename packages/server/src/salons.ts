@@ -55,6 +55,17 @@ export interface Salon {
    */
   gerant: string | null;
   prive: boolean;
+  /**
+   * Qui entre malgre tout dans un salon prive (SPEC.md §26), en plus du
+   * proprietaire et de l'administration. Cle par pseudo, pas par compte : une
+   * invitation reste valable tant que l'hote ne la retire pas, y compris pour
+   * qui se reconnecte plus tard -- mais un invite qui change de pseudo (un
+   * invite sans compte le peut) n'est plus reconnu.
+   *
+   * NE SURVIT PAS A UN REDEMARRAGE DU SERVEUR, comme la montante et sa vue :
+   * un salon est un lieu de session, pas une donnee qu'on tient a conserver.
+   */
+  invites: Set<string>;
   layout: LayoutName;
   partie: Game;
   /**
@@ -152,6 +163,14 @@ export function identifiantPris(id: string): boolean {
   return false;
 }
 
+/**
+ * Un salon prive ferme sa porte a tous, sauf trois : celui qui l'a cree,
+ * l'administration, et qui figure sur la liste d'invites (SPEC.md §26).
+ */
+export function peutEntrerDans(s: Salon, nom: string, admin: boolean): boolean {
+  return !s.prive || admin || nom === s.proprietaire || s.invites.has(nom);
+}
+
 export function tousLesSalons(): Salon[] {
   return [...salons.values()].sort((a, b) => a.creeLe - b.creeLe);
 }
@@ -206,7 +225,7 @@ export async function ouvrirSalon(opts: {
   await partie.start();
   const s: Salon = {
     id: opts.id, nom: opts.nom, proprietaire: opts.proprietaire,
-    gerant: opts.proprietaire, prive: opts.prive,
+    gerant: opts.proprietaire, prive: opts.prive, invites: new Set(),
     layout: opts.layout, partie, montante: null, vue: null,
     creeLe: opts.creeLe ?? Date.now(),
   };

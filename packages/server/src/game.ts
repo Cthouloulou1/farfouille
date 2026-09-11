@@ -167,9 +167,10 @@ export interface PlayedMove {
  * `sac`        le sac et les reliquats ne composent plus de tirage jouable ;
  * `coups`      le nombre de coups regle est atteint ;
  * `duree`      la duree reglee est ecoulee ;
- * `injouable`  assez de tirages de suite sans le moindre coup possible.
+ * `injouable`  assez de tirages de suite sans le moindre coup possible ;
+ * `abandon`    l'hote ou un administrateur a force la fin (SPEC.md §25).
  */
-export type RaisonDeFin = "sac" | "coups" | "duree" | "injouable";
+export type RaisonDeFin = "sac" | "coups" | "duree" | "injouable" | "abandon";
 
 export interface ChatMessage {
   at: number;
@@ -1503,6 +1504,65 @@ export class Game {
     return n;
   }
 
+  /**
+   * Bascule commune a toute fin de partie, quelle que soit sa raison : sac
+   * epuise, nombre de coups ou duree atteints (`deal`), ou abandon volontaire
+   * (`abandonnerLaPartie`, SPEC.md §25).
+   */
+  private finirLaPartie(raison: RaisonDeFin, note: string): void {
+    this.terminer(raison);
+    this.solving = false;
+    this.canonicalTop = null;
+    // Les coups prets ne seront jamais servis : la partie s'arrete ici.
+    this.viderLAvance();
+    // LES LETTRES RESTEES EN MAIN REJOIGNENT LE RELIQUAT : sans ce `rendre`,
+    // elles disparaissaient purement et simplement -- ni sur la grille, ni
+    // dans le sac -- des que la partie s'arretait alors qu'il en restait (plus
+    // de voyelle a jouer, nombre de coups ou duree atteinte, abandon). Le
+    // reliquat doit compter TOUT ce qui n'a jamais ete joue, pas seulement ce
+    // qui n'a jamais ete tire.
+    //
+    // `reliquat` ET NON `rack` : le tirage porte encore les lettres du coup
+    // qu'on vient de jouer, et les rendre toutes en inventait autant que le
+    // dernier mot en comptait.
+    this.bag.rendre(this.reliquat.filter((l) => l !== BLANK || !this.cfg.joker));
+    this.reliquat = [];
+    // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
+    // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
+    // qui restent dans le sac ne sont pas piochés : ils ne serviront plus.
+    this.rack = "";
+    this.rackNotation = "";
+    this.bestScore = -1;
+    this.isotops = 0;
+    this.tiers = [];
+    console.log(`[partie] terminee apres ${this.moves.length} coups${note}`);
+    this.emit();
+  }
+
+  /**
+   * Abandonne le coup en cours : il se clot comme si l'echeance venait de
+   * tomber, temps imparti compris (SPEC.md §24). Reserve au topping, joue
+   * seul, sur une grille finie -- ces conditions sont verifiees par
+   * l'appelant (index.ts), pas ici : le moteur ne connait pas qui est present.
+   */
+  async abandonnerLeCoup(): Promise<void> {
+    if (this.canonicalTop === null || this.finie || !this.actif) return;
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    await (this.cfg.mode === "duplicate" ? this.clore() : this.cloreParDefaut());
+  }
+
+  /**
+   * Force la fin de la partie sur-le-champ (SPEC.md §25). La raison propre
+   * (`"abandon"`) l'exclut d'elle-meme du tableau des parties topees (§23,
+   * `manche()` n'accepte que `"sac"` et `"injouable"`) ; ses coups, ratés
+   * compris, rejoignent quand meme le tableau des mots via `onArret`.
+   */
+  async abandonnerLaPartie(): Promise<void> {
+    if (this.finie) return;
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    this.finirLaPartie("abandon", " (abandonnee)");
+  }
+
   /** Tire le prochain tirage et lance le calcul du top. */
   private async deal(injouables = 0): Promise<void> {
     // Fin de partie (SPEC.md §16) : le sac ne permet plus de composer un tirage
@@ -1518,35 +1578,10 @@ export class Game {
     // jokers soient poses. Voir `jokersTousPoses`.
     const plusRienATirer = this.bag.estFinie(this.reliquat) && this.jokersTousPoses();
     if (assezJoue || assezDure || plusRienATirer) {
-      this.terminer(assezJoue ? "coups" : assezDure ? "duree" : "sac");
-      this.solving = false;
-      this.canonicalTop = null;
-      // Les coups prets ne seront jamais servis : la partie s'arrete ici.
-      this.viderLAvance();
-      // LES LETTRES RESTEES EN MAIN REJOIGNENT LE RELIQUAT, comme sur l'autre
-      // sortie de deal() (aucun coup possible avec le tirage courant, un peu
-      // plus bas) : sans ce `rendre`, elles disparaissaient purement et
-      // simplement -- ni sur la grille, ni dans le sac -- des que la partie
-      // s'arretait alors qu'il en restait (plus de voyelle a jouer, nombre de
-      // coups ou duree atteinte). Le reliquat doit compter TOUT ce qui n'a
-      // jamais ete joue, pas seulement ce qui n'a jamais ete tire.
-      //
-      // `reliquat` ET NON `rack` : le tirage porte encore les lettres du coup
-      // qu'on vient de jouer, et les rendre toutes en inventait autant que le
-      // dernier mot en comptait.
-      this.bag.rendre(this.reliquat.filter((l) => l !== BLANK || !this.cfg.joker));
-      this.reliquat = [];
-      // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
-      // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
-      // qui restent dans le sac ne sont pas piochés : ils ne serviront plus.
-      this.rack = "";
-      this.rackNotation = "";
-      this.bestScore = -1;
-      this.isotops = 0;
-      this.tiers = [];
-      console.log(`[partie] terminee apres ${this.moves.length} coups` +
-        (assezJoue ? " (nombre de coups atteint)" : assezDure ? " (duree ecoulee)" : ""));
-      this.emit();
+      this.finirLaPartie(
+        assezJoue ? "coups" : assezDure ? "duree" : "sac",
+        assezJoue ? " (nombre de coups atteint)" : assezDure ? " (duree ecoulee)" : "",
+      );
       return;
     }
     // Les jokers ne repassent pas par le sac : on les retire du reliquat avant
