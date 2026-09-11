@@ -4467,6 +4467,14 @@ cv.addEventListener("pointerup", (e) => {
 cv.addEventListener("pointercancel", () => { press = null; clearTimeout(holdTimer); cv.style.cursor = ""; });
 
 addEventListener("keydown", (e) => {
+  // LA CONFIRMATION PASSE AVANT TOUT LE RESTE, meme les reglages ou le voile
+  // du pseudo qu'elle peut recouvrir : Entree vaut Oui, Echap vaut Non, comme
+  // dans n'importe quelle boite de dialogue (SPEC.md §24-25).
+  if (!$("voile-confirmer").hidden) {
+    if (e.key === "Enter") { e.preventDefault(); ($("confirmer-oui") as HTMLButtonElement).click(); }
+    else if (e.key === "Escape") { e.preventDefault(); ($("confirmer-non") as HTMLButtonElement).click(); }
+    return;
+  }
   // LE FORMULAIRE DES BUGS S'OUVRE DES DEUX COTES, donc Echap le referme des
   // deux cotes -- y compris depuis sa zone de texte, qui garderait la touche
   // pour elle si l'on attendait les branches suivantes.
@@ -5227,10 +5235,7 @@ function applyState(s: {
   // changer sans que rien d'autre ne bouge. La case suit, si les reglages sont
   // ouverts en ce moment meme.
   salonPrive = s.prive === true;
-  if (!$("reglages").hidden) {
-    ($("r-prive") as HTMLInputElement).checked = salonPrive;
-    $("r-inviter").hidden = !salonPrive;
-  }
+  if (!$("reglages").hidden) ($("r-prive") as HTMLInputElement).checked = salonPrive;
   if (s.proprietaire !== undefined) salonPermanent = s.proprietaire === null;
   permanent = s.permanent === true;
   // UNE GRILLE PERMANENTE NE SE REREGLE PAS. Relancer, c'est archiver la partie
@@ -5244,8 +5249,12 @@ function applyState(s: {
   // notion de "coup" a abandonner. `s.finie`, et non `finie` : ce dernier n'est
   // reassigne que plus bas, et porterait encore la valeur d'avant ce message.
   {
-    const admin = moiCompte?.admin === true;
-    const seProposeIci = !duplicate && cfg.bornes !== null;
+    // JAMAIS SUR UN SALON PERMANENT (la grille mondiale, §16) : c'est LA
+    // partie du site, et l'administration s'y promene aussi -- lui laisser un
+    // bouton qui l'abandonnerait serait absurde. Ce veto passe avant tout le
+    // reste, administration comprise.
+    const admin = !permanent && moiCompte?.admin === true;
+    const seProposeIci = !permanent && !duplicate && cfg.bornes !== null;
     const seul = (s.online ?? []).length <= 1;
     // UN COUP EN COURS, ET NON UNE PARTIE QUI ATTEND SON DECOMPTE OU SON
     // LANCEMENT : le tirage n'existe pas encore, `abandonnerLeCoup` n'aurait
@@ -7842,7 +7851,6 @@ function ouvrirReglages(): void {
   cBorne = cfg.dureeMax !== null ? "duree" : "coups";
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
   ($("r-prive") as HTMLInputElement).checked = salonPrive;
-  $("r-inviter").hidden = !salonPrive;
   peuplerMode();
   peuplerCoups();
   peuplerChrono();
@@ -7895,9 +7903,7 @@ $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
 // n'y a aucune raison d'archiver une partie en cours pour la seule fermer aux
 // nouveaux venus.
 $("r-prive").addEventListener("change", () => {
-  const coche = ($("r-prive") as HTMLInputElement).checked;
-  $("r-inviter").hidden = !coche;
-  envoyer({ t: "salonPrive", prive: coche });
+  envoyer({ t: "salonPrive", prive: ($("r-prive") as HTMLInputElement).checked });
 });
 
 $("r-inviter").addEventListener("click", () => {

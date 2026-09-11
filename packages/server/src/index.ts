@@ -1370,28 +1370,21 @@ wss.on("connection", (ws, req) => {
       // meme compte, dans le meme salon, ne se genent pas -- comme sur la
       // plupart des sites, ou etre connecte a son compte dans deux onglets ne
       // pose pas de question.
-      const autres = [...clients.entries()].filter(([c, v]) => c !== ws && v.nom === nom);
-      if (inscrit === null) {
-        // INVITE (pseudo provisoire, §8) : pas d'identite stable qui permette
-        // de reconnaitre deux onglets comme la meme personne. Une connexion
-        // neuve remplace donc la precedente, ou qu'elle soit -- l'ancien
-        // onglet est prevenu plutot que de rester bloque sur un etat mort.
-        for (const [c] of autres) {
-          send(c, { t: "refus", quoi: "salon", message: "Reconnecté depuis un autre onglet" });
-          c.close();
-        }
-      } else {
-        // COMPTE INSCRIT : coexiste avec ses propres onglets DANS LE MEME
-        // salon (rien a faire ci-dessous, `ws.on("close")` sait deja garder la
-        // presence tant qu'un autre onglet du meme nom reste connecte au meme
-        // salon -- voir `occupants`). Un compte ne reste cependant que dans un
-        // seul salon a la fois : rejoindre celui-ci retire sa presence de tout
-        // autre, et l'onglet qui l'occupait y revient a l'accueil.
-        for (const [c, v] of autres) {
-          if (v.salon === cible.id) continue;
-          send(c, { t: "refus", quoi: "salon", message: "Reconnecté dans un autre salon" });
-          c.close();
-        }
+      // UN SEUL SALON A LA FOIS, PAR PSEUDO -- meme pour un compte inscrit.
+      // Deux onglets dans le meme salon ne servent a rien (on y voit deja
+      // tout), et un onglet resterait sinon a regarder un etat mort des qu'un
+      // autre a pris la main ailleurs. Rejoindre CE salon remplace donc
+      // TOUTE autre connexion du meme nom, ici ou ailleurs -- l'onglet
+      // remplace est prevenu plutot que de rester bloque, et revient a
+      // l'accueil. Ce qui reste libre : consulter une autre partie du site
+      // (records, profil) dans un second onglet, qui ne rejoint aucun salon
+      // et n'a donc rien a ceder.
+      for (const [c, v] of [...clients.entries()].filter(([c, v]) => c !== ws && v.nom === nom)) {
+        send(c, {
+          t: "refus", quoi: "salon",
+          message: v.salon === cible.id ? "Reconnecté depuis un autre onglet" : "Reconnecté dans un autre salon",
+        });
+        c.close();
       }
       clients.set(ws, { nom, salon: cible.id, compte: inscrit });
       // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
@@ -1750,6 +1743,14 @@ wss.on("connection", (ws, req) => {
     // sur une grille sans fin, le bouton ne s'affiche pas -- mais un message
     // force reste possible, donc on revalide ici, pas seulement cote client.
     if (msg.t === "abandonnerCoup" || msg.t === "abandonnerPartie") {
+      // JAMAIS SUR UN SALON PERMANENT (la grille mondiale) : c'est LA partie
+      // du site, et ce veto passe avant tout le reste, administration
+      // comprise -- voir main.ts, qui cache deja les boutons pour la meme
+      // raison.
+      if (estPermanent(s)) {
+        send(ws, { t: "result", ok: false, message: "cette action n'est pas proposée ici" });
+        return;
+      }
       const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
       const cfg = s.partie.cfg;
       const proposeIci = cfg.mode !== "duplicate" && cfg.bornes !== null;

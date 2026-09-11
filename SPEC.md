@@ -5455,24 +5455,24 @@ restreint que les autres.
 Le pseudo était jusqu'ici réservé à UNE connexion à la fois sur tout le
 serveur : ouvrir un deuxième onglet, recharger une page dans un nouveau, ou
 suivre un lien vers un salon pendant que l'autre onglet tournait encore s'y
-heurtait avec un message de refus. La règle change, et distingue deux cas.
+heurtait avec un message de refus.
 
-### Un compte inscrit peut ouvrir plusieurs onglets, dans le même salon
+### Un seul salon à la fois, par pseudo -- jamais deux onglets dans le même
 
-**Deux connexions du même compte dans le même salon coexistent désormais sans
-se gêner** -- comme sur la plupart des sites, où être connecté à son compte
-dans deux onglets ne pose pas de question.
+**Rejoindre un salon retire la présence de ce pseudo de partout ailleurs**,
+salon différent ou identique : deux onglets dans le MEME salon ne servent à
+rien, on y voit déjà tout depuis l'un des deux. L'onglet qui perd sa place est
+prévenu (« reconnecté depuis un autre onglet », ou « reconnecté dans un autre
+salon ») et revient à l'accueil, plutôt que de continuer à afficher un état
+mort ou de se voir opposer un refus sans recours.
 
-**Un compte reste cependant dans un seul salon à la fois.** Se connecter à un
-second salon avec un compte déjà présent dans un premier en retire sa présence
-de ce premier salon -- l'onglet resté ouvert dessus est prévenu et revient à
-l'accueil, plutôt que de continuer à afficher un salon qu'on a quitté sans le
-savoir.
+Cela vaut pareil pour un compte inscrit et pour un invité sous pseudo
+provisoire (§8) : aucun des deux n'a de raison d'occuper un salon deux fois à
+la fois.
 
-### Un invité (compte provisoire) n'a qu'une connexion
+### Ce qui reste libre : le reste du site, dans un autre onglet
 
-Un joueur sans compte, sous un pseudo temporaire (§8), n'a pas cette identité
-stable qui permettrait de reconnaître deux onglets comme la même personne.
-**Une nouvelle connexion sous ce pseudo déconnecte la précédente**, où qu'elle
-soit -- l'ancien onglet est prévenu (« reconnecté ailleurs ») plutôt que de
-rester bloqué sur un état qui ne bougera plus.
+**Consulter les records, son profil ou la liste des salons n'entre dans aucun
+salon** -- ces pages ne rejoignent rien côté serveur, donc n'y disputent la
+place de personne. Un deuxième onglet ouvert dessus, pendant qu'on joue dans
+le premier, ne déclenche donc jamais la reprise ci-dessus.
