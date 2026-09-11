@@ -7438,10 +7438,10 @@ for (const b of $("r-grille").querySelectorAll("button")) {
     if (cBornes === null) cJokers = 1;
     peuplerJoker();
     appliquerLeModeDeReglages();
-    // Chaque grille a son tirage naturel : les probabilites ponderees ne
-    // s'epuisent jamais, ce qu'une grille sans bord demande ; le plateau ferme
-    // veut le sac de 102, et le sac sans fin n'a plus lieu d'y etre.
-    if (cBornes === null && cPioche === "sac102") cPioche = "probabilites";
+    // Chaque grille a son tirage naturel : le sac sans fin ne s'epuise jamais,
+    // ce qu'une grille sans bord demande ; le plateau ferme veut le sac de
+    // 102, et le sac fini n'a plus lieu d'y etre.
+    if (cBornes === null && cPioche === "sac102") cPioche = "sac102boucle";
     // Le plateau borne veut un vrai sac -- des probabilites ponderees n'y
     // finissent jamais de remplir la grille. Le sac SANS FIN, lui, y a
     // desormais sa place et n'est plus chasse.
