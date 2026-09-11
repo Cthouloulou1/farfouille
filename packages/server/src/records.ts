@@ -44,8 +44,24 @@ import {
 import { dawgPath } from "../../engine/src/paths.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(here, "..", "data");
-const JOURNAL = join(DATA_DIR, "records.journal.jsonl");
+let DATA_DIR = join(here, "..", "data");
+const journal = (): string => join(DATA_DIR, "records.journal.jsonl");
+
+/**
+ * POUR LES TESTS SEULEMENT. Deplace le journal des records vers un dossier
+ * isole -- un dossier temporaire, jamais `packages/server/data`.
+ *
+ * `check_records.ts` deplaçait autrefois le VRAI journal de cote, jouait ses
+ * parties fictives dessus, puis le restaurait a la fin (`process.on("exit")`).
+ * Une execution interrompue avant cette restauration -- un test qui plante,
+ * un delai depasse, une session qui n'attend pas la fin -- laissait le vrai
+ * journal egare sous un autre nom, ou l'exposait a se faire ecraser par
+ * l'execution suivante du meme test. Rediriger vers un dossier a soi rend ce
+ * risque impossible : le vrai fichier n'est plus jamais touche.
+ */
+export function definirDossierDeDonnees(dir: string): void {
+  DATA_DIR = dir;
+}
 
 /**
  * Ce qu'un coup laisse a l'observation.
@@ -311,7 +327,7 @@ function appliquer(d: DeltaDeMots): void {
 
 function inscrire(ev: Evenement): void {
   mkdirSync(DATA_DIR, { recursive: true });
-  const fd = openSync(JOURNAL, "a");
+  const fd = openSync(journal(), "a");
   try {
     writeSync(fd, JSON.stringify(ev) + "\n");
     fsyncSync(fd);
@@ -329,13 +345,13 @@ export function ouvrirLesRecords(): void {
   mots.clear();
   invalidees.clear();
   ouvert = true;
-  if (!existsSync(JOURNAL)) {
+  if (!existsSync(journal())) {
     console.log("[records] aucun record enregistre");
     return;
   }
   let cassees = 0;
   let deltas = 0;
-  for (const ligne of readFileSync(JOURNAL, "utf8").split("\n")) {
+  for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
     if (ligne.trim() === "") continue;
     let ev: any;
     try { ev = JSON.parse(ligne) as Evenement; } catch { cassees++; continue; }
@@ -418,9 +434,9 @@ export function invaliderLaManche(ref: string, par: string, raison: string): boo
 
 /** Met le journal des records de cote. Il repart vide. Rien n'est efface. */
 export function remettreLesRecordsAZero(): string | null {
-  if (!existsSync(JOURNAL)) { manches = []; mots.clear(); invalidees.clear(); return null; }
+  if (!existsSync(journal())) { manches = []; mots.clear(); invalidees.clear(); return null; }
   const archive = join(DATA_DIR, `records.${Date.now()}.journal.jsonl`);
-  renameSync(JOURNAL, archive);
+  renameSync(journal(), archive);
   manches = [];
   mots.clear();
   invalidees.clear();

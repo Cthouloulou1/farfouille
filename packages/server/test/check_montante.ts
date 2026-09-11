@@ -21,26 +21,23 @@
  *
  * Rien n'est ecrit sur le disque : la montante est un etat en memoire, et ce
  * test ne fait que le faire avancer. Seule la derniere partie ouvre le journal
- * des records, mis de cote puis rendu.
+ * des records -- dans un dossier a part, jamais le vrai `packages/server/data`
+ * (voir `check_records.ts` pour le pourquoi).
  */
-import { existsSync, renameSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   cloreLEtape, etapeReprenable, ilResteUneEtape, mancheDeLaMontante,
   montanteAchevable, montanteFinieDElleMeme, montantePerdue, montantePublique,
   nouvelleMontante, passerALEtapeSuivante, reprendreLEtape, totaux,
   type Montante,
 } from "../src/montante.ts";
-import { ouvrirLesRecords, type EtapeObservee } from "../src/records.ts";
+import { definirDossierDeDonnees, ouvrirLesRecords, type EtapeObservee } from "../src/records.ts";
 import { configDeLEtape, ETAPES_MONTANTE, etapeMontante } from "../../engine/src/montante.ts";
 import { BORNES_NORMALE } from "../../engine/src/categories.ts";
 import { avec, configParDefaut, primesParDefaut } from "../../engine/src/config.ts";
 import { setLayout, LAYOUTS } from "../../engine/src/bonus.ts";
-
-const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
-const JOURNAL = join(D, "records.journal.jsonl");
-const DE_COTE = join(D, "records.essai-montante.jsonl");
 
 let echecs = 0;
 function verifie(nom: string, ok: boolean, detail = ""): void {
@@ -413,38 +410,34 @@ console.log("\n  --- ce qui prive de tableau ---\n");
 // ------------------------------------------ la ligne part vraiment au journal
 console.log("\n  --- la ligne au journal ---\n");
 {
-  // Le journal reel est mis de cote : ce test ne doit rien couter a la machine
-  // sur laquelle il tourne.
-  const gardeAPart = existsSync(JOURNAL);
-  if (gardeAPart) renameSync(JOURNAL, DE_COTE);
-  try {
-    ouvrirLesRecords();
-    const m = nouvelleMontante();
-    for (let rang = 1; rang <= ETAPES_MONTANTE; rang++) {
-      etapeEntiere(m, vue({ temps: 10_000 }));
-    }
-    const ligne = mancheDeLaMontante(m, CFG);
-    if (ligne === null) verifie("la ligne existe", false);
-    else {
-      const { ajouterUneManche, mancheDe, manchesValides, tableau } =
-        await import("../src/records.ts");
-      ajouterUneManche(ligne);
-      verifie("elle se retrouve par sa reference", mancheDe(ligne.ref) !== undefined);
-      verifie("elle compte parmi les manches valides",
-        manchesValides().some((x) => x.ref === ligne.ref));
-      const t = tableau({ categorie: "montante" });
-      verifie("et elle mene le tableau de la montante",
-        t.topees[0]?.ref === ligne.ref, `${t.topees.length} ligne(s)`);
-      // Le journal fait foi : on relit, la ligne et ses etapes sont la.
-      ouvrirLesRecords();
-      const relue = mancheDe(ligne.ref);
-      verifie("relue du journal, elle garde ses six etapes",
-        relue?.etapes?.length === ETAPES_MONTANTE, `${relue?.etapes?.length ?? 0}`);
-    }
-  } finally {
-    if (existsSync(JOURNAL)) rmSync(JOURNAL);
-    if (gardeAPart && existsSync(DE_COTE)) renameSync(DE_COTE, JOURNAL);
+  // Le journal des records part dans un dossier a soi : ce test ne doit rien
+  // couter, ni risquer, sur la machine sur laquelle il tourne.
+  const dossier = mkdtempSync(join(tmpdir(), "farfouille-check-montante-"));
+  definirDossierDeDonnees(dossier);
+  ouvrirLesRecords();
+  const m = nouvelleMontante();
+  for (let rang = 1; rang <= ETAPES_MONTANTE; rang++) {
+    etapeEntiere(m, vue({ temps: 10_000 }));
   }
+  const ligne = mancheDeLaMontante(m, CFG);
+  if (ligne === null) verifie("la ligne existe", false);
+  else {
+    const { ajouterUneManche, mancheDe, manchesValides, tableau } =
+      await import("../src/records.ts");
+    ajouterUneManche(ligne);
+    verifie("elle se retrouve par sa reference", mancheDe(ligne.ref) !== undefined);
+    verifie("elle compte parmi les manches valides",
+      manchesValides().some((x) => x.ref === ligne.ref));
+    const t = tableau({ categorie: "montante" });
+    verifie("et elle mene le tableau de la montante",
+      t.topees[0]?.ref === ligne.ref, `${t.topees.length} ligne(s)`);
+    // Le journal fait foi : on relit, la ligne et ses etapes sont la.
+    ouvrirLesRecords();
+    const relue = mancheDe(ligne.ref);
+    verifie("relue du journal, elle garde ses six etapes",
+      relue?.etapes?.length === ETAPES_MONTANTE, `${relue?.etapes?.length ?? 0}`);
+  }
+  rmSync(dossier, { recursive: true, force: true });
 }
 
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);

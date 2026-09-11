@@ -23,26 +23,34 @@
  * desormais que CHAQUE coup ait vu quelqu'un s'y essayer, et qu'AU MOINS UN top
  * ait ete trouve (voir `Observation.vraimentJouee` dans records.ts).
  *
- * LE JOURNAL DES RECORDS EXISTANT EST MIS DE COTE puis rendu : ce test ne doit
- * rien couter a la machine sur laquelle il tourne.
+ * LE JOURNAL DES RECORDS JOUE DANS UN DOSSIER A PART, jamais dans le vrai
+ * `packages/server/data` : ce test y ecrit et l'efface a volonte, et une
+ * execution interrompue en cours de route -- un delai depasse, une session
+ * qui n'attend pas la fin -- ne risque donc plus rien pour les vrais records
+ * du site. C'etait autrefois un rename-puis-restaure du vrai journal, et une
+ * interruption au mauvais moment l'egarait pour de bon (SPEC.md §23).
  */
-import { existsSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Game } from "../src/game.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import {
-  empreinteDuLexique, invaliderLaManche, manchesValides, motsRates, motsTrouves,
-  observer, ouvrirLesRecords,
+  definirDossierDeDonnees, empreinteDuLexique, invaliderLaManche, manchesValides,
+  motsRates, motsTrouves, observer, ouvrirLesRecords,
 } from "../src/records.ts";
 import { avec, configParDefaut, type ConfigPartie } from "../../engine/src/config.ts";
 import { setLayout, LAYOUTS } from "../../engine/src/bonus.ts";
 import { BORNES_NORMALE } from "../../engine/src/categories.ts";
 
 const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
-const JOURNAL = join(D, "records.journal.jsonl");
-const DE_COTE = join(D, "records.essai-en-cours.jsonl");
 const SUFFIXES = [".json", ".journal.jsonl", ".paliers.jsonl", ".verrou", ".secours.json"];
+// Le journal des records seul part dans un dossier temporaire ; les parties
+// fictives, elles, restent dans le vrai dossier -- sous des identifiants
+// uniques, nettoyes plus bas, comme les autres tests de ce dossier.
+const DOSSIER_RECORDS = mkdtempSync(join(tmpdir(), "farfouille-check-records-"));
+definirDossierDeDonnees(DOSSIER_RECORDS);
 
 let echecs = 0;
 function verifie(nom: string, ok: boolean, detail = ""): void {
@@ -140,14 +148,6 @@ async function jouer(g: Game, qui: string | null, plafond = 300): Promise<void> 
     await dors(15);
   }
 }
-
-// ------------------------------------ le journal existant est mis de cote
-if (existsSync(JOURNAL)) renameSync(JOURNAL, DE_COTE);
-function rendreLeJournal(): void {
-  if (existsSync(JOURNAL)) rmSync(JOURNAL);
-  if (existsSync(DE_COTE)) renameSync(DE_COTE, JOURNAL);
-}
-process.on("exit", rendreLeJournal);
 
 console.log("\nCe qui entre au tableau des records\n");
 setLayout("classique15");
@@ -389,7 +389,9 @@ console.log("\n  --- l'empreinte du lexique ---\n");
   verifie("deux lexiques ont deux empreintes", a !== anglais, `${a} contre ${anglais}`);
 }
 
-for (const id of [ID, ID2, ID3, ID4, ID5]) nettoyer(id);
-rendreLeJournal();
+// ID6 MANQUAIT ICI : ses fichiers ("records-un-mot.*") restaient sur le
+// disque apres chaque execution du test, en plein `packages/server/data`.
+for (const id of [ID, ID2, ID3, ID4, ID5, ID6]) nettoyer(id);
+rmSync(DOSSIER_RECORDS, { recursive: true, force: true });
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);
 process.exit(echecs === 0 ? 0 : 1);

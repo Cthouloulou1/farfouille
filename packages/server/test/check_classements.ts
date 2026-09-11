@@ -10,20 +10,23 @@
  * chemin de lecture -- ce n'est pas un faux, c'est le format d'echange du
  * module, et une ligne mal formee se verrait ici comme en production.
  *
- * LE JOURNAL DES RECORDS EXISTANT EST MIS DE COTE puis rendu.
+ * LE JOURNAL DES RECORDS JOUE DANS UN DOSSIER A PART, jamais dans le vrai
+ * `packages/server/data` -- voir `check_records.ts` pour le pourquoi : un
+ * rename-puis-restaure du vrai journal, interrompu au mauvais moment, l'egare
+ * pour de bon.
  */
-import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   annexe, classementAuNegatif, classementDeVitesse, compteurWuQi, coupsExtremes,
-  invaliderLaManche, motsRates, motsTrouves, ouvrirLesRecords, refDeLaGraine, tableau,
-  type CoupObserve, type Manche,
+  definirDossierDeDonnees, invaliderLaManche, motsRates, motsTrouves, ouvrirLesRecords,
+  refDeLaGraine, tableau, type CoupObserve, type Manche,
 } from "../src/records.ts";
 
-const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
-const JOURNAL = join(D, "records.journal.jsonl");
-const DE_COTE = join(D, "records.essai-classements.jsonl");
+const DOSSIER = mkdtempSync(join(tmpdir(), "farfouille-check-classements-"));
+definirDossierDeDonnees(DOSSIER);
+const JOURNAL = join(DOSSIER, "records.journal.jsonl");
 
 let echecs = 0;
 function verifie(nom: string, ok: boolean, detail = ""): void {
@@ -115,14 +118,6 @@ function poserDesMots(...lots: { lexique?: string; trouves?: string[]; rates?: s
   })).join("\n") + "\n", "utf8");
   ouvrirLesRecords();
 }
-
-// ------------------------------------ le journal existant est mis de cote
-if (existsSync(JOURNAL)) renameSync(JOURNAL, DE_COTE);
-function rendreLeJournal(): void {
-  if (existsSync(JOURNAL)) rmSync(JOURNAL);
-  if (existsSync(DE_COTE)) renameSync(DE_COTE, JOURNAL);
-}
-process.on("exit", rendreLeJournal);
 
 console.log("\nLes classements de records\n");
 
@@ -399,6 +394,6 @@ console.log("\n  --- une manche invalidee ---\n");
     motsRates("ods9").length === 0, "aucun lot de mots dans ce bloc");
 }
 
-rendreLeJournal();
+rmSync(DOSSIER, { recursive: true, force: true });
 console.log(`\n${echecs === 0 ? "Tout est bon." : `${echecs} echec(s).`}\n`);
 process.exit(echecs === 0 ? 0 : 1);
