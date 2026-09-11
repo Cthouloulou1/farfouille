@@ -1038,6 +1038,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .reglage.cote-a-cote { display: flex; gap: 26px; align-items: center; margin-top: 14px; }
 .reglage.cote-a-cote label { margin: 0; }
 .reglage.cote-a-cote #r-topping-collab-case { margin-left: auto; }
+/* UN SELECTEUR D'IDENTIFIANT L'EMPORTE SUR `[hidden]` (voir plus bas) : sans
+   cette regle, `.rg-corps label.case { display: flex }` gagnait sur l'attribut
+   et la case restait visible en duplicate malgre `.hidden = true`. */
+#r-topping-collab-case[hidden] { display: none; }
 .rg-corps label { display: block; font-size: .8em; color: var(--ink-faint); margin: 13px 0 6px; }
 .reglage > label:first-child { margin-top: 4px; }
 .rg-corps label.case { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); font-size: .85em; }
