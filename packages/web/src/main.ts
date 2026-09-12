@@ -1954,7 +1954,21 @@ function calerLeChevalet(): void {
   // etats alternaient.
   const pose = parseFloat(box.style.getPropertyValue("--decalage")) || 0;
   const vise = (cv.left + cv.width / 2) - (b.left + b.width / 2 - pose);
-  box.style.setProperty("--decalage", `${Math.round(Math.max(-jeu, Math.min(jeu, vise)))}px`);
+  const decalage = Math.round(Math.max(-jeu, Math.min(jeu, vise)));
+  box.style.setProperty("--decalage", `${decalage}px`);
+
+  // LE BOUTON DE MELANGE SUIT LA RANGEE, PAS LA BARRE : pose en absolu (donc
+  // hors du flux flex, sans grignoter la place que `dispo` mesure ci-dessus --
+  // c'est ce qui le faisait decaler tout le chevalet avant qu'il ne sorte du
+  // flux), juste apres le dernier caramel, quel que soit le decalage qui vient
+  // d'etre pose.
+  const melange = $("rb-melange");
+  if (!melange.hidden) {
+    const barre = box.parentElement as HTMLElement;
+    const barreRect = barre.getBoundingClientRect();
+    const centreRangee = (b.left + b.width / 2 - pose) + decalage - barreRect.left;
+    melange.style.left = `${Math.round(centreRangee + rangee / 2 + 10)}px`;
+  }
 }
 
 function peindreCaramels(lettres: readonly string[]): void {
@@ -5120,7 +5134,6 @@ function peuplerPreferences(): void {
   }
   $("p-vols").setAttribute("aria-pressed", String(!prefs.vols));
   $("p-image").setAttribute("aria-pressed", String(prefs.imageHD));
-  $("p-quatre").setAttribute("aria-pressed", String(prefs.quatre));
   for (const b of $("p-reperes").querySelectorAll("button")) {
     b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === prefs.reperes));
   }
@@ -5198,10 +5211,10 @@ $("p-image").addEventListener("click", () => {
   peuplerPreferences();
 });
 /**
- * Bascule le curseur a quatre directions -- appele depuis les deux endroits
- * qui le proposent : les parametres du site (`p-quatre`) et le panneau
- * rapide au-dessus de l'anagrammeur (`rj-quatre`, SPEC.md §28). Un seul
- * reglage, deux portes.
+ * Bascule le curseur a quatre directions -- ne se propose plus que d'un seul
+ * endroit, le panneau rapide au-dessus de l'anagrammeur (SPEC.md §28) : la
+ * saisie est un reglage de jeu, pas un reglage de site, et n'a donc plus sa
+ * place dans les parametres generaux.
  */
 function basculerQuatre(): void {
   prefs.quatre = !prefs.quatre;
@@ -5214,10 +5227,8 @@ function basculerQuatre(): void {
     paintRack(); paintCurrent(); draw();
   }
   garderPreferences();
-  peuplerPreferences();
   peuplerReglagesJeu();
 }
-$("p-quatre").addEventListener("click", basculerQuatre);
 for (const b of $("p-reperes").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     prefs.reperes = (b as HTMLElement).dataset["v"] as Reperes;
@@ -5243,6 +5254,10 @@ $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 /** Montre ou cache le bouton de melange, selon le reglage (SPEC.md §28). */
 function appliquerMelangeVisible(): void {
   $("rb-melange").hidden = !prefs.melange;
+  // LE POSITIONNE TOUT DE SUITE : sans cela il apparaissait a l'endroit ou le
+  // CSS l'avait laisse la derniere fois -- souvent (0,0) -- en attendant le
+  // prochain repaint du chevalet.
+  calerLeChevalet();
 }
 
 /** Le panneau rapide suit les deux memes reglages que les parametres du site. */

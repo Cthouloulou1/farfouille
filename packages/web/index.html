@@ -177,11 +177,15 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 .rackbar .image { flex: none; padding: 7px 9px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
 .rackbar .image:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .rackbar .image:disabled { opacity: .45; cursor: default; }
-/* MELANGE DES LETTRES : meme habillage que le bouton photo juste a cote, avec
-   un badge qui rappelle le raccourci -- 1 en QWERTY, & en AZERTY, 1 du pave
-   numerique -- cache tant que le reglage ne l'a pas active (voir
-   #rj-melange). */
-.rb-melange { position: relative; }
+/* MELANGE DES LETTRES : meme habillage que le bouton photo, avec un badge qui
+   rappelle le raccourci -- 1 en QWERTY, & en AZERTY, 1 du pave numerique --
+   cache tant que le reglage ne l'a pas active (voir #rj-melange). POSE EN
+   ABSOLU, HORS DU FLUX FLEX : la rangee de caramels est un `flex: 1` qui
+   prend TOUT ce qui reste entre les compteurs (voir `.tiles` plus bas) --
+   un bouton de plus dans ce flux lui aurait grignote sa place et decale le
+   chevalet entier. `calerLeChevalet` (main.ts) le repose juste apres le
+   dernier caramel a chaque repaint, quel que soit le decalage courant. */
+.rb-melange { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; }
 .rb-melange[hidden] { display: none; }
 .rb-melange .touche { position: absolute; right: -4px; bottom: -4px; min-width: 13px; padding: 0 2px; border-radius: 6px; background: var(--accent); color: #FFFFFF; font-family: "IBM Plex Mono", monospace; font-size: 9px; line-height: 13px; text-align: center; }
 /* LA RANGEE NE TOUCHE PAS A LA HAUTEUR DE LA BARRE, ET SE CENTRE SUR LA GRILLE.
@@ -2227,13 +2231,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <label>Caméra</label>
         <button type="button" class="bascule" id="p-vols" aria-pressed="false">
           <span class="voyant"></span>Réduire les mouvements de caméra
-        </button>
-      </div>
-
-      <div class="reglage">
-        <label>Saisie</label>
-        <button type="button" class="bascule" id="p-quatre" aria-pressed="false">
-          <span class="voyant"></span>Curseur à quatre directions
         </button>
       </div>
 
