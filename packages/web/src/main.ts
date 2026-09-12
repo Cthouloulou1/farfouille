@@ -2548,7 +2548,7 @@ function paintSide() {
     const profil = inscrits.has(name) && openPlayer === name
       ? '<button type="button" class="voir-profil" title="Voir le profil">profil</button>' : "";
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom"${infobulle}>${name}${marque}${coeurs}${profil}</span>` + droite;
+                    `<span class="nom"${infobulle}>${pseudoOrne(name)}${marque}${coeurs}${profil}</span>` + droite;
     row.querySelector(".voir-profil")?.addEventListener("click", (e) => {
       // Le clic sur la ligne DEROULE les coups : celui-ci ne doit pas y monter.
       e.stopPropagation();
@@ -2653,7 +2653,7 @@ function paintSide() {
   if (online.length === 0) boiteEnLigne.textContent = "—";
   for (const [i, n] of online.entries()) {
     const e = document.createElement("span");
-    e.textContent = verifies.has(n) ? `${n} ✓` : n;
+    e.innerHTML = pseudoOrne(n) + (verifies.has(n) ? " ✓" : "");
     const vrai = nomsPublics[n];
     if (vrai !== undefined) e.title = vrai;
     if (inscrits.has(n)) {
@@ -2816,6 +2816,65 @@ function quiLaTrouve(m: MoveInfo, complet = false): string {
     return t2("{n} joueurs", { n: trouveurs.length });
   }
   return m.player ?? (m.demiPoint ? `${m.demiPoint.joueur} (0.5)` : t("non trouvé"));
+}
+
+/**
+ * SALONS STARS SEULEMENT : qui a deja tope WU ou QI, exactement -- pas un
+ * isotop, pas un pluriel. La premiere lettre de son pseudo s'en pare, dans le
+ * classement, les connectes et le chat, sans que rien ne le dise nulle part.
+ *
+ * Reconstruits entierement a l'arrivee d'un salon (la grille mondiale porte
+ * des milliers de coups), puis tenus a jour coup par coup : rescanner tout
+ * l'historique a chaque peinture de l'ecran couterait cher pour une grille
+ * qui ne s'arrete jamais.
+ */
+let joueursWU = new Set<string>();
+let joueursQI = new Set<string>();
+
+function reconstituerLesJetons(): void {
+  joueursWU = new Set();
+  joueursQI = new Set();
+  for (const m of history) enregistrerLeJetonDuCoup(m);
+}
+
+function enregistrerLeJetonDuCoup(m: MoveInfo): void {
+  // Un coup DE DUPLICATE se reconnait a ses propositions, pas au drapeau
+  // global `duplicate` -- celui-ci change de valeur pendant `applyState`, et
+  // l'ordre entre les deux ne doit pas decider ce que ce coup-la a ete.
+  if (m.trouveurs !== undefined || m.propositions !== undefined) {
+    for (const nom of trouveursDuCoup(m)) {
+      const mot = m.propositions?.[nom]?.word;
+      if (mot === "WU") joueursWU.add(nom);
+      if (mot === "QI") joueursQI.add(nom);
+    }
+    return;
+  }
+  if (m.player === null) return;
+  const mot = m.playerWord ?? m.word;
+  if (mot === "WU") joueursWU.add(m.player);
+  if (mot === "QI") joueursQI.add(m.player);
+}
+
+/**
+ * Or, argent ou bronze pour la premiere lettre de ce pseudo -- `null` hors
+ * salon star, ou si ce joueur n'a encore rien de tout ca. Le WU n'existe pas
+ * en anglais : le salon star anglais ne connait que l'argent du QI.
+ */
+function jetonDuJoueur(nom: string): "or" | "argent" | "bronze" | null {
+  if (!salonPermanent) return null;
+  const qi = joueursQI.has(nom);
+  if (dictionnaire(cfg.dictionnaire).langue === "en") return qi ? "argent" : null;
+  const wu = joueursWU.has(nom);
+  if (wu && qi) return "or";
+  if (wu) return "argent";
+  if (qi) return "bronze";
+  return null;
+}
+
+/** Le pseudo tel qu'il s'affiche, sa premiere lettre en metal s'il y a lieu. */
+function pseudoOrne(nom: string): string {
+  const jeton = jetonDuJoueur(nom);
+  return jeton === null ? nom : `<span class="lettre-${jeton}">${nom.slice(0, 1)}</span>${nom.slice(1)}`;
 }
 
 /**
@@ -3971,7 +4030,7 @@ function ligneDeChat(m: Chat): HTMLElement {
   const el = document.createElement("div");
   el.className = "msg";
   const who = document.createElement("span");
-  who.className = "who"; who.textContent = m.who;
+  who.className = "who"; who.innerHTML = pseudoOrne(m.who);
   const vrai = nomsPublics[m.who];
   if (vrai !== undefined) who.title = vrai;
   if (inscrits.has(m.who)) {
@@ -4068,6 +4127,17 @@ interface Preferences {
    */
   quatre: boolean;
   /**
+   * Le tirage se melange-t-il au hasard, plutot que de rester range dans
+   * l'ordre alphabetique que le serveur envoie ?
+   *
+   * Reglage, decoche par defaut, comme le curseur a quatre directions
+   * ci-dessus : les deux vivent dans le meme panneau rapide, au-dessus de
+   * l'anagrammeur (SPEC.md §28). Ce n'est qu'un arrangement d'affichage --
+   * voir `ordreChevalet` -- rien n'en sort vers le serveur, et melanger ses
+   * propres lettres ne donne aucun avantage a plusieurs.
+   */
+  melange: boolean;
+  /**
    * De combien le texte est grossi, dans la feuille de route et dans le
    * panneau de droite.
    *
@@ -4094,6 +4164,7 @@ const prefs: Preferences = {
   reperes: langue() === "en" ? "en" : "fr",
   avance: false,
   quatre: false,
+  melange: false,
   zoomRoute: 1,
   zoomCote: 1,
 };
@@ -4157,6 +4228,7 @@ function lirePreferences(): void {
       reperesChoisis = true;
     }
     if (typeof v.quatre === "boolean") prefs.quatre = v.quatre;
+    if (typeof v.melange === "boolean") prefs.melange = v.melange;
     if (typeof v.avance === "boolean") prefs.avance = v.avance;
     for (const cle of ["zoomRoute", "zoomCote"] as const) {
       const z = v[cle];
@@ -4603,6 +4675,7 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (!$("prefs").hidden && e.key === "Escape") { $("prefs").hidden = true; return; }
+  if (!$("reglages-jeu-panneau").hidden && e.key === "Escape") { basculerLeReglageDeJeu(); return; }
   if (!$("roadmap").hidden && e.key === "Escape") { fermerLaRoute(); return; }
   if (ghost !== null && e.key === "Escape") { ghost = null; draw(); return; }
 
@@ -4635,6 +4708,21 @@ addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
     e.preventDefault();
     rangerLeChevalet();
+    return;
+  }
+  // 1 MELANGE LE TIRAGE (SPEC.md §28), reglage decoche par defaut. `e.code`
+  // et non `e.key`, comme les raccourcis 1-7 de l'anagrammeur : la touche
+  // au-dessus du A vaut "Digit1" quel que soit ce qu'elle tape -- "1" en
+  // QWERTY, "&" en AZERTY -- et le pave numerique la double. PAS QUAND LE
+  // MINI ANAGRAMMEUR EST OUVERT : 1 y choisit deja une instance (SV_RACCOURCIS),
+  // et l'anagrammeur plein ecran ferme cette meme touche plus haut (la page
+  // se traite comme l'accueil, voir `$("join").hidden` en tete de cette
+  // fonction).
+  if ((e.code === "Digit1" || e.code === "Numpad1") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (prefs.melange && !miniOuvert) {
+      e.preventDefault();
+      melangerLeChevalet();
+    }
     return;
   }
   if (e.key === "Escape") { typed = ""; paintRack(); paintCurrent(); draw(); return; }
@@ -5109,7 +5197,13 @@ $("p-image").addEventListener("click", () => {
   garderPreferences();
   peuplerPreferences();
 });
-$("p-quatre").addEventListener("click", () => {
+/**
+ * Bascule le curseur a quatre directions -- appele depuis les deux endroits
+ * qui le proposent : les parametres du site (`p-quatre`) et le panneau
+ * rapide au-dessus de l'anagrammeur (`rj-quatre`, SPEC.md §28). Un seul
+ * reglage, deux portes.
+ */
+function basculerQuatre(): void {
   prefs.quatre = !prefs.quatre;
   // ON NE LAISSE PAS UN CURSEUR A RECULONS derriere soi : le reglage referme,
   // la barre d'espace ne saurait plus revenir a l'endroit, et le curseur
@@ -5121,7 +5215,9 @@ $("p-quatre").addEventListener("click", () => {
   }
   garderPreferences();
   peuplerPreferences();
-});
+  peuplerReglagesJeu();
+}
+$("p-quatre").addEventListener("click", basculerQuatre);
 for (const b of $("p-reperes").querySelectorAll("button")) {
   b.addEventListener("click", () => {
     prefs.reperes = (b as HTMLElement).dataset["v"] as Reperes;
@@ -5142,11 +5238,72 @@ function ouvrirLesPreferences(): void {
 $("prefs-open").addEventListener("click", ouvrirLesPreferences);
 $("prefs-close").addEventListener("click", () => { $("prefs").hidden = true; });
 
+// ------------------------------------------------- reglage de jeu rapide
+
+/** Montre ou cache le bouton de melange, selon le reglage (SPEC.md §28). */
+function appliquerMelangeVisible(): void {
+  $("rb-melange").hidden = !prefs.melange;
+}
+
+/** Le panneau rapide suit les deux memes reglages que les parametres du site. */
+function peuplerReglagesJeu(): void {
+  $("rj-quatre").setAttribute("aria-pressed", String(prefs.quatre));
+  $("rj-melange").setAttribute("aria-pressed", String(prefs.melange));
+}
+
+/** Ouvre ou ferme le panneau rapide, au-dessus de l'anagrammeur. */
+function basculerLeReglageDeJeu(): void {
+  const ouvert = $("reglages-jeu-panneau").hidden;
+  $("reglages-jeu-panneau").hidden = !ouvert;
+  $("reglages-jeu-open").setAttribute("aria-pressed", String(ouvert));
+  if (ouvert) peuplerReglagesJeu();
+}
+$("reglages-jeu-open").addEventListener("click", (e) => {
+  e.stopPropagation();
+  basculerLeReglageDeJeu();
+});
+// UN CLIC AILLEURS LE REFERME, comme n'importe quel menu deroulant : rien
+// dans la page n'appelle a le fermer explicitement, ce serait un bouton de
+// plus a chercher pour deux reglages qu'on regle en un coup d'oeil.
+document.addEventListener("pointerdown", (e) => {
+  if ($("reglages-jeu-panneau").hidden) return;
+  if ((e.target as HTMLElement).closest(".reglages-jeu-colonne")) return;
+  basculerLeReglageDeJeu();
+});
+$("rj-quatre").addEventListener("click", basculerQuatre);
+$("rj-melange").addEventListener("click", () => {
+  prefs.melange = !prefs.melange;
+  garderPreferences();
+  peuplerReglagesJeu();
+  appliquerMelangeVisible();
+});
+
+/**
+ * Melange le chevalet au hasard (Fisher-Yates), sans rien changer a la
+ * partie : comme un deplacement a la main (voir `ordreChevalet`), l'ordre ne
+ * porte que sur l'affichage. Rejoue donc `selonLeChevalet` tel quel au
+ * prochain repaint, et se defait avec le reste de l'arrangement quand la main
+ * est rendue.
+ */
+function melangerLeChevalet(): void {
+  if (rejeu !== null) return;
+  if (rack !== ordrePour) { ordrePour = rack; ordreChevalet = [...rack]; }
+  for (let i = ordreChevalet.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = ordreChevalet[i]!;
+    ordreChevalet[i] = ordreChevalet[j]!;
+    ordreChevalet[j] = tmp;
+  }
+  paintRack();
+}
+$("rb-melange").addEventListener("click", melangerLeChevalet);
+
 lirePreferences();
 setReperes(prefs.reperes);
 appliquerLesTailles();
 appliquerLeTheme();
 appliquerLesHauteurs();
+appliquerMelangeVisible();
 
 // ---------------------------------------------------------------- chronos
 
@@ -5422,6 +5579,7 @@ function connect() {
       canReveal = m.reveal === true;
       tiles = m.tiles;
       history = m.moves;
+      reconstituerLesJetons();
       chat = m.chat ?? [];
       // La variante vient du serveur : c'est elle qui dit combien de caramels se
       // posent, ce que vaut chaque lettre et quelle prime recompense quoi.
@@ -5494,6 +5652,7 @@ function connect() {
       cfg = m.config ? deserialiser(m.config) : cfg;
       tiles = m.tiles ?? [];
       history = [];
+      reconstituerLesJetons();
       chat = m.chat ?? [];
       board = new Board(dict, cfg);
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
@@ -5541,6 +5700,7 @@ function connect() {
         tiles.push({ x: p.x, y: p.y, l: p.letter, b: p.blank ? 1 : 0, n: mv.n });
       }
       history.push(mv);
+      enregistrerLeJetonDuCoup(mv);
       best = null;
       // Les mots refuses parlaient de la position d'avant : elle vient de
       // changer, et certains sont peut-etre jouables maintenant.

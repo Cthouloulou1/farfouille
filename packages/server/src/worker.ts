@@ -172,9 +172,15 @@ parentPort!.on(
       t: "paliers",
       id: msg.id,
       ms: performance.now() - t0,
-      tiers: tiers.map((g) => ({
+      tiers: tiers.map((g, i) => ({
         score: g[0]!.score,
-        moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
+        // Le top en tete de son palier : le tirage au sort qui le designe
+        // parmi ses isotops n'a rien d'alphabetique, et le lecteur veut le
+        // voir en premier, pas perdu dans l'ordre de la grille (SPEC.md §5).
+        moves: (i === 0 && top !== null
+          ? [top.top, ...g.filter((m) => m !== top.top)]
+          : g
+        ).map((m) => [m.word, m.dir, m.x, m.y] as const),
       })),
     });
     return;
@@ -192,9 +198,14 @@ parentPort!.on(
     top: top.top,
     bestScore: top.bestScore,
     isotops: top.isotops.length,
-    tiers: top.tiers.map((g) => ({
+    tiers: top.tiers.map((g, i) => ({
       score: g[0]!.score,
-      moves: g.map((m) => [m.word, m.dir, m.x, m.y] as const),
+      // Le top en tete de son palier, comme dans la branche `paliers` : le
+      // journal garde ce tri, et le rejeu le lit tel quel (SPEC.md §5).
+      moves: (i === 0
+        ? [top.top, ...g.filter((m) => m !== top.top)]
+        : g
+      ).map((m) => [m.word, m.dir, m.x, m.y] as const),
     })),
   };
   parentPort!.postMessage({

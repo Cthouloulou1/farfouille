@@ -4,7 +4,7 @@ Document de référence du projet. Il consigne les décisions prises, pas les
 intentions : ce qui est ici est arbitré. Ce qui reste ouvert est rassemblé en
 fin de document, section « Reporté ».
 
-Instruction globale : il est inutile de relire les dictionnaires à chaque prompt, ce sont des outils pour le projet ils ne doivent être inspectés que si expressément demandé ('dictionnaire.txt', 'dictionnaire-csw24.txt', 'dictionnaire-eel22.txt', 'dictionnaire-nwl23.txt', ainsi que les dawg et les gaddag associés). Ne pas relire les fichiers dans packages/server/data, ce sont juste des parties enregistrées. 
+Instruction globale : il est inutile de relire les dictionnaires à chaque prompt, ce sont des outils pour le projet ils ne doivent être inspectés que si expressément demandé ('dictionnaire.txt', 'dictionnaire-csw24.txt', 'dictionnaire-eel22.txt', 'dictionnaire-nwl23.txt', ainsi que les fichiers dans packages/engine/data qui sont les dawg et les gaddag associés aux dictionnaires). Aussi ne pas relire les fichiers dans packages/server/data, ce sont juste des parties enregistrées. 
 
 ---
 
@@ -2156,10 +2156,6 @@ des deux mondes.
 `mondiale` joue en français, `mondiale-en` — « The Infinite Grid » — en anglais.
 L'accueil ne montre que celles de votre langue ; **« Tout afficher »** empile
 les autres dans la colonne de gauche.
-
-« The Infinite Grid » joue en **CSW 24**, pas dans l'EEL 22 par défaut d'un
-salon anglais ordinaire (§7) : c'est la grille permanente, elle vise le même
-public de joueurs confirmés que la grille française.
 
 Une grille permanente **neuve** ne démarre pas toute seule : elle n'appartient à
 personne, donc personne ne la règle. Un compte administrateur ouvre un compte à
@@ -5495,39 +5491,54 @@ le premier, ne déclenche donc jamais la reprise ci-dessus.
 
 ---
 
-## 28. Le topping collaboratif
+## 28. Le réglage de jeu rapide
 
-Le topping ordinaire compare : chacun voit le nombre de coups que les autres
-ont remportés, et cherche sa propre meilleure solution sans savoir où en sont
-les voisins. C'est ce qui en fait une course. Une table qui préfère chercher
-ensemble, sans classement qui pèse sur l'ambiance, a maintenant une case pour
-ça.
+Deux options qu'on veut pouvoir changer en pleine partie, sans quitter la
+grille pour aller les chercher dans les paramètres du site : le curseur à
+quatre directions (§18), et le mélange des lettres, nouveau ici.
 
-### La case, réservée au topping
+### La roue, au-dessus de l'anagrammeur
 
-Dans les réglages, sur la même ligne que *Décompte*, à l'autre bout : une case
-**Topping collaboratif**. Elle n'existe qu'au topping -- le duplicate compte
-des points par nature, il n'a rien à taire au classement -- et disparaît des
-réglages dès qu'on bascule sur l'autre mode.
+Un petit bouton rond, en forme de roue crantée -- plus petit que le "A" de
+l'anagrammeur (§9) -- empilé juste au-dessus de lui, dans le même coin en bas
+à droite de la partie. Il ouvre un panneau minuscule, deux cases à cocher,
+rien de plus : ce n'est pas une nouvelle fenêtre de réglages, juste un raccourci
+vers deux réglages qu'on veut sous la main pendant qu'on joue.
 
-### Ce que la case tait, et ce qu'elle montre à la place
+Il reste visible même quand l'anagrammeur ne l'est pas -- une partie à
+plusieurs le cache (SPEC.md §9, on ne tente pas les joueurs à tricher), mais
+mélanger ses propres lettres ne regarde que soi et ne gêne personne en face :
+rien n'empêche donc la roue de rester là.
 
-**Le classement n'affiche plus le nombre de coups remportés par chacun.** Le
-compte continue d'exister -- la feuille de route dit toujours qui a trouvé le
-top de chaque coup, et rien n'empêche de le recompter à la main en la
-parcourant -- mais il ne s'étale plus en direct sous les yeux de la table.
+**Curseur à quatre directions** est le même réglage que celui des paramètres
+du site (`p-quatre`) : une seule valeur, deux portes pour la changer.
 
-**La case qui montrait « votre meilleure solution » montre celle de toute la
-table, en direct, place comprise.** D'ordinaire elle ne parle que de ce qu'ON
-a soi-même trouvé sur le coup en cours ; en collaboratif, elle affiche la
-meilleure proposition connue -- mot, score et emplacement -- quel que soit qui
-l'a soumise, mise à jour à chaque essai qui fait mieux. C'est le principe même
-de la collaboration : le top se joue souvent au même endroit qu'une bonne
-solution déjà trouvée, et la place peut mettre un autre joueur sur la voie.
+### Mélange des lettres
 
-### Ce qui reste ouvert
+Réglage, décoché par défaut, comme le curseur à quatre directions.
 
-| Sujet | Question |
-|---|---|
-| Le nom derrière la solution | La case ne dit pas qui a soumis la meilleure proposition -- non tranché si ça manque à l'usage. |
-| La montante | Une étape de montante hérite du réglage de la partie qui la précède, comme le reste de ce qui n'est pas imposé par la suite ; jamais testé en pratique. |
+Une fois coché, un bouton de mélange apparaît à droite du tirage : deux
+flèches entrelacées, avec un petit "1" dans le coin -- le raccourci qui fait la
+même chose. Cliquer dessus range le chevalet dans un ordre tiré au sort, au
+lieu de l'ordre alphabétique envoyé par le serveur.
+
+**Ce n'est qu'un arrangement d'affichage**, exactement comme déplacer une
+lettre à la main sur le chevalet (§9) : ni la partie ni le serveur n'en savent
+rien, et mélanger son propre tirage ne donne donc aucun avantage à plusieurs.
+Il se défait avec le reste de l'arrangement, quand la main est rendue.
+
+### Le raccourci, touche 1
+
+Comme les raccourcis 1 à 7 de l'anagrammeur, c'est le CODE de la touche qui
+compte, pas le caractère qu'elle tape : la touche au-dessus du A vaut
+`Digit1` en QWERTY comme en AZERTY (où elle écrit "&"), et le pavé numérique
+la double.
+
+**Ne marche pas quand le mini anagrammeur est ouvert** : 1 y choisit déjà une
+recherche (§9), et les deux ne doivent pas se marcher dessus. L'anagrammeur en
+page entière n'a pas besoin du même garde-fou : l'ouvrir revient à l'accueil
+côté client, où aucun raccourci de partie n'a cours.
+
+Marche partout ailleurs où l'on est dans un salon -- avant que la partie ne
+démarre comme pendant qu'elle tourne -- puisque le mélange ne triche jamais,
+à la différence de l'anagrammeur.

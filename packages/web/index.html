@@ -177,6 +177,13 @@ h2 { margin: 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; 
 .rackbar .image { flex: none; padding: 7px 9px; line-height: 0; color: var(--ink-faint); background: none; border: 1px solid var(--rule); border-radius: 4px; }
 .rackbar .image:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .rackbar .image:disabled { opacity: .45; cursor: default; }
+/* MELANGE DES LETTRES : meme habillage que le bouton photo juste a cote, avec
+   un badge qui rappelle le raccourci -- 1 en QWERTY, & en AZERTY, 1 du pave
+   numerique -- cache tant que le reglage ne l'a pas active (voir
+   #rj-melange). */
+.rb-melange { position: relative; }
+.rb-melange[hidden] { display: none; }
+.rb-melange .touche { position: absolute; right: -4px; bottom: -4px; min-width: 13px; padding: 0 2px; border-radius: 6px; background: var(--accent); color: #FFFFFF; font-family: "IBM Plex Mono", monospace; font-size: 9px; line-height: 13px; text-align: center; }
 /* LA RANGEE NE TOUCHE PAS A LA HAUTEUR DE LA BARRE, ET SE CENTRE SUR LA GRILLE.
    Elle occupe une place fixe -- celle d'un caramel -- meme vide : sans cela,
    poser toutes ses lettres retractait la barre et la grille remontait d'un
@@ -477,6 +484,24 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .solveur-declencheur:hover { background: var(--accent); color: #FFFFFF; }
 .solveur-declencheur[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
 .solveur-declencheur[hidden] { display: none; }
+
+/* LE REGLAGE DE JEU RAPIDE, AU-DESSUS DE L'ANAGRAMMEUR : deux options qui se
+   changent en pleine partie sans passer par les parametres du site -- le
+   curseur a quatre directions (SPEC.md §18) et le melange du tirage. Empile
+   au-dessus du "A" dans une colonne calee sur le meme bord bas que lui
+   (`align-self: flex-end`) : ajouter ce bouton ne doit pas deplacer l'icone
+   que le mini solveur utilise comme ancre (voir `.solveur-mini` plus haut). */
+.reglages-jeu-colonne { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; align-self: flex-end; }
+.reglages-jeu-declencheur { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 2px solid var(--accent); border-radius: 50%; background: var(--accent-bg); color: var(--accent); box-shadow: 0 2px 8px var(--shadow); }
+.reglages-jeu-declencheur:hover { background: var(--accent); color: #FFFFFF; }
+.reglages-jeu-declencheur[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
+/* Ancre sur le bouton lui-meme (`bottom: 100%`), pas sur un decalage fixe en
+   pixels : le panneau reste juste au-dessus de son declencheur quel que soit
+   ce qui bouge autour. */
+.reglages-jeu-panneau { position: absolute; bottom: 100%; right: 0; margin-bottom: 8px; width: 240px; padding: 6px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 10px 30px var(--shadow); z-index: 26; }
+.reglages-jeu-panneau[hidden] { display: none; }
+.reglages-jeu-panneau .bascule { border-radius: 5px; }
+.reglages-jeu-panneau .bascule:hover { background: var(--hover); }
 
 .roadmap { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ink) 32%, transparent); }
 .roadmap[hidden] { display: none; }
@@ -1205,6 +1230,14 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rc-jeton.argent { background: linear-gradient(160deg, #DDE2E4, #A8B0B4); }
 .rc-jeton.bronze { background: linear-gradient(160deg, #E0B08A, #A9713F); color: #3A2314; }
 
+/* PSEUDO DES SALONS STARS : la premiere lettre se pare de metal pour qui a
+   deja tope WU ou QI, exactement -- rien ne le dit ailleurs, le changement se
+   remarque ou non. Memes degrades que les jetons de records ci-dessus. */
+.lettre-or, .lettre-argent, .lettre-bronze { -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
+.lettre-or { background: linear-gradient(160deg, #F2D07A, #C9A227); }
+.lettre-argent { background: linear-gradient(160deg, #DDE2E4, #A8B0B4); }
+.lettre-bronze { background: linear-gradient(160deg, #E0B08A, #A9713F); }
+
 /* LES JOUEURS, chacun de sa couleur. Elle se derive du nom : rien a
    enregistrer, et le meme joueur garde la sienne d'un tableau a l'autre. */
 /* LES NOMS TIENNENT SUR UNE LIGNE. Ils passaient a la ligne suivante, ce qui
@@ -1780,6 +1813,16 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 <div class="rackbar">
   <div class="stat"><span>Coup</span><b id="rb-move">—</b></div>
   <div class="tiles" id="rb-tiles"></div>
+  <button type="button" class="image rb-melange" id="rb-melange" title="Mélanger les lettres (1)" aria-label="Mélanger les lettres" hidden>
+    <svg viewBox="0 0 24 24" width="16" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="16 3 21 3 21 8"></polyline>
+      <line x1="4" y1="20" x2="21" y2="3"></line>
+      <polyline points="21 16 21 21 16 21"></polyline>
+      <line x1="15" y1="15" x2="21" y2="21"></line>
+      <line x1="4" y1="4" x2="9" y2="9"></line>
+    </svg>
+    <span class="touche">1</span>
+  </button>
   <div class="stat" id="rb-reste-wrap" hidden><span>Reste</span><b id="rb-reste">—</b></div>
   <div class="stat" id="rb-neg-wrap" hidden><span>Négatif</span><b id="rb-neg">0</b></div>
   <div class="stat" id="rb-score-wrap" hidden><span>Score</span><b id="rb-score">0</b></div>
@@ -1949,7 +1992,30 @@ button.word:hover { color: var(--accent); border-color: transparent; }
           title="Passer le tour (Ctrl+Entrée)" aria-label="Passer le tour" hidden>✕</button>
         <button type="button" class="abandon" id="abandon-partie"
           title="Abandonner la partie" aria-label="Abandonner la partie" hidden>✕✕</button>
-        <button type="button" id="solveur-jeu" class="solveur-declencheur" title="Anagrammeur" aria-label="Anagrammeur" hidden>A</button>
+        <div class="reglages-jeu-colonne">
+          <div class="reglages-jeu-panneau" id="reglages-jeu-panneau" hidden>
+            <button type="button" class="bascule" id="rj-quatre" aria-pressed="false">
+              <span class="voyant"></span>Curseur à quatre directions
+            </button>
+            <button type="button" class="bascule" id="rj-melange" aria-pressed="false">
+              <span class="voyant"></span>Mélange des lettres
+            </button>
+          </div>
+          <button type="button" id="reglages-jeu-open" class="reglages-jeu-declencheur"
+                  title="Paramètres de jeu" aria-label="Paramètres de jeu" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="currentColor" fill-rule="evenodd" d="
+                M10.09 1.17 L13.91 1.17 L13.48 4.75 L16.08 5.83 L18.31 2.99 L21.01 5.69
+                L18.17 7.92 L19.25 10.52 L22.83 10.09 L22.83 13.91 L19.25 13.48
+                L18.17 16.08 L21.01 18.31 L18.31 21.01 L16.08 18.17 L13.48 19.25
+                L13.91 22.83 L10.09 22.83 L10.52 19.25 L7.92 18.17 L5.69 21.01
+                L2.99 18.31 L5.83 16.08 L4.75 13.48 L1.17 13.91 L1.17 10.09
+                L4.75 10.52 L5.83 7.92 L2.99 5.69 L5.69 2.99 L7.92 5.83 L10.52 4.75 Z
+                M12 8.3 a3.7 3.7 0 1 0 0 7.4 a3.7 3.7 0 1 0 0-7.4 Z"/>
+            </svg>
+          </button>
+          <button type="button" id="solveur-jeu" class="solveur-declencheur" title="Anagrammeur" aria-label="Anagrammeur" hidden>A</button>
+        </div>
       </div>
       <div class="chat-in">
         <input id="chat-text" maxlength="400" placeholder="Message…" autocomplete="off">
