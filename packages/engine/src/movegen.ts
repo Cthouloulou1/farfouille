@@ -211,6 +211,21 @@ export interface GenOptions {
    * puisqu'ils sont tous des tops valables.
    */
   maxMoves?: number;
+
+  /**
+   * TIRAGE AU SORT DETERMINISTE pour departager deux poses du MEME mot, sur la
+   * MEME case, au MEME score, ou seule la position du joker differe -- par
+   * exemple M(A)NGERA contre MANGER(A). Les deux valent deja le meme score
+   * avant d'arriver ici : aucune des deux positions ne peut donc en faire
+   * perdre.
+   *
+   * Sans graine fournie, le choix retombe sur la variante canonique la plus
+   * petite (moins de jokers, puis le joker le plus tot dans le mot) : c'est ce
+   * que voient les appels qui n'ont pas de partie sous la main (paliers d'une
+   * partie relue, bancs d'essai). La graine vient de (idPartie, numeroDeCoup),
+   * comme celle de `pickTop`, sans quoi l'historique n'est pas rejouable.
+   */
+  random?: () => number;
 }
 
 export interface GenStats {
@@ -248,6 +263,7 @@ export function generateMoves(
   // faisait entre deux listes vides sans que rien ne le signale.
   const wantTiers = Math.max(0, opts.tiers ?? (opts.prune === false ? Infinity : 0));
   const maxMoves = Math.max(1, opts.maxMoves ?? Infinity);
+  const random = opts.random ?? (() => 0);
   const t0 = performance.now();
   const E = gaddag.edges;
   // Tables de la partie jouee sur CETTE grille -- valeurs des lettres et primes.
@@ -266,6 +282,14 @@ export function generateMoves(
   const cellBlank = new Uint8Array(OFF * 2 + 4);
 
   const best = new Map<string, Move>();
+  /**
+   * Pour chaque coup retenu dans `best`, les variantes qui posent le MEME mot
+   * sur la MEME case au MEME score, joker mis a part sur une lettre ou une
+   * autre. Triees puis departagees au sort une fois la generation finie --
+   * jamais au fil de l'eau, pour rester independant de l'ordre d'exploration
+   * (SPEC.md §5 : deux serveurs doivent voir la meme liste).
+   */
+  const variants = new Map<string, { rank: number; placements: Placement[] }[]>();
   let raw = 0;
   let bestScore = -1;
   /** Score minimum pour meriter d'etre materialise. */
@@ -305,7 +329,9 @@ export function generateMoves(
     const cut = kept[kept.length - 1] ?? bestScore;
     // Le seuil ne redescend jamais : un coup deja ecarte ne pourrait pas revenir.
     if (cut > threshold) threshold = cut;
-    for (const [k, m] of best) if (m.score < threshold) best.delete(k);
+    for (const [k, m] of best) {
+      if (m.score < threshold) { best.delete(k); variants.delete(k); }
+    }
 
     // Amorti : sans cela, une position a 163 isotops declencherait un tri a
     // chaque coup retenu.
@@ -361,33 +387,23 @@ export function generateMoves(
     // ce qui tranche aussi entre deux affectations de jokers concurrentes.
     const k = `${dir}${sx},${sy}:${word}`;
     const prev = best.get(k);
-    let take = prev === undefined || score > prev.score;
-    if (!take && prev !== undefined && score === prev.score) {
-      // MEME mot, MEME case, MEME score, mais les jokers ne sont pas aux memes
-      // lettres. Sans departage canonique on garderait celui trouve en premier,
-      // donc un resultat dependant de l'ordre d'exploration -- et l'ordre change
-      // avec l'elagage. Constate sur ?ADEFSZ : DESAMEZ vaut 148 points que le
-      // joker soit sur l'un ou l'autre E, mais le caramel pose differe, la
-      // grille evolue autrement, et les parties divergent 110 coups plus loin.
-      //
-      // Regle : le moins de jokers possible, puis les jokers le plus tot dans
-      // le mot. Arbitraire, mais fixe.
-      take = blankRank < prevBlankRank(prev, dir);
-    }
-    if (take) {
+    if (prev === undefined || score > prev.score) {
       best.set(k, { dir, x: sx, y: sy, word, placements, score });
+      variants.set(k, [{ rank: blankRank, placements }]);
       if (best.size >= trimAt) trim();
+      return;
     }
-  }
-
-  /** Meme rang que `blankRank`, recalcule depuis un coup deja retenu. */
-  function prevBlankRank(m: Move, d: Dir): number {
-    let r = 0;
-    for (const p of m.placements) {
-      if (!p.blank) continue;
-      r += 0x10000 + (1 << (d === "H" ? p.x - m.x : p.y - m.y));
+    if (score === prev.score) {
+      // MEME mot, MEME case, MEME score, mais les jokers ne sont pas aux memes
+      // lettres -- par exemple M(A)NGERA contre MANGER(A). Les deux valent deja
+      // le meme score : aucune des deux positions ne fait perdre de points, donc
+      // rien ne justifie de toujours preferer la meme. On les empile pour un
+      // tirage au sort une fois la generation finie (voir plus bas), au lieu de
+      // trancher tout de suite sur l'ordre d'exploration -- il change avec
+      // l'elagage, et deux serveurs qui explorent dans un ordre different
+      // doivent quand meme voir le meme tirage.
+      variants.get(k)!.push({ rank: blankRank, placements });
     }
-    return r;
   }
 
   function goOn(
@@ -593,6 +609,20 @@ export function generateMoves(
   for (; i < tasks.length; i++) { run(tasks[i]!); explored++; }
 
   trim();
+
+  // Tirage au sort des positions de joker a egalite de score, une fois pour
+  // toutes : le trier ICI, sur la liste complete des variantes, est ce qui le
+  // rend independant de l'ordre d'exploration (voir `record`).
+  for (const [k, m] of best) {
+    const vs = variants.get(k);
+    if (vs === undefined || vs.length < 2) continue;
+    vs.sort((a, b) => a.rank - b.rank);
+    const pick = vs[Math.floor(random() * vs.length)]!;
+    if (pick.placements !== m.placements) {
+      best.set(k, { dir: m.dir, x: m.x, y: m.y, word: m.word, placements: pick.placements, score: m.score });
+    }
+  }
+
   const moves = [...best.values()];
   return {
     moves,

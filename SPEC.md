@@ -370,15 +370,25 @@ utiliser la vraie lettre est donc toujours au moins aussi bon. L'interface n'a
 besoin d'aucune touche spéciale.
 
 > ⚠️ **Quand deux affectations donnent le MÊME score, il faut quand même
-> trancher, et de façon canonique.** Maximiser le score ne suffit pas : sur le
-> tirage `?ADEFSZ`, le mot `DESAMEZ` vaut 148 points que le joker soit sur l'un
-> ou l'autre de ses deux `E`. Mais le caramel posé diffère — un joker à 0 point
-> au lieu d'un vrai `E` — la grille évolue autrement, et deux moteurs qui
+> trancher, et de façon déterministe.** Maximiser le score ne suffit pas : sur
+> le tirage `?ADEFSZ`, le mot `DESAMEZ` vaut 148 points que le joker soit sur
+> l'un ou l'autre de ses deux `E`. Mais le caramel posé diffère — un joker à 0
+> point au lieu d'un vrai `E` — la grille évolue autrement, et deux moteurs qui
 > exploreraient dans un ordre différent joueraient des parties différentes. La
 > divergence n'éclate que 110 coups plus loin.
 >
-> Règle retenue : **le moins de jokers possible, puis les jokers le plus tôt
-> dans le mot.** Arbitraire, mais fixe.
+> Aucune des deux positions ne coûte de points : ni l'une ni l'autre n'est donc
+> plus légitime que l'autre. Règle retenue : **un tirage au sort**, comme celui
+> qui départage les isotops (§5) — même graine, (idPartie, numéroDeCoup), pour
+> que l'historique reste rejouable et que deux serveurs s'accordent. Avant ce
+> tirage, la liste des positions à égalité est mise dans un ordre canonique
+> (indépendant de l'ordre d'exploration), pour que le sort tombe sur la même
+> case quel que soit le mode de génération.
+>
+> Sans graine (paliers d'une partie relue, bancs d'essai), le choix retombe sur
+> la variante canonique la plus petite — l'ancienne règle, gardée comme
+> repli déterministe : le moins de jokers possible, puis les jokers le plus tôt
+> dans le mot.
 
 ---
 

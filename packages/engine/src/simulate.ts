@@ -45,10 +45,11 @@ export function simulate(
 
   for (let n = 1; n <= moves; n++) {
     const draw = bag.draw(reliquat);
-    const gen = generateMoves(board, gaddag, draw.rack);
+    const alea = mulberry32(moveSeed(gameId, n));
+    const gen = generateMoves(board, gaddag, draw.rack, { random: alea });
     if (gen.moves.length === 0) break;
 
-    const top = pickTop(gen.moves, mulberry32(moveSeed(gameId, n)));
+    const top = pickTop(gen.moves, alea);
     if (top === null) break;
 
     // Multiplicateur de mot cumule : detecte les cases bonus qui se cumulent.

@@ -142,9 +142,10 @@ parentPort!.on(
     const t0 = performance.now();
     const passe = new Board(dawg, deserialiser(config));
     passe.place(msg.avant);
-    const gen = generateMoves(passe, gaddag, msg.rack, { prune: false });
-    // La graine ne sert qu'a departager les isotops ; les paliers, eux, ne
-    // dependent que de la position et du tirage.
+    // La graine ne sert qu'a departager les isotops et les positions de joker
+    // a egalite de score ; les paliers, eux, ne dependent que de la position
+    // et du tirage.
+    const gen = generateMoves(passe, gaddag, msg.rack, { prune: false, random: mulberry32(1) });
     const top = pickTop(gen.moves, mulberry32(1), passe.cfg.joker);
     // LE PLAFOND SE POSE ICI, ET PAS DANS LE GENERATEUR.
     //
@@ -179,9 +180,14 @@ parentPort!.on(
     return;
   }
   const t0 = performance.now();
-  const gen = generateMoves(board, gaddag, msg.rack, { tiers: msg.tiers, maxMoves: 120 });
-  const top = pickTop(gen.moves, aleaDuCoup(msg.moveNumber), board.cfg.joker,
-    msg.reliquat);
+  // Meme graine pour les deux : departager les positions de joker a egalite de
+  // score dans le generateur, puis les isotops dans `pickTop`, consomme la
+  // meme suite deterministe dans le meme ordre a chaque rejeu.
+  const alea = aleaDuCoup(msg.moveNumber);
+  const gen = generateMoves(board, gaddag, msg.rack, {
+    tiers: msg.tiers, maxMoves: 120, random: alea,
+  });
+  const top = pickTop(gen.moves, alea, board.cfg.joker, msg.reliquat);
   const result = top === null ? null : {
     top: top.top,
     bestScore: top.bestScore,
