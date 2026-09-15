@@ -12,7 +12,7 @@
 import { mkdirSync, openSync, writeSync, fsyncSync, readFileSync, existsSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Game } from "./game.ts";
+import { Game, type PartieFigee } from "./game.ts";
 import { marqueDeLaMontante, type Montante } from "./montante.ts";
 import type { Lecture } from "./records.ts";
 import { serialiser, deserialiser, type ConfigPartie, type ConfigSerialisee } from "../../engine/src/config.ts";
@@ -87,6 +87,27 @@ export interface Salon {
    */
   vue: Lecture | null;
   creeLe: number;
+  /**
+   * LA PARTIE D'EPREUVE QUE CE SALON SERT, ou `null` (SPEC.md §29).
+   *
+   * Un salon d'epreuve est prive, ses reglages sont ceux de la partie figee et
+   * ne se changent pas, et sa partie ne s'efface jamais : une manche la cite.
+   */
+  epreuve: SalonDEpreuve | null;
+}
+
+/** Ce qu'un salon d'epreuve sait de la partie qu'il sert. */
+export interface SalonDEpreuve {
+  /** L'epreuve : `pdj:2026-09-15:ods9`. */
+  epreuve: string;
+  /** Le numero de la partie dans l'epreuve. */
+  partie: number;
+  /** La partie figee servie. */
+  figee: string;
+  /** Qui a ouvert le salon. */
+  compte: string;
+  /** La manche lancee dans ce salon, ou `null` tant qu'on n'a pas lance. */
+  manche: string | null;
 }
 
 const salons = new Map<string, Salon>();
@@ -211,6 +232,7 @@ export function resume(s: Salon, connectes: number, permanent = false) {
 export async function ouvrirSalon(opts: {
   id: string; nom: string; proprietaire: string | null; prive: boolean;
   layout: LayoutName; cfg: ConfigPartie; nouveau: boolean; creeLe?: number;
+  epreuve?: SalonDEpreuve; figee?: PartieFigee;
 }): Promise<Salon> {
   if (salons.has(opts.id)) throw new Error(`le salon "${opts.id}" existe deja`);
   if (salons.size >= MAX_SALONS) {
@@ -221,19 +243,28 @@ export async function ouvrirSalon(opts: {
   const enregistree = Game.configEnregistree(opts.id);
   const cfg = enregistree !== null ? deserialiser(enregistree) : opts.cfg;
 
-  const partie = new Game(opts.id, opts.layout, cfg);
+  const epreuve = opts.epreuve ?? null;
+  if (epreuve !== null && opts.figee === undefined) {
+    throw new Error(`le salon d'epreuve "${opts.id}" n'a pas sa partie figee`);
+  }
+  const partie = new Game(opts.id, opts.layout, cfg, null,
+    // MUETTE : le terminal de l'hote ne lit pas les tirages ni les tops d'une
+    // partie que d'autres n'ont pas encore jouee (SPEC.md §29).
+    epreuve === null ? {} : { figee: opts.figee, epreuve: true, muet: true });
   await partie.start();
   const s: Salon = {
     id: opts.id, nom: opts.nom, proprietaire: opts.proprietaire,
     gerant: opts.proprietaire, prive: opts.prive, invites: new Set(),
     layout: opts.layout, partie, montante: null, vue: null,
     creeLe: opts.creeLe ?? Date.now(),
+    epreuve,
   };
   salons.set(s.id, s);
   if (opts.nouveau) {
     inscrire({
       t: "ouvert", id: s.id, nom: s.nom, proprietaire: s.proprietaire,
       prive: s.prive, layout: s.layout, config: serialiser(cfg), creeLe: s.creeLe,
+      ...(epreuve === null ? {} : { epreuve }),
     });
   }
   return s;
@@ -325,6 +356,9 @@ export function confierLesReglages(s: Salon, presents: string[]): string | null 
  * pesait a elle seule 9,4 Mo.
  */
 export function meriteDEtreGardee(s: Salon): boolean {
+  // UNE PARTIE D'EPREUVE NE S'EFFACE JAMAIS, finie ou non : une manche la cite,
+  // et une manche en pause se reprend dans un salon rouvert sur ce journal-la.
+  if (s.epreuve !== null) return true;
   return s.partie.cfg.bornes !== null && s.partie.finie;
 }
 

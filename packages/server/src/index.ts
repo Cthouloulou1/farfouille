@@ -15,7 +15,7 @@ import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
-import { Game, type PlayedMove } from "./game.ts";
+import { Game, type PlayedMove, type RaisonDeFin } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
@@ -39,6 +39,13 @@ import {
 } from "./montante.ts";
 import { configDeLEtape, etapeMontante, montantePossible } from "../../engine/src/montante.ts";
 import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lecteur.ts";
+import {
+  assurerLesPartiesDuJour, cumulDeLEpreuve, epreuveDuJour, finirLaManche, joursConnus,
+  lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId, ouvrirLeCompetitif,
+  ouvrirUneManche, partieFigee, partiesDuJour, resultatsDeLaPartie, salonDeLaPartie,
+  type Jeu, type Manche,
+} from "./competitif.ts";
+import { LEXIQUES_DU_JOUR, jourDe, jourValide, nomDeLaPartie } from "../../engine/src/epreuves.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
 const ANNEXES: readonly Annexe[] = [
@@ -395,6 +402,11 @@ function publicState(s: Salon) {
     rejeuOuvert: REJEU_OUVERT.has(s.id),
     /** Grille permanente : ni supprimee, ni relancee. */
     permanent: estPermanent(s),
+    // LA PARTIE D'EPREUVE QUE CE SALON SERT (SPEC.md §29), ou `null`.
+    epreuve: epreuvePublique(s),
+    // Une manche en pause montre le temps que son coup avait deja dure.
+    enPause: g.enPause,
+    ecoulePause: g.ecoulePause,
     sac: g.restantDuSac(),
     finie: g.finie,
     solving: g.solving,
@@ -476,6 +488,15 @@ function surveiller(s: Salon): void {
   }));
   // Le moteur parle aussi : la liste des trouveurs du duplicate vient de lui.
   s.partie.onChat((m) => broadcast(s.id, { t: "said", msg: m }));
+  // UN SALON D'EPREUVE N'ALIMENTE PAS LES RECORDS. Sa partie se met en pause,
+  // se referme et se rouvre au fil des retours du joueur : l'observation, qui
+  // ne survit pas a une fermeture, y compterait ses mots plusieurs fois. Ce
+  // qu'il ecrit, c'est sa manche (SPEC.md §29).
+  if (s.epreuve !== null) {
+    s.vue = null;
+    s.partie.onFin((raison) => cloreLaMancheDuSalon(s, raison));
+    return;
+  }
   // LE SALON OBSERVE SA PROPRE PARTIE (SPEC.md §23). N'ecrit rien si ses
   // reglages ne peuvent porter aucun record -- une grille sans fin, un
   // duplicate, un sac qui ne s'epuise pas. C'est ici, et nulle part ailleurs,
@@ -489,6 +510,92 @@ function surveiller(s: Salon): void {
   // mondiale retiendrait ses onze mille coups pour personne.
   s.vue = observer(s.partie,
     s.montante === null ? undefined : (e) => cloreLEtapeDeLaMontante(s, e));
+}
+
+/** Ce que les clients savent de la partie d'epreuve d'un salon. */
+function epreuvePublique(s: Salon) {
+  const e = s.epreuve;
+  if (e === null) return null;
+  const quoi = lireLEpreuve(e.epreuve);
+  const jour = quoi === null ? undefined : partiesDuJour(quoi.jour, quoi.lexique);
+  const p = jour?.parties.find((x) => x.n === e.partie);
+  const m = e.manche === null ? undefined : mancheParId(e.manche);
+  return {
+    epreuve: e.epreuve, jour: quoi?.jour ?? null, lexique: quoi?.lexique ?? null,
+    partie: e.partie, config: p?.config ?? null, compte: e.compte,
+    lancee: m !== undefined, jeu: m?.jeu ?? null, noms: m?.noms ?? "",
+    equipe: m?.equipe ?? [], close: m !== undefined && m.fin !== null,
+  };
+}
+
+/**
+ * La partie d'un salon d'epreuve vient de finir : sa manche s'ecrit.
+ *
+ * UNE PARTIE ABANDONNEE N'EST PAS ENREGISTREE (SPEC.md §29). Le bouton n'existe
+ * pas dans une manche ; la regle vaut quand meme ici, pour un message force.
+ */
+function cloreLaMancheDuSalon(s: Salon, raison: RaisonDeFin): void {
+  const id = s.epreuve?.manche ?? null;
+  if (id === null || raison === "abandon") return;
+  const fin = finirLaManche(id, s.partie.moves, s.partie.cfg.jouables);
+  if (fin === null) return;
+  console.log(`[competitif] manche close dans "${s.id}" : ${fin.coups.length} coups, `
+    + `${(fin.temps / 1000).toFixed(2)} s, negatif ${fin.negatif}`);
+  broadcast(s.id, { t: "state", state: publicState(s) });
+}
+
+/**
+ * Ouvre le salon ou se joue une partie d'epreuve -- ou le rend s'il l'est deja.
+ *
+ * LE SALON EST PROPRE A UN COMPTE ET A UNE PARTIE, et son identifiant ne change
+ * pas : un salon referme parce que son joueur est parti se rouvre sur le meme
+ * journal, et la manche en pause reprend la ou elle en etait.
+ */
+async function ouvrirLeSalonDEpreuve(o: {
+  epreuve: string; partie: number; compte: string; manche?: Manche;
+}): Promise<Salon> {
+  const id = o.manche?.salon ?? salonDeLaPartie(o.epreuve, o.partie, o.compte);
+  const deja = salon(id);
+  if (deja !== undefined) return deja;
+  const quoi = lireLEpreuve(o.epreuve);
+  const p = quoi === null ? undefined
+    : partiesDuJour(quoi.jour, quoi.lexique)?.parties.find((x) => x.n === o.partie);
+  if (p === undefined) throw new Error("cette partie n'existe pas");
+  const figee = partieFigee(p.figee);
+  if (figee === null) throw new Error("la partie figée est introuvable");
+  const proprietaire = o.manche?.compte ?? o.compte;
+  const s = await ouvrirSalon({
+    id, nom: `P${p.n} · ${nomDeLaPartie(p.config)}`, proprietaire, prive: true,
+    layout: LAYOUT, cfg: deserialiser(p.config), nouveau: true,
+    epreuve: {
+      epreuve: o.epreuve, partie: o.partie, figee: figee.id, compte: proprietaire,
+      manche: o.manche?.id ?? null,
+    },
+    figee,
+  });
+  apresOuvertureDEpreuve(s);
+  return s;
+}
+
+/**
+ * Ce qu'un salon d'epreuve demande une fois ouvert, qu'il soit neuf ou relu du
+ * registre : ses invites, sa diffusion, et la manche d'une partie finie pendant
+ * que personne ne pouvait l'ecrire.
+ */
+function apresOuvertureDEpreuve(s: Salon): void {
+  const e = s.epreuve!;
+  const m = e.manche === null ? undefined : mancheParId(e.manche);
+  if (m !== undefined) for (const n of m.equipe) s.invites.add(n);
+  surveiller(s);
+  if (m !== undefined && m.fin === null && s.partie.finie && s.partie.raisonDeLaFin !== "abandon") {
+    finirLaManche(m.id, s.partie.moves, s.partie.cfg.jouables);
+  }
+  // Une manche lancee dont aucun tirage n'est parti -- le serveur s'est arrete
+  // entre les deux -- est lancee quand meme : sa tentative est deja consommee.
+  // Son premier coup s'ouvrira a l'arrivee d'un de ses joueurs.
+  if (m !== undefined && m.fin === null && !s.partie.demarree) void s.partie.demarrer();
+  // Personne n'y entrera peut-etre : il se referme alors comme un autre.
+  rangerPlusTard(s.id);
 }
 
 /**
@@ -657,6 +764,25 @@ async function ouvrirLesSalons(): Promise<void> {
   // Les salons crees lors des sessions precedentes reprennent ou ils en etaient.
   for (const e of salonsEnregistres()) {
     if (e["id"] === GAME_ID || e["id"] === GAME_ID_EN) continue;
+    // UN SALON D'EPREUVE RETROUVE SA PARTIE FIGEE ET SA MANCHE : le registre ne
+    // porte que ce qui ne change pas, la manche vit au journal du competitif.
+    if (e["epreuve"] !== undefined) {
+      try {
+        const ep = e["epreuve"] as { epreuve: string; partie: number; figee: string; compte: string };
+        const figee = partieFigee(ep.figee);
+        if (figee === null) throw new Error("partie figée introuvable");
+        const s = await ouvrirSalon({
+          id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? ep.compte,
+          prive: true, layout: (e["layout"] ?? LAYOUT) as LayoutName,
+          cfg: deserialiser(figee.config), nouveau: false, creeLe: e["creeLe"],
+          epreuve: { ...ep, manche: mancheDuSalon(e["id"])?.id ?? null }, figee,
+        });
+        apresOuvertureDEpreuve(s);
+      } catch (err) {
+        console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
+      }
+      continue;
+    }
     try {
       const s = await ouvrirSalon({
         id: e["id"], nom: e["nom"] ?? e["id"], proprietaire: e["proprietaire"] ?? null,
@@ -955,6 +1081,103 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     json(res, 200, {
       lexique: confondus ? LEXIQUE_TOUS : lexique,
       longueur: longueur ?? null, lignes,
+    });
+    return;
+  }
+
+  // ------------------------------------------------------------ le competitif
+  //
+  // Les parties du jour d'un lexique, a une date. JAMAIS CELLES DE DEMAIN : elles
+  // sont figees d'avance, et ne se montrent pas avant de paraitre (SPEC.md §29).
+  if (url === "/api/competitif/jour" && req.method === "GET") {
+    const p = parametres(req);
+    const moi = quiParle(req);
+    const lexique = (LEXIQUES_DU_JOUR as readonly string[]).includes(p.get("lexique") ?? "")
+      ? p.get("lexique")! : LEXIQUES_DU_JOUR[0];
+    const aujourdhui = jourDe(Date.now());
+    const demande = p.get("jour");
+    const jour = jourValide(demande) && demande <= aujourdhui ? demande : aujourdhui;
+    const j = partiesDuJour(jour, lexique);
+    const epreuve = epreuveDuJour(jour, lexique);
+    json(res, 200, {
+      jour, aujourdhui, lexique, pret: j !== undefined,
+      jours: joursConnus(lexique),
+      parties: (j?.parties ?? []).map((x) => {
+        const m = moi === undefined ? undefined : mancheDuCompte(moi.pseudo, epreuve, x.n);
+        return {
+          n: x.n, config: x.config,
+          etat: m === undefined ? "a-jouer" : m.fin === null ? "en-cours" : "jouee",
+          temps: m?.fin?.temps ?? null, negatif: m?.fin?.negatif ?? null,
+          joueurs: resultatsDeLaPartie(epreuve, x.n, null).lignes.length,
+        };
+      }),
+    });
+    return;
+  }
+
+  // JOUER UNE PARTIE DU JOUR : on rend le salon ou elle se joue, ouvert au besoin.
+  // Rien n'est consomme ici -- la tentative part au lancement, pas a l'entree.
+  if (url === "/api/competitif/jouer" && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) {
+      json(res, 401, { erreur: "Les parties du jour se jouent avec un compte" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const lexique = String(corps.lexique ?? "");
+    const jour = corps.jour;
+    const n = Number(corps.partie);
+    if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique) || !jourValide(jour)
+        || jour > jourDe(Date.now()) || !Number.isInteger(n)) {
+      json(res, 400, { erreur: "cette partie n'existe pas" });
+      return;
+    }
+    const j = partiesDuJour(jour, lexique);
+    if (j === undefined) {
+      json(res, 503, { erreur: "Les parties du jour se préparent, réessayez dans un instant" });
+      return;
+    }
+    if (!j.parties.some((x) => x.n === n)) { json(res, 404, { erreur: "cette partie n'existe pas" }); return; }
+    const epreuve = epreuveDuJour(jour, lexique);
+    const m = mancheDuCompte(moi.pseudo, epreuve, n);
+    if (m !== undefined && m.fin !== null) {
+      json(res, 409, { erreur: "Vous avez déjà joué cette partie" });
+      return;
+    }
+    try {
+      const s = await ouvrirLeSalonDEpreuve({ epreuve, partie: n, compte: moi.pseudo, manche: m });
+      json(res, 200, { salon: s.id });
+    } catch (e) {
+      json(res, 503, { erreur: (e as Error).message });
+    }
+    return;
+  }
+
+  // LES RESULTATS D'UNE PARTIE, OU LE CUMUL. Les lignes sont publiques ; le
+  // detail des coups ne part qu'a qui a fini la partie (voir `competitif.ts`).
+  if (url === "/api/competitif/resultats" && req.method === "GET") {
+    const p = parametres(req);
+    const moi = quiParle(req);
+    const lexique = p.get("lexique") ?? "";
+    const jour = p.get("jour");
+    const j = jourValide(jour) && jour <= jourDe(Date.now()) ? partiesDuJour(jour, lexique) : undefined;
+    if (j === undefined) { json(res, 404, { erreur: "Aucune partie ce jour-là" }); return; }
+    const epreuve = epreuveDuJour(j.jour, lexique);
+    const parties = j.parties.map((x) => ({ n: x.n, config: x.config }));
+    if (p.get("partie") === "cumul") {
+      json(res, 200, {
+        jour: j.jour, lexique, parties, partie: "cumul",
+        ...cumulDeLEpreuve(epreuve, moi?.pseudo ?? null),
+      });
+      return;
+    }
+    const n = Number(p.get("partie") ?? "1");
+    if (!j.parties.some((x) => x.n === n)) { json(res, 404, { erreur: "cette partie n'existe pas" }); return; }
+    json(res, 200, {
+      jour: j.jour, lexique, parties, partie: n,
+      ...resultatsDeLaPartie(epreuve, n, moi?.pseudo ?? null),
     });
     return;
   }
@@ -1371,6 +1594,21 @@ wss.on("connection", (ws, req) => {
         send(ws, { t: "refus", quoi: "salon", message: "Ce salon est privé" });
         return;
       }
+      // UN SALON D'EPREUVE (SPEC.md §29) : des comptes seulement, et une fois la
+      // manche lancee, ses joueurs seulement. Qui entrerait en cours de partie
+      // verrait les tirages d'une partie qu'il n'a pas encore jouee.
+      if (cible.epreuve !== null) {
+        const estAdmin = compte(inscrit ?? "")?.admin === true;
+        if (inscrit === null && !estAdmin) {
+          send(ws, { t: "refus", quoi: "salon", message: "Les parties du jour se jouent avec un compte" });
+          return;
+        }
+        const m = cible.epreuve.manche === null ? undefined : mancheParId(cible.epreuve.manche);
+        if (m !== undefined && m.fin === null && !m.equipe.includes(nom) && !estAdmin) {
+          send(ws, { t: "refus", quoi: "salon", message: "Cette partie se joue sans vous" });
+          return;
+        }
+      }
       // Deux joueurs du meme nom rendent le classement faux et les statistiques
       // inexploitables : on ne saurait plus a qui attribuer un coup. L'unicite
       // vaut PAR SALON, pas sur tout le serveur (SPEC.md §27) : deux onglets du
@@ -1402,6 +1640,7 @@ wss.on("connection", (ws, req) => {
       send(ws, {
         t: "hello",
         you: nom,
+        epreuve: epreuvePublique(cible),
         gameId: cible.partie.gameId,
         salon: cible.id,
         nomSalon: cible.nom,
@@ -1490,6 +1729,49 @@ wss.on("connection", (ws, req) => {
       return;
     }
 
+    // ------------------------------------------------ la partie d'epreuve
+    //
+    // LANCER : la tentative de chacun part ici, et pas a l'entree du salon. Seul
+    // ou a plusieurs sur un compte, une manche d'un joueur ; avec des comptes
+    // invites, une manche d'equipe en topping collaboratif (SPEC.md §29).
+    if (msg.t === "epreuve-lancer") {
+      const e = s.epreuve;
+      if (e === null || e.manche !== null) return;
+      if (moi.nom !== e.compte) {
+        send(ws, { t: "result", ok: false, message: "seul l'hôte lance la partie" });
+        return;
+      }
+      const presents = occupants(s.id).filter((n) => compte(n) !== undefined);
+      const equipe = presents.length > 1 ? [moi.nom, ...presents.filter((n) => n !== moi.nom)] : [moi.nom];
+      for (const nom of equipe) {
+        if (mancheDuCompte(nom, e.epreuve, e.partie) !== undefined) {
+          send(ws, { t: "result", ok: false, message: `${nom} a déjà joué cette partie` });
+          return;
+        }
+      }
+      const jeu: Jeu = equipe.length > 1 ? "equipe" : msg.jeu === "compte" ? "compte" : "seul";
+      const m = ouvrirUneManche({
+        epreuve: e.epreuve, partie: e.partie, salon: s.id, compte: moi.nom, jeu,
+        noms: jeu === "compte" ? String(msg.noms ?? "").trim() : "", equipe,
+      });
+      e.manche = m.id;
+      for (const nom of equipe) s.invites.add(nom);
+      // Le decompte est coupe seul, et mis quand des comptes partent ensemble.
+      s.partie.decompteImpose = equipe.length > 1;
+      console.log(`[competitif] "${s.id}" lance par ${moi.nom} (${jeu}, ${equipe.length} compte(s))`);
+      await s.partie.demarrer();
+      broadcast(s.id, { t: "state", state: publicState(s) });
+      return;
+    }
+
+    if (msg.t === "pause" || msg.t === "reprendre") {
+      const e = s.epreuve;
+      const m = e === null || e.manche === null ? undefined : mancheParId(e.manche);
+      if (m === undefined || !m.equipe.includes(moi.nom)) return;
+      if (msg.t === "pause") s.partie.mettreEnPause(); else s.partie.reprendre();
+      return;
+    }
+
     if (msg.t === "try") {
       const r = await s.partie.attempt(
         moi.nom, msg.dir as Dir, Number(msg.x), Number(msg.y), String(msg.typed ?? ""),
@@ -1539,6 +1821,10 @@ wss.on("connection", (ws, req) => {
       // megarde. L'ecran cache deja le bouton ; ceci est la regle.
       if (estPermanent(s)) {
         send(ws, { t: "result", ok: false, message: "cette grille est permanente" });
+        return;
+      }
+      if (s.epreuve !== null) {
+        send(ws, { t: "result", ok: false, message: "les réglages d'une partie du jour ne changent pas" });
         return;
       }
       if (s.proprietaire === null || s.gerant !== moi.nom) {
@@ -1714,6 +2000,7 @@ wss.on("connection", (ws, req) => {
     // prendre effet -- contrairement au reste des reglages, qui passe par
     // "relancer" plus haut.
     if (msg.t === "salonPrive") {
+      if (s.epreuve !== null) return;
       const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
       if (!estAdmin && s.gerant !== moi.nom) {
         send(ws, { t: "result", ok: false, message: "seul l'hôte règle la confidentialité du salon" });
@@ -1732,6 +2019,8 @@ wss.on("connection", (ws, req) => {
     }
 
     if (msg.t === "inviter") {
+      // Une manche lancee ne prend plus personne : ses joueurs sont fixes.
+      if (s.epreuve !== null && s.epreuve.manche !== null) return;
       const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
       if (!estAdmin && s.gerant !== moi.nom) {
         send(ws, { t: "result", ok: false, message: "seul l'hôte invite dans le salon" });
@@ -1775,6 +2064,13 @@ wss.on("connection", (ws, req) => {
           return;
         }
         await s.partie.abandonnerLeCoup();
+        return;
+      }
+      // UNE MANCHE NE S'ABANDONNE PAS, meme par l'administration : elle ne
+      // serait pas enregistree, et le geste ne servirait qu'a perdre sa
+      // tentative (SPEC.md §29).
+      if (s.epreuve !== null) {
+        send(ws, { t: "result", ok: false, message: "cette action n'est pas proposée ici" });
         return;
       }
       // ABANDONNER LA PARTIE : reserve a l'hote, ou un administrateur -- et
@@ -1951,7 +2247,11 @@ function rangerPlusTard(id: string): void {
 // raison. Un SIGKILL ne laisse rien passer : ils restent, et le prochain
 // demarrage les reconnait comme perimes puisque leur processus n'existe plus.
 const rendreLesVerrous = (): void => {
-  for (const s of tousLesSalons()) s.partie.releaseLock();
+  for (const s of tousLesSalons()) {
+    // Une manche qui joue s'ecrit en pause : elle reprendra au temps qu'elle avait.
+    s.partie.pauseDArret();
+    s.partie.releaseLock();
+  }
 };
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
   process.on(signal, () => { rendreLesVerrous(); process.exit(0); });
@@ -1976,6 +2276,7 @@ http.listen(PORT, () => {
   if (REVEAL) console.log('  mode --reveler : le bouton "révéler le top" est visible');
   lireLesComptes();
   ouvrirLesRecords();
+  ouvrirLeCompetitif();
   void assurerLesAdmins(ADMINS, ADMIN_MDP);
 
   console.log(`
@@ -1984,4 +2285,12 @@ http.listen(PORT, () => {
   // le top d'un gros tirage sur une grande grille prend des minutes, et faire
   // attendre le site pendant ce temps donnait un serveur injoignable.
   void ouvrirLesSalons();
+  // LES PARTIES DU JOUR SE FIGENT EN ARRIERE-PLAN : aujourd'hui et demain, puis
+  // toutes les dix minutes, pour que le changement de jour les trouve pretes.
+  const figer = (): void => {
+    void assurerLesPartiesDuJour(LAYOUT).catch((e) =>
+      console.error(`[competitif] parties du jour non figees : ${(e as Error).message}`));
+  };
+  figer();
+  setInterval(figer, 10 * 60_000).unref();
 });

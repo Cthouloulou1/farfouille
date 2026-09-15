@@ -1375,6 +1375,82 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pr-sols { max-height: 560px; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 0; }
 .pr-attente { padding: 10px 15px; font-size: 12.5px; color: var(--ink-faint); }
 
+/* ------------------------------------------------------------ LE COMPETITIF
+   Voir SPEC.md §29. Les parties du jour a gauche, les tournois a droite. */
+.competitif-page { padding-top: 14px; width: min(100%, max(70vw, 1100px)); margin: 0 auto; }
+.cp-colonnes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 900px) { .cp-colonnes { grid-template-columns: minmax(0, 1fr); } }
+.cp-tete { display: flex; align-items: baseline; gap: 12px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--rule); }
+.cp-tete h1 { margin: 0; font-size: 19px; font-weight: 600; }
+.cp-date { margin-left: auto; font-size: 13px; color: var(--ink-faint); }
+.cp-parties { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+/* UNE LIGNE PAR PARTIE : le numero, le nom, puis les deux gestes. Le numero se
+   lit de loin, c'est lui qu'on cite (« j'ai rate la P2 »). */
+.cp-partie { display: grid; grid-template-columns: 38px minmax(0, 1fr) 150px 110px; gap: 8px; align-items: stretch; }
+.cp-num { display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--ink); }
+.cp-nom { display: flex; flex-direction: column; justify-content: center; padding: 10px 12px; background: var(--field); border-radius: 5px; font-size: 14px; color: var(--ink); min-width: 0; }
+.cp-nom span { font-size: 12px; color: var(--ink-faint); }
+.cp-partie button { padding: 10px 8px; border: 1px solid var(--rule); border-radius: 5px; background: var(--panel); color: var(--ink-soft); font-size: 14px; }
+.cp-partie button:hover:not(:disabled) { color: var(--ink); border-color: var(--rule); background: var(--hover); }
+.cp-partie .cp-jouer { color: var(--ink); font-weight: 600; }
+.cp-partie .cp-faite { font-family: var(--mono); font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cp-pied { margin-top: 18px; text-align: center; }
+.cp-jours { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.cp-jours button { padding: 5px 10px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cp-jours button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.cp-jours[hidden] { display: none; }
+
+/* ------------------------------------------------------------ LES RESULTATS
+   Le classement a gauche, la feuille de route a droite. */
+.resultats-page { padding-top: 14px; width: min(100%, 96vw); margin: 0 auto; }
+.rs-corps { display: grid; grid-template-columns: minmax(300px, 25%) minmax(0, 1fr); gap: 20px; padding-top: 12px; align-items: start; }
+@media (max-width: 1100px) { .rs-corps { grid-template-columns: minmax(0, 1fr); } }
+.rs-filtres { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 8px; }
+.rs-filtres .bascule { width: auto; padding: 6px 4px; background: none; border: 0; color: var(--ink-soft); }
+.rs-filtres .bascule:hover { color: var(--ink); background: none; }
+.cp-pied .lien-pied { padding: 0; font: inherit; font-size: 13px; color: var(--ink-faint); background: none; border: 0; }
+.cp-pied .lien-pied:hover { color: var(--accent); text-decoration: underline; background: none; }
+.rs-classement th.triable { cursor: pointer; }
+.rs-classement th.triable:hover { color: var(--ink); }
+.rs-classement tbody tr { cursor: pointer; }
+/* LA LIGNE DE CELUI DONT ON LIT LA FEUILLE se voit dans la liste. */
+.rc-tableau.rs-classement tbody tr.rs-vu { background: var(--accent-bg); }
+.rc-tableau.rs-classement tbody tr.rs-vu td { color: var(--ink); }
+/* JOUEE APRES LA FERMETURE : une teinte, pas un retrait (SPEC.md §29). */
+.rc-tableau.rs-classement tbody tr.rs-tard td { color: var(--ink-faint); font-style: italic; }
+.rc-tableau.rs-classement tbody tr.rs-tard { background: var(--warn-bg); }
+.rs-classement .rs-noms { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
+.rs-classement .rs-noms i { font-style: normal; font-size: .86em; color: var(--ink-faint); }
+.rs-droite h2 { margin: 0 0 8px; }
+.rs-feuille table { font-size: 12.5px; }
+.rs-feuille th { padding: 4px 4px; }
+.rs-feuille td { padding: 3px 4px; cursor: default; }
+.rs-feuille thead tr.rs-groupes th { text-align: center; border-bottom: 0; padding-bottom: 0; }
+.rs-feuille th.rs-sep, .rs-feuille td.rs-sep { border-left: 1px solid var(--rule); }
+.rs-feuille .rs-mot { color: var(--ink); font-weight: 500; }
+.rs-feuille .rs-top { color: var(--accent); font-weight: 600; }
+/* UN COUP RATE SE VOIT SUR TOUTE SA LIGNE. */
+.pr-route.rs-feuille tbody tr.rs-rate { background: var(--warn-bg); }
+.pr-route.rs-feuille tbody tr.rs-rate td { color: var(--ink); }
+.rs-feuille .rs-trouves { padding: 0 6px; border: 0; background: none; color: var(--ink); font: inherit; text-decoration: underline dotted; cursor: pointer; }
+.rs-feuille .rs-trouves:hover { color: var(--accent); background: none; }
+.rs-resume { margin-top: 10px; font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+.rs-resume b { color: var(--ink); font-weight: 500; }
+.rs-vide { padding: 30px 4px; font-size: 13.5px; color: var(--ink-faint); }
+.rs-trouves-boite { width: min(520px, 94vw); }
+.rs-trouves-boite h3 { margin: 14px 0 4px; font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); }
+.rs-trouves-boite .ligne { display: flex; gap: 10px; padding: 4px 8px; font-size: 13.5px; }
+.rs-trouves-boite .ligne .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-trouves-boite .ligne .chiffre { flex: none; font-family: var(--mono); color: var(--ink-soft); }
+
+/* LE BLOC D'UNE PARTIE D'EPREUVE, dans le panneau du salon. */
+#epreuve-wrap .ep-gestes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+#epreuve-wrap .ep-gestes button { padding: 8px 10px; }
+#epreuve-wrap .ep-gestes button i { font-style: normal; color: var(--ink-faint); font-size: .86em; }
+#epreuve-wrap .ep-gestes input { padding: 7px 9px; }
+#epreuve-wrap .ep-principal { font-weight: 600; }
+#epreuve-wrap [hidden] { display: none; }
+
 @media (max-width: 900px) { .side { display: none; } }
 </style>
 </head>
@@ -1610,6 +1686,60 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     </div>
   </div>
 
+  <!-- LE COMPETITIF (SPEC.md §29) : une page, comme les records. Les parties du
+       jour a gauche, les tournois a droite. -->
+  <div class="corps competitif-page" id="corps-competitif" hidden>
+    <div class="cp-colonnes">
+      <section>
+        <div class="cp-tete">
+          <h1>Parties du jour</h1>
+          <span class="cp-date" id="cp-date"></span>
+        </div>
+        <div class="rc-choix" id="cp-lexique"></div>
+        <div class="join-error" id="cp-error" hidden></div>
+        <div class="cp-parties" id="cp-parties"></div>
+        <!-- LE CALENDRIER EST DISCRET : on revient rarement sur un jour passe. -->
+        <div class="cp-pied">
+          <button type="button" class="lien-pied" id="cp-calendrier">Calendrier</button>
+        </div>
+        <div class="cp-jours" id="cp-jours" hidden></div>
+      </section>
+      <section>
+        <div class="cp-tete"><h1>Tournois</h1></div>
+        <div class="rc-vide" id="cp-tournois">Aucun tournoi pour l'instant.</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- LES RESULTATS D'UNE PARTIE DU JOUR : le classement a gauche, la feuille de
+       route a droite, une fois la partie jouee. -->
+  <div class="corps resultats-page" id="corps-resultats" hidden>
+    <div class="pr-tete">
+      <button type="button" class="pr-retour" id="rs-retour">← Parties du jour</button>
+      <h1 id="rs-titre">Résultats</h1>
+      <span class="pr-detail" id="rs-detail"></span>
+    </div>
+    <div class="rc-barre"><div class="rc-vues" id="rs-onglets"></div></div>
+    <div class="rs-corps">
+      <div>
+        <div class="rs-filtres">
+          <button type="button" class="bascule" id="rs-solo" aria-pressed="false">
+            <span class="voyant"></span>Solo seulement
+          </button>
+          <button type="button" class="bascule" id="rs-atemps" aria-pressed="false">
+            <span class="voyant"></span>À temps seulement
+          </button>
+        </div>
+        <div class="rc-tableau rs-classement" id="rs-classement"></div>
+      </div>
+      <div class="rs-droite">
+        <h2 id="rs-feuille-titre">Feuille de route</h2>
+        <div class="pr-route rs-feuille" id="rs-feuille"></div>
+        <div class="rs-resume" id="rs-resume"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- LE REGLEMENT EST DE ZULU, MOT POUR MOT. Il l'a epure lui-meme ; ce n'est
        pas un resume de la specification, c'est ce qu'un joueur a besoin de
        savoir devant le tableau. -->
@@ -1728,6 +1858,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <h2>Joueurs de la partie</h2>
     <div class="tablee-liste" id="tablee-liste"></div>
     <button class="valider" id="tablee-close" type="button">Fermer</button>
+  </div>
+</div>
+
+<!-- QUI A TROUVE UN COUP, ET CE QUE LES AUTRES ONT JOUE (SPEC.md §29). -->
+<div class="voile" id="voile-trouves" hidden>
+  <div class="pseudo rs-trouves-boite">
+    <h2 id="trouves-titre">Coup</h2>
+    <div class="tablee-liste" id="trouves-liste"></div>
+    <button class="valider" id="trouves-close" type="button">Fermer</button>
   </div>
 </div>
 
@@ -1869,6 +2008,26 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <button id="lancer">Lancer la partie</button>
       </div>
       <div class="block fin" id="fin" hidden>Partie terminée</div>
+      <!-- LA PARTIE D'EPREUVE (SPEC.md §29) : comment on la joue avant de la
+           lancer, la pause pendant, les resultats apres. -->
+      <div class="block" id="epreuve-wrap" hidden>
+        <div class="head"><h2 id="ep-titre">Partie du jour</h2></div>
+        <div class="sub" id="ep-detail"></div>
+        <div class="ep-gestes" id="ep-avant" hidden>
+          <button type="button" class="ep-principal" id="ep-seul">Jouer seul <i>(Entrée)</i></button>
+          <button type="button" id="ep-plusieurs">À plusieurs sur ce compte</button>
+          <input id="ep-noms" maxlength="120" placeholder="Noms des joueurs" autocomplete="off" hidden>
+          <button type="button" id="ep-lancer-compte" hidden>Lancer</button>
+          <button type="button" id="ep-inviter">Inviter</button>
+          <button type="button" class="ep-principal" id="ep-equipe" hidden>Jouer en équipe</button>
+        </div>
+        <div class="sub" id="ep-attente" hidden></div>
+        <div class="ep-gestes">
+          <button type="button" id="ep-pause" hidden>Pause</button>
+          <button type="button" class="ep-principal" id="ep-reprendre" hidden>Reprendre</button>
+          <button type="button" class="ep-principal" id="ep-resultats" hidden>Résultats</button>
+        </div>
+      </div>
       <div class="block" id="rejeu-wrap" hidden>
         <button id="rejeu-open" class="rejeu-declencheur">Revoir la partie <i>(Ctrl+E)</i></button>
       </div>

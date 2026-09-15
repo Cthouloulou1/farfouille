@@ -5582,16 +5582,21 @@ au même moment. Il ne partage avec le reste que les salons et la page.
 
 ### La partie est jouée avant qu'on la joue
 
-Une partie figée se calcule **entièrement à sa création**, dans un fil, comme le
-simulateur de la phase 0 (§14). Le salon qui la sert ne tire rien et ne cherche
-rien : il lit le coup suivant. Trois raisons.
+Une partie figée se calcule **entièrement à sa création**. On joue pour de vrai
+une partie ordinaire — sa pioche, son solveur, ses coups d'avance — en révélant
+chaque top dès qu'il est connu, et l'on écrit ce qui en sort. Le salon qui la
+sert ensuite ne tire rien et ne cherche rien : il lit le coup suivant. Trois
+raisons.
 
-1. **Tout le monde joue vraiment la même partie.** La graine ne suffit pas.
-   L'isotop retenu et la case d'un joker à égalité se tirent au sort sur
-   `moveSeed(gameId, n)`, et `gameId` est propre au salon. Deux salons partis de
-   la même graine retiendraient des isotops différents, et leurs grilles
-   divergeraient dès le premier. Figer la partie supprime la question au lieu de
-   la contourner.
+1. **Tout le monde joue vraiment la même partie, même si le code change.** Tout
+   ce que le serveur tire — lettres, isotop retenu, case d'un joker à égalité —
+   découle bien de la graine : deux parties ordinaires sur la même graine jouent
+   la même partie, et c'est vérifié (`check_figees.ts`). Mais la graine ne fait
+   qu'alimenter **le code du moment**. Une règle de tirage retouchée, un
+   départage d'isotops changé — celui du joker par position l'a été le
+   12 septembre — et deux manches jouées avant et après la mise à jour ne jouent
+   plus la même partie. Une partie du jour dure vingt-quatre heures, un tournoi
+   des semaines ; le code change plusieurs fois par jour.
 2. **La charge.** Un salon occupe un fil de calcul, et une vingtaine de salons
    tiennent sur la machine (§16). Cent personnes sur la P1 d'un matin en
    demanderaient cent. Une partie figée n'en demande **aucun** pendant le jeu :
@@ -5601,7 +5606,19 @@ rien : il lit le coup suivant. Trois raisons.
    premier joueur arrive.
 
 Les **paliers du rejeu**, eux, ne sont pas figés. Ils se refont à la demande par
-le fil partagé des parties archivées (§23), qui sait déjà le faire.
+le fil du salon, qui ne sert plus qu'à cela : sa demande de paliers ne lit pas
+sa grille, elle reçoit les caramels posés avant le coup.
+
+**Figer est rapide.** Mesuré au serveur d'essai : une partie normale en 0,4 à
+0,6 s, les trois parties anglaises d'un jour en 1,2 à 1,7 s, les deux parties
+ODS (super grille comprise) en 0,9 à 1,1 s.
+
+**La partie qu'on fige est muette, et celle qu'on sert aussi.** Une partie
+ordinaire écrit chaque tirage et chaque top dans le terminal de l'hôte. Celle
+qui fige les parties de demain les y écrirait d'avance ; celle d'une manche y
+écrirait les tops d'une partie que d'autres n'ont pas encore jouée. Le terminal
+ne dit donc que le nombre de parties figées, le temps que ça a pris, et le
+temps et le négatif d'une manche close.
 
 Une partie figée **ne s'efface jamais** : une épreuve la cite, comme un record
 cite sa partie (§23).
@@ -5631,6 +5648,11 @@ verrait les tirages à deux pour rejouer ensuite seul.
 fermeture de l'épreuve, elle ne laisse aucune ligne au classement, et la
 tentative reste consommée.
 
+**Un salon d'épreuve n'alimente pas les records.** Sa partie se met en pause, se
+referme et se rouvre au fil des retours du joueur, et l'observation des records
+(§23) ne survit pas à une fermeture : elle y compterait ses mots plusieurs fois.
+Ce qu'il écrit, c'est sa manche.
+
 ### La pause
 
 **Un bouton Pause** arrête le chrono du coup. **Fermer l'onglet** ou perdre la
@@ -5640,6 +5662,13 @@ revenir. En équipe, la pause vaut pour toute l'équipe ; chacun pour soi, elle 
 vaut que pour soi.
 
 Revenir sur la page Compétitif montre **Reprendre** à la place de **Jouer**.
+
+**On revient en pause, et c'est le joueur qui reprend.** Rouvrir le salon ne
+relance pas le chrono : on a le temps de se réinstaller. Le salon d'une manche
+se referme quatre-vingt-dix secondes après le départ de son dernier joueur,
+comme un autre, mais sa partie ne s'efface jamais : il se rouvre sur le même
+journal. Un serveur qu'on arrête écrit la pause de chaque manche qui joue ; un
+serveur qui tombe ne le peut pas, et le coup en cours se rend alors entier.
 
 **La pause laisse chercher un tirage chrono arrêté, et c'est accepté.** On
 préfère quelques tricheurs à des joueurs qui ne peuvent pas quitter l'écran.
@@ -6128,6 +6157,24 @@ Tout suit la règle du §11 : **le journal fait foi**, le reste en est une vue.
 
 `jeu` vaut `seul`, `compte` (à plusieurs sur un compte, avec le texte),
 `equipe` (avec les comptes) ou `chacun`.
+
+### Ce qui est construit
+
+**Le 15 septembre 2026 :** les parties figées, la manche et sa pause, le salon
+d'épreuve (seul, à plusieurs sur un compte, en équipe), les parties du jour des
+trois lexiques figées d'avance pour aujourd'hui et demain, la page Compétitif,
+la page des résultats avec son classement, ses deux cases, son cumul et sa
+feuille de route, « Trouvé par » et sa fenêtre.
+
+**Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
+par joueur dans un salon qui n'en tient qu'une), le panneau d'administration et
+les règles du jour, les graphiques, les défis et les notifications, les
+tournois.
+
+```bash
+node packages/server/test/check_figees.ts       # figer, servir, la pause
+node packages/server/test/check_competitif.ts   # manches, bilans, classements
+```
 
 ### L'ordre de construction
 

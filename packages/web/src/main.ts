@@ -37,6 +37,7 @@ import {
 } from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 import { chercherLeMot } from "../../engine/src/chercher.ts";
+import { LEXIQUES_DU_JOUR, nomDeLaPartie } from "../../engine/src/epreuves.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cv = $<HTMLCanvasElement>("cv");
@@ -147,6 +148,26 @@ let debutDeLaPartie = 0;
 let tempsJoue = 0;
 /** Cette partie laisse-t-elle revoir ses coups avant d'etre finie ? */
 let rejeuOuvert = false;
+
+/** Ce que le serveur dit de la partie d'epreuve du salon (SPEC.md §29). */
+interface EpreuveVue {
+  epreuve: string;
+  jour: string | null;
+  lexique: string | null;
+  partie: number;
+  config: ConfigSerialisee | null;
+  compte: string;
+  lancee: boolean;
+  jeu: string | null;
+  noms: string;
+  equipe: string[];
+  close: boolean;
+}
+/** La partie d'epreuve que sert ce salon, ou `null` pour un salon ordinaire. */
+let epreuve: EpreuveVue | null = null;
+/** La manche est en pause, et son coup avait deja dure `ecoulePause`. */
+let enPause = false;
+let ecoulePause = 0;
 
 /**
  * LA MONTANTE DU SALON, ou `null` : six parties en topping a la suite
@@ -2390,8 +2411,10 @@ function paintSide() {
   // PAS PENDANT UNE MONTANTE : la suite a ses propres boutons, et « Rejouer »
   // y relancerait une partie seule, ce qui mettrait fin a la montante sans le
   // dire. Qui veut en sortir passe par les reglages, et le voit.
-  $("rejouer-wrap").hidden = !finie || gerant !== me || permanent || montante !== null;
+  $("rejouer-wrap").hidden = !finie || gerant !== me || permanent || montante !== null
+    || epreuve !== null;
   peindreLaMontante();
+  peindreLEpreuve();
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
@@ -2447,7 +2470,10 @@ function paintSide() {
   // JAMAIS SUR UN SALON STAR (`salonPermanent`, sans proprietaire) : la
   // grille mondiale n'est jamais vraiment "seul", elle attend simplement le
   // prochain joueur, et ne se ferme ni ne se termine jamais.
-  const soloEtHorsStar = !salonPermanent && (monde.size <= 1 || finie || !demarree);
+  // UNE MANCHE FERME L'ANAGRAMMEUR PENDANT LA PARTIE, meme seul : c'est une
+  // epreuve classee. Avant et apres, il est la comme ailleurs (SPEC.md §29).
+  const soloEtHorsStar = !salonPermanent
+    && (epreuve !== null ? (finie || !demarree) : (monde.size <= 1 || finie || !demarree));
   $("solveur-jeu").hidden = !soloEtHorsStar;
   if (!soloEtHorsStar) fermerLeSolveurMini();
   $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
@@ -4596,6 +4622,7 @@ addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("voile-route").hidden) { fermerLaFeuille(); return; }
     if (!$("voile-tablee").hidden) { $("voile-tablee").hidden = true; return; }
+    if (!$("voile-trouves").hidden) { $("voile-trouves").hidden = true; return; }
     if (!$("voile-joueur").hidden) { $("voile-joueur").hidden = true; return; }
     if (!$("voile-admin").hidden) { $("voile-admin").hidden = true; return; }
     if (!$("voile-compte").hidden) { $("voile-compte").hidden = true; return; }
@@ -4618,6 +4645,16 @@ addEventListener("keydown", (e) => {
   if (!$("reglages").hidden && e.key === "Escape") {
     e.preventDefault();
     $("reglages").hidden = true;
+    return;
+  }
+  // ENTREE LANCE LA PARTIE DU JOUR, SEUL (SPEC.md §29) : c'est le cas de presque
+  // tout le monde, tous les matins. Depuis le champ des noms, elle la lance a
+  // plusieurs sur le compte.
+  if (e.key === "Enter" && epreuveALancer()) {
+    e.preventDefault();
+    if (document.activeElement === $("ep-noms")) ($("ep-lancer-compte") as HTMLButtonElement).click();
+    else if (!$("ep-seul").hidden) ($("ep-seul") as HTMLButtonElement).click();
+    else if (!$("ep-equipe").hidden) ($("ep-equipe") as HTMLButtonElement).click();
     return;
   }
   // Toute zone de saisie garde ses touches : sans cela, Retour arriere etait
@@ -5347,7 +5384,9 @@ setInterval(() => {
   // coups joues plus le coup en cours, et l'on peut suivre l'un par l'autre.
   // Un salon endormi ne compte pas non plus : personne n'y cherche, et le
   // chrono repart a plein au premier arrivant -- le total reculerait.
-  const enCours = solving || finie || !demarree || endormi || decompteJusqua > now
+  // UNE MANCHE EN PAUSE montre ce que son coup avait dure, et le fige la.
+  const enCours = enPause && demarree && !finie ? ecoulePause
+    : solving || finie || !demarree || endormi || decompteJusqua > now
     ? 0 : Math.max(0, now - servedAt);
   // LE TEMPS ET LE NEGATIF SONT CEUX DE LA MONTANTE ENTIERE, pas de l'etape en
   // cours (SPEC.md §23). C'est le total qui s'affiche, et c'est le total qui
@@ -5362,9 +5401,15 @@ setInterval(() => {
     $("rb-reste").textContent = `${mn}:${String(sc).padStart(2, "0")}`;
   }
   if (!demarree) { $("elapsed").textContent = "—"; return; }
+  if (enPause) {
+    $("elapsed").textContent = chrono === null ? fmtSecondes(ecoulePause)
+      : `${Math.ceil(Math.max(0, chrono * 1000 - ecoulePause) / 1000)} s`;
+    $("elapsed").style.color = "var(--ink-faint)";
+    return;
+  }
   if (endormi) { $("elapsed").textContent = "en pause"; return; }
   if (solving) { $("elapsed").textContent = "…"; return; }
-  if (chrono === null) { $("elapsed").textContent = fmtSecondes(enCours); return; }
+  if (chrono === null) { $("elapsed").style.color = ""; $("elapsed").textContent = fmtSecondes(enCours); return; }
   // Compte a rebours : c'est le temps qui reste qui interesse le joueur.
   const reste = Math.max(0, servedAt + chrono * 1000 - now);
   $("elapsed").textContent = `${Math.ceil(reste / 1000)} s`;
@@ -5390,8 +5435,12 @@ function applyState(s: {
   meilleureCollective?:
     { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null;
   montante?: MontanteVue | null;
+  epreuve?: EpreuveVue | null; enPause?: boolean; ecoulePause?: number;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
+  epreuve = s.epreuve ?? null;
+  enPause = s.enPause === true;
+  ecoulePause = s.ecoulePause ?? 0;
   rack = s.rack ?? "";
   moveNumber = s.moveNumber;
   cumul = s.cumul;
@@ -5437,7 +5486,8 @@ function applyState(s: {
   // en cours et en ouvrir une neuve : sur une grille d'etude qui porte onze
   // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
-  $("reglages-open").hidden = gerant !== me || permanent;
+  // Les reglages d'une partie d'epreuve sont ceux de sa partie figee.
+  $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null;
   // ABANDONNER UN COUP / LA PARTIE (SPEC.md §24-25). L'administration voit
   // toujours les deux boutons ; pour tout le monde, ils exigent le topping sur
   // une grille finie -- le duplicate et la grille sans fin n'ont pas la meme
@@ -5460,8 +5510,9 @@ function applyState(s: {
     // Reserve a l'hote (ou l'administration), et seulement une fois un coup
     // manque -- l'historique le sait des qu'un joueur y a laisse un `player` nul.
     const coupManque = history.some((m) => m.player === null) || s.last?.player === null;
-    $("abandon-partie").hidden =
-      s.finie === true || !(admin || (seProposeIci && gerant === me && coupManque));
+    // UNE MANCHE NE S'ABANDONNE PAS, meme par l'administration (SPEC.md §29).
+    $("abandon-partie").hidden = epreuve !== null
+      || s.finie === true || !(admin || (seProposeIci && gerant === me && coupManque));
   }
   // LE DEPART D'UNE PARTIE FERME LE MINI ANAGRAMMEUR, MEME EN SOLO : passe le
   // moment de s'en servir sans arriere-pensee, une fois que ca part pour de
@@ -5606,13 +5657,14 @@ function connect() {
       gerant = m.gerant ?? null;
       salonPermanent = m.proprietaire === null;
       permanent = m.permanent === true;
-      $("reglages-open").hidden = gerant !== me || permanent;
+      epreuve = m.epreuve ?? null;
+      $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null;
       $("conn").textContent = `${me} · ${m.nomSalon}`;
       // Une partie qui n'a pas commence s'ouvre sur ses reglages : c'est la
       // qu'on choisit la variante avant de lancer quoi que ce soit.
       // Une grille permanente ne s'ouvre pas non plus sur ses reglages : elle
       // n'est pas la pour etre reglee, meme le jour ou on la cree.
-      if (m.state?.demarree === false && m.gerant === me && !permanent) {
+      if (m.state?.demarree === false && m.gerant === me && !permanent && epreuve === null) {
         setTimeout(ouvrirReglages, 60);
       }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
@@ -5987,6 +6039,8 @@ function ouvrirLeProfil(pousser = true): void {
   if (moiCompte === null) { ouvrirLeCompte(); return; }
   $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
+  $("corps-competitif").hidden = true;
+  $("corps-resultats").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
   ($("mdp-ancien") as HTMLInputElement).value = "";
@@ -6027,6 +6081,8 @@ function fermerLeProfil(pousser = true): void {
 function ouvrirLeSolveur(pousser = true): void {
   $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
+  $("corps-competitif").hidden = true;
+  $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
   $("join").hidden = false;
@@ -6053,6 +6109,8 @@ addEventListener("popstate", () => {
   if (page === "compte" && moiCompte !== null) { ouvrirLeProfil(false); return; }
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
   if (page === "records") { fermerLaPartie(false); ouvrirLesRecords(false); return; }
+  if (page === "competitif") { ouvrirLeCompetitif(false); return; }
+  if (page === "resultats") { ouvrirLesResultatsDeLAdresse(); return; }
   if (page === "partie") {
     const p = new URLSearchParams(location.search);
     const id = p.get("partie");
@@ -6065,6 +6123,7 @@ addEventListener("popstate", () => {
   fermerLeSolveur(false);
   fermerLaPartie(false);
   fermerLesRecords(false);
+  fermerLeCompetitif(false);
 });
 
 // --- Le solveur : anagrammes, mots formables, extensions, squelettes. ---
@@ -7080,6 +7139,11 @@ function demanderLePseudo(ou: string | null): void {
 function peindreCompte(): void {
   const boite = $("compte");
   boite.replaceChildren();
+
+  const competitif = el("button", "records", t("Compétitif")) as HTMLButtonElement;
+  competitif.type = "button";
+  competitif.addEventListener("click", () => ouvrirLeCompetitif());
+  boite.appendChild(competitif);
 
   const solveur = el("button", "records", t("Anagrammeur")) as HTMLButtonElement;
   solveur.type = "button";
@@ -8179,6 +8243,8 @@ function quitterSalon(): void {
   $("roadmap").hidden = true;
   $("join").hidden = false;
   void peuplerSalons();
+  // On revient sur la page d'ou l'on etait parti jouer : elle a change.
+  if (!$("corps-competitif").hidden) void chargerLeCompetitif();
 }
 
 $("quitter").addEventListener("click", quitterSalon);
@@ -8189,6 +8255,7 @@ $("site-nom").addEventListener("click", () => {
   if (!$("corps-solveur").hidden) { fermerLeSolveur(); return; }
   if (!$("corps-partie").hidden) { fermerLaPartie(); return; }
   if (!$("corps-records").hidden) { fermerLesRecords(); return; }
+  if (!$("corps-competitif").hidden || !$("corps-resultats").hidden) { fermerLeCompetitif(); return; }
   if ($("join").hidden) quitterSalon();
 });
 
@@ -8464,6 +8531,9 @@ async function rejoindre(id: string): Promise<void> {
   permanent = false;
   tempsJoue = 0;
   rejeuOuvert = false;
+  epreuve = null;
+  enPause = false;
+  ecoulePause = 0;
   // LA TABLE RASE DOIT SE VOIR, PAS SEULEMENT SE FAIRE. Les variables etaient
   // bien remises a zero, mais l'ecran gardait ce qu'on y avait peint pour le
   // salon precedent jusqu'a l'arrivee de `hello` : on voyait un instant le
@@ -8562,6 +8632,8 @@ void lireLeCompte().then(() => {
   // s'ouvre par sa REFERENCE (SPEC.md §23), qui ne designe qu'une manche.
   const ou = new URLSearchParams(location.search);
   if (ou.get("page") === "records") ouvrirLesRecords(false);
+  if (ou.get("page") === "competitif") ouvrirLeCompetitif(false);
+  if (ou.get("page") === "resultats") ouvrirLesResultatsDeLAdresse();
   if (ou.get("page") === "partie" && ou.get("partie") !== null) {
     void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1));
   }
@@ -9430,6 +9502,8 @@ function peindreLesLongueurs(): void {
  */
 function ouvrirLesRecords(pousser = true): void {
   $("corps-partie").hidden = true;
+  $("corps-competitif").hidden = true;
+  $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
   $("corps-solveur").hidden = true;
@@ -10016,3 +10090,795 @@ addEventListener("keydown", (e) => {
 // Le plateau se redessine quand la fenetre change de taille : il est en
 // pourcentage, et un canevas ne se remet pas a l'echelle tout seul.
 addEventListener("resize", () => { if (!$("corps-partie").hidden) prDessiner(); });
+
+// ---------------------------------------------------------------- LE COMPETITIF
+//
+// Voir SPEC.md §29. Une page, comme les records : les parties du jour a gauche,
+// les tournois a droite. Et une seconde page pour les resultats d'une partie :
+// le classement a gauche, la feuille de route a droite.
+
+/** Une partie du jour, telle que la liste la montre. */
+interface PartieDuJourVue {
+  n: number;
+  config: ConfigSerialisee;
+  etat: "a-jouer" | "en-cours" | "jouee";
+  temps: number | null;
+  negatif: number | null;
+  joueurs: number;
+}
+
+/** Le lexique des parties du jour a l'arrivee : celui de la langue du site. */
+function lexiqueDuJourParDefaut(): string {
+  const l = moiCompte?.langue === "en" || moiCompte?.langue === "fr" ? moiCompte.langue : langue();
+  return l === "en" ? "csw24" : "ods9";
+}
+
+let cpLexique = "";
+/** Le jour regarde, ou `null` pour aujourd'hui. */
+let cpJour: string | null = null;
+let cpDemande = 0;
+
+/**
+ * UN TEMPS D'EPREUVE, AU CENTIEME : `01:23.45`, et `1:02:03.45` au-dela de
+ * l'heure. Les colonnes s'alignent : chaque temps a la meme largeur.
+ */
+function tempsCentiemes(ms: number): string {
+  const c = Math.max(0, Math.round(ms / 10));
+  const h = Math.floor(c / 360000);
+  const m = Math.floor((c % 360000) / 6000);
+  const s = Math.floor((c % 6000) / 100);
+  const cc = c % 100;
+  const mmss = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cc).padStart(2, "0")}`;
+  return h > 0 ? `${h}:${mmss}` : mmss;
+}
+
+/** Un negatif : `top` a zero, `-3` sinon. */
+const negatifDit = (n: number): string => (n <= 0 ? "top" : `-${n}`);
+
+/** Un jour, en toutes lettres : « mardi 15 septembre 2026 ». */
+function jourEnLettres(jour: string): string {
+  const [a, m, j] = jour.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(a, m - 1, j, 12)).toLocaleDateString(
+    langue() === "en" ? "en-GB" : "fr-FR",
+    { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function ouvrirLeCompetitif(pousser = true): void {
+  $("corps-partie").hidden = true;
+  $("corps-salons").hidden = true;
+  $("corps-profil").hidden = true;
+  $("corps-solveur").hidden = true;
+  $("corps-records").hidden = true;
+  $("corps-resultats").hidden = true;
+  $("corps-competitif").hidden = false;
+  $("join").hidden = false;
+  if (cpLexique === "") cpLexique = lexiqueDuJourParDefaut();
+  cpJour = null;
+  $("cp-jours").hidden = true;
+  peindreLesLexiquesDuJour();
+  void chargerLeCompetitif();
+  if (pousser) window.history.pushState({ page: "competitif" }, "", "?page=competitif");
+}
+
+function fermerLeCompetitif(pousser = true): void {
+  $("corps-competitif").hidden = true;
+  $("corps-resultats").hidden = true;
+  $("corps-salons").hidden = false;
+  $("cp-parties").replaceChildren();
+  $("rs-classement").replaceChildren();
+  $("rs-feuille").replaceChildren();
+  rsDonnees = null;
+  if (pousser) window.history.pushState({ page: "salons" }, "", location.pathname);
+}
+
+/** Les trois lexiques, en puces, dans l'ordre des parties du jour. */
+function peindreLesLexiquesDuJour(): void {
+  const boite = $("cp-lexique");
+  boite.replaceChildren();
+  for (const id of LEXIQUES_DU_JOUR) {
+    const b = el("button", "", dictionnaire(id).nom.split(" ")[0]!) as HTMLButtonElement;
+    b.type = "button";
+    b.title = dictionnaire(id).nom;
+    b.setAttribute("aria-pressed", String(id === cpLexique));
+    b.addEventListener("click", () => {
+      cpLexique = id;
+      peindreLesLexiquesDuJour();
+      void chargerLeCompetitif();
+    });
+    boite.appendChild(b);
+  }
+}
+
+async function chargerLeCompetitif(): Promise<void> {
+  const mien = ++cpDemande;
+  $("cp-error").hidden = true;
+  let d: {
+    jour: string; aujourdhui: string; lexique: string; pret: boolean;
+    jours: string[]; parties: PartieDuJourVue[];
+  };
+  try {
+    const r = await fetch(`/api/competitif/jour?lexique=${encodeURIComponent(cpLexique)}`
+      + (cpJour === null ? "" : `&jour=${cpJour}`));
+    d = await r.json();
+  } catch {
+    if (mien !== cpDemande) return;
+    $("cp-parties").replaceChildren(tableauVide(t("serveur injoignable")));
+    return;
+  }
+  if (mien !== cpDemande) return;
+  $("cp-date").textContent = jourEnLettres(d.jour);
+  if (!d.pret) {
+    $("cp-parties").replaceChildren(tableauVide(
+      d.jour === d.aujourdhui ? t("Les parties du jour se préparent.") : t("Aucune partie ce jour-là.")));
+  } else {
+    $("cp-parties").replaceChildren(...d.parties.map((p) => ligneDePartieDuJour(d.jour, d.lexique, p)));
+  }
+  peindreLeCalendrier(d.jours, d.jour);
+}
+
+/** Une partie du jour : son numero, son nom, et les deux gestes. */
+function ligneDePartieDuJour(jour: string, lexique: string, p: PartieDuJourVue): HTMLElement {
+  const ligne = el("div", "cp-partie");
+  ligne.appendChild(el("div", "cp-num", String(p.n)));
+  const nom = el("div", "cp-nom", nomDeLaPartie(p.config, t));
+  nom.appendChild(el("span", "", t2(p.joueurs > 1 ? "{n} joueurs" : "{n} joueur", { n: p.joueurs })));
+  ligne.appendChild(nom);
+
+  const jouer = el("button", "cp-jouer") as HTMLButtonElement;
+  jouer.type = "button";
+  if (p.etat === "jouee" && p.temps !== null) {
+    // UNE PARTIE JOUEE MONTRE CE QU'ON Y A FAIT, a la place du bouton.
+    jouer.className = "cp-faite";
+    jouer.textContent = `${tempsCentiemes(p.temps)} · ${negatifDit(p.negatif ?? 0)}`;
+    jouer.addEventListener("click", () => ouvrirLesResultats(jour, lexique, p.n));
+  } else {
+    jouer.textContent = p.etat === "en-cours" ? t("Reprendre") : t("Jouer");
+    jouer.addEventListener("click", () => void jouerLaPartieDuJour(jour, lexique, p.n));
+  }
+  ligne.appendChild(jouer);
+
+  const resultats = el("button", "", t("Résultats")) as HTMLButtonElement;
+  resultats.type = "button";
+  resultats.addEventListener("click", () => ouvrirLesResultats(jour, lexique, p.n));
+  ligne.appendChild(resultats);
+  return ligne;
+}
+
+/**
+ * JOUER, OU REPRENDRE : le serveur rend le salon de la partie, et l'on y entre.
+ * Sans compte, on propose de se connecter : les parties du jour se jouent avec
+ * un compte (SPEC.md §29).
+ */
+async function jouerLaPartieDuJour(jour: string, lexique: string, n: number): Promise<void> {
+  if (moiCompte === null) { ouvrirLeCompte("connexion"); return; }
+  $("cp-error").hidden = true;
+  try {
+    const r = await fetch("/api/competitif/jouer", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jour, lexique, partie: n }),
+    });
+    const d = await r.json();
+    if (!r.ok || typeof d.salon !== "string") {
+      $("cp-error").textContent = t(d.erreur ?? "serveur injoignable");
+      $("cp-error").hidden = false;
+      return;
+    }
+    ($("name") as HTMLInputElement).value = moiCompte.pseudo;
+    allerA(d.salon);
+  } catch {
+    $("cp-error").textContent = t("serveur injoignable");
+    $("cp-error").hidden = false;
+  }
+}
+
+/** Le calendrier : les jours qui ont eu des parties, le plus recent d'abord. */
+function peindreLeCalendrier(jours: string[], vu: string): void {
+  const boite = $("cp-jours");
+  boite.replaceChildren(...jours.map((j) => {
+    const b = el("button", "", new Date(`${j}T12:00:00Z`).toLocaleDateString(
+      langue() === "en" ? "en-GB" : "fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }),
+    ) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(j === vu));
+    b.addEventListener("click", () => {
+      cpJour = j;
+      void chargerLeCompetitif();
+    });
+    return b;
+  }));
+}
+
+$("cp-calendrier").addEventListener("click", () => { $("cp-jours").hidden = !$("cp-jours").hidden; });
+
+// ------------------------------------------------------------- LES RESULTATS
+
+interface LigneVue {
+  manche: string;
+  compte: string;
+  jeu: "seul" | "compte" | "equipe";
+  noms: string;
+  equipe: string[];
+  temps: number;
+  negatif: number;
+  score: number;
+  coups: number;
+  aTemps: boolean;
+  at: number;
+  /** Au cumul seulement. */
+  parties?: number[];
+  cle?: string;
+}
+
+interface CoupVue {
+  n: number;
+  notation: string;
+  mot: string;
+  dir: Dir;
+  x: number;
+  y: number;
+  score: number;
+  farfouille: boolean;
+  ms: number;
+  trouve: boolean;
+  prop: { mot: string; dir: Dir; x: number; y: number; score: number } | null;
+}
+
+interface ResultatsVue {
+  jour: string;
+  lexique: string;
+  parties: { n: number; config: ConfigSerialisee }[];
+  partie: number | "cumul";
+  lignes: LigneVue[];
+  moi: any;
+  details?: Record<string, CoupVue[]> | null;
+}
+
+let rsJour = "";
+let rsLexique = "";
+let rsPartie: number | "cumul" = 1;
+let rsDonnees: ResultatsVue | null = null;
+let rsTri: "temps" | "negatif" = "temps";
+let rsSolo = false;
+let rsATemps = false;
+/** La manche dont la feuille de route est ouverte a droite. */
+let rsVue: string | null = null;
+let rsDemande = 0;
+
+function ouvrirLesResultats(jour: string, lexique: string, partie: number | "cumul", pousser = true): void {
+  $("corps-partie").hidden = true;
+  $("corps-salons").hidden = true;
+  $("corps-profil").hidden = true;
+  $("corps-solveur").hidden = true;
+  $("corps-records").hidden = true;
+  $("corps-competitif").hidden = true;
+  $("corps-resultats").hidden = false;
+  $("join").hidden = false;
+  rsJour = jour;
+  rsLexique = lexique;
+  rsPartie = partie;
+  rsVue = null;
+  rsTri = "temps";
+  void chargerLesResultats();
+  if (pousser) {
+    window.history.pushState({ page: "resultats" }, "",
+      `?page=resultats&jour=${jour}&lexique=${encodeURIComponent(lexique)}&partie=${partie}`);
+  }
+}
+
+/** Une adresse de resultats s'ouvre au chargement comme au retour arriere. */
+function ouvrirLesResultatsDeLAdresse(): void {
+  const p = new URLSearchParams(location.search);
+  const partie = p.get("partie") === "cumul" ? "cumul" : Math.max(1, Number(p.get("partie")) || 1);
+  ouvrirLesResultats(p.get("jour") ?? "", p.get("lexique") ?? "ods9", partie, false);
+}
+
+$("rs-retour").addEventListener("click", () => {
+  cpLexique = rsLexique;
+  ouvrirLeCompetitif();
+});
+
+async function chargerLesResultats(): Promise<void> {
+  const mien = ++rsDemande;
+  $("rs-classement").replaceChildren(tableauVide(t("chargement…")));
+  $("rs-feuille").replaceChildren();
+  $("rs-resume").replaceChildren();
+  let d: ResultatsVue;
+  try {
+    const r = await fetch(`/api/competitif/resultats?jour=${rsJour}`
+      + `&lexique=${encodeURIComponent(rsLexique)}&partie=${rsPartie}`);
+    d = await r.json();
+    if (!r.ok) {
+      if (mien !== rsDemande) return;
+      $("rs-classement").replaceChildren(tableauVide(t((d as any).erreur ?? "serveur injoignable")));
+      return;
+    }
+  } catch {
+    if (mien !== rsDemande) return;
+    $("rs-classement").replaceChildren(tableauVide(t("serveur injoignable")));
+    return;
+  }
+  if (mien !== rsDemande) return;
+  rsDonnees = d;
+  // Sa propre feuille s'ouvre d'office, des qu'on a joue la partie.
+  if (rsVue === null && d.partie !== "cumul" && d.moi?.fini === true) rsVue = d.moi.manche;
+  peindreLesResultats();
+}
+
+function peindreLesOngletsDesResultats(d: ResultatsVue): void {
+  const boite = $("rs-onglets");
+  const onglets: { v: number | "cumul"; texte: string }[] = [
+    ...d.parties.map((p) => ({ v: p.n as number | "cumul", texte: `P${p.n}` })),
+    { v: "cumul", texte: t("Cumul") },
+  ];
+  boite.replaceChildren(...onglets.map((o) => {
+    const b = el("button", "", o.texte) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(o.v === rsPartie));
+    b.addEventListener("click", () => {
+      if (o.v === rsPartie) return;
+      rsPartie = o.v;
+      rsVue = null;
+      window.history.replaceState({ page: "resultats" }, "",
+        `?page=resultats&jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${o.v}`);
+      void chargerLesResultats();
+    });
+    return b;
+  }));
+}
+
+/** Les lignes que les cases cochees laissent. */
+function lignesRetenues(d: ResultatsVue): LigneVue[] {
+  return d.lignes.filter((l) => (!rsSolo || l.jeu === "seul") && (!rsATemps || l.aTemps));
+}
+
+/** Deux temps egaux au centieme sont ex aequo (SPEC.md §23). */
+const centiemes = (ms: number): number => Math.round(ms / 10);
+
+function peindreLesResultats(): void {
+  const d = rsDonnees;
+  if (d === null) return;
+  peindreLesOngletsDesResultats(d);
+  $("rs-solo").setAttribute("aria-pressed", String(rsSolo));
+  $("rs-atemps").setAttribute("aria-pressed", String(rsATemps));
+  const partie = d.partie === "cumul" ? null : d.parties.find((p) => p.n === d.partie);
+  $("rs-titre").textContent = partie === null || partie === undefined
+    ? t("Cumul") : `P${partie.n} · ${nomDeLaPartie(partie.config, t)}`;
+  $("rs-detail").textContent = `${jourEnLettres(d.jour)} · ${dictionnaire(d.lexique).nom}`;
+  if (d.partie === "cumul") peindreLeCumul(d);
+  else peindreLeClassementDeLaPartie(d);
+}
+
+/** Le nom d'une ligne : le pseudo, les noms ecrits a la main, ou l'equipe. */
+function celluleDuJoueur(l: LigneVue): HTMLElement {
+  const td = el("td", "g rs-noms");
+  if (l.jeu === "equipe") {
+    l.equipe.forEach((nom, i) => {
+      if (i > 0) td.appendChild(document.createTextNode(" + "));
+      td.appendChild(pseudoCliquable(nom));
+    });
+    return td;
+  }
+  td.appendChild(pseudoCliquable(l.compte));
+  if (l.jeu === "compte") td.appendChild(el("i", "", l.noms === "" ? ` ${t("(à plusieurs)")}` : ` · ${l.noms}`));
+  return td;
+}
+
+/** Trie et classe : au temps, ou au negatif puis au temps. */
+function classer(lignes: LigneVue[]): { l: LigneVue; rang: number }[] {
+  const tries = [...lignes].sort((a, b) => rsTri === "negatif"
+    ? a.negatif - b.negatif || a.temps - b.temps
+    : a.temps - b.temps);
+  const out: { l: LigneVue; rang: number }[] = [];
+  tries.forEach((l, i) => {
+    const p = out[i - 1];
+    const egal = p !== undefined && centiemes(p.l.temps) === centiemes(l.temps)
+      && (rsTri === "temps" || p.l.negatif === l.negatif);
+    out.push({ l, rang: egal ? p!.rang : i + 1 });
+  });
+  return out;
+}
+
+/** L'entete du classement : Temps et Negatif se cliquent pour trier. */
+function teteDuClassement(avecParties: boolean): HTMLElement {
+  const thead = el("thead");
+  const tr = el("tr");
+  const colonne = (texte: string, classe = "", tri?: "temps" | "negatif"): void => {
+    const th = el("th", classe, texte);
+    if (tri !== undefined) {
+      th.classList.add("triable");
+      if (rsTri === tri) { th.classList.add("tri"); th.appendChild(el("span", "rc-tri", "▾")); }
+      th.addEventListener("click", () => { rsTri = tri; peindreLesResultats(); });
+    }
+    tr.appendChild(th);
+  };
+  colonne("#");
+  colonne(t("Joueur"), "g");
+  if (avecParties) colonne(t("Parties"));
+  colonne(t("Temps"), "", "temps");
+  colonne(t("Négatif"), "", "negatif");
+  colonne(t("Score"));
+  thead.appendChild(tr);
+  return thead;
+}
+
+function ligneDeClassement(l: LigneVue, rang: number, avecParties: boolean): HTMLElement {
+  const tr = el("tr");
+  if (!l.aTemps) {
+    tr.classList.add("rs-tard");
+    tr.title = t("Jouée après la fermeture");
+  }
+  if (l.manche === rsVue) tr.classList.add("rs-vu");
+  tr.appendChild(celluleDuRang(rang));
+  tr.appendChild(celluleDuJoueur(l));
+  if (avecParties) tr.appendChild(el("td", "", String(l.parties?.length ?? 1)));
+  tr.appendChild(el("td", rsTri === "temps" ? "fort" : "", tempsCentiemes(l.temps)));
+  tr.appendChild(el("td", rsTri === "negatif" ? "fort" : "", negatifDit(l.negatif)));
+  tr.appendChild(el("td", "", String(l.score)));
+  return tr;
+}
+
+function peindreLeClassementDeLaPartie(d: ResultatsVue): void {
+  const lignes = lignesRetenues(d);
+  if (lignes.length === 0) {
+    $("rs-classement").replaceChildren(tableauVide(t("Personne n'a encore joué cette partie.")));
+  } else {
+    const table = el("table");
+    table.appendChild(teteDuClassement(false));
+    const corps = el("tbody");
+    for (const { l, rang } of classer(lignes)) {
+      const tr = ligneDeClassement(l, rang, false);
+      tr.addEventListener("click", () => {
+        if (d.details === null || d.details === undefined) return;
+        rsVue = l.manche;
+        peindreLesResultats();
+      });
+      corps.appendChild(tr);
+    }
+    table.appendChild(corps);
+    $("rs-classement").replaceChildren(table);
+  }
+  peindreLaFeuille(d, lignes);
+}
+
+/**
+ * LE CUMUL : ceux qui ont tout joue d'abord, puis ceux a qui il manque une
+ * partie, et ainsi de suite, separes par une ligne legere (SPEC.md §29).
+ */
+function peindreLeCumul(d: ResultatsVue): void {
+  const lignes = lignesRetenues(d);
+  const total = d.parties.length;
+  if (lignes.length === 0) {
+    $("rs-classement").replaceChildren(tableauVide(t("Personne n'a encore joué ces parties.")));
+  } else {
+    const table = el("table");
+    table.appendChild(teteDuClassement(true));
+    const corps = el("tbody");
+    let rangDepart = 0;
+    for (let n = total; n >= 1; n--) {
+      const groupe = lignes.filter((l) => (l.parties?.length ?? 1) === n);
+      if (groupe.length === 0) continue;
+      if (rangDepart > 0) {
+        const coupure = el("tr", "rc-coupure");
+        const td = el("td", "", t2(n > 1 ? "{n} parties" : "{n} partie", { n })) as HTMLTableCellElement;
+        td.colSpan = 6;
+        coupure.appendChild(td);
+        corps.appendChild(coupure);
+      }
+      for (const { l, rang } of classer(groupe)) {
+        corps.appendChild(ligneDeClassement(l, rangDepart + rang, true));
+      }
+      rangDepart += groupe.length;
+    }
+    table.appendChild(corps);
+    $("rs-classement").replaceChildren(table);
+  }
+  // A DROITE, ses propres parties, une ligne chacune.
+  $("rs-feuille-titre").textContent = t("Vos parties");
+  const miennes = (d.moi ?? []) as { partie: number; fini: boolean; temps: number | null;
+    negatif: number | null; score: number | null }[];
+  if (miennes.length === 0) {
+    $("rs-feuille").replaceChildren(el("div", "rs-vide", t("Vous n'avez pas encore joué ces parties.")));
+    $("rs-resume").replaceChildren();
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: t("Partie"), classe: "g" }, { texte: t("Temps") }, { texte: t("Négatif") }, { texte: t("Score") },
+  ]));
+  const corps = el("tbody");
+  for (const p of [...miennes].sort((a, b) => a.partie - b.partie)) {
+    const tr = el("tr");
+    const conf = d.parties.find((x) => x.n === p.partie)?.config;
+    tr.appendChild(el("td", "g", `P${p.partie}${conf === undefined ? "" : ` · ${nomDeLaPartie(conf, t)}`}`));
+    tr.appendChild(el("td", "", p.temps === null ? t("en cours") : tempsCentiemes(p.temps)));
+    tr.appendChild(el("td", "", p.negatif === null ? "" : negatifDit(p.negatif)));
+    tr.appendChild(el("td", "", p.score === null ? "" : String(p.score)));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("rs-feuille").replaceChildren(table);
+  const finies = miennes.filter((p) => p.fini);
+  $("rs-resume").textContent = finies.length === 0 ? "" : t2("Total : {temps} · {neg} · {score} points", {
+    temps: tempsCentiemes(finies.reduce((a, p) => a + (p.temps ?? 0), 0)),
+    neg: negatifDit(finies.reduce((a, p) => a + (p.negatif ?? 0), 0)),
+    score: finies.reduce((a, p) => a + (p.score ?? 0), 0),
+  });
+}
+
+/** Le tirage tel que la feuille l'ecrit : les jokers colles a leur partie. */
+const tirageDeLaFeuille = (notation: string): string => notation.replace(/\+(\?+)$/, "$1");
+
+/** Qui a joue cette ligne, pour les titres : le pseudo, ou l'equipe. */
+const nomDeLaLigne = (l: LigneVue): string => (l.jeu === "equipe" ? l.equipe.join(" + ") : l.compte);
+
+/**
+ * LA FEUILLE DE ROUTE DU CLASSEMENT (SPEC.md §29).
+ *
+ * Elle ne s'ouvre qu'a qui a fini la partie : le serveur n'envoie le detail des
+ * coups qu'a lui. « Trouve par » et le meilleur temps se comptent sur les lignes
+ * que les cases laissent -- un meilleur temps ne doit pas appartenir a une
+ * ligne qu'on vient de masquer.
+ */
+function peindreLaFeuille(d: ResultatsVue, lignes: LigneVue[]): void {
+  const details = d.details ?? null;
+  $("rs-feuille-titre").textContent = t("Feuille de route");
+  if (details === null) {
+    $("rs-feuille").replaceChildren(el("div", "rs-vide",
+      d.moi?.enCours === true ? t("La feuille de route s'affiche une fois la partie finie.")
+        : t("La feuille de route s'affiche une fois la partie jouée.")));
+    $("rs-resume").replaceChildren();
+    return;
+  }
+  const vue = d.lignes.find((l) => l.manche === rsVue);
+  const coups = vue === undefined ? undefined : details[vue.manche];
+  if (vue === undefined || coups === undefined) {
+    $("rs-feuille").replaceChildren(el("div", "rs-vide", t("Choisissez une ligne du classement.")));
+    $("rs-resume").replaceChildren();
+    return;
+  }
+  const mienne = vue.manche === d.moi?.manche;
+  if (!mienne) $("rs-feuille-titre").textContent = t2("Feuille de route de {nom}", { nom: nomDeLaLigne(vue) });
+  const partie = d.parties.find((p) => p.n === d.partie);
+  const bornes = partie?.config.bornes ?? 7;
+  const chronoMs = (partie?.config.chrono ?? 0) * 1000;
+
+  // Pour chaque coup : qui l'a trouve, et en combien de temps.
+  const trouveurs = (n: number): { l: LigneVue; ms: number }[] => lignes
+    .map((l) => ({ l, c: details[l.manche]?.[n - 1] }))
+    .filter((x) => x.c?.trouve === true)
+    .map((x) => ({ l: x.l, ms: x.c!.ms }));
+
+  const table = el("table");
+  const thead = el("thead");
+  const groupes = el("tr", "rs-groupes");
+  const groupe = (texte: string, span: number, sep = true): void => {
+    const th = el("th", sep ? "rs-sep" : "", texte) as HTMLTableCellElement;
+    th.colSpan = span;
+    groupes.appendChild(th);
+  };
+  groupe("", 2, false);
+  groupe(t("Temps"), 2);
+  groupe(t("Mot retenu"), 3);
+  groupe(mienne ? t("Votre mot") : t2("Mot de {nom}", { nom: nomDeLaLigne(vue) }), 4);
+  groupe(t("Trouvé par"), 1);
+  groupe(t("Meilleur temps"), 2);
+  groupe(t("Cumul"), 3);
+  thead.appendChild(groupes);
+  const noms = el("tr");
+  const col = (texte: string, classe = ""): void => { noms.appendChild(el("th", classe, texte)); };
+  col(t("Cp.")); col(t("Tirage"), "g");
+  col(t("Coup"), "rs-sep"); col(t("Cumul"));
+  col(t("Mot"), "g rs-sep"); col(t("Pos.")); col(t("Score"));
+  col(t("Mot"), "g rs-sep"); col(t("Pos.")); col(t("Score")); col(t("Nég."));
+  col(t2("/{n} joueurs", { n: lignes.length }), "rs-sep");
+  col(t("Temps"), "rs-sep"); col(t("Joueurs"), "g");
+  col(t("Score"), "rs-sep"); col(t("Nég.")); col(t("Partie"));
+  thead.appendChild(noms);
+  table.appendChild(thead);
+
+  const corps = el("tbody");
+  let cumulTemps = 0, cumulScore = 0, cumulNeg = 0, cumulPartie = 0, cumulMeilleurs = 0;
+  let tops = 0, farfouilles = 0, farfouillesTrouvees = 0;
+  for (const c of coups) {
+    const tr = el("tr");
+    if (!c.trouve) tr.classList.add("rs-rate");
+    const td = (texte: string, classe = ""): HTMLElement => {
+      const x = el("td", classe, texte);
+      tr.appendChild(x);
+      return x;
+    };
+    cumulTemps += c.ms;
+    const sienne = c.prop?.score ?? 0;
+    const neg = Math.max(0, c.score - sienne);
+    cumulScore += sienne;
+    cumulNeg += neg;
+    cumulPartie += c.score;
+    if (c.trouve) tops++;
+    if (c.farfouille) { farfouilles++; if (c.trouve) farfouillesTrouvees++; }
+
+    td(String(c.n));
+    td(tirageDeLaFeuille(c.notation), "g");
+    td(tempsCentiemes(c.ms), "rs-sep");
+    td(tempsCentiemes(cumulTemps));
+    td(c.mot, "g rs-sep rs-mot");
+    td(noteCoup(c.dir, c.x, c.y, bornes));
+    td(String(c.score));
+    if (c.prop === null) {
+      td("", "g rs-sep"); td(""); td("");
+    } else {
+      td(c.prop.mot, "g rs-sep");
+      td(noteCoup(c.prop.dir, c.prop.x, c.prop.y, bornes));
+      td(String(c.prop.score));
+    }
+    td(negatifDit(neg), neg === 0 ? "rs-top" : "");
+
+    // TROUVE PAR : le nombre dans la case, le total dans l'entete. Un seul
+    // trouveur s'ecrit « SOLO de Ana ».
+    const qui = trouveurs(c.n);
+    const cellule = el("td", "rs-sep");
+    const bouton = el("button", "rs-trouves",
+      qui.length === 1 ? t2("SOLO de {nom}", { nom: nomDeLaLigne(qui[0]!.l) }) : String(qui.length),
+    ) as HTMLButtonElement;
+    bouton.type = "button";
+    bouton.addEventListener("click", () => ouvrirLesTrouveurs(c, lignes, details, bornes));
+    cellule.appendChild(bouton);
+    tr.appendChild(cellule);
+
+    // LE MEILLEUR TEMPS : le plus rapide parmi ceux qui ont trouve, au centieme.
+    if (qui.length === 0) {
+      td("", "rs-sep"); td("", "g");
+      cumulMeilleurs += chronoMs;
+    } else {
+      const meilleur = Math.min(...qui.map((q) => q.ms));
+      cumulMeilleurs += meilleur;
+      const ex = qui.filter((q) => centiemes(q.ms) === centiemes(meilleur)).map((q) => nomDeLaLigne(q.l));
+      td(tempsCentiemes(meilleur), "rs-sep");
+      const nomsCell = td(ex.length <= 2 ? ex.join(", ")
+        : t2("{a}, {b} et {n} autres", { a: ex[0]!, b: ex[1]!, n: ex.length - 2 }), "g");
+      nomsCell.title = ex.join("\n");
+    }
+    td(String(cumulScore), "rs-sep");
+    td(negatifDit(cumulNeg), cumulNeg === 0 ? "rs-top" : "");
+    td(String(cumulPartie));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("rs-feuille").replaceChildren(table);
+
+  const pc = (a: number, b: number): string => (b === 0 ? "0" : String(Math.round((a / b) * 100)));
+  const ecart = cumulTemps - cumulMeilleurs;
+  const resume = $("rs-resume");
+  resume.replaceChildren();
+  const morceau = (etiquette: string, valeur: string): void => {
+    if (resume.childNodes.length > 0) resume.appendChild(document.createTextNode(" · "));
+    resume.appendChild(document.createTextNode(`${etiquette} : `));
+    resume.appendChild(el("b", "", valeur));
+  };
+  morceau(t("Temps moyen par coup"), `${(cumulTemps / Math.max(1, coups.length) / 1000).toFixed(2)} s`);
+  morceau(t("Tops trouvés"), `${tops}/${coups.length} (${pc(tops, coups.length)} %)`);
+  morceau(t("Farfouilles trouvées"), `${farfouillesTrouvees}/${farfouilles} (${pc(farfouillesTrouvees, farfouilles)} %)`);
+  morceau(t("Négatif"), negatifDit(cumulNeg));
+  morceau(t("Cumul des meilleurs temps"), `${tempsCentiemes(cumulMeilleurs)} (+${tempsCentiemes(Math.max(0, ecart))})`);
+}
+
+/**
+ * QUI A TROUVE CE COUP, ET CE QUE LES AUTRES ONT JOUE (SPEC.md §29).
+ *
+ * La vue que publie la federation, en plus court : les trouveurs du plus rapide
+ * au plus lent, puis chaque autre solution avec le nombre de joueurs qui s'y
+ * sont arretes.
+ */
+function ouvrirLesTrouveurs(
+  c: CoupVue, lignes: LigneVue[], details: Record<string, CoupVue[]>, bornes: number | null,
+): void {
+  $("trouves-titre").textContent = `${t("Coup")} ${c.n} · ${c.mot} ${noteCoup(c.dir, c.x, c.y, bornes)} · ${c.score}`;
+  const liste = $("trouves-liste");
+  liste.replaceChildren();
+  const ligne = (qui: string, chiffre: string): HTMLElement => {
+    const x = el("div", "ligne");
+    x.appendChild(el("span", "qui", qui));
+    x.appendChild(el("span", "chiffre", chiffre));
+    return x;
+  };
+  const leurs = lignes.map((l) => ({ l, c: details[l.manche]?.[c.n - 1] }))
+    .filter((x): x is { l: LigneVue; c: CoupVue } => x.c !== undefined);
+  const trouves = leurs.filter((x) => x.c.trouve).sort((a, b) => a.c.ms - b.c.ms);
+  liste.appendChild(el("h3", "", t2("Trouvé par {n}", { n: trouves.length })));
+  for (const x of trouves) liste.appendChild(ligne(nomDeLaLigne(x.l), tempsCentiemes(x.c.ms)));
+
+  const autres = new Map<string, { mot: string; pos: string; score: number; noms: string[] }>();
+  let sansRien = 0;
+  for (const x of leurs.filter((y) => !y.c.trouve)) {
+    const p = x.c.prop;
+    if (p === null) { sansRien++; continue; }
+    const pos = noteCoup(p.dir, p.x, p.y, bornes);
+    const cle = `${p.mot}|${pos}|${p.score}`;
+    const g = autres.get(cle) ?? { mot: p.mot, pos, score: p.score, noms: [] };
+    g.noms.push(nomDeLaLigne(x.l));
+    autres.set(cle, g);
+  }
+  if (autres.size > 0 || sansRien > 0) {
+    liste.appendChild(el("h3", "", t("Les autres solutions")));
+    for (const g of [...autres.values()].sort((a, b) => b.score - a.score || b.noms.length - a.noms.length)) {
+      const x = ligne(`${g.mot} ${g.pos} · ${g.score}`, String(g.noms.length));
+      x.title = g.noms.join("\n");
+      liste.appendChild(x);
+    }
+    if (sansRien > 0) liste.appendChild(ligne(t("Sans solution"), String(sansRien)));
+  }
+  $("voile-trouves").hidden = false;
+}
+
+$("trouves-close").addEventListener("click", () => { $("voile-trouves").hidden = true; });
+$("voile-trouves").addEventListener("click", (e) => {
+  if (e.target === $("voile-trouves")) $("voile-trouves").hidden = true;
+});
+$("rs-solo").addEventListener("click", () => { rsSolo = !rsSolo; peindreLesResultats(); });
+$("rs-atemps").addEventListener("click", () => { rsATemps = !rsATemps; peindreLesResultats(); });
+
+// ------------------------------------------------------ LE SALON D'UNE EPREUVE
+
+/** La partie d'epreuve attend-elle qu'on la lance, et est-ce a nous de le faire ? */
+function epreuveALancer(): boolean {
+  return epreuve !== null && !epreuve.lancee && epreuve.compte === me && $("join").hidden === true;
+}
+
+/**
+ * LE BLOC DE LA PARTIE D'EPREUVE, dans le panneau du salon (SPEC.md §29).
+ *
+ * Avant : comment on la joue. Pendant : la pause. Apres : les resultats.
+ */
+function peindreLEpreuve(): void {
+  const e = epreuve;
+  $("epreuve-wrap").hidden = e === null;
+  if (e === null) return;
+  $("ep-titre").textContent = e.config === null ? `P${e.partie}` : `P${e.partie} · ${nomDeLaPartie(e.config, t)}`;
+  $("ep-detail").textContent = [
+    e.lexique === null ? "" : dictionnaire(e.lexique).nom,
+    e.jour === null ? "" : jourEnLettres(e.jour),
+  ].filter((x) => x !== "").join(" · ");
+
+  const hote = e.compte === me;
+  // Les comptes presents : a deux ou plus, la partie se lance en equipe.
+  const comptes = online.filter((n) => inscrits.has(n));
+  const aPlusieurs = comptes.length > 1;
+  const avant = !e.lancee;
+  $("ep-avant").hidden = !avant || !hote;
+  $("ep-seul").hidden = aPlusieurs;
+  $("ep-plusieurs").hidden = aPlusieurs;
+  if (aPlusieurs) { $("ep-noms").hidden = true; $("ep-lancer-compte").hidden = true; }
+  $("ep-equipe").hidden = !aPlusieurs;
+  $("ep-attente").hidden = !avant || hote;
+  $("ep-attente").textContent = t2("{nom} lance la partie.", { nom: e.compte });
+
+  const joueur = e.equipe.includes(me);
+  const enJeu = e.lancee && !finie && !e.close && joueur;
+  $("ep-pause").hidden = !enJeu || enPause;
+  $("ep-reprendre").hidden = !enJeu || !enPause;
+  $("ep-resultats").hidden = !(finie || e.close) || e.jour === null;
+}
+
+$("ep-seul").addEventListener("click", () => { envoyer({ t: "epreuve-lancer", jeu: "seul" }); });
+$("ep-plusieurs").addEventListener("click", () => {
+  $("ep-noms").hidden = false;
+  $("ep-lancer-compte").hidden = false;
+  ($("ep-noms") as HTMLInputElement).focus();
+});
+$("ep-lancer-compte").addEventListener("click", () => {
+  envoyer({ t: "epreuve-lancer", jeu: "compte", noms: ($("ep-noms") as HTMLInputElement).value });
+});
+$("ep-equipe").addEventListener("click", () => { envoyer({ t: "epreuve-lancer", jeu: "equipe" }); });
+$("ep-inviter").addEventListener("click", () => {
+  $("inviter-liste").replaceChildren(el("p", "", t("Chargement…")));
+  $("voile-inviter").hidden = false;
+  envoyer({ t: "connectes" });
+});
+$("ep-pause").addEventListener("click", () => { envoyer({ t: "pause" }); });
+$("ep-reprendre").addEventListener("click", () => { envoyer({ t: "reprendre" }); });
+$("ep-resultats").addEventListener("click", () => {
+  const e = epreuve;
+  if (e === null || e.jour === null || e.lexique === null) return;
+  const { jour, lexique, partie } = { jour: e.jour, lexique: e.lexique, partie: e.partie };
+  quitterSalon();
+  ouvrirLesResultats(jour, lexique, partie);
+});

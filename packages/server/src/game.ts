@@ -172,6 +172,58 @@ export interface PlayedMove {
  */
 export type RaisonDeFin = "sac" | "coups" | "duree" | "injouable" | "abandon";
 
+/**
+ * UN COUP D'UNE PARTIE FIGEE : ce qu'il faut pour le servir sans rien calculer.
+ *
+ * Les champs sont ceux du journal (voir `pourLeJournal`) : le mot, sa case et le
+ * rang des jokers restes jokers suffisent a refaire les placements sur la grille
+ * d'avant le coup. `sac` est ce que la pioche montrait une fois le tirage fait.
+ */
+export interface CoupFige {
+  n: number;
+  rack: string;
+  notation: string;
+  word: string;
+  dir: Dir;
+  x: number;
+  y: number;
+  score: number;
+  blancs?: number[];
+  jokers?: { sortis: string[]; restes: number };
+  isotops: number;
+  sac: string;
+}
+
+/**
+ * UNE PARTIE ENTIERE, JOUEE D'AVANCE. Voir SPEC.md §29.
+ *
+ * Elle se calcule une fois, a sa creation, par une vraie partie qu'on revele
+ * coup apres coup. Ensuite chaque salon qui la sert lit le coup suivant au lieu
+ * de le chercher.
+ */
+export interface PartieFigee {
+  version: 1;
+  id: string;
+  layout: LayoutName;
+  config: ConfigSerialisee;
+  graine: string;
+  coups: CoupFige[];
+  fin: { raison: RaisonDeFin; sac: string };
+  creeLe: number;
+}
+
+/** Ce qu'une partie peut recevoir de plus que ses reglages. */
+export interface OptionsDePartie {
+  /** La graine d'une partie neuve. Sans elle, on en tire une au hasard. */
+  graine?: string;
+  /** La partie a servir, au lieu de piocher et de chercher. */
+  figee?: PartieFigee;
+  /** Une manche : la pause remplace le sommeil. */
+  epreuve?: boolean;
+  /** Rien au terminal. */
+  muet?: boolean;
+}
+
 export interface ChatMessage {
   at: number;
   who: string;
@@ -778,13 +830,56 @@ export class Game {
    */
   readonly montante: { id: string; etape: number; essai: number } | null;
 
+  /**
+   * LA PARTIE FIGEE QUE CE SALON SERT, ou `null` (SPEC.md §29).
+   *
+   * Tirages, tops et fin viennent d'elle : ni sac, ni solveur. Les joueurs d'une
+   * meme partie du jour jouent donc la meme partie pour de bon, meme si le code
+   * du serveur change entre deux manches -- ce qu'une graine seule ne garantit
+   * pas, puisqu'elle ne fait qu'alimenter le code du jour.
+   */
+  private readonly figee: PartieFigee | null;
+  /**
+   * UNE PARTIE D'EPREUVE SE MET EN PAUSE, elle ne s'endort pas (SPEC.md §29).
+   *
+   * Un salon ordinaire qui se vide rend au premier arrivant un coup au temps
+   * plein. Une manche, elle, compte son temps : quitter la page arrete le chrono
+   * la ou il en etait, et le retour le reprend au meme endroit.
+   */
+  readonly epreuve: boolean;
+  /**
+   * RIEN AU TERMINAL. Une partie qu'on fige pour demain ecrirait sinon ses
+   * tirages et ses tops dans la console de l'hote -- qui ne doit pas les voir.
+   */
+  private readonly muet: boolean;
+  /** La graine d'une partie NEUVE, quand elle est imposee. */
+  private readonly graineImposee: string | null;
+  /** La partie est en pause : le chrono du coup est arrete. Voir `mettreEnPause`. */
+  enPause = false;
+  /** Ce que le coup en cours avait deja dure quand la pause est tombee. */
+  private ecouleEnPause = 0;
+  /** Le journal porte au moins un tirage servi : la partie a commence. */
+  private serviAuJournal = false;
+  /**
+   * Le decompte de depart, impose par le salon plutot que lu dans les reglages.
+   *
+   * Une manche a des reglages verrouilles, mais son decompte depend de qui la
+   * joue : coupe seul, mis des que des comptes invites partent ensemble.
+   */
+  decompteImpose: boolean | null = null;
+
   constructor(
     gameId: string, layout: LayoutName, cfg?: ConfigPartie,
     montante?: { id: string; etape: number; essai: number } | null,
+    options: OptionsDePartie = {},
   ) {
     this.gameId = gameId;
     this.layout = layout;
     this.montante = montante ?? null;
+    this.figee = options.figee ?? null;
+    this.epreuve = options.epreuve === true;
+    this.muet = options.muet === true;
+    this.graineImposee = options.figee?.graine ?? options.graine ?? null;
     setLayout(layout);
     this.cfg = cfg ?? configParDefaut();
     // Le lexique de la partie, pas celui du serveur : deux salons voisins
@@ -831,7 +926,7 @@ export class Game {
         );
       }
       if (pid !== undefined && pid !== process.pid) {
-        console.log(
+        this.log(
           `[partie] verrou perime du processus ${pid}` +
           (alive(pid) ? " (numero recycle par un autre programme)" : " (arret brutal)") +
           `, on le reprend`,
@@ -979,9 +1074,9 @@ export class Game {
     }
     this.tailleAnnexe = brut.length;
     if (this.ouEstLePalier.size > 0) {
-      console.log(`[partie] ${this.ouEstLePalier.size} coup(s) avec sous-tops en annexe`);
+      this.log(`[partie] ${this.ouEstLePalier.size} coup(s) avec sous-tops en annexe`);
     }
-    if (casses > 0) console.warn(`[partie] ${casses} ligne(s) illisible(s) dans l'annexe`);
+    if (casses > 0) this.warn(`[partie] ${casses} ligne(s) illisible(s) dans l'annexe`);
   }
 
   /** Relit le journal. Les lignes tronquees par une coupure sont ignorees. */
@@ -1003,7 +1098,7 @@ export class Game {
     }
     this.tailleJournal = brut.length;
     if (broken > 0) {
-      console.warn(`[partie] ${broken} ligne(s) illisible(s) dans le journal, ignorees`);
+      this.warn(`[partie] ${broken} ligne(s) illisible(s) dans le journal, ignorees`);
     }
     return out;
   }
@@ -1127,6 +1222,9 @@ export class Game {
    */
   onChat(fn: (m: ChatMessage) => void): void { this.surChat.push(fn); }
   private emit(): void { for (const f of this.listeners) f(); }
+  /** Le terminal, sauf pour une partie muette. Voir `muet`. */
+  private log(...a: unknown[]): void { if (!this.muet) console.log(...a); }
+  private warn(...a: unknown[]): void { if (!this.muet) console.warn(...a); }
 
   /**
    * Ouvre le fil du solveur. A part, parce qu'il faut savoir le refaire : voir
@@ -1160,15 +1258,15 @@ export class Game {
 
     if (events.length > 0) {
       saved = this.rebuild(events);
-      console.log(`[partie] ${events.length} evenements relus dans le journal`);
+      this.log(`[partie] ${events.length} evenements relus dans le journal`);
     } else if (existsSync(this.file)) {
       saved = JSON.parse(readFileSync(this.file, "utf8")) as Saved;
-      console.log(`[partie] pas de journal, reprise depuis l'instantane`);
+      this.log(`[partie] pas de journal, reprise depuis l'instantane`);
     }
 
     // Nouvelle grille = nouvelle graine, tiree au hasard. Les parties anciennes
     // n'en avaient pas : on retombe sur le nom, pour ne pas les casser.
-    this.seed = saved?.seed ?? (saved ? this.gameId : randomUUID());
+    this.seed = saved?.seed ?? (saved ? this.gameId : (this.graineImposee ?? randomUUID()));
     this.createdAt = saved?.createdAt ?? Date.now();
     this.chat = saved?.chat ?? [];
 
@@ -1214,7 +1312,7 @@ export class Game {
           this.ouEstLeCoup.set(m.n, this.append({ t: "coup", move: m }));
         }
         for (const c of this.chat) this.append({ t: "chat", msg: c });
-        console.log(`[partie] journal cree a partir de l'instantane`);
+        this.log(`[partie] journal cree a partir de l'instantane`);
       }
     }
     // Le sac et les poids suivent le dictionnaire : le W anglais est une
@@ -1276,6 +1374,17 @@ export class Game {
       this.players = saved.players ?? {};
       let sansTrace = 0;
       for (const m of saved.moves) {
+        // UNE PARTIE FIGEE N'A PAS DE SAC A REFAIRE : ses tirages sont ecrits.
+        // On repose les coups, et rien d'autre.
+        if (this.figee !== null) {
+          if ((m as { placements?: Placement[] }).placements === undefined) {
+            m.placements = this.refairePlacements(m);
+          }
+          this.board.place(m.placements);
+          this.worker.postMessage({ t: "place", placements: m.placements });
+          this.moves.push(m);
+          continue;
+        }
         // La pioche doit etre refaite dans l'ordre : c'est elle qui porte l'etat
         // de compensation, et il depend de tout l'historique. En partie joker
         // elle est completee SANS le joker, exactement comme au tirage.
@@ -1309,17 +1418,19 @@ export class Game {
         this.moves.push(m);
       }
       if (sansTrace > 0) {
-        console.warn(`[partie] ${sansTrace} coup(s) joker sans trace de substitution : ` +
+        this.warn(`[partie] ${sansTrace} coup(s) joker sans trace de substitution : ` +
           `le reliquat est reconstitue au mieux`);
       }
       this.posesSolveur = this.moves.length;
-      console.log(`[partie] ${this.moves.length} coups rejoues`);
+      this.log(`[partie] ${this.moves.length} coups rejoues`);
     } else {
-      console.log(`[partie] nouvelle grille, graine ${this.seed.slice(0, 8)}`);
+      this.log(`[partie] nouvelle grille, graine ${this.seed.slice(0, 8)}`);
     }
     // Une partie qui a deja des coups a evidemment commence : on ne va pas
     // redemander ses reglages a celui qui la reprend.
-    this.demarree = this.moves.length > 0;
+    // UNE MANCHE COMMENCEE L'EST MEME SANS COUP JOUE : son premier tirage a ete
+    // servi, et elle doit reprendre sur lui plutot que d'attendre qu'on la lance.
+    this.demarree = this.moves.length > 0 || (this.epreuve && this.serviAuJournal);
     // On ne pioche PAS ici : le premier joueur qui entre declenchera le
     // calcul. Distribuer au demarrage faisait calculer le top de chaque salon
     // enregistre, y compris ceux que personne n'ouvrira.
@@ -1371,11 +1482,18 @@ export class Game {
     };
     const byNumber = new Map<number, PlayedMove>();
     let servi: { n: number; at: number } | null = null;
+    let pause: { n: number; ecoule: number } | null = null;
     for (const { ev, ou } of events) {
       if (ev["t"] === "servi") {
         servi = { n: ev["n"] as number, at: ev["at"] as number };
+        this.serviAuJournal = true;
         continue;
       }
+      if (ev["t"] === "pause") {
+        pause = { n: ev["n"] as number, ecoule: Math.max(0, Number(ev["ecoule"]) || 0) };
+        continue;
+      }
+      if (ev["t"] === "reprise") { pause = null; continue; }
       if (ev["t"] === "grille") {
         out.seed = ev["seed"] ?? out.seed;
         out.createdAt = ev["createdAt"] ?? out.createdAt;
@@ -1428,6 +1546,22 @@ export class Game {
     if (servi !== null && servi.n === out.moves.length + 1 && this.cfg.chrono === null) {
       this.repriseCoup = servi.n;
       this.repriseServie = servi.at;
+    }
+    // UNE MANCHE REPREND EN PAUSE, au temps qu'elle avait (SPEC.md §29).
+    //
+    // La pause ecrite au journal dit ce que le coup avait dure. Un coup servi
+    // sans pause derriere lui est un serveur tombe en pleine recherche : on ne
+    // sait pas combien de temps il a couru, et on le rend entier plutot que de
+    // l'inventer.
+    if (this.epreuve) {
+      const enCours = out.moves.length + 1;
+      if (pause !== null && pause.n === enCours) {
+        this.enPause = true;
+        this.ecouleEnPause = pause.ecoule;
+      } else if (servi !== null && servi.n === enCours) {
+        this.enPause = true;
+        this.ecouleEnPause = 0;
+      }
     }
     // Le classement se recompte, il ne se stocke pas : ainsi il ne peut pas
     // deriver de la liste des coups.
@@ -1539,7 +1673,10 @@ export class Game {
     // `reliquat` ET NON `rack` : le tirage porte encore les lettres du coup
     // qu'on vient de jouer, et les rendre toutes en inventait autant que le
     // dernier mot en comptait.
-    this.bag.rendre(this.reliquat.filter((l) => l !== BLANK || !this.cfg.joker));
+    // Une partie figee n'a pas de sac vivant : son reste est ecrit (`restantDuSac`).
+    if (this.figee === null) {
+      this.bag.rendre(this.reliquat.filter((l) => l !== BLANK || !this.cfg.joker));
+    }
     this.reliquat = [];
     // Le tirage DISPARAIT. Le laisser en place laissait taper des mots sur une
     // partie close, sans que rien ne dise qu'elle etait finie. Les caramels
@@ -1549,7 +1686,7 @@ export class Game {
     this.bestScore = -1;
     this.isotops = 0;
     this.tiers = [];
-    console.log(`[partie] terminee apres ${this.moves.length} coups${note}`);
+    this.log(`[partie] terminee apres ${this.moves.length} coups${note}`);
     this.emit();
   }
 
@@ -1562,6 +1699,10 @@ export class Game {
   async abandonnerLeCoup(): Promise<void> {
     if (this.canonicalTop === null || this.finie || !this.actif) return;
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    // Abandonner un coup en pause, c'est vouloir la suite : elle ne s'ouvre pas
+    // arretee.
+    this.enPause = false;
+    this.ecouleEnPause = 0;
     await (this.cfg.mode === "duplicate" ? this.clore() : this.cloreParDefaut());
   }
 
@@ -1579,6 +1720,7 @@ export class Game {
 
   /** Tire le prochain tirage et lance le calcul du top. */
   private async deal(injouables = 0): Promise<void> {
+    if (this.figee !== null) { this.servirLeCoupFige(); return; }
     // Fin de partie (SPEC.md §16) : le sac ne permet plus de composer un tirage
     // jouable. On ne distribue plus, et l'etat diffuse le dit.
     // Nombre de coups atteint : la partie s'arrete la, meme si le sac pourrait
@@ -1724,7 +1866,7 @@ export class Game {
       this.reliquat = [];
       const plafond = tiragesInjouables(this.cfg.bornes);
       if (injouables + 1 >= plafond) {
-        console.log(`[partie] terminee apres ${this.moves.length} coups ` +
+        this.log(`[partie] terminee apres ${this.moves.length} coups ` +
           `(${plafond} tirages de suite sans un seul coup jouable)`);
         this.terminer("injouable");
         this.rack = "";
@@ -1736,7 +1878,7 @@ export class Game {
         this.emit();
         return;
       }
-      console.warn(`[partie] aucun coup possible avec ${this.rack}, on repioche ` +
+      this.warn(`[partie] aucun coup possible avec ${this.rack}, on repioche ` +
         `(${injouables + 1}/${plafond})`);
       await this.deal(injouables + 1);
       return;
@@ -1755,6 +1897,42 @@ export class Game {
    * `msCalcul` vaut zero pour un coup pris dans la file d'avance : il n'a rien
    * coute a ce moment-la, il etait deja pret.
    */
+  /**
+   * LE COUP SUIVANT D'UNE PARTIE FIGEE (SPEC.md §29). Ni pioche, ni calcul : il
+   * est ecrit, et la partie s'arrete la ou la partie figee s'est arretee.
+   */
+  private servirLeCoupFige(): void {
+    const f = this.figee!;
+    const c = f.coups[this.moves.length];
+    if (c === undefined) {
+      this.finirLaPartie(f.fin.raison, "");
+      return;
+    }
+    this.propositions.clear();
+    this.meilleureCollective = null;
+    this.essais.clear();
+    this.participants = new Set(this.presents);
+    this.rack = c.rack;
+    this.rackNotation = c.notation;
+    // Les placements se refont sur la grille D'AVANT le coup, comme a la
+    // relecture d'un journal : ce sont eux qui iront sur la grille.
+    this.canonicalTop = {
+      word: c.word, dir: c.dir, x: c.x, y: c.y, score: c.score,
+      placements: this.refairePlacements(c),
+    };
+    this.bestScore = c.score;
+    this.isotops = c.isotops;
+    this.tiers = [];
+    this.reliquatDuTop = null;
+    // Rien a envoyer au solveur : `commit` le lit ici, et le solveur ne sert plus
+    // qu'aux paliers du rejeu, qui ne demandent pas sa grille.
+    this.posePrise = true;
+    this.pretCourant = null;
+    this.msDuTop = 0;
+    this.ouvrirLeDecompte();
+    this.servir(0, true);
+  }
+
   private servir(msCalcul: number, avance: boolean): void {
     // Le top est connu : on peut de nouveau departager, donc valider.
     this.solving = false;
@@ -1794,9 +1972,15 @@ export class Game {
     this.repriseServie = 0;
     this.servedAt = reprise !== 0 ? reprise : Date.now();
     if (this.debutDeLaPartie === 0) this.debutDeLaPartie = this.servedAt;
-    // Un chrono, lui, repart entier : reprendre une minuterie interrompue une
-    // heure plus tot ferait expirer le coup a la seconde ou le serveur revient.
-    this.armerLeChrono();
+    // UNE MANCHE EN PAUSE OUVRE SON COUP SANS LE CHRONOMETRER. Il part au temps
+    // qu'il avait deja -- zero pour un coup neuf -- quand le joueur reprend.
+    if (this.enPause) {
+      this.servedAt = Date.now() - this.ecouleEnPause;
+    } else {
+      // Un chrono, lui, repart entier : reprendre une minuterie interrompue une
+      // heure plus tot ferait expirer le coup a la seconde ou le serveur revient.
+      this.armerLeChrono();
+    }
     // L'HEURE DU TIRAGE VA AU JOURNAL, et rien d'autre. Ni le tirage, ni le
     // top : le journal est relu par le serveur, mais il est aussi lisible par
     // l'hote, et un coup en cours ne doit se lire nulle part.
@@ -1810,7 +1994,7 @@ export class Game {
     // coute -- et c'est le cout qui interesse : c'est lui qui dit si la machine
     // suit. On garde donc les deux : le prix, et le fait qu'il ait ete paye
     // avant que quiconque attende.
-    console.log(
+    this.log(
       `[partie] coup ${n} · tirage ${this.rackNotation} · ` +
       `calcule en ${msCalcul.toFixed(0)} ms` + (avance ? " (d'avance)" : ""),
     );
@@ -1835,7 +2019,7 @@ export class Game {
    * partie la rejoue a l'identique.
    */
   private peutPrendreDeLAvance(): boolean {
-    if (this.arretee || this.avanceRenoncee) return false;
+    if (this.arretee || this.avanceRenoncee || this.figee !== null) return false;
     if (!this.demarree || this.finie || !this.actif) return false;
     if (this.canonicalTop === null) return false;
     if (this.cfg.coupsMax !== null && this.posesSolveur >= this.cfg.coupsMax) return false;
@@ -2080,6 +2264,14 @@ export class Game {
    * Vide sur une pioche ponderee, ou rien ne s'epuise.
    */
   restantDuSac(): string {
+    // Une partie figee a ecrit ce que son sac montrait, coup par coup : le coup
+    // en cours est le suivant des coups joues, et apres le dernier il reste la fin.
+    if (this.figee !== null) {
+      if (this.finie || this.rack === "") {
+        return this.finie ? this.figee.fin.sac : (this.figee.coups[this.moves.length - 1]?.sac ?? "");
+      }
+      return this.figee.coups[this.moves.length]?.sac ?? this.figee.fin.sac;
+    }
     const r = this.bag.restant();
     let out = "";
     // Les jokers a la FIN : ils ne sont pas des lettres, les voir en tete de
@@ -2104,6 +2296,9 @@ export class Game {
     if (this.solving || this.canonicalTop === null) {
       return { ok: false, message: "le coup n'est pas encore prêt" };
     }
+    // En pause, le chrono est arrete : un mot tape maintenant se chercherait
+    // hors du temps compte.
+    if (this.enPause) return { ok: false, message: "la partie est en pause" };
     // CE JOUEUR CHERCHE, et c'est note avant meme de savoir si son mot existe :
     // un essai refuse reste un essai. Voir `essais`.
     this.essais.add(player);
@@ -2315,7 +2510,13 @@ export class Game {
     // deja resolus, et `Bag.remainder` y chercherait un R la ou le tirage
     // n'avait qu'un joker -- on rejoue seulement la decision sur le vrai sac.
     const prepare = this.pretCourant;
-    if (prepare !== null) {
+    const fige = this.figee?.coups[move.n - 1];
+    if (fige !== undefined) {
+      // PARTIE FIGEE : les placements sont deja ceux d'apres la substitution, et
+      // la trace des jokers est ecrite. Il n'y a ni reliquat ni sac a tenir.
+      this.reliquat = [];
+      if (fige.jokers !== undefined) move.jokers = fige.jokers;
+    } else if (prepare !== null) {
       this.reliquat = prepare.reliquatApres;
       if (this.cfg.joker) {
         this.rejouerLesJokers(prepare);
@@ -2354,7 +2555,7 @@ export class Game {
     this.save();
     for (const f of this.surCoup) f(move);
     // Ici le coup est joue : tout est devenu public, on peut l'ecrire.
-    console.log(
+    this.log(
       `[partie] coup ${move.n} remporte par ${player ?? "personne"} : ` +
       `${move.word} ${noteCoup(move.dir, move.x, move.y, this.cfg.bornes)} ${move.score} pts ` +
       `en ${(ms / 1000).toFixed(1)} s` +
@@ -2383,7 +2584,8 @@ export class Game {
    */
   private ouvrirLeDecompte(): boolean {
     if (this.decompteJusqua > Date.now()) return true;
-    if (!this.cfg.decompte || this.moves.length > 0 || !this.actif || this.finie) return false;
+    const voulu = this.decompteImpose ?? this.cfg.decompte;
+    if (!voulu || this.moves.length > 0 || !this.actif || this.finie) return false;
     this.decompteJusqua = Date.now() + DECOMPTE_MS;
     return true;
   }
@@ -2392,16 +2594,84 @@ export class Game {
    * Lance la minuterie du coup courant. Sans personne dans le salon, il n'y a
    * rien a chronometrer : le coup attend.
    */
-  private armerLeChrono(): void {
+  private armerLeChrono(dejaEcoule = 0): void {
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     if (!this.actif || this.finie) return;
 
     if (this.cfg.chrono === null) return;
-    this.servedAt = Date.now();
+    this.servedAt = Date.now() - dejaEcoule;
     this.echeance = setTimeout(() => {
       this.echeance = null;
       void (this.cfg.mode === "duplicate" ? this.clore() : this.cloreParDefaut());
-    }, this.cfg.chrono * 1000);
+    }, Math.max(0, this.cfg.chrono * 1000 - dejaEcoule));
+  }
+
+  /**
+   * Le coup en cours est-il ouvert, chrono parti ? C'est la seule chose qu'une
+   * pause arrete : un tirage pas encore servi n'a pas de temps a garder.
+   */
+  private coupOuvert(): boolean {
+    return this.demarree && !this.finie && this.canonicalTop !== null && !this.solving
+      && this.decompteJusqua <= Date.now();
+  }
+
+  /**
+   * MET LA MANCHE EN PAUSE (SPEC.md §29).
+   *
+   * Le chrono du coup s'arrete la ou il en est, et ce qu'il avait deja dure
+   * s'ecrit au journal : un serveur qui redemarre reprend la pause telle quelle.
+   * Demandee avant que le coup ne s'ouvre -- pendant le decompte, entre deux
+   * coups -- elle attend le coup suivant et l'ouvre arrete, a zero.
+   *
+   * Rend vrai si la partie est desormais en pause.
+   */
+  mettreEnPause(): boolean {
+    if (!this.epreuve || this.finie || !this.demarree) return false;
+    if (this.enPause) return true;
+    const ouvert = this.coupOuvert();
+    if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
+    this.enPause = true;
+    this.ecouleEnPause = ouvert ? Math.max(0, Date.now() - this.servedAt) : 0;
+    if (this.cfg.chrono !== null) {
+      this.ecouleEnPause = Math.min(this.ecouleEnPause, this.cfg.chrono * 1000);
+    }
+    if (ouvert) this.append({ t: "pause", n: this.moveNumber + 1, ecoule: this.ecouleEnPause });
+    this.emit();
+    return true;
+  }
+
+  /** La pause se leve : le coup repart au temps qu'il avait. */
+  reprendre(): boolean {
+    if (!this.enPause || this.finie) return false;
+    this.enPause = false;
+    if (this.coupOuvert()) {
+      this.append({ t: "reprise", n: this.moveNumber + 1 });
+      this.armerLeChrono(this.ecouleEnPause);
+      // Sans chrono, `armerLeChrono` ne pose rien : le temps du coup se lit
+      // quand meme sur `servedAt`, qu'on recule d'autant.
+      if (this.cfg.chrono === null) this.servedAt = Date.now() - this.ecouleEnPause;
+    }
+    this.ecouleEnPause = 0;
+    this.emit();
+    return true;
+  }
+
+  /** Ce que le coup en cours a dure jusqu'a la pause, pour l'ecran. */
+  get ecoulePause(): number { return this.enPause ? this.ecouleEnPause : 0; }
+
+  /**
+   * LE SERVEUR S'ARRETE : la manche qui joue s'ecrit en pause, sans rien changer
+   * d'autre. Synchrone, parce qu'on l'appelle depuis un signal d'arret.
+   */
+  pauseDArret(): void {
+    if (!this.epreuve || this.enPause || !this.coupOuvert()) return;
+    // L'etat suit, pour qu'un second appel -- le signal, puis la sortie du
+    // processus -- n'ecrive pas une seconde pause.
+    this.enPause = true;
+    this.ecouleEnPause = Math.max(0, Date.now() - this.servedAt);
+    try {
+      this.append({ t: "pause", n: this.moveNumber + 1, ecoule: this.ecouleEnPause });
+    } catch { /* on s'arrete de toute facon */ }
   }
 
   /**
@@ -2418,6 +2688,9 @@ export class Game {
       await this.deal();
       return;
     }
+    // Une manche en pause le reste : c'est le joueur qui la reprend, quand il
+    // est pret, et pas son arrivee dans le salon.
+    if (this.enPause) { this.emit(); return; }
     this.armerLeChrono();
     this.emit();
     // Le salon s'etait vide au milieu d'une avance : elle a pu s'arreter avant
@@ -2454,6 +2727,9 @@ export class Game {
 
   /** La salle s'est vidée : le coup en cours gele, rien ne se calcule plus. */
   endormir(): void {
+    // UNE MANCHE NE S'ENDORT PAS, ELLE SE MET EN PAUSE : son coup reprendra au
+    // temps qu'il avait, et non au temps plein d'un salon qu'on retrouve.
+    if (this.epreuve) this.mettreEnPause();
     this.actif = false;
     if (this.echeance !== null) { clearTimeout(this.echeance); this.echeance = null; }
     this.emit();
@@ -2586,7 +2862,7 @@ export class Game {
    * quelles cases du mot etaient vides, donc lesquelles il a posees. On
    * l'appelle donc au fil du rejeu, coup apres coup, jamais apres coup.
    */
-  private refairePlacements(m: PlayedMove): Placement[] {
+  private refairePlacements(m: Pick<PlayedMove, "word" | "dir" | "x" | "y" | "blancs">): Placement[] {
     const dx = m.dir === "H" ? 1 : 0;
     const dy = m.dir === "H" ? 0 : 1;
     const blancs = m.blancs ?? [];
@@ -2604,13 +2880,13 @@ export class Game {
     d: { sorties: string[]; restes: number }, avecSac: boolean,
   ): void {
     for (const l of d.sorties) {
-      console.log(`[partie] le joker joue ${l} : un vrai ${l} sort du sac`);
+      this.log(`[partie] le joker joue ${l} : un vrai ${l} sort du sac`);
     }
     for (let i = 0; i < d.restes; i++) {
       this.jokersEnReserve--;
       const reste = this.jokersEnReserve === Infinity ? "on en reprend un"
         : `${this.jokersEnReserve} joker${this.jokersEnReserve > 1 ? "s" : ""} en reserve`;
-      console.log(
+      this.log(
         `[partie] ${avecSac ? "plus de lettre libre dans le sac : " : ""}` +
         `le joker reste sur la grille (${reste})`,
       );
