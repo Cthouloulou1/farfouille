@@ -5568,8 +5568,9 @@ Les trois épreuves se distinguent par leurs réglages, pas par leur code :
 
 | épreuve | parties | période | participants |
 |---|---|---|---|
-| **Parties du jour** | 2 en français, 3 en anglais | de 5 h 30 à 5 h 29 le lendemain | tout compte |
+| **Parties du jour** | par lexique : 2 en ODS, 3 en CSW et en NWL | de 5 h 30 à 5 h 29 le lendemain | tout compte |
 | **Tournoi de topping** | N, réglées une à une | une date de début, une date de fin | les inscrits |
+| **Tournoi de duplicate** | N, réglées une à une | une heure par partie, tous présents | les inscrits |
 | **Défi** | 1, reprise d'une partie déjà jouée | aucune : un défi n'expire pas | quiconque reçoit l'invitation ou le lien |
 
 Les classements, la feuille de route et les graphiques ne lisent que des
@@ -5630,23 +5631,29 @@ verrait les tirages à deux pour rejouer ensuite seul.
 fermeture de l'épreuve, elle ne laisse aucune ligne au classement, et la
 tentative reste consommée.
 
-### Fermer l'onglet met la partie en pause
+### La pause
 
-Le chrono du coup s'arrête quand le joueur quitte le salon, onglet fermé ou
-connexion perdue. Il repart où il en était au retour : même coup, même tirage,
-même temps écoulé. On a jusqu'à la fermeture de l'épreuve pour revenir. En
-équipe, la pause dure tant qu'aucun membre n'est là.
+**Un bouton Pause** arrête le chrono du coup. **Fermer l'onglet** ou perdre la
+connexion fait la même chose. Le chrono repart où il en était au retour : même
+coup, même tirage, même temps écoulé. On a jusqu'à la fermeture de l'épreuve pour
+revenir. En équipe, la pause vaut pour toute l'équipe ; chacun pour soi, elle ne
+vaut que pour soi.
 
 Revenir sur la page Compétitif montre **Reprendre** à la place de **Jouer**.
 
-> ⚠️ Une pause laisse le tirage en tête pendant que le chrono est arrêté : on
-> peut le chercher ailleurs, puis revenir. Les pauses sont écrites à la manche,
-> donc lisibles. Ce qu'on en fait reste ouvert (en fin de section).
+**La pause laisse chercher un tirage chrono arrêté, et c'est accepté.** On
+préfère quelques tricheurs à des joueurs qui ne peuvent pas quitter l'écran.
+Les pauses sont écrites à la manche : elles restent lisibles si un jour il faut
+les lire.
+
+Le tirage **reste affiché** pendant la pause. Le cacher n'empêcherait rien, on
+l'a déjà vu, et gênerait qui revient.
 
 ### Ce qui est permis pendant une manche
 
 | | |
 |---|---|
+| **Pause** | permise, à tout moment (voir plus haut) |
 | **Abandonner un coup** (§24) | permis, aux conditions du §24. Le coup compte pour le chrono plein, et le négatif pour la meilleure solution soumise jusque-là |
 | **Abandonner la partie** (§25) | **absent**, même pour un compte d'administration. La manche ne serait pas enregistrée : le bouton ne servirait qu'à perdre sa tentative |
 | **Anagrammeur** | fermé pendant la partie, ouvert avant et après, comme dans un salon ordinaire |
@@ -5703,23 +5710,40 @@ moitié de l'année. Le jour qu'elles portent est celui de leur parution.
 provisoire. Les invités voient la page et les classements, pas le bouton
 **Jouer**.
 
-**Une liste par langue**, choisie par la langue du site. Ce qu'on joue pour
-commencer :
+**Une liste par lexique.** Trois boutons en tête de la colonne, dans cet ordre :
+**ODS**, **CSW**, **NWL**. Le lexique de la langue du site est choisi à
+l'arrivée : ODS en français, CSW en anglais, le premier des lexiques anglais de
+la liste. Chaque lexique a ses propres parties, ses graines et ses classements :
+un tirage anglais n'a rien à faire dans un classement français.
 
-| langue | parties |
+Ce qu'on joue pour commencer :
+
+| lexique | parties |
 |---|---|
-| **français** | P1 **Normale 30s** : 15×15, 7 sur 7, 30 secondes par coup · P2 **Normale super grille 60s** : 21×21, 7 sur 7, 60 secondes par coup |
-| **anglais** | P1 et P2 **Normal 120s** : 15×15, 7 sur 7, 2 minutes par coup · P3 **Joker 120s** : la même, avec un joker par tirage |
+| **ODS** | P1 **Normale, 30s** : 15×15, 7 sur 7, 30 secondes par coup · P2 **Normale super grille, 60s** : 21×21, 7 sur 7, 60 secondes par coup |
+| **CSW** et **NWL** | P1 et P2 **Normale, 2min** : 15×15, 7 sur 7, 2 minutes par coup · P3 **Joker, 2min** : la même, avec un joker par tirage |
 
-**Le nom se lit dans les réglages**, il ne se choisit pas. « Normale 60s » veut
-dire grille normale, 7 sur 7, 60 secondes par coup. On ne précise que ce qui
-s'écarte : la super grille, un format autre que 7 sur 7, le joker. Un nom libre
-dirait ce que la personne qui l'a écrit pense de la partie.
+**Une partie se nomme par son numéro, puis par ses réglages.** P1, P2, P3 disent
+laquelle ; le reste dit ce qu'elle est, et ne se choisit pas : un nom libre dirait
+ce que la personne qui l'a écrit pense de la partie. On ne précise que ce qui
+s'écarte de la partie normale.
 
-**Les jours passés restent jouables**, depuis le calendrier. Le classement du
-jour, lui, est clos à la fermeture : une manche jouée ensuite se compare aux
-lignes du jour, sur sa feuille de route et ses graphiques, mais n'entre pas dans
-la liste.
+| partie | nom |
+|---|---|
+| 15×15, 7 sur 7, 60 s | `Normale, 60s` |
+| 15×15, 5 sur 9, 90 s | `5/9, 1min30` |
+| 21×21, 11 sur 11, 3 min | `11/11 super grille, 3min` |
+| 15×15, 7 sur 7, un joker, 2 min | `Joker, 2min` |
+| 15×15, 7 sur 8, un joker, 2 min | `7/8 joker, 2min` |
+
+Le chrono s'écrit en secondes jusqu'à la minute, en minutes au-delà, les
+secondes restantes accolées : `30s`, `60s`, `1min30`, `2min`.
+
+**Les jours passés restent jouables**, depuis le calendrier. **Une manche jouée
+après la fermeture entre au classement du jour, sur une ligne teintée** : on la
+compare à celles des autres, et la teinte dit qu'elle a eu tout le temps d'en
+entendre parler. La case **À temps seulement** la retire, comme **Solo
+seulement** retire les équipes.
 
 ### Tirer les parties du lendemain
 
@@ -5741,7 +5765,8 @@ Le panneau n'existe que pour un compte d'administration, sur la page Compétitif
 
 | commande | effet |
 |---|---|
-| **Nombre de parties** | 2 par défaut en français, 3 en anglais |
+| **Lexique** | ODS, CSW, NWL : chaque lexique se règle à part |
+| **Nombre de parties** | 2 par défaut en ODS, 3 en CSW et en NWL |
 | **Tout retirer** | tire à nouveau réglages et graines de toutes les parties ; leur nombre ne change pas |
 | **Nouvelle graine**, par partie | mêmes réglages, autres tirages |
 | **Réglages**, par partie | le panneau des réglages d'un salon (§16) |
@@ -5758,13 +5783,13 @@ réglages s'écrivent au journal eux aussi.
 
 ### Les règles du jour
 
-Une règle se donne **par langue et par numéro de partie**, et peut se limiter à
+Une règle se donne **par lexique et par numéro de partie**, et peut se limiter à
 certains jours de la semaine. Elle porte une liste de **modèles pondérés**. Un
 modèle est un jeu de réglages dont certains sont des **plages** ; un modèle
 marqué `aleatoire` tire chaque réglage parmi toutes les valeurs permises.
 
 ```
-{ "langue": "fr", "partie": 2, "jours": ["dim"],
+{ "lexique": "ods", "partie": 2, "jours": ["dim"],
   "modeles": [
     { "poids": 3, "grille": "21", "format": "7/7", "chrono": [30, 120, 30] },
     { "poids": 1, "aleatoire": true } ] }
@@ -5813,7 +5838,13 @@ raté y coûte déjà son chrono entier. **Cliquer *Négatif*** classe aux point
 le temps départageant les égalités.
 
 **Solo seulement** : une case qui retire les équipes et les lignes à plusieurs
-sur un compte.
+sur un compte. **À temps seulement** : une case qui retire les lignes teintées,
+jouées après la fermeture.
+
+Les deux cases valent pour toute la page : le rang, le « Trouvé par », le
+meilleur temps et les graphiques se recalculent sur les lignes qui restent.
+Sans quoi un meilleur temps affiché appartiendrait à une ligne qu'on vient de
+masquer.
 
 **Cumul et Général** additionnent temps, négatif et score sur toutes les
 parties. Ceux qui ont tout joué sont classés d'abord ; viennent ensuite ceux à
@@ -5938,8 +5969,8 @@ collaboratif.
 Comptes seulement, une tentative par compte, et **un défi n'expire pas**. Un
 invité qui ouvre le lien se connecte d'abord.
 
-**On est notifié quand quelqu'un joue un défi qu'on a joué.** Seulement les
-défis : sur les parties du jour, la pastille ne s'éteindrait jamais.
+**On est notifié quand quelqu'un joue un défi qu'on a joué.** Pas sur les
+parties du jour : la pastille ne s'éteindrait jamais.
 
 ### Les notifications
 
@@ -5948,6 +5979,8 @@ liste. Ce qui en allume une :
 
 - un défi reçu ;
 - un défi que vous avez joué vient d'être joué par quelqu'un ;
+- une invitation dans un tournoi de topping, de duplicate ou de battle : un
+  partenaire vous a nommé en s'inscrivant ;
 - une rencontre de battle à jouer, et sa date limite ;
 - un tournoi où vous êtes inscrit qui commence.
 
@@ -5971,6 +6004,16 @@ jour : qui regarde une partie la joue hors classement.
 
 **Les inscriptions sont ouvertes à tout compte**, et chacun s'inscrit lui-même.
 
+**L'équipe se forme à l'inscription.** Quand le tournoi se joue à plusieurs, qui
+s'inscrit nomme ses partenaires, de l'une des deux façons déjà vues au salon :
+
+- **par écrit**, un texte libre : l'équipe joue sur un seul compte ;
+- **par pseudo** : chaque partenaire reçoit une notification, et l'équipe joue
+  avec ses comptes.
+
+La même règle vaut pour le battle et le duplicate quand ils se jouent à
+plusieurs.
+
 **Chaque partie se joue une fois, dans l'ordre qu'on veut, quand on veut** entre
 les deux dates. Par défaut chacun joue en différé. Le salon « chacun pour soi »
 permet de jouer en présentiel ; une équipe joue tous ses membres dans le même
@@ -5978,6 +6021,28 @@ salon, en même temps. On peut aussi y déclarer qu'on est plusieurs sur un
 compte.
 
 Le **Général** se calcule comme le Cumul des parties du jour.
+
+### Les tournois de duplicate
+
+Création réservée à l'administration. Ils se règlent comme un tournoi de
+topping : nom, dates, joueurs par équipe, nombre de parties, réglages de chaque
+partie.
+
+**Tous les joueurs sont présents en même temps, dans le même salon, et c'est
+impératif.** Au duplicate, le coup dure le temps du chrono pour tout le monde,
+et le top s'affiche à tous à la fin de ce temps (§16). Jouer en différé, ce
+serait jouer une partie dont d'autres connaissent déjà les tops. C'est moins
+pratique qu'un tournoi de topping, et c'est le prix de la formule.
+
+Chaque partie a donc une **heure**, et non une période. Le salon s'ouvre avant,
+les inscrits y entrent, la partie démarre au décompte. Qui n'est pas là ne la
+joue pas.
+
+Le classement se fait **aux points** : c'est ce que le duplicate compte. Le temps
+n'y a pas de colonne, le coup dure pour tous le temps du chrono.
+
+La partie reste figée à l'avance, comme partout ici : un salon de duplicate
+avec cinquante joueurs n'a pas plus de calcul à faire qu'un salon d'un seul.
 
 ### Les tournois de battle
 
@@ -6066,26 +6131,23 @@ Tout suit la règle du §11 : **le journal fait foi**, le reste en est une vue.
 
 ### L'ordre de construction
 
-1. Partie figée, manche, salon d'épreuve, parties du jour en français, page,
-   classement et feuille de route.
-2. Le panneau d'administration, les règles du jour, les parties anglaises.
+1. Partie figée, manche, salon d'épreuve, parties du jour des trois lexiques,
+   page, classement et feuille de route.
+2. Le panneau d'administration et les règles du jour.
 3. Les graphiques.
 4. Les défis et les notifications.
 5. Les tournois de topping.
-6. Les tournois de battle.
+6. Les tournois de duplicate.
+7. Les tournois de battle.
 
 ### Ce qui reste ouvert
 
 | Sujet | Question |
 |---|---|
-| **La pause** | Elle laisse chercher un tirage chrono arrêté. Montrer le nombre de pauses sur la ligne du classement, les plafonner, ou laisser faire ? |
 | **L'aperçu de l'administrateur** | Il sort son auteur du classement de la partie regardée. À confirmer. |
-| **Les jours passés** | Rejouables hors classement. À confirmer : on pourrait aussi les classer à part, marqués « après la fermeture ». |
-| **Le nom des parties** | L'ordre des mots (« Normale super grille 60s ») et les chronos au-delà de la minute (« 120s » ou « 2min ») sont à fixer. |
-| **Le lexique des parties anglaises** | NWL ou CSW. |
 | **Équipe ou chacun pour soi** | Le choix se fait au salon, dès que des comptes invités sont là. À confirmer. |
-| **Les équipes d'un tournoi** | Comment une équipe se forme : un joueur l'inscrit et invite les autres par pseudo, qui acceptent par notification ? |
 | **Les inscriptions** | Jusqu'à la date de fin, ou jusqu'à une date à part ? |
+| **Un partenaire nommé qui refuse** | L'inscription d'une équipe attend-elle l'accord de chaque partenaire nommé par pseudo ? |
 | **Le départage d'une poule** | Après les points et les manches gagnées : les points de manche, la rencontre directe ? |
 | **Un tableau incomplet** | Des effectifs qui ne sont pas des puissances de deux demandent des exempts. Aux mieux classés des poules ? |
 | **Une rencontre de tableau non jouée** | 0 point aux deux ne désigne pas de vainqueur : qui passe ? |
