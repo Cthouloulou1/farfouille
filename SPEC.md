@@ -1875,6 +1875,7 @@ pas un outil.
 | **Les dictionnaires dérivés** | Le *clabbers* (tout anagramme d'un mot du dictionnaire est admis) et le *crabb* (tout mot **contenu** dans un mot est admis : `GF` par `STAGFLATION`). Ce ne sont pas des modes de jeu mais des **langues** : ils se branchent là où se branche l'anglais. Plus tard, le *barbc* (anagrammes du crabb) et le *labber* (crabb du clabbers) — deux ensembles distincts, contre l'intuition. |
 | **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. **En arbitrage, il se choisit à la main** (§22). |
 | **Le mode arbitrage** | Un duplicate dont les tirages sont saisis et non tirés, conduit par le gérant du salon : arbitrer un tournoi, préparer une partie, ou saisir une partie jouée sur papier. Spécifié au §22, avec le **top des tops** qui l'accompagne et sert aussi en rejeu. |
+| **Le compétitif** | Une page à part : les parties du jour, les tournois de topping et de battle, et les défis sur une partie déjà jouée. Spécifié au §29. |
 | **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. Le compteur qui les départage est spécifié au §23. |
 
 ### Vu, pas expliqué
@@ -5542,3 +5543,552 @@ côté client, où aucun raccourci de partie n'a cours.
 Marche partout ailleurs où l'on est dans un salon -- avant que la partie ne
 démarre comme pendant qu'elle tourne -- puisque le mélange ne triche jamais,
 à la différence de l'anagrammeur.
+
+---
+
+## 29. Le compétitif
+
+Une page à part, ouverte depuis le bandeau par un bouton **Compétitif**, placé
+à gauche d'**Anagrammeur**. Elle rassemble tout ce qui se joue pour un
+classement : les **parties du jour** à gauche, les **tournois** à droite. On y
+arrive aussi par un **défi**, lancé sur une partie qu'on vient de jouer.
+
+Ce sont trois choses différentes à l'écran, mais une seule mécanique en dessous.
+Le tournoi de battle fait exception, et il a sa propre sous-section.
+
+### Ce qu'on joue, ce qu'on organise, ce qu'on a fait
+
+| objet | ce qu'il détient |
+|---|---|
+| **Partie figée** | une configuration, une graine, et la partie entière déjà jouée : chaque tirage, son top retenu, sa case, son score |
+| **Épreuve** | une ou plusieurs parties figées, une période, et qui peut y jouer |
+| **Manche** | ce qu'un joueur ou une équipe a fait sur une partie figée : pour chaque coup, son temps et sa meilleure solution |
+
+Les trois épreuves se distinguent par leurs réglages, pas par leur code :
+
+| épreuve | parties | période | participants |
+|---|---|---|---|
+| **Parties du jour** | 2 en français, 3 en anglais | de 5 h 30 à 5 h 29 le lendemain | tout compte |
+| **Tournoi de topping** | N, réglées une à une | une date de début, une date de fin | les inscrits |
+| **Défi** | 1, reprise d'une partie déjà jouée | aucune : un défi n'expire pas | quiconque reçoit l'invitation ou le lien |
+
+Les classements, la feuille de route et les graphiques ne lisent que des
+manches. Ils s'écrivent donc une fois et servent aux trois.
+
+Le **tournoi de battle** n'entre pas dans ce moule. On n'y joue pas une partie
+commune chacun de son côté : on y **rencontre** quelqu'un, dans le même salon,
+au même moment. Il ne partage avec le reste que les salons et la page.
+
+### La partie est jouée avant qu'on la joue
+
+Une partie figée se calcule **entièrement à sa création**, dans un fil, comme le
+simulateur de la phase 0 (§14). Le salon qui la sert ne tire rien et ne cherche
+rien : il lit le coup suivant. Trois raisons.
+
+1. **Tout le monde joue vraiment la même partie.** La graine ne suffit pas.
+   L'isotop retenu et la case d'un joker à égalité se tirent au sort sur
+   `moveSeed(gameId, n)`, et `gameId` est propre au salon. Deux salons partis de
+   la même graine retiendraient des isotops différents, et leurs grilles
+   divergeraient dès le premier. Figer la partie supprime la question au lieu de
+   la contourner.
+2. **La charge.** Un salon occupe un fil de calcul, et une vingtaine de salons
+   tiennent sur la machine (§16). Cent personnes sur la P1 d'un matin en
+   demanderaient cent. Une partie figée n'en demande **aucun** pendant le jeu :
+   valider un mot et en compter les points se fait sans solveur, le client le
+   fait déjà (§14, phase 1).
+3. **Personne n'attend un calcul.** Même une super grille est prête avant que le
+   premier joueur arrive.
+
+Les **paliers du rejeu**, eux, ne sont pas figés. Ils se refont à la demande par
+le fil partagé des parties archivées (§23), qui sait déjà le faire.
+
+Une partie figée **ne s'efface jamais** : une épreuve la cite, comme un record
+cite sa partie (§23).
+
+**Un défi fige une partie déjà jouée.** Son journal porte chaque tirage, chaque
+mot retenu, sa case et son score (§23, « Rejouer une partie archivée ») : il
+suffit de le recopier. Seules se défient les parties **en topping, sur un plateau
+borné, terminées par le sac ou par un tirage injouable**. Une partie abandonnée
+s'arrête au milieu, et une grille sans fin n'a pas de fin à comparer.
+
+### La manche
+
+Une manche s'ouvre quand la partie démarre dans le salon, et s'écrit coup par
+coup :
+
+- pour chaque coup : le temps, compté par le serveur (§2) ; la meilleure
+  solution soumise, sa case et son score ; trouvé ou non ;
+- les pauses et les reprises ;
+- la fin.
+
+**Une tentative par compte et par partie.** Ouvrir une manche consomme la
+tentative, qu'on la finisse ou non. Un partenaire invité dans une équipe a joué
+la partie lui aussi : sa tentative part avec celle de l'équipe. Sans cela, on
+verrait les tirages à deux pour rejouer ensuite seul.
+
+**Une manche n'est enregistrée que si elle est finie.** Laissée en plan à la
+fermeture de l'épreuve, elle ne laisse aucune ligne au classement, et la
+tentative reste consommée.
+
+### Fermer l'onglet met la partie en pause
+
+Le chrono du coup s'arrête quand le joueur quitte le salon, onglet fermé ou
+connexion perdue. Il repart où il en était au retour : même coup, même tirage,
+même temps écoulé. On a jusqu'à la fermeture de l'épreuve pour revenir. En
+équipe, la pause dure tant qu'aucun membre n'est là.
+
+Revenir sur la page Compétitif montre **Reprendre** à la place de **Jouer**.
+
+> ⚠️ Une pause laisse le tirage en tête pendant que le chrono est arrêté : on
+> peut le chercher ailleurs, puis revenir. Les pauses sont écrites à la manche,
+> donc lisibles. Ce qu'on en fait reste ouvert (en fin de section).
+
+### Ce qui est permis pendant une manche
+
+| | |
+|---|---|
+| **Abandonner un coup** (§24) | permis, aux conditions du §24. Le coup compte pour le chrono plein, et le négatif pour la meilleure solution soumise jusque-là |
+| **Abandonner la partie** (§25) | **absent**, même pour un compte d'administration. La manche ne serait pas enregistrée : le bouton ne servirait qu'à perdre sa tentative |
+| **Anagrammeur** | fermé pendant la partie, ouvert avant et après, comme dans un salon ordinaire |
+| **Rejeu et feuille de route** | dès la partie finie, depuis l'écran d'un salon dont la partie est terminée, raccourci compris |
+
+À la fin, un bouton **Résultats** mène au classement de la partie.
+
+### Le salon d'une épreuve
+
+**Jouer** ouvre un salon **privé** (§26), aux réglages **verrouillés** : ce sont
+ceux de la partie figée. Avant de lancer, on dit comment on joue.
+
+| choix | ce que devient la manche | au classement |
+|---|---|---|
+| **Seul** | une manche, un joueur | solo |
+| **À plusieurs sur ce compte** (partage d'écran, même écran) | une manche ; un texte libre, facultatif, donne les noms | le pseudo et le texte ; **pas solo** |
+| **En équipe**, avec des comptes invités | une manche commune, en topping collaboratif : le premier qui trouve fait avancer toute l'équipe | tous les noms sur une ligne ; **pas solo** |
+| **Chacun pour soi**, avec des comptes invités | une manche par joueur | une ligne chacun ; solo |
+
+**Entrée choisit *Seul* et lance la partie.** C'est le cas de presque tout le
+monde, tous les matins.
+
+**Le décompte** (§16) est **coupé** quand on joue seul ou à plusieurs sur un
+compte, et **mis** dès que des comptes invités sont là : eux doivent partir
+ensemble.
+
+Le négatif d'une équipe se mesure sur sa meilleure solution, celle du membre qui
+a trouvé le mieux (§19) : une équipe joue une feuille, comme un joueur.
+
+### Chacun pour soi, dans le même salon
+
+Le départ est commun, au décompte. Ensuite **chacun a son chrono** : on ne voit
+ni où en sont les autres, ni ce qu'ils tapent, et un top trouvé par l'un ne fait
+rien avancer chez l'autre. Le salon tient donc une manche par joueur, et non
+plus une partie pour tous.
+
+L'autre lecture est écartée : un coup qui durerait jusqu'à ce que tous aient
+trouvé. Chacun attendrait à chaque coup, et ce temps d'attente servirait à
+préparer le suivant.
+
+**Qui a fini regarde les autres** : le coup où chacun en est, et sa meilleure
+solution du moment. Il n'a plus rien à apprendre pour sa propre manche. C'est ce
+qui fait vivre un tournoi en présentiel. Pour les parties du jour, jouées en
+différé, cela servira rarement.
+
+### Les parties du jour
+
+**Elles paraissent à 5 h 30, heure de Paris, et ferment à 5 h 29 le
+lendemain**, changement d'heure compris. L'heure se calcule dans le fuseau
+`Europe/Paris`, jamais par un décalage fixe, qui se tromperait d'une heure la
+moitié de l'année. Le jour qu'elles portent est celui de leur parution.
+
+**Comptes seulement.** Une tentative unique ne se contrôle pas sous un pseudo
+provisoire. Les invités voient la page et les classements, pas le bouton
+**Jouer**.
+
+**Une liste par langue**, choisie par la langue du site. Ce qu'on joue pour
+commencer :
+
+| langue | parties |
+|---|---|
+| **français** | P1 **Normale 30s** : 15×15, 7 sur 7, 30 secondes par coup · P2 **Normale super grille 60s** : 21×21, 7 sur 7, 60 secondes par coup |
+| **anglais** | P1 et P2 **Normal 120s** : 15×15, 7 sur 7, 2 minutes par coup · P3 **Joker 120s** : la même, avec un joker par tirage |
+
+**Le nom se lit dans les réglages**, il ne se choisit pas. « Normale 60s » veut
+dire grille normale, 7 sur 7, 60 secondes par coup. On ne précise que ce qui
+s'écarte : la super grille, un format autre que 7 sur 7, le joker. Un nom libre
+dirait ce que la personne qui l'a écrit pense de la partie.
+
+**Les jours passés restent jouables**, depuis le calendrier. Le classement du
+jour, lui, est clos à la fermeture : une manche jouée ensuite se compare aux
+lignes du jour, sur sa feuille de route et ses graphiques, mais n'entre pas dans
+la liste.
+
+### Tirer les parties du lendemain
+
+**Tout est tiré au sort, et c'est la règle qui compte le plus ici.**
+L'administrateur est connu des joueurs. S'il choisissait les parties, savoir ce
+qu'il aime jouer deviendrait une information. C'est le même problème qu'en
+tournoi réel, où savoir quel isotop un arbitre retient en est déjà une.
+
+Le cycle tient en trois temps :
+
+1. à 5 h 30, les parties **du lendemain** sont tirées selon les règles du jour,
+   puis calculées ;
+2. l'administrateur peut les modifier pendant toute la journée ;
+3. à 5 h 30 le lendemain, elles paraissent et ne changent plus.
+
+Sans intervention, le site tourne seul.
+
+Le panneau n'existe que pour un compte d'administration, sur la page Compétitif :
+
+| commande | effet |
+|---|---|
+| **Nombre de parties** | 2 par défaut en français, 3 en anglais |
+| **Tout retirer** | tire à nouveau réglages et graines de toutes les parties ; leur nombre ne change pas |
+| **Nouvelle graine**, par partie | mêmes réglages, autres tirages |
+| **Réglages**, par partie | le panneau des réglages d'un salon (§16) |
+| **Aperçu**, par partie | la partie entière : coups, tops, cases, scores |
+
+**Rien d'une partie ne se voit sans Aperçu.** Le panneau ne montre que son nom.
+Le calcul se refait après chaque changement, pour que l'aperçu soit immédiat et
+la parution certaine.
+
+**Un aperçu s'écrit au journal, et sort son auteur du classement de cette
+partie.** Celui qui l'a regardée la connaît : il peut la jouer, hors classement.
+Sans aperçu, l'administrateur est classé comme tout le monde. Retirages et
+réglages s'écrivent au journal eux aussi.
+
+### Les règles du jour
+
+Une règle se donne **par langue et par numéro de partie**, et peut se limiter à
+certains jours de la semaine. Elle porte une liste de **modèles pondérés**. Un
+modèle est un jeu de réglages dont certains sont des **plages** ; un modèle
+marqué `aleatoire` tire chaque réglage parmi toutes les valeurs permises.
+
+```
+{ "langue": "fr", "partie": 2, "jours": ["dim"],
+  "modeles": [
+    { "poids": 3, "grille": "21", "format": "7/7", "chrono": [30, 120, 30] },
+    { "poids": 1, "aleatoire": true } ] }
+```
+
+`[30, 120, 30]` se lit : de 30 à 120 secondes, par pas de 30.
+
+**Pour commencer, chaque partie a un seul modèle, fixe**, celui du tableau
+ci-dessus. La structure est là pour le jour où la pool s'élargit ; ce qu'on y
+met ne se décide pas maintenant.
+
+### La page Compétitif
+
+**À gauche, les parties du jour.** Une ligne par partie : le numéro, le nom, puis
+**Jouer** et **Résultats**. Une partie jouée remplace **Jouer** par son temps et
+son négatif ; une partie commencée montre **Reprendre**. En bas, discret, le
+**Calendrier** : les jours passés, leurs classements, et de quoi les rejouer.
+
+**À droite, les tournois**, en **tuiles** comme le mur des salons, avec la
+vignette de leur grille : c'est un repère que le site a déjà. Chaque tuile porte
+le type (topping ou battle), le nom et les dates. Trois groupes : en cours, à
+venir, terminés. **Créer un tournoi** n'apparaît que pour un compte
+d'administration.
+
+La page est visible par les invités. Ils ne peuvent ni jouer ni s'inscrire.
+
+### Le classement
+
+Une page à part : **le classement à gauche**, **la feuille de route et les
+graphiques à droite**.
+
+**Les onglets.** Pour les parties du jour : **P1**, **P2**… puis **Cumul**. Pour
+un tournoi : **Général** d'abord, puis les parties. Un tournoi se juge sur son
+total ; les parties du jour se jouent et se regardent une par une.
+
+| colonne | contenu |
+|---|---|
+| **#** | le rang ; deux temps égaux au centième sont ex æquo, et le rang suivant saute d'autant (§23) |
+| **Joueur** | le pseudo ; en équipe, tous les noms ; à plusieurs sur un compte, le pseudo et le texte |
+| **Temps** | la somme des temps par coup, un coup raté comptant pour le chrono plein ; au centième |
+| **Négatif** | la somme des écarts entre le top et la meilleure solution soumise ; `top` à zéro |
+| **Score** | la somme des meilleures solutions soumises |
+
+**Trié au temps par défaut.** Le topping est une épreuve de vitesse, et un coup
+raté y coûte déjà son chrono entier. **Cliquer *Négatif*** classe aux points,
+le temps départageant les égalités.
+
+**Solo seulement** : une case qui retire les équipes et les lignes à plusieurs
+sur un compte.
+
+**Cumul et Général** additionnent temps, négatif et score sur toutes les
+parties. Ceux qui ont tout joué sont classés d'abord ; viennent ensuite ceux à
+qui il manque une partie, puis deux, chaque groupe trié au temps et séparé du
+suivant par une ligne légère. Additionner le temps d'un joueur qui a sauté la
+super grille à celui d'un joueur qui l'a jouée ne compare rien.
+
+**Le classement ne s'impose jamais avant qu'on joue.** **Résultats** reste un
+bouton, et rien ne l'ouvre de soi-même : ni l'arrivée sur la page, ni la sortie
+d'un salon. Un joueur qui veut le voir avant de jouer le peut, mais sans feuille
+de route.
+
+**Dans un tournoi, on voit ce qu'on a fini.** L'onglet d'une partie s'ouvre à
+qui l'a jouée ; le Général s'ouvre à qui les a toutes jouées. À la date de fin,
+tout s'ouvre à tout le monde.
+
+**Cliquer une ligne** ouvre la feuille de route de ce joueur à droite, si l'on a
+soi-même fini la partie.
+
+### La feuille de route du classement
+
+Elle n'apparaît **qu'une fois la partie finie** par qui regarde. Elle reprend la
+police et l'alignement de la feuille de route du salon (§10).
+
+| groupe | colonnes |
+|---|---|
+| **Cp.** | le numéro du coup |
+| **Tirage** | |
+| **Temps** | Coup · Cumul |
+| **Mot retenu** | Mot · Pos. · Score |
+| **Votre mot** | Mot · Pos. · Score · Nég. |
+| **Trouvé par /120 joueurs** | |
+| **Meilleur temps** | Temps · Joueurs |
+| **Cumul** | Score · Nég. · Partie |
+
+**Le mot retenu passe avant le vôtre** : on lit d'abord ce qu'il fallait
+trouver. Sur la feuille d'un autre joueur, *Votre mot* devient *Mot de Ana*.
+
+**Pas de colonne de pénalité** : rien ne se pénalise ici.
+
+**Le tirage** est en ordre alphabétique : le reliquat, un `+`, puis les lettres
+nouvelles, chaque partie triée (`RUV+EOTT`). Un tirage rejeté s'écrit d'un `-`
+suivi de toutes ses lettres triées (`-AEEESTT`). Le joker `?` se range en fin de
+sa partie (`GLOO+FO?`).
+
+**Temps · Coup** est le temps mis à trouver. Un coup raté ou abandonné vaut le
+chrono plein. Au centième, comme tous les temps de cette page.
+
+**Votre mot** est la meilleure solution soumise. Un isotop trouvé à une autre
+case est un top : il s'écrit avec sa propre case, et *Nég.* porte `top`. Sans
+aucune solution, la case reste vide et *Nég.* vaut le score du top.
+
+**Un coup raté se voit sur toute sa ligne**, en rouge pâle. On parcourt une
+feuille pour y retrouver ce qu'on a manqué.
+
+**Trouvé par.** Le nombre total de joueurs est dans l'en-tête (« /120
+joueurs »), le nombre de trouveurs dans la case. Une équipe compte pour un,
+comme elle compte pour une ligne. Quand un seul joueur a trouvé, la case porte
+`SOLO de Ana`. **Cliquer le nombre** ouvre une fenêtre : ceux qui ont trouvé,
+puis ce que les autres ont joué, chaque mot avec sa case, son score et le nombre
+de joueurs, par score décroissant. La fédération française publie la même vue,
+et c'est celle qui dit ce qui a trompé tout le monde.
+
+**Meilleur temps** : le plus rapide parmi ceux qui ont trouvé. Deux noms
+s'écrivent en entier ; au-delà, « Zulu, Ana et 28 autres », et la liste complète
+au survol.
+
+**Le pied de la feuille** : temps moyen par coup, tops trouvés, farfouilles
+trouvées, négatif, et le **cumul des meilleurs temps**, avec l'écart. Ce cumul
+est le temps d'une partie où chaque coup aurait été trouvé au plus vite : la
+partie parfaite de la journée.
+
+Sur l'onglet **Cumul** ou **Général**, la place de la feuille prend un
+récapitulatif : une ligne par partie, avec son temps, son négatif et son score.
+
+### Les graphiques
+
+Sous la feuille de route, dans l'espace qui reste, **cinq onglets**, à la même
+condition : la partie finie. Ils sont dessinés en SVG par le client, sans
+bibliothèque. Le client n'a aucune dépendance, et cinq graphiques n'en
+justifient pas une.
+
+1. **Temps par coup.** En abscisse le coup, en ordonnée le temps, en **échelle
+   logarithmique** : sur une échelle linéaire, un coup trouvé en 2 secondes
+   s'écrase contre l'axe dès qu'un autre en demande 30. Un point par manche,
+   légèrement écarté à l'horizontale pour que les points ne s'empilent pas. Les
+   coups ratés sont posés au chrono, en rouge. La médiane en trait plein, la
+   moyenne en pointillé, le meilleur temps en bas. Vos propres points sont reliés
+   et portent la couleur d'accent.
+2. **La course.** Pour chaque coup, votre temps cumulé moins le cumul médian.
+   Au-dessus de zéro, on est en retard sur la médiane. La courbe dit **où** l'on a
+   perdu du temps, et pas seulement combien.
+3. **Difficulté des coups.** Une barre par coup : la part des joueurs qui l'ont
+   trouvé.
+4. **Le rang au fil des coups.** Le rang au temps cumulé après chaque coup, pour
+   les dix premiers du classement final et pour vous.
+5. **Répartition des temps.** L'histogramme des temps totaux, votre place
+   marquée : « plus rapide que 82 % ».
+
+**Écarté :** le temps selon le type de coup (farfouille ou non, nombre de
+lettres posées).
+
+### Défier sur une partie
+
+À la fin d'une partie qui se défie (voir « La partie est jouée avant qu'on la
+joue »), **chaque joueur présent** dans le salon trouve **Défier sur cette
+partie**. Deux façons :
+
+- **Inviter** un compte par son pseudo. Il reçoit une notification.
+- **Copier un lien.** Le lien ouvre un salon d'épreuve sur cette partie, avec les
+  mêmes choix que partout ailleurs (seul, à plusieurs, en équipe, chacun pour
+  soi).
+
+Une partie ne donne **qu'un seul défi**. Défier deux amis sur la même partie, ou
+repasser le lien qu'on a reçu, remplit le même classement : c'est tout l'intérêt
+d'une partie qu'on a aimée et qu'on fait circuler.
+
+**Les joueurs de la partie d'origine y ont leur ligne.** Seul, c'est une ligne
+solo ; à plusieurs, c'est une équipe, puisque la partie se jouait en topping
+collaboratif.
+
+Comptes seulement, une tentative par compte, et **un défi n'expire pas**. Un
+invité qui ouvre le lien se connecte d'abord.
+
+**On est notifié quand quelqu'un joue un défi qu'on a joué.** Seulement les
+défis : sur les parties du jour, la pastille ne s'éteindrait jamais.
+
+### Les notifications
+
+Une **pastille** sur le bouton du compte, dans le bandeau. Un clic ouvre la
+liste. Ce qui en allume une :
+
+- un défi reçu ;
+- un défi que vous avez joué vient d'être joué par quelqu'un ;
+- une rencontre de battle à jouer, et sa date limite ;
+- un tournoi où vous êtes inscrit qui commence.
+
+Elles vivent dans un journal en ajout seul, comme les comptes : une ligne quand
+elle naît, une ligne quand elle est lue.
+
+### Les tournois de topping
+
+Leur création est **réservée à l'administration**, pour l'instant.
+
+| réglage | par défaut |
+|---|---|
+| **Nom** | |
+| **Début et fin** | |
+| **Joueurs par équipe** | 1 ; la taille est la même pour toutes les équipes |
+| **Nombre de parties** | |
+| **Réglages de chaque partie** | le panneau d'un salon (§16) ; sur la première, **Toutes comme la première** copie ses réglages sur les autres, mais pas sa graine |
+
+Les graines sont tirées au sort, et l'aperçu obéit à la règle des parties du
+jour : qui regarde une partie la joue hors classement.
+
+**Les inscriptions sont ouvertes à tout compte**, et chacun s'inscrit lui-même.
+
+**Chaque partie se joue une fois, dans l'ordre qu'on veut, quand on veut** entre
+les deux dates. Par défaut chacun joue en différé. Le salon « chacun pour soi »
+permet de jouer en présentiel ; une équipe joue tous ses membres dans le même
+salon, en même temps. On peut aussi y déclarer qu'on est plusieurs sur un
+compte.
+
+Le **Général** se calcule comme le Cumul des parties du jour.
+
+### Les tournois de battle
+
+Création réservée à l'administration, comme le topping.
+
+**Une manche** : deux joueurs, un salon, en même temps. Le premier qui trouve le
+top marque **1 point** ; un top que personne ne trouve donne **½ point** à
+chacun. Le total des deux fait donc toujours le nombre de coups. Qui a le plus de
+points gagne la manche ; à égalité, la manche est **nulle**.
+
+**Les parties sont tirées au hasard à chaque manche**, sans partie figée. Une
+partie commune à plusieurs rencontres se raconterait d'une rencontre à l'autre ;
+tirée pour deux joueurs qui la jouent ensemble, elle ne peut pas fuiter. Le salon
+tourne comme un salon de battle ordinaire, avec son fil de calcul.
+
+#### Les poules
+
+| réglage | par défaut |
+|---|---|
+| **Joueurs par poule**, ou nombre de poules | des poules aussi égales que possible |
+| **Composition** | tirée au sort, puis retouchable à la main |
+| **Rencontres par poule** | chacun rencontre tous les autres |
+| **Manches par rencontre** | |
+
+**La composition se tire, puis se retouche.** Rien sur le site ne mesure un
+niveau, et des poules déséquilibrées font un mauvais tournoi. L'administrateur
+qui connaît les joueurs déplace qui il veut d'une poule à l'autre.
+
+**Une rencontre de poule** est gagnée par qui gagne le plus de manches ; à
+égalité, elle est nulle.
+
+| résultat | points |
+|---|---|
+| victoire | 3 |
+| nul | 2 |
+| défaite | 1 |
+| non jouée à la date limite | 0 pour les deux |
+
+Une défaite rapporte plus qu'une rencontre non jouée : venir jouer compte.
+
+Le classement de poule se fait aux points, puis au nombre de manches gagnées.
+
+#### Le double tableau
+
+**On qualifie tout le monde ou une partie des joueurs**, selon le réglage. Les
+mieux classés entrent dans le **tableau haut** ; les suivants entrent
+**directement dans le tableau bas**. Combien vont dans chacun est un réglage.
+
+**Perdre en haut envoie en bas. Perdre en bas élimine.** La **grande finale**
+oppose le vainqueur du tableau haut au vainqueur du tableau bas.
+
+**Chaque rencontre se joue au meilleur de X manches**, X impair. Un réglage à
+part permet un autre X pour les demi-finales et la finale.
+
+**Une manche nulle ne compte pas** dans une rencontre de tableau : elle se
+rejoue. Un tableau a besoin d'un vainqueur ; une poule, non.
+
+#### Les dates limites
+
+Chaque rencontre porte une **date limite**. Les deux joueurs s'arrangent entre
+eux ; la page de la rencontre ouvre un salon privé pour eux deux, aux réglages
+du tournoi, et les manches s'y enchaînent. Passé la date, une rencontre non
+jouée donne **0 point aux deux**.
+
+### Le journal
+
+Tout suit la règle du §11 : **le journal fait foi**, le reste en est une vue.
+
+- **`competitif.journal.jsonl`** : les épreuves et ce qui leur arrive. Création,
+  tirage, retirage, réglage, aperçu, parution, inscription, poules, rencontres.
+- **Un fichier de manches par épreuve.** Une ligne par coup joué : cent joueurs
+  sur deux parties de vingt-deux coups en écrivent 4 400 par jour, soit un peu
+  moins d'un demi-mégaoctet. Un fichier par épreuve se relit sans parcourir
+  l'année.
+- **Les parties figées**, un fichier chacune.
+
+```
+{ "t": "manche", "id": "…", "epreuve": "…", "partie": 1, "compte": "…", "jeu": "seul", "at": … }
+{ "t": "coup", "manche": "…", "n": 3, "ms": 12345, "mot": "VETU", "case": "6B", "score": 19, "top": false }
+{ "t": "pause", "manche": "…", "n": 4, "at": … }
+{ "t": "fin", "manche": "…", "at": … }
+```
+
+`jeu` vaut `seul`, `compte` (à plusieurs sur un compte, avec le texte),
+`equipe` (avec les comptes) ou `chacun`.
+
+### L'ordre de construction
+
+1. Partie figée, manche, salon d'épreuve, parties du jour en français, page,
+   classement et feuille de route.
+2. Le panneau d'administration, les règles du jour, les parties anglaises.
+3. Les graphiques.
+4. Les défis et les notifications.
+5. Les tournois de topping.
+6. Les tournois de battle.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| **La pause** | Elle laisse chercher un tirage chrono arrêté. Montrer le nombre de pauses sur la ligne du classement, les plafonner, ou laisser faire ? |
+| **L'aperçu de l'administrateur** | Il sort son auteur du classement de la partie regardée. À confirmer. |
+| **Les jours passés** | Rejouables hors classement. À confirmer : on pourrait aussi les classer à part, marqués « après la fermeture ». |
+| **Le nom des parties** | L'ordre des mots (« Normale super grille 60s ») et les chronos au-delà de la minute (« 120s » ou « 2min ») sont à fixer. |
+| **Le lexique des parties anglaises** | NWL ou CSW. |
+| **Équipe ou chacun pour soi** | Le choix se fait au salon, dès que des comptes invités sont là. À confirmer. |
+| **Les équipes d'un tournoi** | Comment une équipe se forme : un joueur l'inscrit et invite les autres par pseudo, qui acceptent par notification ? |
+| **Les inscriptions** | Jusqu'à la date de fin, ou jusqu'à une date à part ? |
+| **Le départage d'une poule** | Après les points et les manches gagnées : les points de manche, la rencontre directe ? |
+| **Un tableau incomplet** | Des effectifs qui ne sont pas des puissances de deux demandent des exempts. Aux mieux classés des poules ? |
+| **Une rencontre de tableau non jouée** | 0 point aux deux ne désigne pas de vainqueur : qui passe ? |
+| **La grande finale** | Le vainqueur du tableau bas n'a qu'une rencontre à gagner, alors que son adversaire n'a encore jamais perdu. Tel quel, ou une revanche ? |
+| **Les réglages des manches de battle** | Un seul jeu de réglages pour le tournoi, ou un par phase ? |
+| **Une rencontre commencée** | Interrompue après une manche, reprend-elle avant la date limite ? |
