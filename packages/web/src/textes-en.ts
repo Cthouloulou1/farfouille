@@ -595,7 +595,7 @@ export const EN: Readonly<Record<string, string>> = {
   "la partie est en pause": "the game is paused",
   "Aucune partie ce jour-là.": "No game that day.",
   "Aucune partie ce jour-là": "No game that day",
-  "Solo seulement": "Solo only",
+  "Joueurs solos": "Solo players",
   "À temps seulement": "On time only",
   "Joueur": "Player",
   "Jouée après la fermeture": "Played after closing",

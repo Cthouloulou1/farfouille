@@ -80,7 +80,9 @@ export function chronoDuNom(secondes: number): string {
  * LE NOM D'UNE PARTIE SE LIT DANS SES REGLAGES, il ne se choisit pas.
  *
  * On ne precise que ce qui s'ecarte de la partie normale : le format, le joker,
- * la super grille. `Normale, 60s`, `5/9, 1min30`, `11/11 super grille, 3min`.
+ * la super grille. Chaque morceau se separe du suivant par une virgule :
+ * `Normale, 60s`, `5/9, 1min30`, `Normale, super grille, 60s`,
+ * `11/11, super grille, 3min`.
  * `t` traduit les mots ; le serveur, qui n'affiche rien, s'en passe.
  */
 export function nomDeLaPartie(
@@ -92,8 +94,8 @@ export function nomDeLaPartie(
   const format = c.tirage === 7 && c.jouables === 7
     ? (joker === "" ? t("Normale") : joker.charAt(0).toUpperCase() + joker.slice(1))
     : `${c.jouables}/${c.tirage}${joker === "" ? "" : ` ${joker}`}`;
-  const grille = c.bornes === 10 ? ` ${t("super grille")}` : "";
-  return c.chrono === null ? `${format}${grille}` : `${format}${grille}, ${chronoDuNom(c.chrono)}`;
+  return [format, ...(c.bornes === 10 ? [t("super grille")] : []),
+    ...(c.chrono === null ? [] : [chronoDuNom(c.chrono)])].join(", ");
 }
 
 /** Ce qu'il faut de minutes apres minuit pour que le jour change : 5 h 30. */

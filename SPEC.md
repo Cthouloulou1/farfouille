@@ -5749,7 +5749,7 @@ Ce qu'on joue pour commencer :
 
 | lexique | parties |
 |---|---|
-| **ODS** | P1 **Normale, 30s** : 15×15, 7 sur 7, 30 secondes par coup · P2 **Normale super grille, 60s** : 21×21, 7 sur 7, 60 secondes par coup |
+| **ODS** | P1 **Normale, 30s** : 15×15, 7 sur 7, 30 secondes par coup · P2 **Normale, super grille, 60s** : 21×21, 7 sur 7, 60 secondes par coup |
 | **CSW** et **NWL** | P1 et P2 **Normale, 2min** : 15×15, 7 sur 7, 2 minutes par coup · P3 **Joker, 2min** : la même, avec un joker par tirage |
 
 **Une partie se nomme par son numéro, puis par ses réglages.** P1, P2, P3 disent
@@ -5761,7 +5761,8 @@ s'écarte de la partie normale.
 |---|---|
 | 15×15, 7 sur 7, 60 s | `Normale, 60s` |
 | 15×15, 5 sur 9, 90 s | `5/9, 1min30` |
-| 21×21, 11 sur 11, 3 min | `11/11 super grille, 3min` |
+| 21×21, 7 sur 7, 60 s | `Normale, super grille, 60s` |
+| 21×21, 11 sur 11, 3 min | `11/11, super grille, 3min` |
 | 15×15, 7 sur 7, un joker, 2 min | `Joker, 2min` |
 | 15×15, 7 sur 8, un joker, 2 min | `7/8 joker, 2min` |
 
@@ -5771,8 +5772,8 @@ secondes restantes accolées : `30s`, `60s`, `1min30`, `2min`.
 **Les jours passés restent jouables**, depuis le calendrier. **Une manche jouée
 après la fermeture entre au classement du jour, sur une ligne teintée** : on la
 compare à celles des autres, et la teinte dit qu'elle a eu tout le temps d'en
-entendre parler. La case **À temps seulement** la retire, comme **Solo
-seulement** retire les équipes.
+entendre parler. La case **À temps seulement** la retire, comme **Joueurs
+solos** retire les équipes.
 
 ### Tirer les parties du lendemain
 
@@ -5866,7 +5867,7 @@ total ; les parties du jour se jouent et se regardent une par une.
 raté y coûte déjà son chrono entier. **Cliquer *Négatif*** classe aux points,
 le temps départageant les égalités.
 
-**Solo seulement** : une case qui retire les équipes et les lignes à plusieurs
+**Joueurs solos** : une case qui retire les équipes et les lignes à plusieurs
 sur un compte. **À temps seulement** : une case qui retire les lignes teintées,
 jouées après la fermeture.
 

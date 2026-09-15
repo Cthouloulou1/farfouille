@@ -74,7 +74,9 @@ verifie("les noms des parties",
   nomDeLaPartie({ tirage: 7, jouables: 7, joker: false, bornes: 7, chrono: 60 }) === "Normale, 60s"
   && nomDeLaPartie({ tirage: 9, jouables: 5, joker: false, bornes: 7, chrono: 90 }) === "5/9, 1min30"
   && nomDeLaPartie({ tirage: 11, jouables: 11, joker: false, bornes: 10, chrono: 180 })
-    === "11/11 super grille, 3min"
+    === "11/11, super grille, 3min"
+  && nomDeLaPartie({ tirage: 7, jouables: 7, joker: false, bornes: 10, chrono: 60 })
+    === "Normale, super grille, 60s"
   && nomDeLaPartie({ tirage: 7, jouables: 7, joker: true, bornes: 7, chrono: 120 }) === "Joker, 2min");
 
 // ----------------------------------------------- 1. la partie figee est la partie
