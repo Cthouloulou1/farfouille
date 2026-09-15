@@ -39,6 +39,25 @@ function aleaDuCoup(jeu: Game, n: number): Alea {
     : mulberry32(moveSeed(jeu.seed, n));
 }
 
+/**
+ * Le top d'une position, calcule EXACTEMENT comme le fait `worker.ts`.
+ *
+ * La meme suite aleatoire sert deux fois, dans cet ordre : le generateur y
+ * tire les positions de joker a egalite de score, puis `pickTop` l'isotop.
+ * Appeler le generateur sans elle, ou avec d'autres paliers -- qui changent les
+ * coups retenus, donc le nombre de tirages -- decale la suite, et un autre
+ * isotop sort sans que le jeu y soit pour rien.
+ */
+function topRecalcule(
+  plateau: Board, gaddag: ReturnType<typeof loadDict>, jeu: Game, m: Game["moves"][number],
+) {
+  const alea = aleaDuCoup(jeu, m.n);
+  const gen = generateMoves(plateau, gaddag, m.rack, {
+    tiers: jeu["paliersGardes"], maxMoves: 120, random: alea,
+  });
+  return pickTop(gen.moves, alea, plateau.cfg.joker, m.reliquatDuSac);
+}
+
 const D = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
 const ID = "avance-test";
 
@@ -95,8 +114,7 @@ const gaddag = loadDict(GADDAG_PATH);
 const plateau = new Board(dawg, cfg);
 let faux = 0, premierFaux = "";
 for (const m of g.moves) {
-  const gen = generateMoves(plateau, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
-  const top = pickTop(gen.moves, aleaDuCoup(g, m.n), cfg.joker);
+  const top = topRecalcule(plateau, gaddag, g, m);
   const attendu = top === null ? null : top.top;
   const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
     && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;
@@ -186,13 +204,12 @@ verifie("des jokers ont bien joue de vraies lettres", sortis.length >= 3,
 const plateauJ = new Board(dawg, cfgJ);
 let fauxJ = 0, premierFauxJ = "";
 for (const m of j.moves) {
-  const gen = generateMoves(plateauJ, gaddag, m.rack, { tiers: 40, maxMoves: 120 });
   // LE SAC ENTRE DANS LE CHOIX DE L'ISOTOP, en partie joker : a score egal on
   // retient celui qui CONSERVE le joker, et cela ne se decide qu'avec le sac
   // sous les yeux (SPEC.md §16). Le coup garde donc, en memoire, ce que le
   // solveur avait devant lui -- sans quoi ce juge de paix ne pourrait plus
   // refaire le meme choix, et se plaindrait d'un ecart qui n'en est pas un.
-  const top = pickTop(gen.moves, aleaDuCoup(j, m.n), cfgJ.joker, m.reliquatDuSac);
+  const top = topRecalcule(plateauJ, gaddag, j, m);
   const attendu = top === null ? null : top.top;
   const pareil = attendu !== null && attendu.word === m.word && attendu.dir === m.dir
     && attendu.x === m.x && attendu.y === m.y && attendu.score === m.score;
