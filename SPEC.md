@@ -5772,7 +5772,7 @@ secondes restantes accolées : `30s`, `60s`, `1min30`, `2min`.
 **Les jours passés restent jouables**, depuis le calendrier. **Une manche jouée
 après la fermeture entre au classement du jour, sur une ligne teintée** : on la
 compare à celles des autres, et la teinte dit qu'elle a eu tout le temps d'en
-entendre parler. La case **À temps seulement** la retire, comme **Joueurs
+entendre parler. La case **Joueurs ponctuels seulement** la retire, comme **Joueurs
 solos** retire les équipes.
 
 ### Tirer les parties du lendemain
@@ -5799,7 +5799,7 @@ Le panneau n'existe que pour un compte d'administration, sur la page Compétitif
 | **Nombre de parties** | 2 par défaut en ODS, 3 en CSW et en NWL |
 | **Tout retirer** | tire à nouveau réglages et graines de toutes les parties ; leur nombre ne change pas |
 | **Nouvelle graine**, par partie | mêmes réglages, autres tirages |
-| **Réglages**, par partie | le panneau des réglages d'un salon (§16) |
+| **Réglages**, par partie | l'éditeur de partie (voir plus bas) |
 | **Aperçu**, par partie | la partie entière : coups, tops, cases, scores |
 
 **Rien d'une partie ne se voit sans Aperçu.** Le panneau ne montre que son nom.
@@ -5808,8 +5808,81 @@ la parution certaine.
 
 **Un aperçu s'écrit au journal, et sort son auteur du classement de cette
 partie.** Celui qui l'a regardée la connaît : il peut la jouer, hors classement.
-Sans aperçu, l'administrateur est classé comme tout le monde. Retirages et
-réglages s'écrivent au journal eux aussi.
+Sa ligne paraît teintée, en bas, sans rang. Sans aperçu, l'administrateur est
+classé comme tout le monde. Retirages et réglages s'écrivent au journal eux
+aussi.
+
+**Seules les parties de demain se règlent.** Celles d'aujourd'hui ont paru : des
+joueurs les ont peut-être déjà jouées.
+
+**Tout retirer tire dans une pool.** Les parties tirées automatiquement suivent
+les modèles fixes du tableau des parties du jour. Retirer — ou ajouter une
+partie au-delà de ces modèles — tire dans une pool de modèles pondérés, la même
+pour les trois lexiques en attendant les règles du jour :
+
+| modèle | poids |
+|---|---|
+| Normale, 30s | 3 |
+| Normale, 60s | 3 |
+| Normale, 2min | 2 |
+| Normale, super grille, 60s | 2 |
+| Normale, super grille, 2min | 1 |
+| Joker, 2min | 2 |
+| 7/8, 2min | 1 |
+
+### La page d'administration
+
+Une page à part, `?page=admin-competitif`, ouverte par un bouton
+**Administration** en tête de la page Compétitif. Le bouton n'existe que pour un
+compte d'administration, et le serveur refuse tout le reste. Trois onglets :
+**Parties du jour**, **Tournoi de topping**, **Tournoi de battle**.
+
+### L'éditeur de partie
+
+Le panneau des réglages d'un salon (§16) porte une douzaine de réglages qui
+n'ont rien à faire ici — pioche, primes, terme, mode, décompte, topping
+collaboratif, montante — et il est câblé pour relancer un salon. **Une partie
+d'épreuve ne varie que par quatre choses**, et l'éditeur ne montre qu'elles :
+
+| réglage | choix |
+|---|---|
+| **Grille** | Normale · Super grille |
+| **Format** | 7 sur 7 · 7 sur 8 · 8 sur 8 · Autre (posables, tirés) |
+| **Joker** | Sans · Un · Deux |
+| **Temps par coup** | 15s · 30s · 60s · 90s · 2min · 3min · Autre |
+
+Le lexique vient de l'épreuve, le reste des valeurs d'une partie normale. **Le
+nom se lit en direct** sous l'éditeur : c'est lui qu'on vérifie avant de valider.
+Le même éditeur sert aux parties du jour et aux deux tournois.
+
+### Créer un tournoi de topping
+
+**Ce module est construit pour devenir public.** La création est réservée à
+l'administration aujourd'hui, mais la permission se décide au serveur en un seul
+endroit, et le formulaire ne suppose rien d'un administrateur : le jour où tout
+compte pourra créer son tournoi, on change une ligne et on ajoute un bouton
+**Créer un tournoi** sur la page Compétitif.
+
+| champ | règle |
+|---|---|
+| **Nom** | de 3 à 60 caractères |
+| **Lexique** | ODS, CSW, NWL |
+| **Début et fin** | date et heure de Paris ; la fin après le début |
+| **Joueurs par équipe** | de 1 à 4 ; 1 par défaut |
+| **Nombre de parties** | de 1 à 10 |
+| **Chaque partie** | l'éditeur de partie ; sur la première, **Toutes comme la première** |
+
+Les dates se saisissent **à l'heure de Paris**, quel que soit le fuseau du
+navigateur : c'est l'heure du site, celle des parties du jour. Le serveur
+convertit.
+
+**Valider fige toutes les parties avant de répondre.** Quelques secondes pour dix
+parties : le tournoi n'existe qu'une fois ses parties écrites, et un tournoi qui
+paraît sans elles ne se jouerait pas. Le bouton le dit pendant ce temps.
+
+**Un tournoi créé ne se modifie pas encore.** Le retoucher avant son début, ou le
+supprimer, reste ouvert.
+
 
 ### Les règles du jour
 
@@ -5868,7 +5941,7 @@ raté y coûte déjà son chrono entier. **Cliquer *Négatif*** classe aux point
 le temps départageant les égalités.
 
 **Joueurs solos** : une case qui retire les équipes et les lignes à plusieurs
-sur un compte. **À temps seulement** : une case qui retire les lignes teintées,
+sur un compte. **Joueurs ponctuels seulement** : une case qui retire les lignes teintées,
 jouées après la fermeture.
 
 Les deux cases valent pour toute la page : le rang, le « Trouvé par », le
@@ -6062,6 +6135,23 @@ compte.
 
 Le **Général** se calcule comme le Cumul des parties du jour.
 
+**Une partie de tournoi ne se joue qu'entre les deux dates, et qu'inscrit.**
+Après la fin, rien ne se rattrape : à la différence d'une partie du jour, un
+tournoi a un vainqueur.
+
+**Ce qu'on voit des résultats** (voir « Le classement ») : l'onglet d'une partie
+à qui l'a jouée, le Général à qui les a toutes jouées, et tout à tout le monde
+après la fin.
+
+**Sur la page Compétitif**, chaque tournoi est une tuile : la vignette de la
+grille de sa première partie, son nom, son type, ses dates. Trois groupes : en
+cours, à venir, terminés. La tuile mène à la **page du tournoi** : ses
+réglages, ses inscrits, le bouton **S'inscrire**, et, pour un inscrit, la liste
+de ses parties avec **Jouer** et **Résultats**, comme les parties du jour.
+
+**Les partenaires nommés par pseudo sont inscrits avec l'équipe, sans
+notification** tant que les notifications n'existent pas.
+
 ### Les tournois de duplicate
 
 Création réservée à l'administration. Ils se règlent comme un tournoi de
@@ -6086,7 +6176,30 @@ avec cinquante joueurs n'a pas plus de calcul à faire qu'un salon d'un seul.
 
 ### Les tournois de battle
 
-Création réservée à l'administration, comme le topping.
+Création réservée à l'administration, et pour l'instant seulement elle : ce
+module-là n'a pas vocation à devenir public.
+
+#### Le formulaire de création
+
+| champ | par défaut |
+|---|---|
+| **Nom**, **lexique** | |
+| **Fin des inscriptions** | le début des rencontres |
+| **Joueurs par équipe** | 1 |
+| **Joueurs par poule** | 4 |
+| **Rencontres par poule** | tous contre tous |
+| **Manches par rencontre de poule** | 2 |
+| **Qualifiés** | tous |
+| **Dont au tableau haut** | la moitié des qualifiés |
+| **Meilleur de X**, en tableau | 3 |
+| **X en demi-finale**, **X en finale** | comme les autres rencontres |
+| **La partie d'une manche** | l'éditeur de partie ; Normale, 60s |
+| **Date limite des poules** | une semaine après le début |
+| **Jours par tour de tableau** | 3 |
+
+X est impair : le formulaire n'en propose pas d'autre. **Les poules se tirent une
+fois les inscriptions closes** ; leur tirage, leur retouche à la main et les
+rencontres viennent à l'étape suivante.
 
 **Une manche** : deux joueurs, un salon, en même temps. Le premier qui trouve le
 top marque **1 point** ; un top que personne ne trouve donne **½ point** à
@@ -6177,9 +6290,20 @@ trois lexiques figées d'avance pour aujourd'hui et demain, la page Compétitif,
 la page des résultats avec son classement, ses deux cases, son cumul et sa
 feuille de route, « Trouvé par » et sa fenêtre, et les cinq graphiques.
 
+**Puis :** la page d'administration — les parties de demain (nombre, tout
+retirer, nouvelle graine, réglages par l'éditeur de partie, aperçu) —, les deux
+formulaires de création de tournoi, les tuiles des tournois sur la page
+Compétitif, la page d'un tournoi avec son inscription, et le jeu d'un tournoi de
+topping jusqu'à ses résultats, Général en tête.
+
+**Une équipe inscrite joue une feuille.** Quand un de ses membres lance une
+partie, la manche porte toute l'équipe de l'inscription, présente ou non : la
+tentative de chacun part, et la ligne du classement nomme l'équipe entière.
+
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
-par joueur dans un salon qui n'en tient qu'une), le panneau d'administration et
-les règles du jour, les défis et les notifications, les tournois.
+par joueur dans un salon qui n'en tient qu'une), les règles du jour, les défis
+et les notifications, le tirage des poules et les rencontres du battle, le
+tournoi de duplicate.
 
 ```bash
 node packages/server/test/check_figees.ts       # figer, servir, la pause

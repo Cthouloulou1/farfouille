@@ -37,7 +37,7 @@ import {
 } from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 import { chercherLeMot } from "../../engine/src/chercher.ts";
-import { LEXIQUES_DU_JOUR, nomDeLaPartie } from "../../engine/src/epreuves.ts";
+import { LEXIQUES_DU_JOUR, chronoDuNom, heureDeParis, nomDeLaPartie } from "../../engine/src/epreuves.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cv = $<HTMLCanvasElement>("cv");
@@ -156,6 +156,8 @@ interface EpreuveVue {
   lexique: string | null;
   partie: number;
   config: ConfigSerialisee | null;
+  /** Le tournoi dont la partie fait partie, ou `null` pour une partie du jour. */
+  tournoi: { id: string; nom: string } | null;
   compte: string;
   lancee: boolean;
   jeu: string | null;
@@ -6040,6 +6042,8 @@ function ouvrirLeProfil(pousser = true): void {
   $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
   $("corps-competitif").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-resultats").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
@@ -6082,6 +6086,8 @@ function ouvrirLeSolveur(pousser = true): void {
   $("corps-partie").hidden = true;
   $("corps-records").hidden = true;
   $("corps-competitif").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
@@ -6110,6 +6116,8 @@ addEventListener("popstate", () => {
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
   if (page === "records") { fermerLaPartie(false); ouvrirLesRecords(false); return; }
   if (page === "competitif") { ouvrirLeCompetitif(false); return; }
+  if (page === "admin-competitif") { ouvrirLAdministrationDuCompetitif(false); return; }
+  if (page === "tournoi") { ouvrirLeTournoi(new URLSearchParams(location.search).get("id") ?? "", false); return; }
   if (page === "resultats") { ouvrirLesResultatsDeLAdresse(); return; }
   if (page === "partie") {
     const p = new URLSearchParams(location.search);
@@ -8255,7 +8263,8 @@ $("site-nom").addEventListener("click", () => {
   if (!$("corps-solveur").hidden) { fermerLeSolveur(); return; }
   if (!$("corps-partie").hidden) { fermerLaPartie(); return; }
   if (!$("corps-records").hidden) { fermerLesRecords(); return; }
-  if (!$("corps-competitif").hidden || !$("corps-resultats").hidden) { fermerLeCompetitif(); return; }
+  if (!$("corps-competitif").hidden || !$("corps-resultats").hidden
+      || !$("corps-admin").hidden || !$("corps-tournoi").hidden) { fermerLeCompetitif(); return; }
   if ($("join").hidden) quitterSalon();
 });
 
@@ -8633,6 +8642,8 @@ void lireLeCompte().then(() => {
   const ou = new URLSearchParams(location.search);
   if (ou.get("page") === "records") ouvrirLesRecords(false);
   if (ou.get("page") === "competitif") ouvrirLeCompetitif(false);
+  if (ou.get("page") === "admin-competitif") ouvrirLAdministrationDuCompetitif(false);
+  if (ou.get("page") === "tournoi" && ou.get("id") !== null) ouvrirLeTournoi(ou.get("id")!, false);
   if (ou.get("page") === "resultats") ouvrirLesResultatsDeLAdresse();
   if (ou.get("page") === "partie" && ou.get("partie") !== null) {
     void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1));
@@ -9503,6 +9514,8 @@ function peindreLesLongueurs(): void {
 function ouvrirLesRecords(pousser = true): void {
   $("corps-partie").hidden = true;
   $("corps-competitif").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
@@ -10150,18 +10163,25 @@ function ouvrirLeCompetitif(pousser = true): void {
   $("corps-solveur").hidden = true;
   $("corps-records").hidden = true;
   $("corps-resultats").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-competitif").hidden = false;
   $("join").hidden = false;
   if (cpLexique === "") cpLexique = lexiqueDuJourParDefaut();
   cpJour = null;
   $("cp-jours").hidden = true;
+  // Le bouton n'existe que pour l'administration ; le serveur refuse le reste.
+  $("cp-admin").hidden = moiCompte?.admin !== true;
   peindreLesLexiquesDuJour();
   void chargerLeCompetitif();
+  void chargerLesTournois();
   if (pousser) window.history.pushState({ page: "competitif" }, "", "?page=competitif");
 }
 
 function fermerLeCompetitif(pousser = true): void {
   $("corps-competitif").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = false;
   $("cp-parties").replaceChildren();
@@ -10250,24 +10270,29 @@ function ligneDePartieDuJour(jour: string, lexique: string, p: PartieDuJourVue):
  * un compte (SPEC.md §29).
  */
 async function jouerLaPartieDuJour(jour: string, lexique: string, n: number): Promise<void> {
+  await jouerUnePartie({ jour, lexique, partie: n }, $("cp-error"));
+}
+
+/** Jouer une partie d'epreuve, du jour ou de tournoi : `corps` dit laquelle. */
+async function jouerUnePartie(corps: Record<string, unknown>, erreur: HTMLElement): Promise<void> {
   if (moiCompte === null) { ouvrirLeCompte("connexion"); return; }
-  $("cp-error").hidden = true;
+  erreur.hidden = true;
   try {
     const r = await fetch("/api/competitif/jouer", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jour, lexique, partie: n }),
+      body: JSON.stringify(corps),
     });
     const d = await r.json();
     if (!r.ok || typeof d.salon !== "string") {
-      $("cp-error").textContent = t(d.erreur ?? "serveur injoignable");
-      $("cp-error").hidden = false;
+      erreur.textContent = t(d.erreur ?? "serveur injoignable");
+      erreur.hidden = false;
       return;
     }
     ($("name") as HTMLInputElement).value = moiCompte.pseudo;
     allerA(d.salon);
   } catch {
-    $("cp-error").textContent = t("serveur injoignable");
-    $("cp-error").hidden = false;
+    erreur.textContent = t("serveur injoignable");
+    erreur.hidden = false;
   }
 }
 
@@ -10304,6 +10329,8 @@ interface LigneVue {
   coups: number;
   aTemps: boolean;
   at: number;
+  /** Jouee par qui avait vu la partie d'avance : hors classement. */
+  apercu?: boolean;
   /** Au cumul seulement. */
   parties?: number[];
   cle?: string;
@@ -10324,7 +10351,10 @@ interface CoupVue {
 }
 
 interface ResultatsVue {
-  jour: string;
+  jour: string | null;
+  tournoi?: { id: string; nom: string; fin: number | null };
+  /** Dans un tournoi, les resultats qu'on n'a pas encore le droit de voir. */
+  cache?: boolean;
   lexique: string;
   parties: { n: number; config: ConfigSerialisee }[];
   partie: number | "cumul";
@@ -10335,6 +10365,8 @@ interface ResultatsVue {
 
 let rsJour = "";
 let rsLexique = "";
+/** Le tournoi dont on lit les resultats, ou `null` pour les parties du jour. */
+let rsTournoi: string | null = null;
 let rsPartie: number | "cumul" = 1;
 let rsDonnees: ResultatsVue | null = null;
 let rsTri: "temps" | "negatif" = "temps";
@@ -10351,28 +10383,47 @@ function ouvrirLesResultats(jour: string, lexique: string, partie: number | "cum
   $("corps-solveur").hidden = true;
   $("corps-records").hidden = true;
   $("corps-competitif").hidden = true;
+  $("corps-admin").hidden = true;
+  $("corps-tournoi").hidden = true;
   $("corps-resultats").hidden = false;
   $("join").hidden = false;
   rsJour = jour;
   rsLexique = lexique;
+  rsTournoi = null;
   rsPartie = partie;
   rsVue = null;
   rsTri = "temps";
+  $("rs-retour").textContent = t("← Parties du jour");
   void chargerLesResultats();
-  if (pousser) {
-    window.history.pushState({ page: "resultats" }, "",
-      `?page=resultats&jour=${jour}&lexique=${encodeURIComponent(lexique)}&partie=${partie}`);
-  }
+  if (pousser) window.history.pushState({ page: "resultats" }, "", adresseDesResultats(partie));
+}
+
+/** Les resultats d'un tournoi : le General d'abord (SPEC.md §29). */
+function ouvrirLesResultatsDuTournoi(id: string, partie: number | "cumul" = "cumul", pousser = true): void {
+  ouvrirLesResultats("", "", partie, false);
+  rsTournoi = id;
+  $("rs-retour").textContent = t("← Tournoi");
+  void chargerLesResultats();
+  if (pousser) window.history.pushState({ page: "resultats" }, "", adresseDesResultats(partie));
+}
+
+/** L'adresse des resultats regardes, pour l'historique et les liens. */
+function adresseDesResultats(partie: number | "cumul"): string {
+  return rsTournoi !== null
+    ? `?page=resultats&tournoi=${encodeURIComponent(rsTournoi)}&partie=${partie}`
+    : `?page=resultats&jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${partie}`;
 }
 
 /** Une adresse de resultats s'ouvre au chargement comme au retour arriere. */
 function ouvrirLesResultatsDeLAdresse(): void {
   const p = new URLSearchParams(location.search);
   const partie = p.get("partie") === "cumul" ? "cumul" : Math.max(1, Number(p.get("partie")) || 1);
+  if (p.get("tournoi") !== null) { ouvrirLesResultatsDuTournoi(p.get("tournoi")!, partie, false); return; }
   ouvrirLesResultats(p.get("jour") ?? "", p.get("lexique") ?? "ods9", partie, false);
 }
 
 $("rs-retour").addEventListener("click", () => {
+  if (rsTournoi !== null) { ouvrirLeTournoi(rsTournoi); return; }
   cpLexique = rsLexique;
   ouvrirLeCompetitif();
 });
@@ -10384,8 +10435,9 @@ async function chargerLesResultats(): Promise<void> {
   $("rs-resume").replaceChildren();
   let d: ResultatsVue;
   try {
-    const r = await fetch(`/api/competitif/resultats?jour=${rsJour}`
-      + `&lexique=${encodeURIComponent(rsLexique)}&partie=${rsPartie}`);
+    const r = await fetch(rsTournoi !== null
+      ? `/api/competitif/resultats?tournoi=${encodeURIComponent(rsTournoi)}&partie=${rsPartie}`
+      : `/api/competitif/resultats?jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${rsPartie}`);
     d = await r.json();
     if (!r.ok) {
       if (mien !== rsDemande) return;
@@ -10406,10 +10458,11 @@ async function chargerLesResultats(): Promise<void> {
 
 function peindreLesOngletsDesResultats(d: ResultatsVue): void {
   const boite = $("rs-onglets");
-  const onglets: { v: number | "cumul"; texte: string }[] = [
-    ...d.parties.map((p) => ({ v: p.n as number | "cumul", texte: `P${p.n}` })),
-    { v: "cumul", texte: t("Cumul") },
-  ];
+  const parties = d.parties.map((p) => ({ v: p.n as number | "cumul", texte: `P${p.n}` }));
+  // UN TOURNOI SE JUGE SUR SON TOTAL : son General vient en premier.
+  const onglets: { v: number | "cumul"; texte: string }[] = d.tournoi !== undefined
+    ? [{ v: "cumul", texte: t("Général") }, ...parties]
+    : [...parties, { v: "cumul", texte: t("Cumul") }];
   boite.replaceChildren(...onglets.map((o) => {
     const b = el("button", "", o.texte) as HTMLButtonElement;
     b.type = "button";
@@ -10418,17 +10471,20 @@ function peindreLesOngletsDesResultats(d: ResultatsVue): void {
       if (o.v === rsPartie) return;
       rsPartie = o.v;
       rsVue = null;
-      window.history.replaceState({ page: "resultats" }, "",
-        `?page=resultats&jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${o.v}`);
+      window.history.replaceState({ page: "resultats" }, "", adresseDesResultats(o.v));
       void chargerLesResultats();
     });
     return b;
   }));
 }
 
-/** Les lignes que les cases cochees laissent. */
+/**
+ * Les lignes que les cases cochees laissent. Une ligne jouee par qui avait vu la
+ * partie d'avance n'y est jamais : elle est hors classement (SPEC.md §29).
+ */
 function lignesRetenues(d: ResultatsVue): LigneVue[] {
-  return d.lignes.filter((l) => (!rsSolo || l.jeu === "seul") && (!rsATemps || l.aTemps));
+  return d.lignes.filter((l) => l.apercu !== true
+    && (!rsSolo || l.jeu === "seul") && (!rsATemps || l.aTemps));
 }
 
 /** Deux temps egaux au centieme sont ex aequo (SPEC.md §23). */
@@ -10442,8 +10498,19 @@ function peindreLesResultats(): void {
   $("rs-atemps").setAttribute("aria-pressed", String(rsATemps));
   const partie = d.partie === "cumul" ? null : d.parties.find((p) => p.n === d.partie);
   $("rs-titre").textContent = partie === null || partie === undefined
-    ? t("Cumul") : `P${partie.n} · ${nomDeLaPartie(partie.config, t)}`;
-  $("rs-detail").textContent = `${jourEnLettres(d.jour)} · ${dictionnaire(d.lexique).nom}`;
+    ? t(d.tournoi !== undefined ? "Général" : "Cumul") : `P${partie.n} · ${nomDeLaPartie(partie.config, t)}`;
+  $("rs-detail").textContent = `${d.tournoi !== undefined ? d.tournoi.nom : jourEnLettres(d.jour ?? "")}`
+    + ` · ${dictionnaire(d.lexique).nom}`;
+  // DANS UN TOURNOI, on ne voit que ce qu'on a fini (SPEC.md §29).
+  if (d.cache === true) {
+    $("rs-classement").replaceChildren(tableauVide(d.partie === "cumul"
+      ? t("Le général s'ouvre une fois toutes les parties jouées, ou à la fin du tournoi.")
+      : t("Les résultats de cette partie s'ouvrent une fois la partie jouée, ou à la fin du tournoi.")));
+    $("rs-feuille").replaceChildren();
+    $("rs-resume").replaceChildren();
+    $("rs-graphes").hidden = true;
+    return;
+  }
   if (d.partie === "cumul") peindreLeCumul(d);
   else peindreLeClassementDeLaPartie(d);
 }
@@ -10507,8 +10574,13 @@ function ligneDeClassement(l: LigneVue, rang: number, avecParties: boolean): HTM
     tr.classList.add("rs-tard");
     tr.title = t("Jouée après la fermeture");
   }
+  if (l.apercu === true) {
+    tr.classList.add("rs-apercu");
+    tr.title = t("A vu la partie avant de la jouer : hors classement");
+  }
   if (l.manche === rsVue) tr.classList.add("rs-vu");
-  tr.appendChild(celluleDuRang(rang));
+  if (rang === 0) tr.appendChild(el("td", "rang", "—"));
+  else tr.appendChild(celluleDuRang(rang));
   tr.appendChild(celluleDuJoueur(l));
   if (avecParties) tr.appendChild(el("td", "", String(l.parties?.length ?? 1)));
   tr.appendChild(el("td", rsTri === "temps" ? "fort" : "", tempsCentiemes(l.temps)));
@@ -10519,13 +10591,14 @@ function ligneDeClassement(l: LigneVue, rang: number, avecParties: boolean): HTM
 
 function peindreLeClassementDeLaPartie(d: ResultatsVue): void {
   const lignes = lignesRetenues(d);
-  if (lignes.length === 0) {
+  if (lignes.length === 0 && !d.lignes.some((l) => l.apercu === true)) {
     $("rs-classement").replaceChildren(tableauVide(t("Personne n'a encore joué cette partie.")));
   } else {
     const table = el("table");
     table.appendChild(teteDuClassement(false));
     const corps = el("tbody");
-    for (const { l, rang } of classer(lignes)) {
+    const horsClassement = d.lignes.filter((l) => l.apercu === true);
+    for (const { l, rang } of [...classer(lignes), ...horsClassement.map((l) => ({ l, rang: 0 }))]) {
       const tr = ligneDeClassement(l, rang, false);
       tr.addEventListener("click", () => {
         if (d.details === null || d.details === undefined) return;
@@ -10837,6 +10910,7 @@ function peindreLEpreuve(): void {
   if (e === null) return;
   $("ep-titre").textContent = e.config === null ? `P${e.partie}` : `P${e.partie} · ${nomDeLaPartie(e.config, t)}`;
   $("ep-detail").textContent = [
+    e.tournoi?.nom ?? "",
     e.lexique === null ? "" : dictionnaire(e.lexique).nom,
     e.jour === null ? "" : jourEnLettres(e.jour),
   ].filter((x) => x !== "").join(" · ");
@@ -10858,7 +10932,7 @@ function peindreLEpreuve(): void {
   const enJeu = e.lancee && !finie && !e.close && joueur;
   $("ep-pause").hidden = !enJeu || enPause;
   $("ep-reprendre").hidden = !enJeu || !enPause;
-  $("ep-resultats").hidden = !(finie || e.close) || e.jour === null;
+  $("ep-resultats").hidden = !(finie || e.close) || (e.jour === null && e.tournoi === null);
 }
 
 $("ep-seul").addEventListener("click", () => { envoyer({ t: "epreuve-lancer", jeu: "seul" }); });
@@ -10880,8 +10954,14 @@ $("ep-pause").addEventListener("click", () => { envoyer({ t: "pause" }); });
 $("ep-reprendre").addEventListener("click", () => { envoyer({ t: "reprendre" }); });
 $("ep-resultats").addEventListener("click", () => {
   const e = epreuve;
-  if (e === null || e.jour === null || e.lexique === null) return;
-  const { jour, lexique, partie } = { jour: e.jour, lexique: e.lexique, partie: e.partie };
+  if (e === null) return;
+  const { jour, lexique, partie, tournoi } = e;
+  if (tournoi !== null) {
+    quitterSalon();
+    ouvrirLesResultatsDuTournoi(tournoi.id, partie);
+    return;
+  }
+  if (jour === null || lexique === null) return;
   quitterSalon();
   ouvrirLesResultats(jour, lexique, partie);
 });
@@ -11289,4 +11369,852 @@ function grapheDeLaRepartition(lignes: LigneVue[], vue: LigneVue): Cadre {
     { classe: "g-cle-barre", texte: t2("{n} joueurs, au temps total", { n }) },
   ]);
   return c;
+}
+
+// --------------------------------------------------- L'EDITEUR DE PARTIE
+//
+// Voir SPEC.md §29. Une partie d'epreuve ne varie que par quatre choses -- la
+// grille, le format, le joker, le temps par coup -- et l'editeur ne montre
+// qu'elles. Le nom se lit en direct dessous : c'est lui qu'on verifie.
+//
+// Le meme editeur sert aux parties du jour et aux deux tournois.
+
+/** Ce que l'editeur regle : le modele d'une partie. */
+interface ModeleVue {
+  bornes: 7 | 10;
+  tirage: number;
+  jouables: number;
+  joker: boolean;
+  jokersParCoup?: 1 | 2;
+  chrono: number;
+}
+
+const MODELE_NORMAL: ModeleVue = { bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 60 };
+
+/** Le modele d'une configuration recue du serveur. */
+function modeleDe(c: ConfigSerialisee): ModeleVue {
+  return {
+    bornes: c.bornes === 10 ? 10 : 7, tirage: c.tirage, jouables: c.jouables, joker: c.joker,
+    ...(c.joker && c.jokersParCoup === 2 ? { jokersParCoup: 2 as const } : {}),
+    chrono: c.chrono ?? 60,
+  };
+}
+
+/** Une rangee de boutons a valeur, et ce qui se passe au clic. */
+function rangeeDeChoix(
+  etiquette: string, choix: { v: string; texte: string }[], valeur: string, surChoix: (v: string) => void,
+): { rang: HTMLElement; presser: (v: string) => void } {
+  const rang = el("div", "ed-rang");
+  rang.appendChild(el("label", "", etiquette));
+  const boite = el("div", "rc-choix");
+  const presser = (v: string): void => {
+    for (const b of boite.querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String((b as HTMLElement).dataset["v"] === v));
+    }
+  };
+  for (const c of choix) {
+    const b = el("button", "", c.texte) as HTMLButtonElement;
+    b.type = "button";
+    b.dataset["v"] = c.v;
+    b.addEventListener("click", () => { presser(c.v); surChoix(c.v); });
+    boite.appendChild(b);
+  }
+  rang.appendChild(boite);
+  presser(valeur);
+  return { rang, presser };
+}
+
+/** Un champ numerique dans une rangee. */
+function champNombre(min: number, max: number, valeur: number, titre: string): HTMLInputElement {
+  const i = document.createElement("input");
+  i.type = "number";
+  i.min = String(min);
+  i.max = String(max);
+  i.value = String(valeur);
+  i.title = titre;
+  i.setAttribute("aria-label", titre);
+  return i;
+}
+
+/**
+ * L'EDITEUR DE PARTIE. `surChange` est prevenu a chaque reglage ; `valeur` rend
+ * le modele du moment, et `poser` en impose un autre (« Toutes comme la
+ * premiere »).
+ */
+function editeurDePartie(
+  initial: ModeleVue, surChange: (m: ModeleVue) => void = () => undefined,
+): { el: HTMLElement; valeur: () => ModeleVue; poser: (m: ModeleVue) => void } {
+  let m: ModeleVue = { ...initial };
+  const boite = el("div", "editeur");
+  const nom = el("div", "ed-nom");
+  const changer = (): void => {
+    nom.replaceChildren(document.createTextNode(`${t("Nom de la partie")} : `), el("b", "", nomDeLaPartie(m, t)));
+    surChange({ ...m });
+  };
+
+  const grille = rangeeDeChoix(t("Grille"), [
+    { v: "7", texte: t("Normale") }, { v: "10", texte: t("Super grille") },
+  ], String(m.bornes), (v) => { m.bornes = v === "10" ? 10 : 7; changer(); });
+
+  // LE FORMAT : trois qu'on connait, et « Autre » qui montre deux nombres.
+  const posables = champNombre(2, 15, m.jouables, t("Lettres posables"));
+  const tires = champNombre(2, 15, m.tirage, t("Lettres tirées"));
+  const autreFormat = el("span", "ed-rang");
+  autreFormat.append(posables, document.createTextNode(` ${t("sur")} `), tires);
+  const formatDe = (x: ModeleVue): string =>
+    x.tirage === 7 && x.jouables === 7 ? "7/7" : x.tirage === 8 && x.jouables === 7 ? "7/8"
+      : x.tirage === 8 && x.jouables === 8 ? "8/8" : "autre";
+  const format = rangeeDeChoix(t("Format"), [
+    { v: "7/7", texte: t("7 sur 7") }, { v: "7/8", texte: t("7 sur 8") },
+    { v: "8/8", texte: t("8 sur 8") }, { v: "autre", texte: t("Autre") },
+  ], formatDe(m), (v) => {
+    autreFormat.hidden = v !== "autre";
+    if (v === "7/7") { m.jouables = 7; m.tirage = 7; }
+    if (v === "7/8") { m.jouables = 7; m.tirage = 8; }
+    if (v === "8/8") { m.jouables = 8; m.tirage = 8; }
+    posables.value = String(m.jouables);
+    tires.value = String(m.tirage);
+    changer();
+  });
+  format.rang.appendChild(autreFormat);
+  autreFormat.hidden = formatDe(m) !== "autre";
+  const surNombres = (): void => {
+    const p = Math.round(Number(posables.value)), ti = Math.round(Number(tires.value));
+    if (Number.isFinite(p)) m.jouables = p;
+    if (Number.isFinite(ti)) m.tirage = ti;
+    changer();
+  };
+  posables.addEventListener("input", surNombres);
+  tires.addEventListener("input", surNombres);
+
+  const jokerDe = (x: ModeleVue): string => (!x.joker ? "0" : x.jokersParCoup === 2 ? "2" : "1");
+  const joker = rangeeDeChoix(t("Joker"), [
+    { v: "0", texte: t("Sans") }, { v: "1", texte: t("Un") }, { v: "2", texte: t("Deux") },
+  ], jokerDe(m), (v) => {
+    m.joker = v !== "0";
+    if (v === "2") m.jokersParCoup = 2; else delete m.jokersParCoup;
+    changer();
+  });
+
+  // LE TEMPS PAR COUP : les chronos de tous les jours, et « Autre ».
+  const CHRONOS = [15, 30, 60, 90, 120, 180];
+  const secondes = champNombre(5, 3600, m.chrono, t("Secondes par coup"));
+  const autreChrono = el("span", "ed-rang");
+  autreChrono.append(secondes, document.createTextNode(` ${t("secondes")}`));
+  const chrono = rangeeDeChoix(t("Temps par coup"), [
+    ...CHRONOS.map((c) => ({ v: String(c), texte: chronoDuNom(c) })), { v: "autre", texte: t("Autre") },
+  ], CHRONOS.includes(m.chrono) ? String(m.chrono) : "autre", (v) => {
+    autreChrono.hidden = v !== "autre";
+    if (v !== "autre") m.chrono = Number(v);
+    secondes.value = String(m.chrono);
+    changer();
+  });
+  chrono.rang.appendChild(autreChrono);
+  autreChrono.hidden = CHRONOS.includes(m.chrono);
+  secondes.addEventListener("input", () => {
+    const s = Math.round(Number(secondes.value));
+    if (Number.isFinite(s)) m.chrono = s;
+    changer();
+  });
+
+  boite.append(grille.rang, format.rang, joker.rang, chrono.rang, nom);
+  changer();
+
+  const poser = (x: ModeleVue): void => {
+    m = { ...x };
+    grille.presser(String(m.bornes));
+    format.presser(formatDe(m));
+    autreFormat.hidden = formatDe(m) !== "autre";
+    posables.value = String(m.jouables);
+    tires.value = String(m.tirage);
+    joker.presser(jokerDe(m));
+    chrono.presser(CHRONOS.includes(m.chrono) ? String(m.chrono) : "autre");
+    autreChrono.hidden = CHRONOS.includes(m.chrono);
+    secondes.value = String(m.chrono);
+    changer();
+  };
+  return { el: boite, valeur: () => ({ ...m }), poser };
+}
+
+/** Envoie un formulaire au serveur, et rend sa reponse ou son erreur. */
+async function envoyerAuServeur(url: string, corps: unknown): Promise<{ ok: boolean; d: any }> {
+  try {
+    const r = await fetch(url, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corps),
+    });
+    return { ok: r.ok, d: await r.json() };
+  } catch {
+    return { ok: false, d: { erreur: "serveur injoignable" } };
+  }
+}
+
+/** Montre une erreur dans sa boite, ou la cache. */
+function direLErreur(boite: HTMLElement, message: string | null): void {
+  boite.textContent = message === null ? "" : t(message);
+  boite.hidden = message === null;
+}
+
+// ------------------------------------------------ LA PAGE D'ADMINISTRATION
+
+type OngletAdmin = "pdj" | "topping" | "battle";
+let adOnglet: OngletAdmin = "pdj";
+let adLexique = "ods9";
+let adOccupe = false;
+
+function ouvrirLAdministrationDuCompetitif(pousser = true): void {
+  if (moiCompte?.admin !== true) { ouvrirLeCompetitif(pousser); return; }
+  for (const id of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
+    "corps-competitif", "corps-resultats", "corps-tournoi"]) $(id).hidden = true;
+  $("corps-admin").hidden = false;
+  $("join").hidden = false;
+  peindreLOngletAdmin();
+  if (pousser) window.history.pushState({ page: "admin-competitif" }, "", "?page=admin-competitif");
+}
+
+function peindreLOngletAdmin(): void {
+  presser("ad-onglets", adOnglet);
+  $("ad-pdj").hidden = adOnglet !== "pdj";
+  $("ad-topping").hidden = adOnglet !== "topping";
+  $("ad-battle").hidden = adOnglet !== "battle";
+  if (adOnglet === "pdj") { peindreLesLexiquesDAdmin(); void chargerLesPartiesDeDemain(); }
+  if (adOnglet === "topping" && $("ad-topping").childElementCount === 0) {
+    $("ad-topping").appendChild(formulaireDuTournoiDeTopping((id) => ouvrirLeTournoi(id)));
+  }
+  if (adOnglet === "battle" && $("ad-battle").childElementCount === 0) {
+    $("ad-battle").appendChild(formulaireDuTournoiDeBattle((id) => ouvrirLeTournoi(id)));
+  }
+}
+
+$("ad-onglets").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("button") as HTMLElement | null;
+  const v = b?.dataset["v"];
+  if (v !== "pdj" && v !== "topping" && v !== "battle") return;
+  adOnglet = v;
+  peindreLOngletAdmin();
+});
+$("ad-retour").addEventListener("click", () => ouvrirLeCompetitif());
+$("cp-admin").addEventListener("click", () => ouvrirLAdministrationDuCompetitif());
+
+function peindreLesLexiquesDAdmin(): void {
+  const boite = $("ad-lexique");
+  boite.replaceChildren(...LEXIQUES_DU_JOUR.map((id) => {
+    const b = el("button", "", dictionnaire(id).nom.split(" ")[0]!) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(id === adLexique));
+    b.addEventListener("click", () => {
+      if (adOccupe) return;
+      adLexique = id;
+      peindreLesLexiquesDAdmin();
+      void chargerLesPartiesDeDemain();
+    });
+    return b;
+  }));
+}
+
+interface PartiesDeDemain {
+  jour: string; lexique: string; pret: boolean;
+  parties: { n: number; config: ConfigSerialisee }[];
+  apercus: number[];
+}
+
+async function chargerLesPartiesDeDemain(): Promise<void> {
+  direLErreur($("ad-error"), null);
+  try {
+    const r = await fetch(`/api/admin/pdj?lexique=${encodeURIComponent(adLexique)}`);
+    const d = await r.json();
+    if (!r.ok) { direLErreur($("ad-error"), d.erreur ?? "serveur injoignable"); return; }
+    peindreLesPartiesDeDemain(d as PartiesDeDemain);
+  } catch {
+    direLErreur($("ad-error"), "serveur injoignable");
+  }
+}
+
+/**
+ * UN CHANGEMENT DES PARTIES DE DEMAIN. Il refige ce qu'il touche : quelques
+ * secondes, pendant lesquelles les boutons se taisent.
+ */
+async function changerDemain(corps: Record<string, unknown>): Promise<void> {
+  if (adOccupe) return;
+  adOccupe = true;
+  $("ad-occupe").hidden = false;
+  for (const b of $("corps-admin").querySelectorAll("#ad-pdj button")) (b as HTMLButtonElement).disabled = true;
+  const { ok, d } = await envoyerAuServeur("/api/admin/pdj", { lexique: adLexique, ...corps });
+  adOccupe = false;
+  $("ad-occupe").hidden = true;
+  for (const b of $("corps-admin").querySelectorAll("#ad-pdj button")) (b as HTMLButtonElement).disabled = false;
+  if (!ok) { direLErreur($("ad-error"), d.erreur ?? "serveur injoignable"); return; }
+  direLErreur($("ad-error"), null);
+  peindreLesPartiesDeDemain(d as PartiesDeDemain);
+}
+
+let adNombre = 0;
+
+function peindreLesPartiesDeDemain(d: PartiesDeDemain): void {
+  $("ad-date").textContent = jourEnLettres(d.jour);
+  adNombre = d.parties.length;
+  $("ad-nombre").textContent = d.pret ? String(adNombre) : "—";
+  if (!d.pret) {
+    $("ad-parties").replaceChildren(tableauVide(t("Les parties de demain se préparent.")));
+    return;
+  }
+  // RIEN D'UNE PARTIE NE SE VOIT SANS APERCU : ici, son nom seulement.
+  $("ad-parties").replaceChildren(...d.parties.map((p) => {
+    const ligne = el("div", "ad-partie");
+    ligne.appendChild(el("div", "cp-num", String(p.n)));
+    const nom = el("div", "ad-nom", nomDeLaPartie(p.config, t));
+    if (d.apercus.includes(p.n)) nom.appendChild(el("i", "", t("aperçu ouvert : vous la jouerez hors classement")));
+    ligne.appendChild(nom);
+    const bouton = (texte: string, faire: () => void): void => {
+      const b = el("button", "", texte) as HTMLButtonElement;
+      b.type = "button";
+      b.addEventListener("click", faire);
+      ligne.appendChild(b);
+    };
+    bouton(t("Nouvelle graine"), () => void changerDemain({ action: "graine", partie: p.n }));
+    let editeur: ReturnType<typeof editeurDePartie> | null = null;
+    const zone = el("div", "");
+    zone.style.flexBasis = "100%";
+    bouton(t("Réglages"), () => {
+      if (editeur !== null) { zone.replaceChildren(); editeur = null; return; }
+      editeur = editeurDePartie(modeleDe(p.config));
+      const pied = el("div", "ed-pied");
+      const appliquer = el("button", "", t("Appliquer")) as HTMLButtonElement;
+      appliquer.type = "button";
+      appliquer.addEventListener("click", () => {
+        void changerDemain({ action: "reglages", partie: p.n, modele: editeur!.valeur() });
+      });
+      pied.appendChild(appliquer);
+      editeur.el.appendChild(pied);
+      zone.replaceChildren(editeur.el);
+    });
+    bouton(t("Aperçu"), () => {
+      // L'APERCU SE PAIE : qui l'ouvre joue ensuite cette partie hors classement.
+      confirmer(t("Ouvrir l'aperçu ? Vous jouerez cette partie hors classement."), () => {
+        void ouvrirLApercu(p.n);
+      });
+    });
+    ligne.appendChild(zone);
+    return ligne;
+  }));
+}
+
+$("ad-moins").addEventListener("click", () => {
+  if (adNombre > 1) void changerDemain({ action: "nombre", nombre: adNombre - 1 });
+});
+$("ad-plus").addEventListener("click", () => {
+  if (adNombre < 8) void changerDemain({ action: "nombre", nombre: adNombre + 1 });
+});
+$("ad-retirer").addEventListener("click", () => {
+  confirmer(t("Tout retirer ? Les réglages et les tirages de toutes les parties changent."), () => {
+    void changerDemain({ action: "retirer" });
+  });
+});
+
+/** L'apercu d'une partie de demain : tous ses coups, ses tops, sa fin. */
+async function ouvrirLApercu(n: number): Promise<void> {
+  const { ok, d } = await envoyerAuServeur("/api/admin/pdj/apercu", { lexique: adLexique, partie: n });
+  if (!ok) { direLErreur($("ad-error"), d.erreur ?? "serveur injoignable"); return; }
+  const coups = d.coups as { n: number; notation: string; word: string; dir: Dir; x: number; y: number;
+    score: number; isotops: number }[];
+  const config = d.config as ConfigSerialisee;
+  $("apercu-titre").textContent = `P${n} · ${nomDeLaPartie(config, t)}`;
+  $("apercu-detail").textContent = t2("{jour} · {n} coups · {total} points", {
+    jour: jourEnLettres(d.jour), n: coups.length, total: coups.reduce((a, c) => a + c.score, 0),
+  });
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: t("Cp.") }, { texte: t("Tirage"), classe: "g" }, { texte: t("Top"), classe: "g" },
+    { texte: t("Pos.") }, { texte: t("Score") }, { texte: t("Isotops") },
+  ]));
+  const corps = el("tbody");
+  for (const c of coups) {
+    const tr = el("tr");
+    tr.append(el("td", "", String(c.n)), el("td", "g", tirageDeLaFeuille(c.notation)),
+      el("td", "g rs-mot", c.word), el("td", "", noteCoup(c.dir, c.x, c.y, config.bornes)),
+      el("td", "", String(c.score)), el("td", "", String(c.isotops)));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("apercu-route").replaceChildren(table);
+  $("voile-apercu").hidden = false;
+  void chargerLesPartiesDeDemain();
+}
+
+$("apercu-close").addEventListener("click", () => { $("voile-apercu").hidden = true; });
+$("voile-apercu").addEventListener("click", (e) => {
+  if (e.target === $("voile-apercu")) $("voile-apercu").hidden = true;
+});
+
+// ------------------------------------------------ CREER UN TOURNOI DE TOPPING
+//
+// CE FORMULAIRE EST CONSTRUIT POUR DEVENIR PUBLIC (SPEC.md §29) : il ne suppose
+// rien d'un administrateur, et le serveur verifie tout. Le jour ou tout compte
+// pourra creer son tournoi, il suffira d'un bouton sur la page Competitif.
+
+/** Un champ du formulaire, avec son etiquette. */
+function champ(etiquette: string, contenu: HTMLElement): HTMLElement {
+  const c = el("div", "fo-champ");
+  c.append(el("label", "", etiquette), contenu);
+  return c;
+}
+
+/** Un champ de date et d'heure, a l'heure de Paris. */
+function champDate(valeur: number): HTMLInputElement {
+  const i = document.createElement("input");
+  i.type = "datetime-local";
+  i.value = heureDeParis(valeur);
+  return i;
+}
+
+/** Les trois lexiques, en puces a choix unique. */
+function choixDuLexique(valeur: string, surChoix: (v: string) => void): HTMLElement {
+  return rangeeDeChoix("", LEXIQUES_DU_JOUR.map((id) => ({ v: id, texte: dictionnaire(id).nom })),
+    valeur, surChoix).rang;
+}
+
+/** Un compteur -/+ borne. */
+function compteur(min: number, max: number, valeur: number, surChange: (n: number) => void): HTMLElement {
+  const boite = el("div", "ad-ligne");
+  boite.style.margin = "0";
+  let n = valeur;
+  const moins = el("button", "", "−") as HTMLButtonElement;
+  const plus = el("button", "", "+") as HTMLButtonElement;
+  const vu = el("b", "", String(n));
+  const poser = (x: number): void => {
+    n = Math.max(min, Math.min(max, x));
+    vu.textContent = String(n);
+    moins.disabled = n <= min;
+    plus.disabled = n >= max;
+    surChange(n);
+  };
+  moins.type = "button";
+  plus.type = "button";
+  moins.addEventListener("click", () => poser(n - 1));
+  plus.addEventListener("click", () => poser(n + 1));
+  boite.append(moins, vu, plus);
+  moins.disabled = n <= min;
+  plus.disabled = n >= max;
+  return boite;
+}
+
+/** L'heure pleine qui suit, pour les dates proposees d'office. */
+function prochaineHeure(decalageJours = 0): number {
+  const h = 3_600_000;
+  return Math.ceil(Date.now() / h) * h + decalageJours * 86_400_000;
+}
+
+function formulaireDuTournoiDeTopping(surCree: (id: string) => void): HTMLElement {
+  const f = el("div", "formulaire");
+  const nom = document.createElement("input");
+  nom.type = "text";
+  nom.maxLength = 60;
+  nom.placeholder = t("Nom du tournoi");
+  let lexique = cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique;
+  let equipe = 1;
+  const debut = champDate(prochaineHeure());
+  const fin = champDate(prochaineHeure(7));
+
+  const parties = el("div", "fo-deux");
+  parties.style.flexDirection = "column";
+  const editeurs: ReturnType<typeof editeurDePartie>[] = [];
+  const peindreLesParties = (n: number): void => {
+    while (editeurs.length < n) {
+      editeurs.push(editeurDePartie(editeurs[editeurs.length - 1]?.valeur() ?? MODELE_NORMAL));
+    }
+    editeurs.length = n;
+    parties.replaceChildren(...editeurs.map((e, i) => {
+      const bloc = el("div", "fo-partie");
+      const titre = el("h3", "", `P${i + 1}`);
+      if (i === 0 && n > 1) {
+        const toutes = el("button", "", t("Toutes comme la première")) as HTMLButtonElement;
+        toutes.type = "button";
+        // Les reglages seulement : chaque partie garde sa propre graine.
+        toutes.addEventListener("click", () => {
+          for (const autre of editeurs.slice(1)) autre.poser(editeurs[0]!.valeur());
+        });
+        titre.appendChild(toutes);
+      }
+      bloc.append(titre, e.el);
+      return bloc;
+    }));
+  };
+  peindreLesParties(1);
+
+  const dates = el("div", "fo-deux");
+  dates.append(champ(t("Début (heure de Paris)"), debut), champ(t("Fin (heure de Paris)"), fin));
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const creer = el("button", "valider", t("Créer le tournoi")) as HTMLButtonElement;
+  creer.type = "button";
+  creer.addEventListener("click", () => {
+    void (async () => {
+      creer.disabled = true;
+      creer.textContent = t("Création…");
+      const { ok, d } = await envoyerAuServeur("/api/tournois", {
+        type: "topping", nom: nom.value, lexique, equipe, debut: debut.value, fin: fin.value,
+        parties: editeurs.map((e) => e.valeur()),
+      });
+      creer.disabled = false;
+      creer.textContent = t("Créer le tournoi");
+      if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
+      direLErreur(erreur, null);
+      surCree(d.tournoi.id);
+    })();
+  });
+
+  f.append(
+    champ(t("Nom du tournoi"), nom),
+    champ(t("Lexique"), choixDuLexique(lexique, (v) => { lexique = v; })),
+    dates,
+    el("p", "fo-aide", t("Chaque partie se joue une fois, dans l'ordre qu'on veut, entre ces deux dates.")),
+    champ(t("Joueurs par équipe"), compteur(1, 4, 1, (n) => { equipe = n; })),
+    champ(t("Nombre de parties"), compteur(1, 10, 1, (n) => peindreLesParties(n))),
+    parties, erreur, creer,
+  );
+  return f;
+}
+
+// ------------------------------------------------ CREER UN TOURNOI DE BATTLE
+
+function formulaireDuTournoiDeBattle(surCree: (id: string) => void): HTMLElement {
+  const f = el("div", "formulaire");
+  const nom = document.createElement("input");
+  nom.type = "text";
+  nom.maxLength = 60;
+  nom.placeholder = t("Nom du tournoi");
+  let lexique = cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique;
+  const debut = champDate(prochaineHeure(3));
+  const limite = champDate(prochaineHeure(10));
+  const r = {
+    equipe: 1, joueursParPoule: 4, rencontresParPoule: null as number | null, manchesParPoule: 2,
+    qualifies: null as number | null, tableauHaut: null as number | null,
+    meilleurDe: 3, meilleurDeDemi: 3, meilleurDeFinale: 3, joursParTour: 3,
+  };
+  const editeur = editeurDePartie(MODELE_NORMAL);
+
+  /** Un choix « tous / un nombre », pour les rencontres et les qualifies. */
+  const tousOuNombre = (texteTous: string, min: number, max: number, surChange: (n: number | null) => void): HTMLElement => {
+    const boite = el("div", "ed-rang");
+    const nombre = champNombre(min, max, min, texteTous);
+    nombre.hidden = true;
+    const rangee = rangeeDeChoix("", [{ v: "tous", texte: texteTous }, { v: "n", texte: t("Un nombre") }], "tous", (v) => {
+      nombre.hidden = v === "tous";
+      surChange(v === "tous" ? null : Math.round(Number(nombre.value)));
+    });
+    rangee.rang.firstElementChild?.remove();
+    nombre.addEventListener("input", () => surChange(Math.round(Number(nombre.value))));
+    boite.append(rangee.rang, nombre);
+    return boite;
+  };
+  /** Un « meilleur de » impair. */
+  const impair = (valeur: number, surChange: (n: number) => void): HTMLElement => {
+    const rangee = rangeeDeChoix("", [1, 3, 5, 7, 9].map((n) => ({ v: String(n), texte: String(n) })),
+      String(valeur), (v) => surChange(Number(v)));
+    rangee.rang.firstElementChild?.remove();
+    return rangee.rang;
+  };
+
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const creer = el("button", "valider", t("Créer le tournoi")) as HTMLButtonElement;
+  creer.type = "button";
+  creer.addEventListener("click", () => {
+    void (async () => {
+      creer.disabled = true;
+      const { ok, d } = await envoyerAuServeur("/api/tournois", {
+        type: "battle", nom: nom.value, lexique, debut: debut.value, limitePoules: limite.value,
+        ...r, partie: editeur.valeur(),
+      });
+      creer.disabled = false;
+      if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
+      direLErreur(erreur, null);
+      surCree(d.tournoi.id);
+    })();
+  });
+
+  const debuts = el("div", "fo-deux");
+  debuts.append(champ(t("Début des rencontres (heure de Paris)"), debut),
+    champ(t("Date limite des poules (heure de Paris)"), limite));
+  const poules = el("div", "fo-deux");
+  poules.append(
+    champ(t("Joueurs par poule"), compteur(3, 12, 4, (n) => { r.joueursParPoule = n; })),
+    champ(t("Manches par rencontre de poule"), compteur(1, 9, 2, (n) => { r.manchesParPoule = n; })),
+  );
+  const tableau = el("div", "fo-deux");
+  tableau.append(
+    champ(t("Meilleur de, en tableau"), impair(3, (n) => { r.meilleurDe = n; })),
+    champ(t("En demi-finale"), impair(3, (n) => { r.meilleurDeDemi = n; })),
+    champ(t("En finale"), impair(3, (n) => { r.meilleurDeFinale = n; })),
+  );
+  f.append(
+    champ(t("Nom du tournoi"), nom),
+    champ(t("Lexique"), choixDuLexique(lexique, (v) => { lexique = v; })),
+    debuts,
+    el("p", "fo-aide", t("Les inscriptions ferment au début des rencontres. Les poules se tirent ensuite.")),
+    champ(t("Joueurs par équipe"), compteur(1, 4, 1, (n) => { r.equipe = n; })),
+    poules,
+    champ(t("Rencontres par poule"), tousOuNombre(t("Tous contre tous"), 1, 11, (n) => { r.rencontresParPoule = n; })),
+    champ(t("Qualifiés"), tousOuNombre(t("Tous"), 2, 256, (n) => { r.qualifies = n; })),
+    champ(t("Dont au tableau haut"), tousOuNombre(t("La moitié"), 1, 256, (n) => { r.tableauHaut = n; })),
+    tableau,
+    champ(t("Jours par tour de tableau"), compteur(1, 30, 3, (n) => { r.joursParTour = n; })),
+    champ(t("La partie d'une manche"), editeur.el),
+    erreur, creer,
+  );
+  return f;
+}
+
+// ---------------------------------------------------------------- LES TOURNOIS
+
+interface TournoiVue {
+  id: string;
+  type: "topping" | "battle";
+  nom: string;
+  lexique: string;
+  debut: number;
+  fin: number | null;
+  equipe: number;
+  parties: { n: number; config: ConfigSerialisee }[];
+  battle: {
+    joueursParPoule: number; rencontresParPoule: number | null; manchesParPoule: number;
+    qualifies: number | null; tableauHaut: number | null; meilleurDe: number;
+    meilleurDeDemi: number; meilleurDeFinale: number; partie: ModeleVue;
+    limitePoules: number; joursParTour: number;
+  } | null;
+  par: string;
+  inscrits: { compte: string; noms: string; partenaires: string[] }[];
+}
+
+/** Une date de tournoi, a l'heure de Paris : « 20 sept., 18:00 ». */
+function dateDeTournoi(instant: number): string {
+  return new Date(instant).toLocaleString(langue() === "en" ? "en-GB" : "fr-FR", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris",
+  });
+}
+
+/** Les dates d'un tournoi, en une ligne. */
+function datesDuTournoi(x: TournoiVue): string {
+  return x.fin === null
+    ? t2("rencontres dès le {d}", { d: dateDeTournoi(x.debut) })
+    : t2("du {d} au {f}", { d: dateDeTournoi(x.debut), f: dateDeTournoi(x.fin) });
+}
+
+/** Ou en est un tournoi : a venir, en cours, termine. */
+function etatDuTournoi(x: TournoiVue, maintenant: number): "avenir" | "encours" | "termine" {
+  if (maintenant < x.debut) return "avenir";
+  if (x.fin !== null && maintenant >= x.fin) return "termine";
+  return "encours";
+}
+
+async function chargerLesTournois(): Promise<void> {
+  let d: { maintenant: number; tournois: TournoiVue[] };
+  try {
+    d = await (await fetch("/api/tournois")).json();
+  } catch {
+    $("cp-tournois").replaceChildren(tableauVide(t("serveur injoignable")));
+    return;
+  }
+  if (d.tournois.length === 0) {
+    $("cp-tournois").replaceChildren(tableauVide(t("Aucun tournoi pour l'instant.")));
+    return;
+  }
+  const groupes: { etat: "encours" | "avenir" | "termine"; titre: string }[] = [
+    { etat: "encours", titre: t("En cours") }, { etat: "avenir", titre: t("À venir") },
+    { etat: "termine", titre: t("Terminés") },
+  ];
+  const enfants: HTMLElement[] = [];
+  for (const g of groupes) {
+    const les = d.tournois.filter((x) => etatDuTournoi(x, d.maintenant) === g.etat);
+    if (les.length === 0) continue;
+    enfants.push(el("h3", "", g.titre));
+    for (const x of g.etat === "termine" ? [...les].reverse() : les) enfants.push(tuileDeTournoi(x));
+  }
+  $("cp-tournois").replaceChildren(...enfants);
+}
+
+/** La tuile d'un tournoi : la vignette de sa grille, son nom, son type, ses dates. */
+function tuileDeTournoi(x: TournoiVue): HTMLElement {
+  const c = el("button", "carte") as HTMLButtonElement;
+  c.type = "button";
+  const vue = el("span", "vue");
+  const bornes = x.type === "battle" ? x.battle?.partie.bornes : x.parties[0]?.config.bornes;
+  vue.appendChild(el("span", `vignette ${bornes === 10 ? "super" : "bornee"}`));
+  vue.appendChild(el("span", "badge", x.type === "battle" ? t("Battle") : t("Topping")));
+  c.appendChild(vue);
+  const dedans = el("span", "dedans");
+  dedans.appendChild(el("b", "nom", x.nom));
+  dedans.appendChild(el("span", "quoi", [
+    x.type === "topping" ? t2(x.parties.length > 1 ? "{n} parties" : "{n} partie", { n: x.parties.length }) : "",
+    dictionnaire(x.lexique).nom,
+    x.equipe > 1 ? t2("équipes de {n}", { n: x.equipe }) : "",
+  ].filter((s) => s !== "").join(" · ")));
+  const etat = el("span", "etat");
+  etat.appendChild(el("span", "", datesDuTournoi(x)));
+  etat.appendChild(el("span", "ou", t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length })));
+  dedans.appendChild(etat);
+  c.appendChild(dedans);
+  c.addEventListener("click", () => ouvrirLeTournoi(x.id));
+  return c;
+}
+
+// -------------------------------------------------------- LA PAGE D'UN TOURNOI
+
+let toId = "";
+let toDemande = 0;
+
+function ouvrirLeTournoi(id: string, pousser = true): void {
+  for (const pid of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
+    "corps-competitif", "corps-resultats", "corps-admin"]) $(pid).hidden = true;
+  $("corps-tournoi").hidden = false;
+  $("join").hidden = false;
+  toId = id;
+  void chargerLeTournoi();
+  if (pousser) window.history.pushState({ page: "tournoi" }, "", `?page=tournoi&id=${encodeURIComponent(id)}`);
+}
+
+$("to-retour").addEventListener("click", () => ouvrirLeCompetitif());
+
+async function chargerLeTournoi(): Promise<void> {
+  const mien = ++toDemande;
+  direLErreur($("to-error"), null);
+  let d: {
+    maintenant: number; tournoi: TournoiVue;
+    moi: { inscrit: boolean; parties: { n: number; etat: string; temps: number | null; negatif: number | null }[] } | null;
+    erreur?: string;
+  };
+  try {
+    const r = await fetch(`/api/tournoi/${encodeURIComponent(toId)}`);
+    d = await r.json();
+    if (!r.ok) { direLErreur($("to-error"), d.erreur ?? "serveur injoignable"); return; }
+  } catch {
+    direLErreur($("to-error"), "serveur injoignable");
+    return;
+  }
+  if (mien !== toDemande) return;
+  const x = d.tournoi;
+  const etat = etatDuTournoi(x, d.maintenant);
+  $("to-nom").textContent = x.nom;
+  $("to-detail").textContent = [
+    x.type === "battle" ? t("Tournoi de battle") : t("Tournoi de topping"),
+    dictionnaire(x.lexique).nom, datesDuTournoi(x),
+  ].join(" · ");
+
+  // LES PARTIES : pour un inscrit, entre les deux dates, comme les parties du jour.
+  $("to-parties-titre").textContent = x.type === "battle" ? t("Format") : t("Parties");
+  if (x.type === "topping") {
+    $("to-parties").replaceChildren(...x.parties.map((p) => {
+      const mienne = d.moi?.parties.find((q) => q.n === p.n);
+      const ligne = el("div", "cp-partie");
+      ligne.appendChild(el("div", "cp-num", String(p.n)));
+      ligne.appendChild(el("div", "cp-nom", nomDeLaPartie(p.config, t)));
+      const jouer = el("button", "cp-jouer") as HTMLButtonElement;
+      jouer.type = "button";
+      if (mienne?.etat === "jouee" && mienne.temps !== null) {
+        jouer.className = "cp-faite";
+        jouer.textContent = `${tempsCentiemes(mienne.temps)} · ${negatifDit(mienne.negatif ?? 0)}`;
+        jouer.addEventListener("click", () => ouvrirLesResultatsDuTournoi(x.id, p.n));
+      } else {
+        jouer.textContent = mienne?.etat === "en-cours" ? t("Reprendre") : t("Jouer");
+        jouer.disabled = etat !== "encours" || d.moi?.inscrit !== true;
+        jouer.title = etat === "avenir" ? t("Le tournoi n'a pas commencé")
+          : etat === "termine" ? t("Le tournoi est terminé")
+          : d.moi?.inscrit !== true ? t("Inscrivez-vous d'abord au tournoi") : "";
+        jouer.addEventListener("click", () => void jouerUnePartie({ tournoi: x.id, partie: p.n }, $("to-error")));
+      }
+      ligne.appendChild(jouer);
+      const resultats = el("button", "", t("Résultats")) as HTMLButtonElement;
+      resultats.type = "button";
+      resultats.addEventListener("click", () => ouvrirLesResultatsDuTournoi(x.id, p.n));
+      ligne.appendChild(resultats);
+      return ligne;
+    }));
+    const general = el("button", "cp-jouer", t("Général")) as HTMLButtonElement;
+    general.type = "button";
+    general.style.marginTop = "6px";
+    general.style.alignSelf = "flex-start";
+    general.style.padding = "8px 18px";
+    general.addEventListener("click", () => ouvrirLesResultatsDuTournoi(x.id, "cumul"));
+    $("to-parties").appendChild(general);
+    $("to-format").replaceChildren(el("span", "", x.equipe > 1
+      ? t2("Équipes de {n} joueurs. Chaque partie se joue une fois, dans l'ordre qu'on veut.", { n: x.equipe })
+      : t("Chaque partie se joue une fois, dans l'ordre qu'on veut.")));
+  } else if (x.battle !== null) {
+    const b = x.battle;
+    $("to-parties").replaceChildren();
+    const lignes: [string, string][] = [
+      [t("Joueurs par équipe"), String(x.equipe)],
+      [t("Joueurs par poule"), String(b.joueursParPoule)],
+      [t("Rencontres par poule"), b.rencontresParPoule === null ? t("Tous contre tous") : String(b.rencontresParPoule)],
+      [t("Manches par rencontre de poule"), String(b.manchesParPoule)],
+      [t("Date limite des poules"), dateDeTournoi(b.limitePoules)],
+      [t("Qualifiés"), b.qualifies === null ? t("Tous") : String(b.qualifies)],
+      [t("Dont au tableau haut"), b.tableauHaut === null ? t("La moitié") : String(b.tableauHaut)],
+      [t("Meilleur de, en tableau"), `${b.meilleurDe} · ${t("demi-finale")} ${b.meilleurDeDemi} · ${t("finale")} ${b.meilleurDeFinale}`],
+      [t("Jours par tour de tableau"), String(b.joursParTour)],
+      [t("La partie d'une manche"), nomDeLaPartie(b.partie, t)],
+    ];
+    $("to-format").replaceChildren(...lignes.map(([k, v]) => {
+      const p = el("div", "");
+      p.append(document.createTextNode(`${k} : `), el("b", "", v));
+      return p;
+    }));
+  }
+
+  // L'INSCRIPTION.
+  peindreLInscription(x, d.moi?.inscrit === true, d.maintenant);
+  $("to-inscrits-titre").textContent = t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length });
+  $("to-inscrits").replaceChildren(...x.inscrits.map((i) => {
+    const s = el("span", "rc-joueur");
+    s.appendChild(pseudoCliquable(i.compte));
+    for (const p of i.partenaires) {
+      s.appendChild(document.createTextNode(" + "));
+      s.appendChild(pseudoCliquable(p));
+    }
+    if (i.noms !== "") s.appendChild(el("i", "", ` · ${i.noms}`));
+    return s;
+  }));
+}
+
+/** Le bloc d'inscription : le bouton, et les partenaires quand on joue a plusieurs. */
+function peindreLInscription(x: TournoiVue, inscrit: boolean, maintenant: number): void {
+  const boite = $("to-inscription");
+  const closes = x.type === "topping" ? (x.fin !== null && maintenant >= x.fin) : maintenant >= x.debut;
+  if (inscrit) { boite.replaceChildren(el("p", "to-bloc", t("Vous êtes inscrit."))); return; }
+  if (closes) { boite.replaceChildren(el("p", "to-bloc", t("Les inscriptions sont closes."))); return; }
+  if (moiCompte === null) {
+    const b = el("button", "valider", t("Se connecter pour s'inscrire")) as HTMLButtonElement;
+    b.type = "button";
+    b.style.width = "auto";
+    b.addEventListener("click", () => ouvrirLeCompte("connexion"));
+    boite.replaceChildren(b);
+    return;
+  }
+  const f = el("div", "to-inscription");
+  const pseudos = document.createElement("input");
+  const noms = document.createElement("input");
+  if (x.equipe > 1) {
+    // LES PARTENAIRES SE NOMMENT PAR PSEUDO, OU PAR ECRIT (SPEC.md §29).
+    pseudos.placeholder = t("Pseudos des partenaires, séparés par des virgules");
+    noms.placeholder = t("Ou leurs noms, s'ils jouent sur votre compte");
+    noms.maxLength = 120;
+    f.append(pseudos, noms);
+  }
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const b = el("button", "valider", t("S'inscrire")) as HTMLButtonElement;
+  b.type = "button";
+  b.addEventListener("click", () => {
+    void (async () => {
+      b.disabled = true;
+      const { ok, d } = await envoyerAuServeur(`/api/tournoi/${encodeURIComponent(x.id)}/inscription`, {
+        partenaires: pseudos.value.split(",").map((s) => s.trim()).filter((s) => s !== ""),
+        noms: noms.value,
+      });
+      b.disabled = false;
+      if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
+      void chargerLeTournoi();
+    })();
+  });
+  f.append(erreur, b);
+  boite.replaceChildren(f);
 }

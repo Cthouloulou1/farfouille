@@ -22,6 +22,8 @@ export interface ModeleDePartie {
   tirage: number;
   jouables: number;
   joker: boolean;
+  /** Un joker par tirage, ou deux. Un quand le champ manque. */
+  jokersParCoup?: 1 | 2;
   /** Secondes par coup. */
   chrono: number;
 }
@@ -52,7 +54,7 @@ export function configDuModele(m: ModeleDePartie, lexique: string): ConfigPartie
   const superGrille = m.bornes === 10;
   return avec(avecDictionnaire(configParDefaut(), lexique), {
     tirage: m.tirage, jouables: m.jouables,
-    joker: m.joker, jokersParCoup: 1,
+    joker: m.joker, jokersParCoup: m.joker ? (m.jokersParCoup ?? 1) : 1,
     primes: primesParDefaut(),
     pioche: "sac102", sacs: superGrille ? 2 : 1,
     mode: "topping", coupsMax: null, dureeMax: null,
@@ -62,6 +64,100 @@ export function configDuModele(m: ModeleDePartie, lexique: string): ConfigPartie
     pavage: superGrille ? LAYOUTS.super21 : LAYOUTS.classique15,
     pavageNom: superGrille ? "super21" : "classique15",
   });
+}
+
+/**
+ * LA POOL DES RETIRAGES (SPEC.md §29).
+ *
+ * Les parties tirees d'office suivent les modeles fixes ci-dessus. « Tout
+ * retirer », ou une partie ajoutee au-dela de ces modeles, tire ici. La meme
+ * pool pour les trois lexiques, en attendant les regles du jour.
+ */
+export const POOL_DU_JOUR: readonly { poids: number; modele: ModeleDePartie }[] = [
+  { poids: 3, modele: normale(30) },
+  { poids: 3, modele: normale(60) },
+  { poids: 2, modele: normale(120) },
+  { poids: 2, modele: { ...normale(60), bornes: 10 } },
+  { poids: 1, modele: { ...normale(120), bornes: 10 } },
+  { poids: 2, modele: { ...normale(120), joker: true } },
+  { poids: 1, modele: { ...normale(120), tirage: 8 } },
+];
+
+/** Un modele tire dans la pool, selon les poids. */
+export function tirerUnModele(alea: () => number = Math.random): ModeleDePartie {
+  const total = POOL_DU_JOUR.reduce((a, x) => a + x.poids, 0);
+  let r = alea() * total;
+  for (const x of POOL_DU_JOUR) {
+    r -= x.poids;
+    if (r < 0) return { ...x.modele };
+  }
+  return { ...POOL_DU_JOUR[0]!.modele };
+}
+
+/** Le modele d'une configuration d'epreuve : ce que l'editeur de partie regle. */
+export function modeleDeLaConfig(
+  c: { tirage: number; jouables: number; joker: boolean; jokersParCoup: number; bornes: number | null; chrono: number | null },
+): ModeleDePartie {
+  return {
+    bornes: c.bornes === 10 ? 10 : 7, tirage: c.tirage, jouables: c.jouables,
+    joker: c.joker, ...(c.joker && c.jokersParCoup === 2 ? { jokersParCoup: 2 as const } : {}),
+    chrono: c.chrono ?? 60,
+  };
+}
+
+/**
+ * Un modele recu du dehors, verifie champ par champ. Rend le modele propre, ou
+ * le message qui dit ce qui ne va pas.
+ */
+export function modeleRecevable(x: unknown): ModeleDePartie | string {
+  if (x === null || typeof x !== "object") return "réglages de partie illisibles";
+  const o = x as Record<string, unknown>;
+  const bornes = o["bornes"] === 10 ? 10 : o["bornes"] === 7 ? 7 : null;
+  if (bornes === null) return "grille inconnue";
+  const tirage = Number(o["tirage"]), jouables = Number(o["jouables"]);
+  if (!Number.isInteger(tirage) || tirage < 2 || tirage > 15) return "le tirage va de 2 à 15 lettres";
+  if (!Number.isInteger(jouables) || jouables < 2 || jouables > tirage) {
+    return "on pose de 2 lettres au plus à tout le tirage";
+  }
+  const chrono = Number(o["chrono"]);
+  if (!Number.isInteger(chrono) || chrono < 5 || chrono > 3600) {
+    return "le temps par coup va de 5 secondes à une heure";
+  }
+  const joker = o["joker"] === true;
+  const jokersParCoup = joker && o["jokersParCoup"] === 2 ? 2 : 1;
+  if (joker && jokersParCoup >= tirage) return "il faut au moins une vraie lettre au tirage";
+  return { bornes, tirage, jouables, joker, ...(jokersParCoup === 2 ? { jokersParCoup: 2 as const } : {}), chrono };
+}
+
+/**
+ * UNE HEURE DE PARIS, en instant : `2026-09-20T18:00` -> millisecondes.
+ *
+ * Les dates d'un tournoi se saisissent a l'heure du site, quel que soit le
+ * fuseau du navigateur. On part de l'heure lue comme si elle etait universelle,
+ * puis on corrige du decalage de Paris a cet instant-la -- deux passes suffisent,
+ * y compris la nuit du changement d'heure.
+ */
+export function instantDeParis(texte: unknown): number | null {
+  if (typeof texte !== "string") return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(texte);
+  if (m === null) return null;
+  const voulu = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  let instant = voulu;
+  for (let i = 0; i < 2; i++) instant = voulu - (murDeParis(instant) - instant);
+  return Number.isFinite(instant) ? instant : null;
+}
+
+/** L'heure qu'affiche une horloge de Paris a cet instant, lue comme universelle. */
+function murDeParis(instant: number): number {
+  const p: Record<string, string> = {};
+  for (const x of HEURE_DE_PARIS.formatToParts(new Date(instant))) p[x.type] = x.value;
+  return Date.UTC(Number(p["year"]), Number(p["month"]) - 1, Number(p["day"]),
+    Number(p["hour"]), Number(p["minute"]));
+}
+
+/** Un instant, a l'heure de Paris : `2026-09-20T18:00`, pour un champ de saisie. */
+export function heureDeParis(instant: number): string {
+  return new Date(murDeParis(instant)).toISOString().slice(0, 16);
 }
 
 /**

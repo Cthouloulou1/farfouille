@@ -40,12 +40,19 @@ import {
 import { configDeLEtape, etapeMontante, montantePossible } from "../../engine/src/montante.ts";
 import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lecteur.ts";
 import {
-  assurerLesPartiesDuJour, cumulDeLEpreuve, epreuveDuJour, finirLaManche, joursConnus,
-  lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId, ouvrirLeCompetitif,
-  ouvrirUneManche, partieFigee, partiesDuJour, resultatsDeLaPartie, salonDeLaPartie,
-  type Jeu, type Manche,
+  apercuDeDemain, apercusDe, assurerLesPartiesDuJour, changerLesPartiesDeDemain,
+  creerUnTournoiDeBattle, creerUnTournoiDeTopping, cumulDeLEpreuve, epreuveDuJour,
+  epreuveDuTournoi, finirLaManche, inscriptionDe, inscrireAuTournoi, joursConnus,
+  lexiqueDeLEpreuve, lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId,
+  ouvrirLeCompetitif, ouvrirUneManche, partieFigee, partiesDeLEpreuve, partiesDuJour,
+  resultatsDeLaPartie, salonDeLaPartie, tournoi, tournoiDeLEpreuve, tournoiPublic,
+  tousLesTournois,
+  type ChangementDuJour, type Jeu, type Manche, type ReglagesBattle, type Tournoi,
 } from "./competitif.ts";
-import { LEXIQUES_DU_JOUR, jourDe, jourValide, nomDeLaPartie } from "../../engine/src/epreuves.ts";
+import {
+  LEXIQUES_DU_JOUR, decalerLeJour, instantDeParis, jourDe, jourValide, modeleRecevable,
+  nomDeLaPartie, type ModeleDePartie,
+} from "../../engine/src/epreuves.ts";
 
 /** Les tableaux annexes qui classent des PARTIES. Voir SPEC.md §23. */
 const ANNEXES: readonly Annexe[] = [
@@ -517,11 +524,12 @@ function epreuvePublique(s: Salon) {
   const e = s.epreuve;
   if (e === null) return null;
   const quoi = lireLEpreuve(e.epreuve);
-  const jour = quoi === null ? undefined : partiesDuJour(quoi.jour, quoi.lexique);
-  const p = jour?.parties.find((x) => x.n === e.partie);
+  const t = tournoiDeLEpreuve(e.epreuve);
+  const p = partiesDeLEpreuve(e.epreuve)?.find((x) => x.n === e.partie);
   const m = e.manche === null ? undefined : mancheParId(e.manche);
   return {
-    epreuve: e.epreuve, jour: quoi?.jour ?? null, lexique: quoi?.lexique ?? null,
+    epreuve: e.epreuve, jour: quoi?.jour ?? null, lexique: lexiqueDeLEpreuve(e.epreuve),
+    tournoi: t === undefined ? null : { id: t.id, nom: t.nom },
     partie: e.partie, config: p?.config ?? null, compte: e.compte,
     lancee: m !== undefined, jeu: m?.jeu ?? null, noms: m?.noms ?? "",
     equipe: m?.equipe ?? [], close: m !== undefined && m.fin !== null,
@@ -557,9 +565,7 @@ async function ouvrirLeSalonDEpreuve(o: {
   const id = o.manche?.salon ?? salonDeLaPartie(o.epreuve, o.partie, o.compte);
   const deja = salon(id);
   if (deja !== undefined) return deja;
-  const quoi = lireLEpreuve(o.epreuve);
-  const p = quoi === null ? undefined
-    : partiesDuJour(quoi.jour, quoi.lexique)?.parties.find((x) => x.n === o.partie);
+  const p = partiesDeLEpreuve(o.epreuve)?.find((x) => x.n === o.partie);
   if (p === undefined) throw new Error("cette partie n'existe pas");
   const figee = partieFigee(p.figee);
   if (figee === null) throw new Error("la partie figée est introuvable");
@@ -596,6 +602,101 @@ function apresOuvertureDEpreuve(s: Salon): void {
   if (m !== undefined && m.fin === null && !s.partie.demarree) void s.partie.demarrer();
   // Personne n'y entrera peut-etre : il se referme alors comme un autre.
   rangerPlusTard(s.id);
+}
+
+/**
+ * QUI PEUT CREER UN TOURNOI (SPEC.md §29). Un seul endroit, a dessein : le jour
+ * ou le tournoi de topping s'ouvre a tous, c'est cette ligne qui change.
+ */
+function peutCreerUnTournoi(c: Compte | undefined, type: "topping" | "battle"): boolean {
+  if (c === undefined) return false;
+  return type === "topping" ? c.admin : c.admin;
+}
+
+/** Un entier dans des bornes, ou `null` si ce n'en est pas un. */
+function entierEntre(x: unknown, min: number, max: number): number | null {
+  const n = Number(x);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+
+/** Le nom et le lexique, communs aux deux formulaires. */
+function lireLEnteteDuTournoi(c: any): { nom: string; lexique: string; equipe: number } | string {
+  const nom = String(c.nom ?? "").trim().replace(/\s+/g, " ");
+  if (nom.length < 3 || nom.length > 60) return "Le nom fait de 3 à 60 caractères";
+  const lexique = String(c.lexique ?? "");
+  if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique)) return "Choisissez un lexique";
+  const equipe = entierEntre(c.equipe ?? 1, 1, 4);
+  if (equipe === null) return "Une équipe compte de 1 à 4 joueurs";
+  return { nom, lexique, equipe };
+}
+
+/** Le formulaire du tournoi de topping, verifie champ par champ. */
+function lireUnTournoiDeTopping(c: any): {
+  nom: string; lexique: string; debut: number; fin: number; equipe: number; modeles: ModeleDePartie[];
+} | string {
+  const entete = lireLEnteteDuTournoi(c);
+  if (typeof entete === "string") return entete;
+  const debut = instantDeParis(c.debut), fin = instantDeParis(c.fin);
+  if (debut === null || fin === null) return "Donnez une date de début et une date de fin";
+  if (fin <= debut) return "La fin vient après le début";
+  if (fin <= Date.now()) return "La fin est déjà passée";
+  if (!Array.isArray(c.parties) || c.parties.length < 1 || c.parties.length > 10) {
+    return "Un tournoi compte de 1 à 10 parties";
+  }
+  const modeles: ModeleDePartie[] = [];
+  for (const [i, brut] of c.parties.entries()) {
+    const m = modeleRecevable(brut);
+    if (typeof m === "string") return `P${i + 1} : ${m}`;
+    modeles.push(m);
+  }
+  return { ...entete, debut, fin, modeles };
+}
+
+/** Le formulaire du tournoi de battle, verifie champ par champ. */
+function lireUnTournoiDeBattle(c: any): {
+  nom: string; lexique: string; debut: number; equipe: number; battle: ReglagesBattle;
+} | string {
+  const entete = lireLEnteteDuTournoi(c);
+  if (typeof entete === "string") return entete;
+  const debut = instantDeParis(c.debut);
+  if (debut === null) return "Donnez la date de début des rencontres";
+  if (debut <= Date.now()) return "Le début des rencontres est déjà passé";
+  const limite = instantDeParis(c.limitePoules);
+  if (limite === null || limite <= debut) return "La date limite des poules vient après le début";
+  const impair = (x: unknown): number | null => {
+    const n = entierEntre(x, 1, 9);
+    return n !== null && n % 2 === 1 ? n : null;
+  };
+  const joueursParPoule = entierEntre(c.joueursParPoule ?? 4, 3, 12);
+  const manchesParPoule = entierEntre(c.manchesParPoule ?? 2, 1, 9);
+  const rencontresParPoule = c.rencontresParPoule === null || c.rencontresParPoule === undefined
+    ? null : entierEntre(c.rencontresParPoule, 1, 11);
+  const qualifies = c.qualifies === null || c.qualifies === undefined ? null : entierEntre(c.qualifies, 2, 256);
+  const tableauHaut = c.tableauHaut === null || c.tableauHaut === undefined ? null : entierEntre(c.tableauHaut, 1, 256);
+  const meilleurDe = impair(c.meilleurDe ?? 3);
+  const meilleurDeDemi = impair(c.meilleurDeDemi ?? c.meilleurDe ?? 3);
+  const meilleurDeFinale = impair(c.meilleurDeFinale ?? c.meilleurDe ?? 3);
+  const joursParTour = entierEntre(c.joursParTour ?? 3, 1, 30);
+  if (joueursParPoule === null) return "Une poule compte de 3 à 12 joueurs";
+  if (manchesParPoule === null) return "Une rencontre de poule se joue en 1 à 9 manches";
+  if (c.rencontresParPoule != null && rencontresParPoule === null) return "Rencontres par poule : de 1 à 11";
+  if (c.qualifies != null && qualifies === null) return "Il faut au moins 2 qualifiés";
+  if (c.tableauHaut != null && (tableauHaut === null || (qualifies !== null && tableauHaut > qualifies))) {
+    return "Le tableau haut ne compte pas plus de joueurs que les qualifiés";
+  }
+  if (meilleurDe === null || meilleurDeDemi === null || meilleurDeFinale === null) {
+    return "Une rencontre de tableau se joue au meilleur d'un nombre impair de manches";
+  }
+  if (joursParTour === null) return "Un tour de tableau dure de 1 à 30 jours";
+  const partie = modeleRecevable(c.partie);
+  if (typeof partie === "string") return `Partie d'une manche : ${partie}`;
+  return {
+    ...entete, debut,
+    battle: {
+      joueursParPoule, rencontresParPoule, manchesParPoule, qualifies, tableauHaut,
+      meilleurDe, meilleurDeDemi, meilleurDeFinale, partie, limitePoules: limite, joursParTour,
+    },
+  };
 }
 
 /**
@@ -1120,12 +1221,41 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url === "/api/competitif/jouer" && req.method === "POST") {
     const moi = quiParle(req);
     if (moi === undefined) {
-      json(res, 401, { erreur: "Les parties du jour se jouent avec un compte" });
+      json(res, 401, { erreur: "Connectez-vous pour jouer" });
       return;
     }
     let corps: any;
     try { corps = await corpsJson(req); }
     catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    // UNE PARTIE DE TOURNOI : entre ses deux dates, et pour un inscrit.
+    if (corps.tournoi !== undefined) {
+      const t = tournoi(String(corps.tournoi));
+      const n = Number(corps.partie);
+      if (t === undefined || t.type !== "topping" || !t.parties.some((x) => x.n === n)) {
+        json(res, 404, { erreur: "cette partie n'existe pas" });
+        return;
+      }
+      const maintenant = Date.now();
+      if (maintenant < t.debut) { json(res, 403, { erreur: "Le tournoi n'a pas commencé" }); return; }
+      if (t.fin !== null && maintenant >= t.fin) { json(res, 403, { erreur: "Le tournoi est terminé" }); return; }
+      if (inscriptionDe(t, moi.pseudo) === undefined) {
+        json(res, 403, { erreur: "Inscrivez-vous d'abord au tournoi" });
+        return;
+      }
+      const epreuve = epreuveDuTournoi(t.id);
+      const m = mancheDuCompte(moi.pseudo, epreuve, n);
+      if (m !== undefined && m.fin !== null) {
+        json(res, 409, { erreur: "Vous avez déjà joué cette partie" });
+        return;
+      }
+      try {
+        const s = await ouvrirLeSalonDEpreuve({ epreuve, partie: n, compte: moi.pseudo, manche: m });
+        json(res, 200, { salon: s.id });
+      } catch (e) {
+        json(res, 503, { erreur: (e as Error).message });
+      }
+      return;
+    }
     const lexique = String(corps.lexique ?? "");
     const jour = corps.jour;
     const n = Number(corps.partie);
@@ -1160,6 +1290,23 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url === "/api/competitif/resultats" && req.method === "GET") {
     const p = parametres(req);
     const moi = quiParle(req);
+    if (p.get("tournoi") !== null) {
+      const t = tournoi(p.get("tournoi")!);
+      if (t === undefined || t.type !== "topping") { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+      const epreuve = epreuveDuTournoi(t.id);
+      const base = {
+        jour: null, lexique: t.lexique, tournoi: { id: t.id, nom: t.nom, fin: t.fin },
+        parties: t.parties.map((x) => ({ n: x.n, config: x.config })),
+      };
+      if (p.get("partie") === "cumul") {
+        json(res, 200, { ...base, partie: "cumul", ...cumulDeLEpreuve(epreuve, moi?.pseudo ?? null) });
+        return;
+      }
+      const n = Number(p.get("partie") ?? "1");
+      if (!t.parties.some((x) => x.n === n)) { json(res, 404, { erreur: "cette partie n'existe pas" }); return; }
+      json(res, 200, { ...base, partie: n, ...resultatsDeLaPartie(epreuve, n, moi?.pseudo ?? null) });
+      return;
+    }
     const lexique = p.get("lexique") ?? "";
     const jour = p.get("jour");
     const j = jourValide(jour) && jour <= jourDe(Date.now()) ? partiesDuJour(jour, lexique) : undefined;
@@ -1179,6 +1326,138 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       jour: j.jour, lexique, parties, partie: n,
       ...resultatsDeLaPartie(epreuve, n, moi?.pseudo ?? null),
     });
+    return;
+  }
+
+  // ------------------------------------------------ l'administration du competitif
+  //
+  // LE SERVEUR REFUSE, et pas seulement l'ecran : un bouton cache est un
+  // garde-fou, pas une regle.
+  if (url === "/api/admin/pdj" && (req.method === "GET" || req.method === "POST")) {
+    const moi = quiParle(req);
+    if (moi === undefined || !moi.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    let lexique = parametres(req).get("lexique") ?? "";
+    if (req.method === "POST") {
+      let corps: any;
+      try { corps = await corpsJson(req); }
+      catch { json(res, 400, { erreur: "requête illisible" }); return; }
+      lexique = String(corps.lexique ?? "");
+      if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique)) {
+        json(res, 400, { erreur: "lexique inconnu" });
+        return;
+      }
+      let changement: ChangementDuJour;
+      if (corps.action === "nombre") changement = { action: "nombre", nombre: Number(corps.nombre) };
+      else if (corps.action === "retirer") changement = { action: "retirer" };
+      else if (corps.action === "graine") changement = { action: "graine", partie: Number(corps.partie) };
+      else if (corps.action === "reglages") {
+        const modele = modeleRecevable(corps.modele);
+        if (typeof modele === "string") { json(res, 400, { erreur: modele }); return; }
+        changement = { action: "reglages", partie: Number(corps.partie), modele };
+      } else { json(res, 400, { erreur: "action inconnue" }); return; }
+      const r = await changerLesPartiesDeDemain(lexique, changement, moi.pseudo, LAYOUT);
+      if (typeof r === "string") { json(res, 400, { erreur: r }); return; }
+    }
+    if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique)) lexique = LEXIQUES_DU_JOUR[0];
+    const demain = decalerLeJour(jourDe(Date.now()), 1);
+    const j = partiesDuJour(demain, lexique);
+    json(res, 200, {
+      jour: demain, lexique, pret: j !== undefined,
+      // LE NOM, ET RIEN D'AUTRE : la partie ne se voit qu'a l'apercu.
+      parties: (j?.parties ?? []).map((x) => ({ n: x.n, config: x.config })),
+      apercus: apercusDe(moi.pseudo, lexique),
+    });
+    return;
+  }
+
+  if (url === "/api/admin/pdj/apercu" && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined || !moi.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const a = apercuDeDemain(String(corps.lexique ?? ""), Number(corps.partie), moi.pseudo);
+    if (a === null) { json(res, 404, { erreur: "cette partie n'existe pas" }); return; }
+    console.log(`[competitif] apercu de la P${a.partie} du ${a.jour} par ${moi.pseudo}`);
+    json(res, 200, a);
+    return;
+  }
+
+  // LES TOURNOIS : la liste et la fiche sont publiques.
+  if (url === "/api/tournois" && req.method === "GET") {
+    json(res, 200, { maintenant: Date.now(), tournois: tousLesTournois().map(tournoiPublic) });
+    return;
+  }
+
+  if (url === "/api/tournois" && req.method === "POST") {
+    const moi = quiParle(req);
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const type = corps.type === "battle" ? "battle" : "topping";
+    if (!peutCreerUnTournoi(moi, type)) { json(res, 403, { erreur: "réservé" }); return; }
+    if (type === "topping") {
+      const o = lireUnTournoiDeTopping(corps);
+      if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
+      try {
+        const t = await creerUnTournoiDeTopping({ ...o, par: moi!.pseudo }, LAYOUT);
+        json(res, 200, { tournoi: tournoiPublic(t) });
+      } catch (e) {
+        json(res, 500, { erreur: (e as Error).message });
+      }
+      return;
+    }
+    const o = lireUnTournoiDeBattle(corps);
+    if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
+    json(res, 200, { tournoi: tournoiPublic(creerUnTournoiDeBattle({ ...o, par: moi!.pseudo })) });
+    return;
+  }
+
+  if (url.startsWith("/api/tournoi/") && req.method === "GET") {
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const moi = quiParle(req);
+    const epreuve = epreuveDuTournoi(t.id);
+    const inscription = moi === undefined ? undefined : inscriptionDe(t, moi.pseudo);
+    json(res, 200, {
+      maintenant: Date.now(),
+      tournoi: tournoiPublic(t),
+      moi: moi === undefined ? null : {
+        inscrit: inscription !== undefined,
+        parties: t.parties.map((x) => {
+          const m = mancheDuCompte(moi.pseudo, epreuve, x.n);
+          return {
+            n: x.n, etat: m === undefined ? "a-jouer" : m.fin === null ? "en-cours" : "jouee",
+            temps: m?.fin?.temps ?? null, negatif: m?.fin?.negatif ?? null,
+          };
+        }),
+      },
+    });
+    return;
+  }
+
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/inscription") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Les tournois se jouent avec un compte" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/inscription".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    // Les partenaires nommes par pseudo doivent avoir un compte : on garde
+    // l'ecriture exacte de leur pseudo, pas celle qu'on a tapee.
+    const partenaires: string[] = [];
+    for (const brut of (Array.isArray(corps.partenaires) ? corps.partenaires : []).slice(0, 8)) {
+      const nom = String(brut ?? "").trim();
+      if (nom === "") continue;
+      const c = compte(nom);
+      if (c === undefined) { json(res, 400, { erreur: `Aucun compte ne s'appelle ${nom}` }); return; }
+      partenaires.push(c.pseudo);
+    }
+    const erreur = inscrireAuTournoi(t, moi.pseudo, String(corps.noms ?? ""), partenaires);
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    console.log(`[competitif] ${moi.pseudo} s'inscrit au tournoi "${t.nom}"`);
+    json(res, 200, { tournoi: tournoiPublic(t) });
     return;
   }
 
@@ -1742,7 +2021,12 @@ wss.on("connection", (ws, req) => {
         return;
       }
       const presents = occupants(s.id).filter((n) => compte(n) !== undefined);
-      const equipe = presents.length > 1 ? [moi.nom, ...presents.filter((n) => n !== moi.nom)] : [moi.nom];
+      // DANS UN TOURNOI A PLUSIEURS, L'EQUIPE EST CELLE DE L'INSCRIPTION : elle
+      // joue une feuille, et la tentative de chacun part, meme de qui n'est pas la.
+      const t = tournoiDeLEpreuve(e.epreuve);
+      const inscription = t === undefined ? undefined : inscriptionDe(t, moi.nom);
+      const inscrits = inscription === undefined ? [] : [inscription.compte, ...inscription.partenaires];
+      const equipe = [...new Set([moi.nom, ...presents, ...inscrits])];
       for (const nom of equipe) {
         if (mancheDuCompte(nom, e.epreuve, e.partie) !== undefined) {
           send(ws, { t: "result", ok: false, message: `${nom} a déjà joué cette partie` });
@@ -1757,7 +2041,7 @@ wss.on("connection", (ws, req) => {
       e.manche = m.id;
       for (const nom of equipe) s.invites.add(nom);
       // Le decompte est coupe seul, et mis quand des comptes partent ensemble.
-      s.partie.decompteImpose = equipe.length > 1;
+      s.partie.decompteImpose = presents.length > 1;
       console.log(`[competitif] "${s.id}" lance par ${moi.nom} (${jeu}, ${equipe.length} compte(s))`);
       await s.partie.demarrer();
       broadcast(s.id, { t: "state", state: publicState(s) });

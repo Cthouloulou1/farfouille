@@ -1443,6 +1443,76 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rs-trouves-boite .ligne .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-trouves-boite .ligne .chiffre { flex: none; font-family: var(--mono); color: var(--ink-soft); }
 
+/* ------------------------------------------------ L'ADMINISTRATION, LES TOURNOIS
+   Voir SPEC.md §29. */
+.cp-haut { display: flex; justify-content: flex-end; min-height: 8px; }
+.cp-haut button { padding: 6px 13px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.cp-haut button:hover { color: var(--ink); background: var(--hover); border-color: var(--rule); }
+.cp-tournois { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.cp-tournois h3 { grid-column: 1 / -1; margin: 6px 0 -4px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); }
+.ad-bloc { padding-top: 14px; }
+.ad-bloc[hidden] { display: none; }
+.ad-bloc h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.ad-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; font-size: 13.5px; color: var(--ink-soft); }
+.ad-ligne button { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.ad-ligne button:hover:not(:disabled) { color: var(--ink); background: var(--hover); border-color: var(--rule); }
+.ad-ligne button:disabled { opacity: .45; cursor: default; }
+.ad-ligne b { min-width: 1.5em; text-align: center; font-family: var(--mono); color: var(--ink); }
+.ad-partie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--rule); }
+.ad-partie .cp-num { width: 38px; }
+.ad-partie .ad-nom { flex: 1; min-width: 160px; font-size: 14px; color: var(--ink); }
+.ad-partie .ad-nom i { font-style: normal; font-size: 12px; color: var(--ink-faint); margin-left: 8px; }
+.ad-partie > button { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.ad-partie > button:hover:not(:disabled) { color: var(--ink); background: var(--hover); border-color: var(--rule); }
+.ad-partie > button:disabled { opacity: .45; cursor: default; }
+.ad-partie .editeur { flex-basis: 100%; }
+.ad-occupe { font-size: 13px; color: var(--ink-faint); }
+
+/* L'EDITEUR DE PARTIE : quatre reglages, et le nom qui en sort. */
+.editeur { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--field); border-radius: 6px; }
+.editeur [hidden] { display: none; }
+.editeur .ed-rang { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.editeur .ed-rang > label { width: 120px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); }
+.editeur input[type="number"] { width: 70px; padding: 5px 7px; }
+.editeur .ed-nom { font-size: 14px; color: var(--ink); }
+.editeur .ed-nom b { font-weight: 600; }
+.editeur .ed-pied { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.editeur .ed-pied button { padding: 6px 12px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 13px; }
+.editeur .ed-pied button:hover { color: var(--ink); background: var(--hover); }
+
+/* LES FORMULAIRES DE TOURNOI. */
+.formulaire { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+.formulaire .fo-champ { display: flex; flex-direction: column; gap: 6px; }
+.formulaire .fo-champ > label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); }
+.formulaire .fo-deux { display: flex; flex-wrap: wrap; gap: 14px 24px; }
+.formulaire input[type="text"], .formulaire input[type="datetime-local"], .formulaire input[type="number"] { padding: 7px 9px; font-size: 14px; }
+.formulaire input[type="text"] { max-width: 420px; }
+.formulaire .fo-partie { display: flex; flex-direction: column; gap: 6px; }
+.formulaire .fo-partie h3 { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.formulaire .fo-partie h3 button { padding: 3px 9px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12px; font-weight: 400; }
+.formulaire .fo-partie h3 button:hover { color: var(--ink); background: var(--hover); }
+.formulaire .fo-aide { margin: 0; font-size: 12.5px; color: var(--ink-faint); }
+.formulaire .valider { align-self: flex-start; width: auto; padding: 9px 22px; }
+
+/* LA PAGE D'UN TOURNOI. */
+.to-bloc { font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+.to-bloc b { color: var(--ink); font-weight: 500; }
+.to-inscription { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.to-inscription input { padding: 7px 9px; }
+.to-inscription .valider { align-self: flex-start; width: auto; padding: 8px 20px; }
+.to-inscrits { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+.to-format { margin-top: 18px; }
+
+/* L'APERCU D'UNE PARTIE DE DEMAIN. */
+.ap-boite { width: min(760px, 96vw); }
+.ap-boite .pr-route { max-height: calc(100vh - 220px); overflow: auto; border: 1px solid var(--rule); border-radius: 4px; }
+.ap-boite .pr-route td { cursor: default; }
+.ap-boite .valider { width: auto; margin-top: 12px; padding: 8px 20px; }
+
+/* Jouee par qui avait vu la partie d'avance : hors classement. */
+.rc-tableau.rs-classement tbody tr.rs-apercu td { color: var(--ink-faint); }
+.rc-tableau.rs-classement tbody tr.rs-apercu { background: var(--field); }
+
 /* LES GRAPHIQUES. L'encre pour la table, l'accent pour la ligne regardee,
    l'avertissement pour un coup rate : ce que la feuille de route dit deja. */
 .rs-graphes { margin-top: 18px; }
@@ -1724,6 +1794,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   <!-- LE COMPETITIF (SPEC.md §29) : une page, comme les records. Les parties du
        jour a gauche, les tournois a droite. -->
   <div class="corps competitif-page" id="corps-competitif" hidden>
+    <div class="cp-haut"><button type="button" id="cp-admin" hidden>Administration</button></div>
     <div class="cp-colonnes">
       <section>
         <div class="cp-tete">
@@ -1741,7 +1812,65 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </section>
       <section>
         <div class="cp-tete"><h1>Tournois</h1></div>
-        <div class="rc-vide" id="cp-tournois">Aucun tournoi pour l'instant.</div>
+        <div class="cp-tournois" id="cp-tournois"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- L'ADMINISTRATION DU COMPETITIF (SPEC.md §29) : les parties de demain, et la
+       creation des tournois. Le serveur refuse tout a qui n'est pas admin. -->
+  <div class="corps competitif-page" id="corps-admin" hidden>
+    <div class="pr-tete">
+      <button type="button" class="pr-retour" id="ad-retour">← Compétitif</button>
+      <h1>Administration</h1>
+    </div>
+    <div class="rc-barre">
+      <div class="rc-vues" id="ad-onglets">
+        <button type="button" data-v="pdj">Parties du jour</button>
+        <button type="button" data-v="topping">Tournoi de topping</button>
+        <button type="button" data-v="battle">Tournoi de battle</button>
+      </div>
+    </div>
+    <div class="ad-bloc" id="ad-pdj">
+      <div class="cp-tete">
+        <h2>Parties de demain</h2>
+        <span class="cp-date" id="ad-date"></span>
+      </div>
+      <div class="rc-choix" id="ad-lexique"></div>
+      <div class="ad-ligne">
+        <span>Nombre de parties</span>
+        <button type="button" id="ad-moins" aria-label="Une partie de moins">−</button>
+        <b id="ad-nombre">—</b>
+        <button type="button" id="ad-plus" aria-label="Une partie de plus">+</button>
+        <button type="button" id="ad-retirer">Tout retirer</button>
+        <span class="ad-occupe" id="ad-occupe" hidden>Calcul…</span>
+      </div>
+      <div class="join-error" id="ad-error" hidden></div>
+      <div id="ad-parties"></div>
+    </div>
+    <div class="ad-bloc" id="ad-topping" hidden></div>
+    <div class="ad-bloc" id="ad-battle" hidden></div>
+  </div>
+
+  <!-- LA PAGE D'UN TOURNOI : ses parties, l'inscription, les inscrits. -->
+  <div class="corps competitif-page" id="corps-tournoi" hidden>
+    <div class="pr-tete">
+      <button type="button" class="pr-retour" id="to-retour">← Compétitif</button>
+      <h1 id="to-nom">Tournoi</h1>
+      <span class="pr-detail" id="to-detail"></span>
+    </div>
+    <div class="join-error" id="to-error" hidden></div>
+    <div class="cp-colonnes" style="margin-top: 14px">
+      <section>
+        <div class="cp-tete"><h1 id="to-parties-titre">Parties</h1></div>
+        <div class="cp-parties" id="to-parties"></div>
+        <div class="to-bloc to-format" id="to-format"></div>
+      </section>
+      <section>
+        <div class="cp-tete"><h1>Inscription</h1></div>
+        <div id="to-inscription"></div>
+        <div class="cp-tete" style="margin-top: 22px"><h1 id="to-inscrits-titre">Inscrits</h1></div>
+        <div class="to-inscrits" id="to-inscrits"></div>
       </section>
     </div>
   </div>
@@ -1762,7 +1891,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
             <span class="voyant"></span>Joueurs solos
           </button>
           <button type="button" class="bascule" id="rs-atemps" aria-pressed="false">
-            <span class="voyant"></span>À temps seulement
+            <span class="voyant"></span>Joueurs ponctuels seulement
           </button>
         </div>
         <div class="rc-tableau rs-classement" id="rs-classement"></div>
@@ -1899,6 +2028,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <h2>Joueurs de la partie</h2>
     <div class="tablee-liste" id="tablee-liste"></div>
     <button class="valider" id="tablee-close" type="button">Fermer</button>
+  </div>
+</div>
+
+<!-- L'APERCU D'UNE PARTIE DE DEMAIN (SPEC.md §29) : qui l'ouvre la joue hors
+     classement. -->
+<div class="voile" id="voile-apercu" hidden>
+  <div class="pseudo ap-boite">
+    <h2 id="apercu-titre">Aperçu</h2>
+    <p class="fo-aide" id="apercu-detail"></p>
+    <div class="pr-route" id="apercu-route"></div>
+    <button class="valider" id="apercu-close" type="button">Fermer</button>
   </div>
 </div>
 

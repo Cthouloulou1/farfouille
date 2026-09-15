@@ -13,6 +13,7 @@ import { join } from "node:path";
 import {
   bilanDeLaManche, cumulDeLEpreuve, definirDossierDuCompetitif, epreuveDuJour, finirLaManche,
   mancheDuCompte, ouvrirLeCompetitif, ouvrirUneManche, resultatsDeLaPartie,
+  creerUnTournoiDeTopping, epreuveDuTournoi, inscriptionDe, inscrireAuTournoi, tournoiDeLEpreuve,
 } from "../src/competitif.ts";
 import type { PlayedMove } from "../src/game.ts";
 
@@ -105,6 +106,36 @@ verifie("jouee apres 5 h 29 le lendemain, elle est au classement mais pas a temp
   lignesTard.length === 1 && lignesTard[0]!.aTemps === false);
 verifie("jouee le jour meme, elle est a temps",
   resultatsDeLaPartie(ep, 1, null).lignes.every((l) => l.aTemps));
+
+// ---------------------------------------------------------------- tournois
+const heure = Date.now();
+const t = await creerUnTournoiDeTopping({
+  nom: "Essai", lexique: "ods9", debut: heure - 1000, fin: heure + 3_600_000, equipe: 2,
+  modeles: [{ bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 30 },
+    { bornes: 7, tirage: 8, jouables: 7, joker: false, chrono: 60 }],
+  par: "admin",
+}, "pave1");
+verifie("un tournoi de topping fige ses parties avant d'exister", t.parties.length === 2
+  && t.parties[1]!.config.tirage === 8);
+verifie("on s'inscrit avec un partenaire", inscrireAuTournoi(t, "ana", "", ["bob"]) === null
+  && inscriptionDe(t, "bob")?.compte === "ana");
+verifie("un partenaire deja inscrit ne se reinscrit pas", inscrireAuTournoi(t, "bob", "", []) === "bob est déjà inscrit");
+verifie("une equipe ne depasse pas sa taille", inscrireAuTournoi(t, "cy", "", ["dan", "eve"]) === "Une équipe compte 2 joueurs au plus");
+const ept = epreuveDuTournoi(t.id);
+const mt = ouvrirUneManche({ epreuve: ept, partie: 1, salon: "t1", compte: "ana", jeu: "equipe", noms: "", equipe: ["ana", "bob"] });
+finirLaManche(mt.id, coups, 7);
+verifie("dans un tournoi, les lignes d'une partie se cachent a qui ne l'a pas jouee",
+  resultatsDeLaPartie(ept, 1, "cy").cache && resultatsDeLaPartie(ept, 1, "cy").lignes.length === 0);
+verifie("et se montrent a qui l'a jouee", !resultatsDeLaPartie(ept, 1, "bob").cache
+  && resultatsDeLaPartie(ept, 1, "bob").lignes.length === 1);
+verifie("le General reste cache tant qu'il manque une partie", cumulDeLEpreuve(ept, "ana").cache);
+verifie("tout s'ouvre apres la fin", !resultatsDeLaPartie(ept, 1, "cy", heure + 7_200_000).cache
+  && !cumulDeLEpreuve(ept, "cy", heure + 7_200_000).cache);
+verifie("apres la fin, on ne s'inscrit plus",
+  inscrireAuTournoi(t, "cy", "", [], heure + 7_200_000) === "Les inscriptions sont closes");
+ouvrirLeCompetitif();
+verifie("les tournois et les inscriptions se relisent au journal",
+  tournoiDeLEpreuve(ept)?.inscrits.length === 1 && tournoiDeLEpreuve(ept)?.parties.length === 2);
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);
