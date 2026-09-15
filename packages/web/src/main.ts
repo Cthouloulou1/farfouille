@@ -10573,6 +10573,7 @@ function peindreLeCumul(d: ResultatsVue): void {
     $("rs-classement").replaceChildren(table);
   }
   // A DROITE, ses propres parties, une ligne chacune.
+  $("rs-graphes").hidden = true;
   $("rs-feuille-titre").textContent = t("Vos parties");
   const miennes = (d.moi ?? []) as { partie: number; fini: boolean; temps: number | null;
     negatif: number | null; score: number | null }[];
@@ -10622,6 +10623,7 @@ const nomDeLaLigne = (l: LigneVue): string => (l.jeu === "equipe" ? l.equipe.joi
 function peindreLaFeuille(d: ResultatsVue, lignes: LigneVue[]): void {
   const details = d.details ?? null;
   $("rs-feuille-titre").textContent = t("Feuille de route");
+  $("rs-graphes").hidden = true;
   if (details === null) {
     $("rs-feuille").replaceChildren(el("div", "rs-vide",
       d.moi?.enCours === true ? t("La feuille de route s'affiche une fois la partie finie.")
@@ -10759,6 +10761,7 @@ function peindreLaFeuille(d: ResultatsVue, lignes: LigneVue[]): void {
   morceau(t("Farfouilles trouvées"), `${farfouillesTrouvees}/${farfouilles} (${pc(farfouillesTrouvees, farfouilles)} %)`);
   morceau(t("Négatif"), negatifDit(cumulNeg));
   morceau(t("Cumul des meilleurs temps"), `${tempsCentiemes(cumulMeilleurs)} (+${tempsCentiemes(Math.max(0, ecart))})`);
+  peindreLesGraphes(d, lignes, vue, details);
 }
 
 /**
@@ -10882,3 +10885,408 @@ $("ep-resultats").addEventListener("click", () => {
   quitterSalon();
   ouvrirLesResultats(jour, lexique, partie);
 });
+
+// ----------------------------------------------------------- LES GRAPHIQUES
+//
+// Voir SPEC.md §29. Sous la feuille de route, cinq onglets, a la meme condition
+// qu'elle : la partie finie. Dessines en SVG, sans bibliotheque -- le client n'a
+// aucune dependance, et cinq graphiques n'en justifient pas une.
+//
+// Ils se comptent sur les lignes que les cases laissent, comme « Trouve par ».
+// Les couleurs sont celles du theme : l'encre pour la table, l'accent pour vous,
+// l'avertissement pour un coup rate -- c'est deja ce que dit la feuille de route.
+
+type Graphe = "temps" | "course" | "difficulte" | "rang" | "repartition";
+
+const GRAPHES: { v: Graphe; nom: string }[] = [
+  { v: "temps", nom: "Temps par coup" },
+  { v: "course", nom: "La course" },
+  { v: "difficulte", nom: "Difficulté des coups" },
+  { v: "rang", nom: "Rang au fil des coups" },
+  { v: "repartition", nom: "Répartition des temps" },
+];
+
+let rsGraphe: Graphe = "temps";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Un element SVG, ses attributs, et son infobulle s'il en a une. */
+function svgEl(tag: string, attrs: Record<string, string | number>, titre?: string): SVGElement {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+  if (titre !== undefined) {
+    const t0 = document.createElementNS(SVG_NS, "title");
+    t0.textContent = titre;
+    e.appendChild(t0);
+  }
+  return e;
+}
+
+/** La mediane d'une liste de nombres. */
+function mediane(xs: readonly number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
+/** Un ecart deterministe dans [-1, 1], pour que les points ne s'empilent pas. */
+function ecartDe(cle: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < cle.length; i++) h = Math.imul(h ^ cle.charCodeAt(i), 0x01000193) >>> 0;
+  return (h % 2001) / 1000 - 1;
+}
+
+/** Une duree courte, lisible sur un axe : `800 ms`, `2 s`, `1 min`. */
+function dureeDAxe(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${Math.round(ms / 100) / 10} s`;
+  const min = ms / 60_000;
+  return Number.isInteger(min) ? `${min} min` : `${Math.round(min * 10) / 10} min`;
+}
+
+/** Le cadre commun : une zone de trace, et de quoi y placer les coups. */
+interface Cadre {
+  svg: SVGElement;
+  g: number; d: number; h: number; b: number;
+  largeur: number; hauteur: number;
+  xCoup: (n: number) => number;
+  pas: number;
+}
+
+function cadre(nCoups: number, droite = 16): Cadre {
+  const largeur = 900, hauteur = 280;
+  const g = 58, h = 12, b = 30, d = droite;
+  const svg = svgEl("svg", { viewBox: `0 0 ${largeur} ${hauteur}`, role: "img" });
+  const pas = (largeur - g - d) / Math.max(1, nCoups);
+  const c: Cadre = {
+    svg, g, d, h, b, largeur, hauteur, pas,
+    xCoup: (n) => g + (n - 0.5) * pas,
+  };
+  // L'axe des coups : un numero sur deux quand ils sont nombreux.
+  const saut = nCoups > 30 ? 5 : nCoups > 15 ? 2 : 1;
+  for (let n = 1; n <= nCoups; n++) {
+    if (n !== 1 && n % saut !== 0) continue;
+    svg.appendChild(svgEl("text", {
+      x: c.xCoup(n), y: hauteur - b + 17, "text-anchor": "middle", class: "g-texte",
+    })).textContent = String(n);
+  }
+  svg.appendChild(svgEl("text", {
+    x: largeur - d, y: hauteur - 2, "text-anchor": "end", class: "g-texte",
+  })).textContent = t("coup");
+  return c;
+}
+
+/** Une ligne de grille horizontale et son etiquette. */
+function repere(c: Cadre, y: number, texte: string, classe = "g-grille"): void {
+  c.svg.appendChild(svgEl("line", { x1: c.g, x2: c.largeur - c.d, y1: y, y2: y, class: classe }));
+  c.svg.appendChild(svgEl("text", {
+    x: c.g - 8, y: y + 4, "text-anchor": "end", class: "g-texte",
+  })).textContent = texte;
+}
+
+/** Une ligne brisee a partir de points. */
+function trace(points: [number, number][], classe: string, style = ""): SVGElement {
+  return svgEl("polyline", {
+    points: points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "),
+    class: classe, ...(style === "" ? {} : { style }),
+  });
+}
+
+/** La legende sous le graphique : une pastille, un mot. */
+function legende(elements: { classe: string; texte: string; style?: string }[]): void {
+  const p = $("rs-graphe-legende");
+  p.replaceChildren(...elements.map((e) => {
+    const s = el("span", "g-cle");
+    const pastille = el("i", e.classe);
+    if (e.style !== undefined) pastille.setAttribute("style", e.style);
+    s.appendChild(pastille);
+    s.appendChild(document.createTextNode(e.texte));
+    return s;
+  }));
+}
+
+/**
+ * Les graphiques de la partie, pour la ligne regardee.
+ *
+ * `lignes` sont celles que les cases laissent, `vue` celle dont la feuille est
+ * ouverte : c'est elle qui porte la couleur d'accent.
+ */
+function peindreLesGraphes(
+  d: ResultatsVue, lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>,
+): void {
+  $("rs-graphes").hidden = false;
+  $("rs-graphes-onglets").replaceChildren(...GRAPHES.map((x) => {
+    const b = el("button", "", t(x.nom)) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(x.v === rsGraphe));
+    b.addEventListener("click", () => {
+      rsGraphe = x.v;
+      peindreLesGraphes(d, lignes, vue, details);
+    });
+    return b;
+  }));
+  const partie = d.parties.find((p) => p.n === d.partie);
+  const chronoMs = (partie?.config.chrono ?? 60) * 1000;
+  const miens = details[vue.manche] ?? [];
+  const nCoups = miens.length;
+  // Les lignes qui ont un detail, la ligne regardee toujours comprise.
+  const avec = lignes.filter((l) => details[l.manche] !== undefined);
+  if (!avec.some((l) => l.manche === vue.manche)) avec.push(vue);
+  const boite = $("rs-graphe");
+  let c: Cadre;
+  if (rsGraphe === "temps") c = grapheDesTemps(avec, vue, details, nCoups, chronoMs);
+  else if (rsGraphe === "course") c = grapheDeLaCourse(avec, vue, details, nCoups);
+  else if (rsGraphe === "difficulte") c = grapheDeLaDifficulte(avec, vue, details, nCoups);
+  else if (rsGraphe === "rang") c = grapheDuRang(avec, vue, details, nCoups);
+  else c = grapheDeLaRepartition(avec, vue);
+  boite.replaceChildren(c.svg);
+}
+
+/** 1. LE TEMPS DE CHACUN SUR CHAQUE COUP, en echelle logarithmique. */
+function grapheDesTemps(
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>, nCoups: number, chronoMs: number,
+): Cadre {
+  const c = cadre(nCoups);
+  // Sur une echelle lineaire, un coup trouve en deux secondes s'ecrase contre
+  // l'axe des qu'un autre en demande trente.
+  const trouves = lignes.flatMap((l) => (details[l.manche] ?? []).filter((x) => x.trouve).map((x) => x.ms));
+  const bas = Math.max(100, Math.min(chronoMs / 20, ...trouves) / 1.4);
+  const haut = chronoMs * 1.08;
+  const y = (ms: number): number => c.h + (c.hauteur - c.h - c.b)
+    * (1 - (Math.log(Math.max(bas, ms)) - Math.log(bas)) / (Math.log(haut) - Math.log(bas)));
+  for (const s of [0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 180, 300, 600]) {
+    const ms = s * 1000;
+    if (ms < bas || ms > haut) continue;
+    repere(c, y(ms), dureeDAxe(ms));
+  }
+  // Les autres, en gris ; les coups rates au chrono, couleur d'avertissement.
+  for (const l of lignes) {
+    if (l.manche === vue.manche) continue;
+    for (const x of details[l.manche] ?? []) {
+      const ecart = ecartDe(`${l.manche}:${x.n}`) * c.pas * 0.3;
+      c.svg.appendChild(svgEl("circle", {
+        cx: (c.xCoup(x.n) + ecart).toFixed(1), cy: y(x.trouve ? x.ms : chronoMs).toFixed(1),
+        r: 3, class: x.trouve ? "g-point" : "g-rate",
+      }, `${nomDeLaLigne(l)} · ${t("coup")} ${x.n} · ${x.trouve ? tempsCentiemes(x.ms) : t("raté")}`));
+    }
+  }
+  // Mediane, moyenne et meilleur temps de chaque coup.
+  const med: [number, number][] = [], moy: [number, number][] = [], best: [number, number][] = [];
+  for (let n = 1; n <= nCoups; n++) {
+    const temps = lignes.map((l) => details[l.manche]?.[n - 1]).filter((x): x is CoupVue => x !== undefined)
+      .map((x) => (x.trouve ? x.ms : chronoMs));
+    if (temps.length === 0) continue;
+    med.push([c.xCoup(n), y(mediane(temps))]);
+    moy.push([c.xCoup(n), y(temps.reduce((a, b) => a + b, 0) / temps.length)]);
+    const t2s = lignes.map((l) => details[l.manche]?.[n - 1]).filter((x) => x?.trouve === true).map((x) => x!.ms);
+    if (t2s.length > 0) best.push([c.xCoup(n), y(Math.min(...t2s))]);
+  }
+  c.svg.appendChild(trace(best, "g-meilleur"));
+  c.svg.appendChild(trace(moy, "g-moyenne"));
+  c.svg.appendChild(trace(med, "g-mediane"));
+  // Vous, par-dessus tout le reste.
+  const miens = details[vue.manche] ?? [];
+  c.svg.appendChild(trace(miens.map((x) => [c.xCoup(x.n), y(x.trouve ? x.ms : chronoMs)]), "g-moi"));
+  for (const x of miens) {
+    c.svg.appendChild(svgEl("circle", {
+      cx: c.xCoup(x.n).toFixed(1), cy: y(x.trouve ? x.ms : chronoMs).toFixed(1), r: 4.5,
+      class: x.trouve ? "g-moi-point" : "g-moi-rate",
+    }, `${t("coup")} ${x.n} · ${x.trouve ? tempsCentiemes(x.ms) : t("raté")}`));
+  }
+  legende([
+    { classe: "g-cle-moi", texte: nomDeLaLigne(vue) },
+    { classe: "g-cle-mediane", texte: t("médiane") },
+    { classe: "g-cle-moyenne", texte: t("moyenne") },
+    { classe: "g-cle-meilleur", texte: t("meilleur temps") },
+    { classe: "g-cle-point", texte: t("les autres joueurs") },
+    { classe: "g-cle-rate", texte: t("coup raté") },
+  ]);
+  return c;
+}
+
+/**
+ * 2. LA COURSE : votre temps cumule moins le cumul median, coup par coup.
+ * Au-dessus de zero, on est en retard sur la mediane.
+ */
+function grapheDeLaCourse(
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>, nCoups: number,
+): Cadre {
+  const c = cadre(nCoups);
+  const cumuls = new Map<string, number[]>();
+  for (const l of lignes) {
+    let s = 0;
+    cumuls.set(l.manche, (details[l.manche] ?? []).map((x) => (s += x.ms)));
+  }
+  const ecarts: number[] = [];
+  for (let n = 1; n <= nCoups; n++) {
+    const med = mediane(lignes.map((l) => cumuls.get(l.manche)?.[n - 1]).filter((v): v is number => v !== undefined));
+    ecarts.push((cumuls.get(vue.manche)?.[n - 1] ?? 0) - med);
+  }
+  // L'ECHELLE VA DE L'ECART LE PLUS BAS AU PLUS HAUT, zero compris : un joueur
+  // toujours en retard n'a pas a laisser vide la moitie basse du graphique.
+  const lo0 = Math.min(0, ...ecarts), hi0 = Math.max(0, ...ecarts);
+  const marge = Math.max(1000, (hi0 - lo0) * 0.1);
+  const lo = lo0 - marge, hi = hi0 + marge;
+  const y = (v: number): number => c.h + (c.hauteur - c.h - c.b) * ((hi - v) / (hi - lo));
+  const pas = pasDeDuree((hi - lo) / 5);
+  for (let v = Math.ceil(lo / pas) * pas; v <= hi; v += pas) {
+    if (v === 0) continue;
+    repere(c, y(v), `${v > 0 ? "+" : "−"}${dureeDAxe(Math.abs(v))}`);
+  }
+  repere(c, y(0), t("médiane"), "g-zero");
+  const points: [number, number][] = ecarts.map((v, i) => [c.xCoup(i + 1), y(v)]);
+  c.svg.appendChild(trace(points, "g-moi"));
+  ecarts.forEach((v, i) => {
+    c.svg.appendChild(svgEl("circle", {
+      cx: points[i]![0].toFixed(1), cy: points[i]![1].toFixed(1), r: 4,
+      class: (details[vue.manche]?.[i]?.trouve ?? true) ? "g-moi-point" : "g-moi-rate",
+    }, `${t("coup")} ${i + 1} · ${v >= 0 ? "+" : "−"}${tempsCentiemes(Math.abs(v))}`));
+  });
+  legende([
+    { classe: "g-cle-moi", texte: t2("{nom}, écart au cumul médian", { nom: nomDeLaLigne(vue) }) },
+    { classe: "g-cle-rate", texte: t("coup raté") },
+  ]);
+  return c;
+}
+
+/** Un pas d'axe qui se lit, pour une duree : une seconde, cinq, trente, une minute... */
+function pasDeDuree(ms: number): number {
+  for (const s of [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]) {
+    if (s * 1000 >= ms) return s * 1000;
+  }
+  return 3_600_000;
+}
+
+/** Un pas d'axe rond, pour un compte : 1, 2 ou 5 fois une puissance de dix. */
+function pasRond(ms: number): number {
+  const p = 10 ** Math.floor(Math.log10(Math.max(1, ms)));
+  for (const k of [1, 2, 5, 10]) if (k * p >= ms) return k * p;
+  return 10 * p;
+}
+
+/** 3. LA DIFFICULTE DES COUPS : la part des joueurs qui ont trouve chacun. */
+function grapheDeLaDifficulte(
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>, nCoups: number,
+): Cadre {
+  const c = cadre(nCoups);
+  const y = (part: number): number => c.h + (c.hauteur - c.h - c.b) * (1 - part);
+  for (const p of [0.25, 0.5, 0.75, 1]) repere(c, y(p), `${p * 100} %`);
+  const base = y(0);
+  c.svg.appendChild(svgEl("line", { x1: c.g, x2: c.largeur - c.d, y1: base, y2: base, class: "g-zero" }));
+  const largeur = Math.max(3, c.pas - 4);
+  for (let n = 1; n <= nCoups; n++) {
+    const leurs = lignes.map((l) => details[l.manche]?.[n - 1]).filter((x): x is CoupVue => x !== undefined);
+    const trouves = leurs.filter((x) => x.trouve).length;
+    const part = leurs.length === 0 ? 0 : trouves / leurs.length;
+    const haut = base - y(part);
+    const moi = details[vue.manche]?.[n - 1];
+    const x0 = c.xCoup(n) - largeur / 2;
+    const r = Math.min(4, largeur / 2, haut);
+    // Le haut arrondi, la base posee sur l'axe.
+    c.svg.appendChild(svgEl("path", {
+      d: haut <= 0 ? "" : `M${x0},${base} V${base - haut + r} Q${x0},${base - haut} ${x0 + r},${base - haut} `
+        + `H${x0 + largeur - r} Q${x0 + largeur},${base - haut} ${x0 + largeur},${base - haut + r} V${base} Z`,
+      class: moi?.trouve === false ? "g-barre g-barre-ratee" : "g-barre",
+    }, `${t("coup")} ${n} · ${trouves}/${leurs.length} (${Math.round(part * 100)} %)`));
+  }
+  legende([
+    { classe: "g-cle-barre", texte: t2("coups trouvés par {nom}", { nom: nomDeLaLigne(vue) }) },
+    { classe: "g-cle-barre-ratee", texte: t2("coups ratés par {nom}", { nom: nomDeLaLigne(vue) }) },
+  ]);
+  return c;
+}
+
+/** 4. LE RANG AU FIL DES COUPS, pour les dix premiers et pour vous. */
+function grapheDuRang(
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>, nCoups: number,
+): Cadre {
+  const c = cadre(nCoups, 110);
+  const cumuls = new Map<string, number[]>();
+  for (const l of lignes) {
+    let s = 0;
+    cumuls.set(l.manche, (details[l.manche] ?? []).map((x) => (s += x.ms)));
+  }
+  const rangs = new Map<string, number[]>();
+  for (const l of lignes) rangs.set(l.manche, []);
+  for (let n = 1; n <= nCoups; n++) {
+    const ordre = [...lignes].sort((a, b) =>
+      (cumuls.get(a.manche)?.[n - 1] ?? Infinity) - (cumuls.get(b.manche)?.[n - 1] ?? Infinity));
+    ordre.forEach((l, i) => rangs.get(l.manche)!.push(i + 1));
+  }
+  const final = [...lignes].sort((a, b) => a.temps - b.temps);
+  const montres = final.slice(0, 10);
+  if (!montres.includes(vue)) montres.push(vue);
+  const maxRang = lignes.length;
+  const y = (r: number): number => c.h + 8 + (c.hauteur - c.h - c.b - 16) * ((r - 1) / Math.max(1, maxRang - 1));
+  const sautRang = maxRang > 20 ? 5 : maxRang > 10 ? 2 : 1;
+  for (let r = 1; r <= maxRang; r++) if (r === 1 || r % sautRang === 0) repere(c, y(r), String(r));
+  const etiquettes: { y: number; texte: string; couleur: string; moi: boolean }[] = [];
+  for (const l of montres) {
+    const moi = l.manche === vue.manche;
+    const couleur = moi ? "var(--accent)" : couleurDuJoueur(l.compte);
+    const pts: [number, number][] = (rangs.get(l.manche) ?? []).map((r, i) => [c.xCoup(i + 1), y(r)]);
+    c.svg.appendChild(trace(pts, moi ? "g-moi" : "g-rang", `stroke: ${couleur}`));
+    const dernier = pts[pts.length - 1];
+    if (dernier !== undefined) etiquettes.push({ y: dernier[1], texte: nomDeLaLigne(l), couleur, moi });
+  }
+  // Les noms au bout de leur ligne, ecartes s'ils se touchent.
+  etiquettes.sort((a, b) => a.y - b.y);
+  let precedent = -Infinity;
+  for (const e of etiquettes) {
+    const yy = Math.max(e.y + 4, precedent + 12);
+    precedent = yy;
+    c.svg.appendChild(svgEl("text", {
+      x: c.largeur - c.d + 8, y: yy, class: e.moi ? "g-texte g-texte-moi" : "g-texte",
+    })).textContent = e.texte.length > 14 ? `${e.texte.slice(0, 13)}…` : e.texte;
+  }
+  legende([{ classe: "g-cle-moi", texte: t2("{nom}, et les dix premiers au temps cumulé", { nom: nomDeLaLigne(vue) }) }]);
+  return c;
+}
+
+/** 5. LA REPARTITION DES TEMPS TOTAUX, et votre place dedans. */
+function grapheDeLaRepartition(lignes: LigneVue[], vue: LigneVue): Cadre {
+  const n = lignes.length;
+  const classes = Math.max(4, Math.min(14, Math.ceil(Math.sqrt(n)) + 2));
+  const mini = Math.min(...lignes.map((l) => l.temps));
+  const maxi = Math.max(...lignes.map((l) => l.temps));
+  const pasT = Math.max(1, (maxi - mini) / classes);
+  const compte = Array.from({ length: classes }, () => 0);
+  const classeDe = (tps: number): number => Math.min(classes - 1, Math.floor((tps - mini) / pasT));
+  for (const l of lignes) compte[classeDe(l.temps)]!++;
+  const c = cadre(0);
+  // L'axe du bas est celui des temps, pas des coups : on le refait.
+  c.svg.replaceChildren();
+  const pas = (c.largeur - c.g - c.d) / classes;
+  const plusHaut = Math.max(1, ...compte);
+  const y = (v: number): number => c.h + (c.hauteur - c.h - c.b) * (1 - v / plusHaut);
+  const sautV = pasRond(plusHaut / 4);
+  for (let v = sautV; v <= plusHaut; v += sautV) repere(c, y(v), String(v));
+  const base = y(0);
+  const mienne = classeDe(vue.temps);
+  compte.forEach((v, i) => {
+    const x0 = c.g + i * pas + 2;
+    const largeur = pas - 4;
+    const haut = base - y(v);
+    const r = Math.min(4, largeur / 2, haut);
+    c.svg.appendChild(svgEl("path", {
+      d: haut <= 0 ? "" : `M${x0},${base} V${base - haut + r} Q${x0},${base - haut} ${x0 + r},${base - haut} `
+        + `H${x0 + largeur - r} Q${x0 + largeur},${base - haut} ${x0 + largeur},${base - haut + r} V${base} Z`,
+      class: i === mienne ? "g-barre g-barre-moi" : "g-barre",
+    }, t2("{a} à {b} : {n}", { a: tempsCentiemes(mini + i * pasT), b: tempsCentiemes(mini + (i + 1) * pasT), n: v })));
+  });
+  c.svg.appendChild(svgEl("line", { x1: c.g, x2: c.largeur - c.d, y1: base, y2: base, class: "g-zero" }));
+  for (const i of [0, Math.floor(classes / 2), classes]) {
+    c.svg.appendChild(svgEl("text", {
+      x: c.g + i * pas, y: c.hauteur - c.b + 17,
+      "text-anchor": i === 0 ? "start" : i === classes ? "end" : "middle", class: "g-texte",
+    })).textContent = tempsCentiemes(mini + i * pasT);
+  }
+  const plusLents = lignes.filter((l) => l.temps > vue.temps).length;
+  const part = n <= 1 ? 100 : Math.round((plusLents / (n - 1)) * 100);
+  legende([
+    { classe: "g-cle-barre-moi", texte: t2("{nom} : plus rapide que {p} % des joueurs", { nom: nomDeLaLigne(vue), p: part }) },
+    { classe: "g-cle-barre", texte: t2("{n} joueurs, au temps total", { n }) },
+  ]);
+  return c;
+}

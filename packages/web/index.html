@@ -1443,6 +1443,41 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rs-trouves-boite .ligne .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-trouves-boite .ligne .chiffre { flex: none; font-family: var(--mono); color: var(--ink-soft); }
 
+/* LES GRAPHIQUES. L'encre pour la table, l'accent pour la ligne regardee,
+   l'avertissement pour un coup rate : ce que la feuille de route dit deja. */
+.rs-graphes { margin-top: 18px; }
+.rs-graphes[hidden] { display: none; }
+.rs-graphe svg { display: block; width: 100%; height: auto; margin-top: 8px; }
+.rs-graphe .g-grille { stroke: var(--rule); stroke-width: 1; }
+.rs-graphe .g-zero { stroke: var(--ink-faint); stroke-width: 1; }
+.rs-graphe .g-texte { fill: var(--ink-faint); font-family: var(--mono); font-size: 11px; }
+.rs-graphe .g-texte-moi { fill: var(--ink); font-weight: 600; }
+.rs-graphe .g-point { fill: var(--ink-faint); opacity: .5; }
+.rs-graphe .g-rate { fill: var(--warn); opacity: .6; }
+.rs-graphe .g-mediane { fill: none; stroke: var(--ink); stroke-width: 2; }
+.rs-graphe .g-moyenne { fill: none; stroke: var(--ink-soft); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.rs-graphe .g-meilleur { fill: none; stroke: var(--ink-faint); stroke-width: 1; }
+.rs-graphe .g-moi { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
+.rs-graphe .g-rang { fill: none; stroke-width: 1.5; opacity: .75; stroke-linejoin: round; }
+.rs-graphe .g-moi-point { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.rs-graphe .g-moi-rate { fill: var(--warn); stroke: var(--panel); stroke-width: 2; }
+.rs-graphe .g-barre { fill: var(--ink-soft); }
+.rs-graphe .g-barre-ratee { fill: var(--warn); }
+.rs-graphe .g-barre-moi { fill: var(--accent); }
+.rs-graphe circle:hover, .rs-graphe path:hover { opacity: 1; stroke: var(--ink); stroke-width: 1.5; }
+.rs-graphe-legende { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+.g-cle { display: inline-flex; align-items: center; gap: 6px; }
+.g-cle i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.g-cle .g-cle-moi { background: var(--accent); }
+.g-cle .g-cle-mediane { background: var(--ink); }
+.g-cle .g-cle-moyenne { height: 0; border-top: 2px dashed var(--ink-soft); border-radius: 0; }
+.g-cle .g-cle-meilleur { height: 1px; background: var(--ink-faint); }
+.g-cle .g-cle-point, .g-cle .g-cle-rate { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+.g-cle .g-cle-rate { background: var(--warn); }
+.g-cle .g-cle-barre, .g-cle .g-cle-barre-ratee, .g-cle .g-cle-barre-moi { width: 10px; height: 10px; border-radius: 2px; background: var(--ink-soft); }
+.g-cle .g-cle-barre-ratee { background: var(--warn); }
+.g-cle .g-cle-barre-moi { background: var(--accent); }
+
 /* LE BLOC D'UNE PARTIE D'EPREUVE, dans le panneau du salon. */
 #epreuve-wrap .ep-gestes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 #epreuve-wrap .ep-gestes button { padding: 8px 10px; }
@@ -1736,6 +1771,12 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <h2 id="rs-feuille-titre">Feuille de route</h2>
         <div class="pr-route rs-feuille" id="rs-feuille"></div>
         <div class="rs-resume" id="rs-resume"></div>
+        <!-- LES GRAPHIQUES, a la meme condition que la feuille : la partie finie. -->
+        <div class="rs-graphes" id="rs-graphes" hidden>
+          <div class="rc-barre"><div class="rc-vues" id="rs-graphes-onglets"></div></div>
+          <div class="rs-graphe" id="rs-graphe"></div>
+          <p class="rs-graphe-legende" id="rs-graphe-legende"></p>
+        </div>
       </div>
     </div>
   </div>

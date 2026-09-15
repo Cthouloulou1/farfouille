@@ -5976,6 +5976,16 @@ justifient pas une.
 **Écarté :** le temps selon le type de coup (farfouille ou non, nombre de
 lettres posées).
 
+**Chaque marque se survole** : un point dit qui, quel coup et en combien de
+temps ; une barre, combien de joueurs. Une infobulle suffit ici, la feuille de
+route au-dessus porte déjà tous les chiffres.
+
+**La course ne garde pas de moitié vide.** Son échelle va de l'écart le plus bas
+au plus haut, zéro compris : un joueur toujours en retard sur la médiane n'a pas
+à regarder une moitié de graphique où il n'est jamais passé. Ses graduations
+sont des durées qui se lisent — cinq secondes, trente, une minute —, et non des
+fractions de minute.
+
 ### Défier sur une partie
 
 À la fin d'une partie qui se défie (voir « La partie est jouée avant qu'on la
@@ -6164,12 +6174,11 @@ Tout suit la règle du §11 : **le journal fait foi**, le reste en est une vue.
 d'épreuve (seul, à plusieurs sur un compte, en équipe), les parties du jour des
 trois lexiques figées d'avance pour aujourd'hui et demain, la page Compétitif,
 la page des résultats avec son classement, ses deux cases, son cumul et sa
-feuille de route, « Trouvé par » et sa fenêtre.
+feuille de route, « Trouvé par » et sa fenêtre, et les cinq graphiques.
 
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
 par joueur dans un salon qui n'en tient qu'une), le panneau d'administration et
-les règles du jour, les graphiques, les défis et les notifications, les
-tournois.
+les règles du jour, les défis et les notifications, les tournois.
 
 ```bash
 node packages/server/test/check_figees.ts       # figer, servir, la pause
