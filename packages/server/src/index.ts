@@ -28,7 +28,7 @@ import {
 } from "../../engine/src/config.ts";
 import { categorie, estPartieNormale } from "../../engine/src/categories.ts";
 import {
-  ajouterUneManche, annexe, compteurWuQi, coupsExtremes, mancheDe, motsRates,
+  ajouterUneManche, annexe, compteurWuQi, coupsExtremes, mancheDe, manchesValides, motsRates,
   motsTrouves, observer, ouvrirLesRecords, tableau,
   type Annexe, type EtapeObservee,
 } from "./records.ts";
@@ -49,7 +49,9 @@ import {
   classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
   partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
   epreuveDuTournoi, finirLaManche, finisseursDuTournoi, inscriptionDe, inscrireAuTournoi,
-  joursConnus,
+  joursConnus, bilanDeLaManche, ceuxQuiOntFini, creerUnDefi, defi, defiDeLaPartie,
+  defiDeLEpreuve, epreuveDuDefi, manchesDe,
+  type Defi, type FinDeManche,
   lexiqueDeLEpreuve, lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId,
   ouvrirLeCompetitif, ouvrirUneManche, partieFigee, partiesDeLEpreuve, partiesDuJour,
   resultatsDeLaPartie, salonDeLaPartie, tournoi, tournoiDeLEpreuve, tournoiPublic,
@@ -59,6 +61,9 @@ import {
 import {
   marquerLues, notificationsDe, notifier, ouvrirLesNotifications,
 } from "./notifications.ts";
+import {
+  ecrireUnePartie, lignesDesJoueurs, ouvrirLHistorique, partieDeLHistorique, partiesDe,
+} from "./historique.ts";
 import {
   LEXIQUES_DU_JOUR, consigneRecevable, decalerLeJour, instantDeParis, jourDe, jourValide,
   tirerUneConsigne, type ConsigneDePartie,
@@ -528,6 +533,25 @@ function surveiller(s: Salon): void {
   // mondiale retiendrait ses onze mille coups pour personne.
   s.vue = observer(s.partie,
     s.montante === null ? undefined : (e) => cloreLEtapeDeLaMontante(s, e));
+  // ET L'HISTORIQUE DU JOUEUR (SPEC.md §30), qui n'a pas les memes conditions
+  // que les records : une grille sans fin et un duplicate y entrent aussi.
+  s.partie.onFin((raison) => ecrireLHistoriqueDuSalon(s, raison));
+}
+
+/**
+ * Ecrit la partie du salon a l'historique de ceux qui l'ont jouee.
+ *
+ * LA GRILLE PERMANENTE N'EST PAS UNE PARTIE QU'ON JOUE : elle dure depuis des
+ * mois et ne finit jamais. Un salon d'epreuve a deja sa manche au journal du
+ * competitif.
+ */
+function ecrireLHistoriqueDuSalon(s: Salon, raison: string): void {
+  if (s.epreuve !== null || estPermanent(s)) return;
+  ecrireUnePartie({
+    salon: s.id, graine: s.partie.seed, nomSalon: s.nom, fin: raison,
+    cfg: s.partie.cfg, coups: s.partie.moves,
+    estCompte: (nom) => compte(nom) !== undefined,
+  });
 }
 
 /** Ce que les clients savent de la partie d'epreuve d'un salon. */
@@ -558,9 +582,30 @@ function cloreLaMancheDuSalon(s: Salon, raison: RaisonDeFin): void {
   if (id === null || raison === "abandon") return;
   const fin = finirLaManche(id, s.partie.moves, s.partie.cfg.jouables);
   if (fin === null) return;
+  prevenirLesRivauxDuDefi(s);
   console.log(`[competitif] manche close dans "${s.id}" : ${fin.coups.length} coups, `
     + `${(fin.temps / 1000).toFixed(2)} s, negatif ${fin.negatif}`);
   broadcast(s.id, { t: "state", state: publicState(s) });
+}
+
+/**
+ * ON EST PREVENU QUAND QUELQU'UN JOUE UN DEFI QU'ON A JOUE (SPEC.md §29).
+ *
+ * Pas sur les parties du jour ni les tournois : la pastille ne s'eteindrait
+ * jamais. La cle ne laisse passer qu'un avis par manche et par destinataire.
+ */
+function prevenirLesRivauxDuDefi(s: Salon): void {
+  const e = s.epreuve;
+  if (e === null || e.manche === null) return;
+  const d = defiDeLEpreuve(e.epreuve);
+  if (d === undefined) return;
+  const m = mancheParId(e.manche);
+  if (m === undefined) return;
+  for (const qui of ceuxQuiOntFini(e.epreuve, 1)) {
+    if (m.equipe.includes(qui) || compte(qui) === undefined) continue;
+    notifier(qui, "defi-joue", { defi: d.id, nom: d.nom, de: m.equipe.join(", ") },
+      `joue:${m.id}`);
+  }
 }
 
 /**
@@ -703,6 +748,78 @@ function lireLEnteteDuTournoi(c: any): { nom: string; lexique: string; equipe: n
   return { nom, lexique, equipe };
 }
 
+/**
+ * Une partie de salon relue, pour le rejeu de l'historique (SPEC.md §30).
+ *
+ * Elle prend la forme d'une manche de records : c'est ce que la page de rejeu
+ * attend, et une partie est une partie.
+ */
+function partieRelueDeLHistorique(id: string): Record<string, unknown> | string {
+  const [salon, graine] = id.split("~");
+  if (salon === undefined || graine === undefined) return "Cette partie n'existe pas";
+  const h = partieDeLHistorique(salon, graine);
+  if (h === undefined) return "Cette partie n'existe pas";
+  const fichier = journalDeLaPartie(salon, graine);
+  const p = fichier === null ? null : relire(fichier);
+  if (p === null) return "Cette partie n'est plus sur le disque";
+  return {
+    partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
+    fin: p.fin, coups: p.coups,
+    titre: h.nomSalon,
+    dou: nomDeLaPartie(p.config),
+    manche: {
+      ref: id, categorie: "", grille: p.config.bornes === 10 ? "super" : "normale",
+      lexique: p.config.dictionnaire, chrono: p.config.chrono,
+      at: h.at, temps: 0, cumul: p.coups.reduce((a, c) => a + c.score, 0),
+      topee: false, negatif: 0,
+      joueurs: h.joueurs.map((j) => ({ nom: j.nom, tops: j.tops, invite: j.invite })),
+      solo: null,
+    },
+  };
+}
+
+/** Une liste de pseudos de comptes, verifiee un a un. */
+function lireDesPseudos(x: unknown): string[] | string {
+  if (!Array.isArray(x) || x.length === 0) return "Choisissez au moins un joueur";
+  if (x.length > 40) return "Quarante joueurs au plus à la fois";
+  const out: string[] = [];
+  for (const brut of x) {
+    const c = compte(String(brut ?? "").trim());
+    if (c === undefined) return `Aucun compte ne s'appelle ${String(brut ?? "")}`;
+    if (!out.includes(c.pseudo)) out.push(c.pseudo);
+  }
+  return out;
+}
+
+/** Ce qu'un defi montre a tout le monde. */
+function defiPublic(d: Defi) {
+  return { id: d.id, nom: d.nom, config: d.config, par: d.par, at: d.at };
+}
+
+/**
+ * LES LIGNES DES JOUEURS D'ORIGINE d'un defi (SPEC.md §29).
+ *
+ * Une partie de topping n'en fait QU'UNE, meme a plusieurs : celui qui tape le
+ * premier prend le top et les autres n'ont pas eu le temps d'ecrire, si bien
+ * qu'une performance separee ne voudrait rien dire. Le duplicate fait
+ * exception -- chacun y marque son propre score sur chaque coup.
+ */
+function lignesDOrigine(s: Salon): { equipe: string[]; jeu: Jeu; bilan: FinDeManche }[] {
+  const noms = lignesDesJoueurs(s.partie.moves, (n) => compte(n) !== undefined).map((l) => l.nom);
+  if (noms.length === 0) return [];
+  const jouables = s.partie.cfg.jouables;
+  if (s.partie.cfg.mode === "duplicate") {
+    return noms.map((nom) => ({
+      equipe: [nom], jeu: "seul" as Jeu,
+      bilan: bilanDeLaManche({ equipe: [nom] }, s.partie.moves, jouables),
+    }));
+  }
+  return [{
+    equipe: noms, jeu: (noms.length > 1 ? "equipe" : "seul") as Jeu,
+    bilan: bilanDeLaManche({ equipe: noms }, s.partie.moves, jouables),
+  }];
+}
+
 /** Une liste de consignes de partie, verifiee une a une. */
 function lireDesConsignes(x: unknown, max: number): ConsigneDePartie[] | string {
   if (!Array.isArray(x) || x.length < 1 || x.length > max) return `de 1 à ${max} parties`;
@@ -807,6 +924,9 @@ function lireUnTournoiDeBattle(c: any): {
  * de quoi tout redessiner.
  */
 async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]> {
+  // UNE PARTIE RELANCEE EN PLEIN MILIEU NE PASSE PAS PAR `onFin` : son
+  // historique s'ecrit ici, avant qu'elle ne soit archivee.
+  ecrireLHistoriqueDuSalon(s, "relance");
   const archives = await relancer(s, cfg);
   surveiller(s);
   // La partie neuve nait endormie ET ignorante de qui est la : on lui rend les
@@ -1319,13 +1439,33 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   // Rien n'est consomme ici -- la tentative part au lancement, pas a l'entree.
   if (url === "/api/competitif/jouer" && req.method === "POST") {
     const moi = quiParle(req);
-    if (moi === undefined) {
-      json(res, 401, { erreur: "Connectez-vous pour jouer" });
-      return;
-    }
     let corps: any;
     try { corps = await corpsJson(req); }
     catch { json(res, 400, { erreur: "requête illisible" }); return; }
+
+    // UN DEFI SE JOUE SANS COMPTE (SPEC.md §29) : le pseudo suffit, et sa
+    // ligne portera la mention d'invite comme partout ailleurs.
+    if (corps.defi !== undefined) {
+      const d = defi(String(corps.defi));
+      if (d === undefined) { json(res, 404, { erreur: "Ce défi n'existe pas" }); return; }
+      const qui = moi?.pseudo ?? String(corps.pseudo ?? "").trim().slice(0, 24);
+      if (qui === "") { json(res, 400, { erreur: "Choisissez un pseudo" }); return; }
+      const epreuve = epreuveDuDefi(d.id);
+      const m = mancheDuCompte(qui, epreuve, 1);
+      if (m !== undefined && m.fin !== null) {
+        json(res, 409, { erreur: "Vous avez déjà joué ce défi" });
+        return;
+      }
+      try {
+        const s = await ouvrirLeSalonDEpreuve({ epreuve, partie: 1, compte: qui, manche: m });
+        json(res, 200, { salon: s.id });
+      } catch (e) {
+        json(res, 503, { erreur: (e as Error).message });
+      }
+      return;
+    }
+    // TOUT LE RESTE DEMANDE UN COMPTE : seul le defi s'ouvre a un pseudo nu.
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous pour jouer" }); return; }
     // UNE PARTIE DE TOURNOI : entre ses deux dates, et pour un inscrit.
     if (corps.tournoi !== undefined) {
       const t = tournoi(String(corps.tournoi));
@@ -1392,6 +1532,18 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url === "/api/competitif/resultats" && req.method === "GET") {
     const p = parametres(req);
     const moi = quiParle(req);
+    // UN DEFI : une seule partie, et un pseudo suffit a lire la sienne.
+    if (p.get("defi") !== null) {
+      const d = defi(p.get("defi")!);
+      if (d === undefined) { json(res, 404, { erreur: "Ce défi n'existe pas" }); return; }
+      const qui = moi?.pseudo ?? p.get("pseudo") ?? null;
+      json(res, 200, {
+        jour: null, lexique: d.config.dictionnaire, defi: { id: d.id, nom: d.nom },
+        parties: [{ n: 1, config: d.config }], partie: 1,
+        ...resultatsDeLaPartie(epreuveDuDefi(d.id), 1, qui),
+      });
+      return;
+    }
     if (p.get("tournoi") !== null) {
       const t = tournoi(p.get("tournoi")!);
       if (t === undefined || t.type !== "topping") { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
@@ -1603,6 +1755,173 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (moi === undefined) { json(res, 401, { erreur: "connectez-vous" }); return; }
     marquerLues(moi.pseudo);
     json(res, 200, notificationsDe(moi.pseudo));
+    return;
+  }
+
+  // ------------------------------------------------- l'historique d'un joueur
+  //
+  // TROIS JOURNAUX (SPEC.md §30) : le competitif pour les epreuves, celui de
+  // l'historique pour les parties de salon d'aujourd'hui, et celui des records
+  // pour les anciennes. Une partie presente dans deux ne paraît qu'une fois.
+
+  if (url.startsWith("/api/joueur/") && url.endsWith("/historique") && req.method === "GET") {
+    const qui = decodeURIComponent(url.slice("/api/joueur/".length, -"/historique".length));
+    const lignes: Record<string, unknown>[] = [];
+    for (const m of manchesDe(qui)) {
+      lignes.push({
+        type: m.type, source: "competitif", id: m.manche, at: m.at, config: m.config,
+        dou: m.dou, partie: m.partie, temps: m.temps, negatif: m.negatif,
+        score: m.score, coups: m.coups,
+        equipe: m.equipe.length > 1 ? m.equipe : [],
+      });
+    }
+    const vues = new Set<string>();
+    for (const p of partiesDe(qui)) {
+      const sienne = p.joueurs.find((j) => j.nom === qui);
+      if (sienne === undefined) continue;
+      vues.add(`${p.salon}|${p.graine}`);
+      lignes.push({
+        type: "salon", source: "historique", id: `${p.salon}~${p.graine}`, at: p.at,
+        config: p.resume, dou: p.nomSalon, partie: 0, temps: null,
+        negatif: sienne.negatif, score: sienne.score, coups: p.coups,
+        equipe: p.joueurs.length > 1 ? p.joueurs.map((j) => j.nom) : [],
+      });
+    }
+    // LES ANCIENNES PARTIES DE SALON, celles d'avant le journal de l'historique :
+    // le tableau des records est le seul endroit ou elles soient nommees.
+    for (const m of manchesValides()) {
+      if (vues.has(`${m.partie}|${m.graine}`)) continue;
+      if (!m.joueurs.some((j: { nom: string }) => j.nom === qui)) continue;
+      lignes.push({
+        type: "salon", source: "records", id: m.ref, at: m.at, config: null,
+        dou: "", partie: 0, temps: m.temps, negatif: m.negatif,
+        score: m.cumul, coups: m.coups,
+        equipe: m.joueurs.length > 1 ? m.joueurs.map((j: { nom: string }) => j.nom) : [],
+        grille: m.grille, lexique: m.lexique, chrono: m.chrono,
+      });
+    }
+    lignes.sort((a, b) => (b["at"] as number) - (a["at"] as number));
+    json(res, 200, { joueur: qui, lignes: lignes.slice(0, 400) });
+    return;
+  }
+
+  // LE REJEU D'UNE PARTIE DE SALON. Comme le lecteur des records, il ne sert
+  // QUE des parties citees a un journal : une partie en cours ne se lit pas.
+  if (url.startsWith("/api/historique/partie/") && req.method === "GET") {
+    const r = partieRelueDeLHistorique(decodeURIComponent(url.slice("/api/historique/partie/".length)));
+    if (typeof r === "string") { json(res, 404, { message: r }); return; }
+    json(res, 200, r);
+    return;
+  }
+
+  if (url.startsWith("/api/historique/paliers/") && req.method === "GET") {
+    const reste = url.slice("/api/historique/paliers/".length).split("/");
+    const id = decodeURIComponent(reste[0] ?? "");
+    const n = Number(reste[1]);
+    const [salon, graine] = id.split("~");
+    if (salon === undefined || graine === undefined || !Number.isInteger(n)
+        || partieDeLHistorique(salon, graine) === undefined) {
+      json(res, 404, { message: "Partie introuvable" });
+      return;
+    }
+    const fichier = journalDeLaPartie(salon, graine);
+    const p = fichier === null ? null : relireEtGarder(fichier);
+    if (p === null) { json(res, 404, { message: "Partie introuvable" }); return; }
+    json(res, 200, { n, paliers: await paliersDuCoup(p, n) });
+    return;
+  }
+
+  // ------------------------------------------------------------- les defis
+  //
+  // UNE PARTIE QU'ON A JOUEE ET QU'ON FAIT CIRCULER (SPEC.md §29). Elle se
+  // refige depuis sa graine, et s'arrete ou la partie d'origine s'est arretee.
+
+  if (url === "/api/defi" && req.method === "POST") {
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const s = salon(String(corps.salon ?? ""));
+    if (s === undefined) { json(res, 404, { erreur: "Ce salon n'existe pas" }); return; }
+    if (s.epreuve !== null) {
+      json(res, 403, { erreur: "On ne défie pas sur une partie du jour ni de tournoi" });
+      return;
+    }
+    if (estPermanent(s)) { json(res, 403, { erreur: "Cette grille n'a pas de fin" }); return; }
+    if (s.partie.moves.length === 0) { json(res, 400, { erreur: "Cette partie n'a pas de coups" }); return; }
+    const deja = defiDeLaPartie(s.id, s.partie.seed);
+    if (deja !== undefined) { json(res, 200, { defi: defiPublic(deja) }); return; }
+    const moi = quiParle(req);
+    const par = moi?.pseudo ?? (String(corps.pseudo ?? "").trim().slice(0, 24) || "anonyme");
+    try {
+      const d = await creerUnDefi({
+        salon: s.id, graine: s.partie.seed, nom: s.nom, cfg: s.partie.cfg, layout: s.layout,
+        coups: s.partie.moves.length, par, lignes: lignesDOrigine(s),
+      });
+      json(res, 200, { defi: defiPublic(d) });
+    } catch (e) {
+      json(res, 503, { erreur: (e as Error).message });
+    }
+    return;
+  }
+
+  if (url.startsWith("/api/defi/") && url.endsWith("/inviter") && req.method === "POST") {
+    const d = defi(decodeURIComponent(url.slice("/api/defi/".length, -"/inviter".length)));
+    if (d === undefined) { json(res, 404, { erreur: "Ce défi n'existe pas" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const moi = quiParle(req);
+    const de = moi?.pseudo ?? (String(corps.pseudo ?? "").trim().slice(0, 24) || "quelqu'un");
+    const vises = lireDesPseudos(corps.pseudos);
+    if (typeof vises === "string") { json(res, 400, { erreur: vises }); return; }
+    for (const qui of vises) {
+      if (qui === de) continue;
+      notifier(qui, "defi", { defi: d.id, nom: d.nom, de }, `defi:${d.id}`);
+    }
+    console.log(`[competitif] defi "${d.nom}" envoye par ${de} a ${vises.length} joueur(s)`);
+    json(res, 200, { invites: vises.length });
+    return;
+  }
+
+  if (url.startsWith("/api/defi/") && req.method === "GET") {
+    const d = defi(decodeURIComponent(url.slice("/api/defi/".length)));
+    if (d === undefined) { json(res, 404, { erreur: "Ce défi n'existe pas" }); return; }
+    const moi = quiParle(req);
+    const qui = moi?.pseudo ?? parametres(req).get("pseudo") ?? "";
+    const m = qui === "" ? undefined : mancheDuCompte(qui, epreuveDuDefi(d.id), 1);
+    json(res, 200, {
+      defi: defiPublic(d),
+      moi: { etat: m === undefined ? "a-jouer" : m.fin === null ? "en-cours" : "jouee",
+        temps: m?.fin?.temps ?? null, negatif: m?.fin?.negatif ?? null,
+        manche: m?.fin == null ? null : m.id },
+    });
+    return;
+  }
+
+  // LA LISTE DES COMPTES, pour la fenetre qui defie et pour celle qui invite a
+  // un tournoi. Les pseudos et rien d'autre : c'est deja ce qu'un salon montre.
+  if (url === "/api/comptes" && req.method === "GET") {
+    json(res, 200, { pseudos: tousLesComptes().map((c) => c.pseudo).sort((a, b) => a.localeCompare(b, "fr")) });
+    return;
+  }
+
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/inviter") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/inviter".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const vises = lireDesPseudos(corps.pseudos);
+    if (typeof vises === "string") { json(res, 400, { erreur: vises }); return; }
+    for (const qui of vises) {
+      if (qui === moi.pseudo) continue;
+      notifier(qui, "tournoi-invite", { tournoi: t.id, nom: t.nom, de: moi.pseudo },
+        `invite:${t.id}`);
+    }
+    console.log(`[competitif] tournoi "${t.nom}" : ${vises.length} invitation(s) par ${moi.pseudo}`);
+    json(res, 200, { invites: vises.length });
     return;
   }
 
@@ -2162,7 +2481,11 @@ wss.on("connection", (ws, req) => {
       // verrait les tirages d'une partie qu'il n'a pas encore jouee.
       if (cible.epreuve !== null) {
         const estAdmin = compte(inscrit ?? "")?.admin === true;
-        if (inscrit === null && !estAdmin) {
+        // UN DEFI SE JOUE SANS COMPTE (SPEC.md §29) : c'est tout son interet,
+        // on l'envoie a quelqu'un qui n'en a pas encore. Une partie du jour et
+        // un tournoi, non : leur tentative unique ne tient qu'a un compte.
+        const estUnDefi = defiDeLEpreuve(cible.epreuve.epreuve) !== undefined;
+        if (inscrit === null && !estAdmin && !estUnDefi) {
           send(ws, { t: "refus", quoi: "salon", message: "Les parties du jour se jouent avec un compte" });
           return;
         }
@@ -2856,6 +3179,7 @@ http.listen(PORT, () => {
   ouvrirLesRecords();
   ouvrirLeCompetitif();
   ouvrirLesNotifications();
+  ouvrirLHistorique();
   void assurerLesAdmins(ADMINS, ADMIN_MDP);
 
   console.log(`

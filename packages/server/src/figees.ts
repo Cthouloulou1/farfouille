@@ -39,6 +39,7 @@ const DATA_DIR = join(here, "..", "data");
  */
 export async function figerUnePartie(
   cfg: ConfigPartie, layout: LayoutName, graine: string = randomUUID(),
+  coupsMax: number | null = null,
 ): Promise<PartieFigee> {
   const id = randomUUID();
   const travail = `figee-${id}`;
@@ -51,7 +52,10 @@ export async function figerUnePartie(
     await g.demarrer();
     const coups: CoupFige[] = [];
     let immobile = 0;
-    while (!g.finie) {
+    // UN DEFI S'ARRETE OU LA PARTIE D'ORIGINE S'EST ARRETEE (SPEC.md §29) : les
+    // lignes des joueurs d'origine doivent rester comparables aux autres. C'est
+    // aussi ce qui permet de figer une grille sans fin, qui n'en aurait pas.
+    while (!g.finie && (coupsMax === null || coups.length < coupsMax)) {
       const avant = g.moves.length;
       // Ce que le sac montre UNE FOIS LE TIRAGE FAIT : c'est ce que le joueur
       // lira au-dessus de la grille pendant ce coup.
@@ -78,7 +82,7 @@ export async function figerUnePartie(
     }
     return {
       version: 1, id, layout, config: serialiser(cfg), graine, coups,
-      fin: { raison: g.raisonDeLaFin ?? "sac", sac: g.restantDuSac() },
+      fin: { raison: g.finie ? (g.raisonDeLaFin ?? "sac") : "abandon", sac: g.restantDuSac() },
       creeLe: Date.now(),
     };
   } finally {

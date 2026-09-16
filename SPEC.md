@@ -5945,6 +5945,11 @@ ou par l'administration. Le formulaire est le même que celui de la création,
 rempli de ses réglages ; valider **refige toutes ses parties**. Une fois commencé,
 il a des manches jouées : ses réglages ne changent plus, et le serveur le refuse.
 
+**On peut inviter au tournoi.** Sur la page d'un tournoi, **Inviter des
+joueurs** ouvre la liste des comptes du site : chacun reçoit une notification
+qui le mène à cette page, connecté ou non au moment de l'envoi. C'est le seul
+moyen de faire venir quelqu'un sur un tournoi qu'il n'aurait pas vu passer.
+
 **Cliquer sur Jouer inscrit.** S'inscrire d'abord n'apprenait rien à personne et
 ajoutait un geste entre l'envie de jouer et la partie. Le formulaire
 d'inscription reste, et ne sert plus qu'à ce qu'il est seul à faire : **nommer
@@ -6194,25 +6199,52 @@ fractions de minute.
 
 ### Défier sur une partie
 
-À la fin d'une partie qui se défie (voir « La partie est jouée avant qu'on la
-joue »), **chaque joueur présent** dans le salon trouve **Défier sur cette
-partie**. Deux façons :
+À la fin d'une partie de salon, **Défier sur cette partie** — un bouton vert,
+qu'on voit. Il ouvre une fenêtre avec **la liste des comptes du site** : on en
+coche autant qu'on veut, et chacun reçoit une notification. À côté, **Copier le
+lien**, qui ouvre la même partie à qui le reçoit.
 
-- **Inviter** un compte par son pseudo. Il reçoit une notification.
-- **Copier un lien.** Le lien ouvre un salon d'épreuve sur cette partie, avec les
-  mêmes choix que partout ailleurs (seul, à plusieurs, en équipe, chacun pour
-  soi).
+**Un défi se joue sans compte.** Le lien mène au salon du défi ; qui n'est pas
+connecté voit la fenêtre habituelle, qui demande un pseudo ou une connexion.
+C'est le point du défi : on l'envoie à quelqu'un qui n'a pas encore de compte.
+Une tentative par compte est garantie ; un invité, lui, peut recommencer sous un
+autre pseudo, et sa ligne porte la mention **invité** comme partout ailleurs
+(§23).
 
-Une partie ne donne **qu'un seul défi**. Défier deux amis sur la même partie, ou
-repasser le lien qu'on a reçu, remplit le même classement : c'est tout l'intérêt
-d'une partie qu'on a aimée et qu'on fait circuler.
+**Une partie ne donne qu'un seul défi.** Défier deux amis, cliquer deux fois, ou
+repasser le lien qu'on a reçu remplit le même classement — c'est tout l'intérêt
+d'une partie qu'on fait circuler. Le défi est reconnu par le salon et la graine
+de la partie d'origine.
 
-**Les joueurs de la partie d'origine y ont leur ligne.** Seul, c'est une ligne
-solo ; à plusieurs, c'est une équipe, puisque la partie se jouait en topping
-collaboratif.
+**Les joueurs de la partie d'origine y ont leur ligne**, écrite à la création.
+Une partie de topping ne fait **qu'une seule ligne pour tous ses joueurs**, même
+à plusieurs : quand quatre personnes cherchent le même coup, celui qui tape le
+premier prend le top et les autres n'ont pas eu le temps d'écrire — leur
+performance séparée ne veut rien dire. C'est la ligne d'une équipe, comme un
+topping collaboratif. **Le duplicate fait exception** : chacun y marque son
+propre score sur chaque coup, et chacun a donc sa ligne.
 
-Comptes seulement, une tentative par compte, et **un défi n'expire pas**. Un
-invité qui ouvre le lien se connecte d'abord.
+#### Comment la partie du défi est refaite
+
+**Elle se refige depuis la graine de la partie d'origine**, au moment du clic.
+Le même tirage, les mêmes tops, la même grille : c'est une partie figée comme
+celle d'une épreuve (§29), et tout ce qui suit — le salon, la pause, le
+classement, la feuille de route, les graphiques, le rejeu — marche sans rien
+changer.
+
+**Elle s'arrête au coup où la partie d'origine s'est arrêtée.** Une partie
+abandonnée au douzième coup donne un défi de douze coups : les lignes des
+joueurs d'origine doivent rester comparables à celles des autres. C'est aussi ce
+qui permet de défier sur une grille sans fin, qui n'aurait autrement pas de fin
+à figer.
+
+**Un défi n'entre pas aux records, et ne les prive de rien.** La première partie,
+jouée en direct dans un salon avec un tirage tiré au fur et à mesure, reste
+éligible ; sa reprise en défi ne l'est pas, puisqu'on peut en connaître les
+coups d'avance. C'est déjà la règle de toutes les épreuves : un salon d'épreuve
+n'alimente pas les records, et un salon de défi en est un.
+
+**Un défi n'expire pas**, et son classement ne se ferme jamais.
 
 **On est notifié quand quelqu'un joue un défi qu'on a joué.** Pas sur les
 parties du jour : la pastille ne s'éteindrait jamais.
@@ -6234,7 +6266,9 @@ Ce qui en allume une :
   d'invités ;
 - une **inscription en équipe** : un partenaire vous a nommé en s'inscrivant à
   un tournoi ;
-- un **tournoi qui commence**, si l'on y est inscrit.
+- un **tournoi qui commence**, si l'on y est inscrit ;
+- une **invitation à un tournoi**, envoyée depuis sa page ;
+- un **défi** qu'on vous adresse.
 
 **Un clic sur une notification y mène** : le salon, la page du tournoi. Elle
 porte l'heure, et reste après lecture — une liste qui s'efface toute seule ne
@@ -6551,3 +6585,65 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 | **La grande finale** | Le vainqueur du tableau bas n'a qu'une rencontre à gagner, alors que son adversaire n'a encore jamais perdu. Tel quel, ou une revanche ? |
 | **Les réglages des manches de battle** | Un seul jeu de réglages pour le tournoi, ou un par phase ? |
 | **Une rencontre commencée** | Interrompue après une manche, reprend-elle avant la date limite ? |
+
+## 30. La page personnelle
+
+**Cliquer son propre nom mène à sa page**, et non plus aux réglages. Les
+réglages restent, derrière un bouton **Modifier mon profil** qui n'apparaît que
+sur sa propre page.
+
+**La page d'un joueur est publique.** Elle s'ouvre par un bouton **Consulter la
+page** dans la petite fiche qui s'ouvre déjà quand on clique un nom n'importe où
+sur le site. La fiche reste ce qu'elle est, une carte de visite ; la page est ce
+qu'il y a derrière.
+
+### L'historique
+
+Ce qu'un joueur a joué, du plus récent au plus ancien, avec des onglets :
+**Tout**, **Salons**, **Parties du jour**, **Tournois**, **Défis**. Chaque ligne
+porte la date, le nom de la partie tel qu'il se lit partout (*7/8 joker, 30s*),
+ses coups, son score et son négatif, et mène à son rejeu.
+
+**Trois journaux la remplissent** : celui du compétitif pour les parties du jour,
+les tournois et les défis ; celui des records pour les vieilles parties de
+salon ; et un journal neuf, `historique.journal.jsonl`, pour les parties de
+salon à partir de maintenant.
+
+#### Pourquoi un journal de plus
+
+Le journal des records ne retient qu'une partie sur plusieurs — grille bornée,
+sac qui s'épuise, topping — et n'y nomme que **ceux qui ont trouvé au moins un
+top**. Une grille sans fin, un duplicate, ou une partie où l'on n'a rien topé
+n'étaient rattachés à personne. Un joueur ne pouvait donc pas relire ce qu'il
+avait joué.
+
+Le journal de l'historique écrit **une ligne par partie finie**, quelle que soit
+la variante, avec ce que chacun y a fait : combien de coups il a joués, combien
+de tops, son score et son négatif. Rien n'est rétroactif : les parties d'avant
+qui n'étaient éligibles à rien n'existent nulle part, et rien ne les fera
+apparaître.
+
+#### Deux garde-fous
+
+Une liste d'historique ne doit pas se remplir de parties que personne n'a
+vraiment jouées — une grille ouverte et laissée seule, une partie révélée coup
+par coup pour voir.
+
+- **La partie** n'entre que si quelqu'un a proposé un mot sur **au moins trois
+  quarts** de ses coups.
+- **Un joueur** n'y entre que s'il a proposé un mot sur **au moins un coup**.
+  Être assis dans le salon ne suffit pas.
+
+Le second est plus juste qu'« avoir trouvé un top » : en topping à plusieurs, un
+joueur peut jouer toute la partie sans jamais gagner un coup contre plus rapide
+que lui, et cette partie est la sienne quand même.
+
+**La grille permanente n'y entre pas.** Elle dure depuis des mois et ne finit
+jamais ; ce n'est pas une partie qu'on a jouée, c'est un lieu.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| **Le rejeu** | L'historique ouvre le rejeu des parties archivées (§23). Le rejeu d'un salon est plus riche — on y clique une sous-solution et elle se pose sur la grille — mais il demande un salon ouvert. Le premier a reçu le clic sur les sous-solutions ; le reste attend. |
+| **Les statistiques** | La page ne porte qu'une liste. Les moyennes, les séries, les records personnels restent à décider. |

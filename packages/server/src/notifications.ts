@@ -33,7 +33,8 @@ export function definirDossierDesNotifications(dir: string): void {
  * Ce qui allume une notification. Le texte ne s'ecrit pas ici : le serveur
  * n'affiche rien, et la phrase se traduit chez le client.
  */
-export type Genre = "salon" | "equipe" | "tournoi-debut";
+export type Genre =
+  | "salon" | "equipe" | "tournoi-debut" | "tournoi-invite" | "defi" | "defi-joue";
 
 export interface Notification {
   id: string;

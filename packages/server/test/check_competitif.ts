@@ -15,14 +15,16 @@ import {
   mancheDuCompte, ouvrirLeCompetitif, ouvrirUneManche, resultatsDeLaPartie,
   creerUnTournoiDeTopping, epreuveDuTournoi, inscriptionDe, inscrireAuTournoi, tournoiDeLEpreuve,
   assurerLesTournoisDeLaSemaine, consignesDeLaSemaine, consignesPourLeJour, ecrireUnModeleHebdo,
-  finisseursDuTournoi,
+  finisseursDuTournoi, creerUnDefi, defi, defiDeLaPartie, epreuveDuDefi, lexiqueDeLEpreuve,
+  partieFigee, partiesDeLEpreuve,
   laSemaineDe, modeleHebdo, reglerLaSemaine, supprimerUnModeleHebdo, tousLesModelesHebdo,
   tousLesTournois,
   classementDesMedailles, listeDesSolos,
 } from "../src/competitif.ts";
 import {
-  debutDuJour, decalerLeJour, jourDe, jourDeLaSemaine, type ConsigneDePartie,
+  configDuModele, debutDuJour, decalerLeJour, jourDe, jourDeLaSemaine, type ConsigneDePartie,
 } from "../../engine/src/epreuves.ts";
+import { figerUnePartie } from "../src/figees.ts";
 import type { PlayedMove } from "../src/game.ts";
 
 const dossier = mkdtempSync(join(tmpdir(), "competitif-"));
@@ -299,6 +301,66 @@ for (const [n, salon] of [[1, "r3"], [2, "r4"]] as [number, string][]) {
 }
 verifie("une equipe de deux ne fait qu'un resultat", finisseursDuTournoi(tr) === 2,
   String(finisseursDuTournoi(tr)));
+
+// ---------------------------------------------------------------- les defis
+//
+// UNE PARTIE QU'ON A JOUEE SE REFIGE DEPUIS SA GRAINE (SPEC.md §29), et
+// s'arrete au coup ou celle d'origine s'est arretee.
+const graineDuDefi = "graine-du-defi-1";
+const cfgDefi = configDuModele(
+  { bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 30 }, "ods9");
+const origine = await figerUnePartie(cfgDefi, "classique15", graineDuDefi);
+verifie("la partie d'origine a des coups", origine.coups.length > 3,
+  `${origine.coups.length} coups`);
+
+// Trois coups joues, et deux joueurs qui ont propose quelque chose.
+const COUPS = 3;
+const joues: PlayedMove[] = origine.coups.slice(0, COUPS).map((c, i) => ({
+  n: c.n, rack: c.rack, notation: c.notation, word: c.word, dir: c.dir, x: c.x, y: c.y,
+  score: c.score, placements: [], player: i === 0 ? "ana" : "bob", ms: 1000 + i * 100,
+  isotops: c.isotops,
+  propositions: {
+    ana: { word: c.word, dir: c.dir, x: c.x, y: c.y, score: i === 0 ? c.score : c.score - 10 },
+    bob: { word: c.word, dir: c.dir, x: c.x, y: c.y, score: i === 0 ? c.score - 5 : c.score },
+  },
+}));
+
+const d = await creerUnDefi({
+  salon: "salon-defi", graine: graineDuDefi, nom: "Farfouille rude",
+  cfg: cfgDefi, layout: "classique15", coups: COUPS, par: "ana",
+  lignes: [{
+    equipe: ["ana", "bob"], jeu: "equipe",
+    bilan: bilanDeLaManche({ equipe: ["ana", "bob"] }, joues, 7),
+  }],
+});
+verifie("un defi nait de la partie", defiDeLaPartie("salon-defi", graineDuDefi)?.id === d.id);
+verifie("une partie ne donne qu'un seul defi",
+  (await creerUnDefi({
+    salon: "salon-defi", graine: graineDuDefi, nom: "Farfouille rude",
+    cfg: cfgDefi, layout: "classique15", coups: COUPS, par: "bob", lignes: [],
+  })).id === d.id);
+
+const figeeDuDefi = partieFigee(d.figee)!;
+verifie("le defi s'arrete ou la partie s'est arretee",
+  figeeDuDefi.coups.length === COUPS, `${figeeDuDefi.coups.length} coups`);
+verifie("et c'est bien la meme partie",
+  figeeDuDefi.coups.every((c, i) => c.word === origine.coups[i]!.word
+    && c.notation === origine.coups[i]!.notation && c.score === origine.coups[i]!.score));
+
+const epreuveDefi = epreuveDuDefi(d.id);
+const lignesDefi = resultatsDeLaPartie(epreuveDefi, 1, "ana").lignes;
+verifie("les joueurs d'origine ont leur ligne", lignesDefi.length === 1
+  && lignesDefi[0]!.equipe.includes("ana") && lignesDefi[0]!.equipe.includes("bob"));
+verifie("une ligne de defi est toujours a temps", lignesDefi[0]!.aTemps);
+verifie("le defi retrouve sa partie",
+  partiesDeLEpreuve(epreuveDefi)?.length === 1
+  && lexiqueDeLEpreuve(epreuveDefi) === "ods9");
+verifie("chacun d'eux a consomme sa tentative",
+  mancheDuCompte("bob", epreuveDefi, 1) !== undefined);
+
+ouvrirLeCompetitif();
+verifie("le defi se relit au journal", defi(d.id)?.nom === "Farfouille rude"
+  && defiDeLaPartie("salon-defi", graineDuDefi)?.id === d.id);
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);

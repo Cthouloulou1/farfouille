@@ -23,7 +23,7 @@ import type { PlayedMove } from "./game.ts";
 import { ecrireLaPartieFigee, figerUnePartie, lireLaPartieFigee } from "./figees.ts";
 import type { PartieFigee } from "./game.ts";
 import type { LayoutName } from "../../engine/src/bonus.ts";
-import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
+import { deserialiser, type ConfigPartie, type ConfigSerialisee } from "../../engine/src/config.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import {
   JOURS_DE_LA_SEMAINE, LEXIQUES_DU_JOUR, PARTIES_DU_JOUR, configDuModele, consigneExacte,
@@ -49,6 +49,8 @@ export function definirDossierDuCompetitif(dir: string): void {
   semaine.clear();
   hebdos.clear();
   hebdosFaits.clear();
+  defis.clear();
+  defiParPartie.clear();
 }
 
 /** Le dossier ou vivent les parties figees de l'epreuve. */
@@ -174,6 +176,9 @@ const tournois = new Map<string, Tournoi>();
 /** Les consignes d'un lexique pour un jour de la semaine : `lexique|0..6`. */
 const semaine = new Map<string, ConsigneDePartie[]>();
 const hebdos = new Map<string, ModeleHebdo>();
+const defis = new Map<string, Defi>();
+/** `salon|graine` vers l'identifiant du defi : une partie n'en donne qu'un. */
+const defiParPartie = new Map<string, string>();
 /**
  * LES INSTANCES DEJA NEES : `modele|jour`. Elle survit a la suppression du
  * tournoi -- sinon il renaitrait au passage suivant.
@@ -203,6 +208,8 @@ export function tournoiDeLEpreuve(epreuve: string): Tournoi | undefined {
 
 /** Les parties d'une epreuve, quelle qu'elle soit. */
 export function partiesDeLEpreuve(epreuve: string): PartieDEpreuve[] | undefined {
+  const d = defiDeLEpreuve(epreuve);
+  if (d !== undefined) return [{ n: 1, figee: d.figee, config: d.config }];
   const t = tournoiDeLEpreuve(epreuve);
   if (t !== undefined) return t.parties;
   const e = lireLEpreuve(epreuve);
@@ -211,7 +218,8 @@ export function partiesDeLEpreuve(epreuve: string): PartieDEpreuve[] | undefined
 
 /** Le lexique d'une epreuve. */
 export function lexiqueDeLEpreuve(epreuve: string): string | null {
-  return tournoiDeLEpreuve(epreuve)?.lexique ?? lireLEpreuve(epreuve)?.lexique ?? null;
+  return defiDeLEpreuve(epreuve)?.config.dictionnaire
+    ?? tournoiDeLEpreuve(epreuve)?.lexique ?? lireLEpreuve(epreuve)?.lexique ?? null;
 }
 
 /** Ce que dit un identifiant d'epreuve des parties du jour, ou `null`. */
@@ -240,6 +248,8 @@ export function ouvrirLeCompetitif(): void {
   semaine.clear();
   hebdos.clear();
   hebdosFaits.clear();
+  defis.clear();
+  defiParPartie.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
   for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
@@ -263,6 +273,12 @@ function appliquer(e: Record<string, any>): void {
       compte: e["compte"], jeu: e["jeu"], noms: e["noms"] ?? "", equipe: e["equipe"] ?? [e["compte"]],
       at: e["at"], fin: null,
     });
+  } else if (e["t"] === "defi") {
+    defis.set(e["id"], {
+      id: e["id"], salon: e["salon"], graine: e["graine"], nom: e["nom"] ?? e["salon"],
+      figee: e["figee"], config: e["config"], par: e["par"], at: e["at"],
+    });
+    defiParPartie.set(`${e["salon"]}|${e["graine"]}`, e["id"]);
   } else if (e["t"] === "semaine") {
     semaine.set(cleDeLaSemaine(e["lexique"], Number(e["jour"])), e["consignes"] ?? []);
   } else if (e["t"] === "hebdo") {
@@ -489,6 +505,8 @@ export interface LigneDeResultat {
 
 /** Une manche close a-t-elle ete jouee a temps ? */
 function aTemps(m: Manche): boolean {
+  // UN DEFI N'EXPIRE PAS (SPEC.md §29) : toutes ses manches sont a temps.
+  if (m.epreuve.startsWith("defi:")) return true;
   if (m.fin === null) return true;
   const t = tournoiDeLEpreuve(m.epreuve);
   if (t !== undefined) return t.fin === null || m.fin.at <= t.fin;
@@ -731,9 +749,63 @@ export function listeDesSolos(
   return out.slice(0, o.plafond ?? 300);
 }
 
+/**
+ * LES MANCHES D'UN JOUEUR, de la plus recente a la plus ancienne (SPEC.md §30).
+ *
+ * Tout ce qui s'est joue en epreuve : parties du jour, tournois, defis. Les
+ * parties de salon ordinaires ont leur journal a elles.
+ */
+export function manchesDe(nom: string, plafond = 300): {
+  type: "pdj" | "tournoi" | "defi";
+  manche: string;
+  at: number;
+  config: ConfigSerialisee | null;
+  /** D'ou vient la partie : un jour, un tournoi, un defi. */
+  dou: string;
+  partie: number;
+  temps: number;
+  negatif: number;
+  score: number;
+  coups: number;
+  equipe: string[];
+}[] {
+  const out = [];
+  for (const m of manches.values()) {
+    if (m.fin === null || !m.equipe.includes(nom)) continue;
+    const d = defiDeLEpreuve(m.epreuve);
+    const t = tournoiDeLEpreuve(m.epreuve);
+    const j = lireLEpreuve(m.epreuve);
+    const p = partiesDeLEpreuve(m.epreuve)?.find((x) => x.n === m.partie);
+    if (d === undefined && t === undefined && j === null) continue;
+    out.push({
+      type: (d !== undefined ? "defi" : t !== undefined ? "tournoi" : "pdj") as
+        "pdj" | "tournoi" | "defi",
+      manche: m.id, at: m.fin.at, config: p?.config ?? null,
+      dou: d?.nom ?? t?.nom ?? j?.jour ?? "", partie: m.partie,
+      temps: m.fin.temps, negatif: m.fin.negatif,
+      score: m.fin.coups.reduce((a, c) => a + c.score, 0), coups: m.fin.coups.length,
+      equipe: m.equipe,
+    });
+  }
+  out.sort((a, b) => b.at - a.at);
+  return out.slice(0, plafond);
+}
+
+/** Tous ceux qui ont fini cette partie d'epreuve, equipiers compris. */
+export function ceuxQuiOntFini(epreuve: string, partie: number): string[] {
+  const noms = new Set<string>();
+  for (const m of manches.values()) {
+    if (m.epreuve !== epreuve || m.partie !== partie || m.fin === null) continue;
+    for (const nom of m.equipe) noms.add(nom);
+  }
+  return [...noms];
+}
+
 /** Un identifiant de salon sur, et propre a ce compte sur cette partie. */
 export function salonDeLaPartie(epreuve: string, partie: number, compte: string): string {
   const empreinte = createHash("sha1").update(compte).digest("hex").slice(0, 8);
+  const d = defiDeLEpreuve(epreuve);
+  if (d !== undefined) return `defi-${d.id.slice(0, 8)}-${empreinte}`;
   const t = tournoiDeLEpreuve(epreuve);
   if (t !== undefined) return `tournoi-${t.id.slice(0, 8)}-p${partie}-${empreinte}`;
   const e = lireLEpreuve(epreuve);
@@ -875,6 +947,89 @@ async function naitreUnTournoiDeLaSemaine(
   inscrire(ev);
   appliquer(ev);
   console.log(`[competitif] "${m.nom}" du ${jour} : ${parties.length} partie(s) figees`);
+}
+
+// ------------------------------------------------------------------ defis
+
+/**
+ * UN DEFI : une partie qu'on a jouee et qu'on fait circuler (SPEC.md §29).
+ *
+ * C'est une troisieme sorte d'epreuve, `defi:<id>`, avec une seule partie. Tout
+ * ce qui lit les manches -- classement, feuille de route, graphiques, rejeu --
+ * marche dessus sans rien changer.
+ */
+export interface Defi {
+  id: string;
+  /** Le salon et la graine de la partie d'origine : un jeu, un defi. */
+  salon: string;
+  graine: string;
+  /** Le nom du salon d'origine, pour dire d'ou vient la partie. */
+  nom: string;
+  figee: string;
+  config: ConfigSerialisee;
+  par: string;
+  at: number;
+}
+
+export const epreuveDuDefi = (id: string): string => `defi:${id}`;
+
+export function defi(id: string): Defi | undefined {
+  return defis.get(id);
+}
+
+export function defiDeLEpreuve(epreuve: string): Defi | undefined {
+  return epreuve.startsWith("defi:") ? defis.get(epreuve.slice("defi:".length)) : undefined;
+}
+
+/** Le defi deja ne de cette partie, s'il existe : une partie n'en donne qu'un. */
+export function defiDeLaPartie(salon: string, graine: string): Defi | undefined {
+  const id = defiParPartie.get(`${salon}|${graine}`);
+  return id === undefined ? undefined : defis.get(id);
+}
+
+/**
+ * CREE LE DEFI D'UNE PARTIE JOUEE, ou rend celui qui existe deja.
+ *
+ * La partie se refige DEPUIS LA GRAINE de celle d'origine, et s'arrete au coup
+ * ou celle-ci s'est arretee. Les joueurs d'origine y prennent leur ligne :
+ * une seule pour tous en topping, une chacun en duplicate (SPEC.md §29).
+ */
+export function creerUnDefi(o: {
+  salon: string; graine: string; nom: string; cfg: ConfigPartie; layout: LayoutName;
+  coups: number; par: string;
+  /** Ce que les joueurs d'origine ont fait : leurs manches, deja finies. */
+  lignes: { equipe: string[]; jeu: Jeu; bilan: FinDeManche }[];
+}): Promise<Defi> {
+  return unParUn(async () => {
+    const deja = defiDeLaPartie(o.salon, o.graine);
+    if (deja !== undefined) return deja;
+    const f = await figerUnePartie(o.cfg, o.layout, o.graine, o.coups);
+    ecrireLaPartieFigee(DATA_DIR, f);
+    const ev = {
+      t: "defi", id: randomUUID(), salon: o.salon, graine: o.graine, nom: o.nom,
+      figee: f.id, config: f.config, par: o.par, at: Date.now(),
+    };
+    inscrire(ev);
+    appliquer(ev);
+    // LES JOUEURS D'ORIGINE ONT LEUR LIGNE, ecrite tout de suite : le defi
+    // n'aurait aucun sens sans le temps a battre.
+    const epreuve = epreuveDuDefi(ev.id);
+    for (const [i, l] of o.lignes.entries()) {
+      const m = ouvrirUneManche({
+        epreuve, partie: 1, salon: `${o.salon}#origine${i}`, compte: l.equipe[0] ?? "",
+        jeu: l.jeu, noms: "", equipe: l.equipe,
+      });
+      const fin = {
+        t: "fin", manche: m.id, at: Date.now(), temps: l.bilan.temps,
+        negatif: l.bilan.negatif, score: l.bilan.score, coups: l.bilan.coups,
+      };
+      inscrire(fin);
+      appliquer(fin);
+    }
+    console.log(`[competitif] defi "${o.nom}" cree par ${o.par} : `
+      + `${f.coups.length} coups, ${o.lignes.length} ligne(s) d'origine`);
+    return defis.get(ev.id)!;
+  });
 }
 
 // ------------------------------------------ l'administration des parties du jour

@@ -2419,6 +2419,9 @@ function paintSide() {
   // dire. Qui veut en sortir passe par les reglages, et le voit.
   $("rejouer-wrap").hidden = !finie || gerant !== me || permanent || montante !== null
     || epreuve !== null;
+  // DEFIER SUR CETTE PARTIE (SPEC.md §29) : a tous les joueurs, pas au seul
+  // hote, et jamais sur une epreuve ni sur la grille permanente.
+  $("defier-wrap").hidden = !finie || permanent || epreuve !== null || history.length === 0;
   peindreLaMontante();
   peindreLEpreuve();
 
@@ -6057,6 +6060,8 @@ function ouvrirLeProfil(pousser = true): void {
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-resultats").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
@@ -6102,6 +6107,8 @@ function ouvrirLeSolveur(pousser = true): void {
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
@@ -6133,13 +6140,18 @@ addEventListener("popstate", () => {
   if (page === "palmares") { ouvrirLePalmares(false); return; }
   if (page === "admin-competitif") { ouvrirLAdministrationDuCompetitif(false); return; }
   if (page === "tournoi") { ouvrirLeTournoi(new URLSearchParams(location.search).get("id") ?? "", false); return; }
+  if (page === "defi") { ouvrirLeDefi(new URLSearchParams(location.search).get("id") ?? "", false); return; }
+  if (page === "perso") {
+    ouvrirLaPagePerso(new URLSearchParams(location.search).get("joueur") ?? "", false);
+    return;
+  }
   if (page === "resultats") { ouvrirLesResultatsDeLAdresse(); return; }
   if (page === "partie") {
     const p = new URLSearchParams(location.search);
     const id = p.get("partie");
     if (id !== null) {
-      void ouvrirLaPartie(id, Math.max(1, Number(p.get("coup")) || 1),
-        p.get("source") === "competitif" ? "competitif" : "records");
+      void ouvrirLaPartie(id, Math.max(1, Number(p.get("coup")) || 1), (p.get("source") === "competitif" ? "competitif"
+        : p.get("source") === "historique" ? "historique" : "records"));
       return;
     }
   }
@@ -6783,6 +6795,7 @@ async function ouvrirLaFiche(qui: string): Promise<void> {
   try { d = await (await fetch(`/api/joueur/${encodeURIComponent(qui)}`)).json(); }
   catch { d = {}; }
   const j = d.joueur;
+  $("fiche-page").hidden = j === undefined;
   if (j === undefined) {
     $("fiche-error").textContent = t("Ce joueur n'a pas de compte.");
     $("fiche-error").hidden = false;
@@ -6797,6 +6810,10 @@ async function ouvrirLaFiche(qui: string): Promise<void> {
   }
 }
 
+$("fiche-page").addEventListener("click", () => {
+  $("voile-joueur").hidden = true;
+  ouvrirLaPagePerso($("fiche-pseudo").textContent ?? "");
+});
 $("fiche-close").addEventListener("click", () => { $("voile-joueur").hidden = true; });
 $("voile-joueur").addEventListener("click", (e) => {
   if (e.target === $("voile-joueur")) $("voile-joueur").hidden = true;
@@ -7032,6 +7049,8 @@ $("perso-sortir").addEventListener("click", () => {
 
 /** Ou l'on voulait aller quand on nous a demande notre pseudo. */
 let destination: string | null = null;
+/** Ce qu'on reprend une fois le pseudo donne, quand ce n'est pas un salon. */
+let reprendreApresLePseudo: (() => void) | null = null;
 
 /** Le pseudo tel qu'il est saisi. Tant qu'il est vide, on est un visiteur. */
 const pseudo = (): string => ($("name") as HTMLInputElement).value.trim();
@@ -7220,7 +7239,8 @@ function peindreCompte(): void {
   b.appendChild(rond);
   b.appendChild(el("span", "", moiCompte.pseudo));
   if (moiCompte.verifie) b.appendChild(el("span", "pastille", "vérifié"));
-  b.addEventListener("click", () => ouvrirLeProfil());
+  // CLIQUER SON NOM MENE A SA PAGE, et non plus aux reglages (SPEC.md §30).
+  b.addEventListener("click", () => ouvrirLaPagePerso(moiCompte!.pseudo));
   boite.appendChild(b);
 
   const roue = el("button", "icon roue") as HTMLButtonElement;
@@ -8291,7 +8311,8 @@ $("site-nom").addEventListener("click", () => {
   if (!$("corps-partie").hidden) { fermerLaPartie(); return; }
   if (!$("corps-records").hidden) { fermerLesRecords(); return; }
   if (!$("corps-competitif").hidden || !$("corps-resultats").hidden || !$("corps-palmares").hidden
-      || !$("corps-admin").hidden || !$("corps-tournoi").hidden) { fermerLeCompetitif(); return; }
+      || !$("corps-admin").hidden || !$("corps-tournoi").hidden
+      || !$("corps-perso").hidden || !$("corps-defi").hidden) { fermerLeCompetitif(); return; }
   if ($("join").hidden) quitterSalon();
 });
 
@@ -8477,6 +8498,9 @@ $("joinform").addEventListener("submit", (e) => {
   destination = null;
   // On revient sur la destination demandee, pas sur l'accueil.
   if (ou !== null) { void rejoindre(ou); return; }
+  const suite = reprendreApresLePseudo;
+  reprendreApresLePseudo = null;
+  if (suite !== null) { suite(); return; }
   peindreAccueil();
 });
 
@@ -8672,10 +8696,13 @@ void lireLeCompte().then(() => {
   if (ou.get("page") === "palmares") ouvrirLePalmares(false);
   if (ou.get("page") === "admin-competitif") ouvrirLAdministrationDuCompetitif(false);
   if (ou.get("page") === "tournoi" && ou.get("id") !== null) ouvrirLeTournoi(ou.get("id")!, false);
+  if (ou.get("page") === "defi" && ou.get("id") !== null) ouvrirLeDefi(ou.get("id")!, false);
+  if (ou.get("page") === "perso" && ou.get("joueur") !== null) ouvrirLaPagePerso(ou.get("joueur")!, false);
   if (ou.get("page") === "resultats") ouvrirLesResultatsDeLAdresse();
   if (ou.get("page") === "partie" && ou.get("partie") !== null) {
     void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1),
-      ou.get("source") === "competitif" ? "competitif" : "records");
+      ou.get("source") === "competitif" ? "competitif"
+        : ou.get("source") === "historique" ? "historique" : "records");
   }
   // Retour du lien de confirmation : on le dit, et on nettoie l'adresse pour
   // qu'un rafraichissement ne rejoue pas le message.
@@ -9546,6 +9573,8 @@ function ouvrirLesRecords(pousser = true): void {
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
@@ -9794,6 +9823,64 @@ function prDessiner(): void {
       g.fillText(String(v), px + w - w * 0.12, py + h - h * 0.12);
     }
   }
+
+  // ------------------------------------------------ LA SOLUTION QU'ON REGARDE
+  //
+  // CLIQUER UNE SOUS-SOLUTION LA POSE SUR LA GRILLE, comme dans le rejeu d'un
+  // salon : une liste de mots sans la voir tombe ne dit pas ou elle se pose, et
+  // c'est justement ce qu'on vient chercher. Les caramels deja la gardent leur
+  // encre ; seuls ceux que la solution AJOUTE se peignent en fantome.
+  const vue = prLignes[prChoisie];
+  if (vue !== undefined) {
+    const { dx, dy } = step(vue.dir);
+    for (let k = 0; k < vue.mot.length; k++) {
+      const x = vue.x + dx * k, y = vue.y + dy * k;
+      if (poses.has(`${x},${y}`)) continue;
+      const i = x + bornes, j = y + bornes;
+      if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
+      const px = bord(i), py = bord(j);
+      const w = bord(i + 1) - px, h = bord(j + 1) - py;
+      g.fillStyle = C.field;
+      g.fillRect(px, py, w, h);
+      g.globalAlpha = 0.9;
+      g.fillStyle = C.face;
+      g.fillRect(px, py, w, h);
+      g.globalAlpha = 1;
+      g.strokeStyle = C.accent;
+      g.lineWidth = 1.5;
+      g.strokeRect(px + 0.75, py + 0.75, w - 1.5, h - 1.5);
+      g.fillStyle = C.accent;
+      g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(vue.mot[k]!, px + w / 2, py + h / 2 - h * 0.02);
+    }
+  }
+}
+
+
+/**
+ * LES SOLUTIONS DU COUP REGARDE, et celle qu'on a choisie dans la liste.
+ * `prChoisie` est un rang dans `prLignes`, ou -1 quand on ne regarde rien.
+ */
+let prLignes: { mot: string; dir: Dir; x: number; y: number; score: number }[] = [];
+let prChoisie = -1;
+
+$("pr-sols").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest(".sol") as HTMLElement | null;
+  if (b === null) return;
+  const i = Number(b.dataset["i"]);
+  // Recliquer la ligne qu'on regarde rend la grille a la partie seule.
+  prChoisie = i === prChoisie ? -1 : i;
+  prMarquerLaChoisie();
+  prDessiner();
+});
+
+/** Souligne la ligne choisie dans la liste, sans repeindre toute la piste. */
+function prMarquerLaChoisie(): void {
+  for (const b of $("pr-piste").querySelectorAll(".sol")) {
+    b.classList.toggle("choisie", Number((b as HTMLElement).dataset["i"]) === prChoisie);
+  }
 }
 
 /** Le coup regarde, en une ligne sous la grille. */
@@ -9917,6 +10004,8 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
   const piste = $("pr-piste");
   const compte = $("pr-sols-compte");
   piste.style.height = "";
+  prLignes = [];
+  prChoisie = -1;
   if (n === 0 || paliers !== null && paliers.length === 0) {
     piste.replaceChildren(el("div", "pr-attente",
       n === 0 ? t("Aucun coup joué.") : t("Aucune solution trouvée.")));
@@ -9945,9 +10034,14 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
   const H = 26;
   piste.style.height = `${lignes.length * H}px`;
   piste.replaceChildren();
+  // LA GRILLE OUBLIE CE QU'ON REGARDAIT quand on change de coup : la solution
+  // choisie appartenait a l'autre tirage.
+  prLignes = lignes;
+  prChoisie = -1;
   lignes.forEach((s, i) => {
     const b = el("button", `sol${s.score === meilleur ? " best" : ""}`) as HTMLButtonElement;
     b.type = "button";
+    b.dataset["i"] = String(i);
     b.style.top = `${i * H}px`;
     // Le coup REELLEMENT joue se marque, comme le rejeu marque celui qu'on
     // examine : c'est ce qu'on cherche des l'ouverture.
@@ -9976,9 +10070,9 @@ async function prChercherLesPaliers(n: number): Promise<void> {
   const mien = ++prAttente;
   prPeindreLesPaliers(n, null);
   try {
-    const r = await fetch(
-    `${prSource === "competitif" ? "/api/competitif/paliers/" : "/api/paliers/"}`
-    + `${encodeURIComponent(prPartie.manche.ref)}/${n}`);
+    const base = prSource === "competitif" ? "/api/competitif/paliers/"
+      : prSource === "historique" ? "/api/historique/paliers/" : "/api/paliers/";
+    const r = await fetch(`${base}${encodeURIComponent(prPartie.manche.ref)}/${n}`);
     const d = await r.json();
     if (mien !== prAttente) return;
     const paliers = (d.paliers ?? []) as PalierRelu[];
@@ -10014,13 +10108,14 @@ function prAller(n: number): void {
  * competitif (SPEC.md §29). Les deux se lisent sur la meme page ; seules
  * l'adresse et la porte de sortie changent.
  */
-let prSource: "records" | "competitif" = "records";
+let prSource: "records" | "competitif" | "historique" = "records";
 /** Ou revenir en fermant le rejeu, quand ce n'est pas la page des records. */
 let prRetour: (() => void) | null = null;
 
 async function chercherLaPartie(id: string): Promise<PartieRelue | string> {
   try {
-    const base = prSource === "competitif" ? "/api/competitif/partie/" : "/api/partie/";
+    const base = prSource === "competitif" ? "/api/competitif/partie/"
+      : prSource === "historique" ? "/api/historique/partie/" : "/api/partie/";
     const r = await fetch(`${base}${encodeURIComponent(id)}`);
     const brut = await r.json();
     if (!r.ok) {
@@ -10095,13 +10190,13 @@ $("voile-route").addEventListener("click", (e) => {
 
 /** « Revoir » : la grille coup par coup, et les solutions de chacun. */
 async function ouvrirLaPartie(
-  id: string, coup = 1, source: "records" | "competitif" = "records",
+  id: string, coup = 1, source: "records" | "competitif" | "historique" = "records",
   retour: (() => void) | null = null,
 ): Promise<void> {
   prSource = source;
   prRetour = retour;
   for (const pid of ["corps-records", "corps-salons", "corps-profil", "corps-solveur",
-    "corps-competitif", "corps-resultats", "corps-admin", "corps-tournoi", "corps-palmares"]) $(pid).hidden = true;
+    "corps-competitif", "corps-resultats", "corps-admin", "corps-tournoi", "corps-palmares", "corps-perso", "corps-defi"]) $(pid).hidden = true;
   $("corps-partie").hidden = false;
   $("join").hidden = false;
   $("pr-titre").textContent = t("chargement…");
@@ -10109,7 +10204,7 @@ async function ouvrirLaPartie(
   $("pr-coup").replaceChildren();
   window.history.pushState({ page: "partie", id, coup }, "",
     `?page=partie&partie=${encodeURIComponent(id)}&coup=${coup}`
-    + (source === "competitif" ? "&source=competitif" : ""));
+    + (source === "records" ? "" : `&source=${source}`));
 
   const d = await chercherLaPartie(id);
   if (typeof d === "string") { $("pr-titre").textContent = d; return; }
@@ -10221,7 +10316,7 @@ function jourEnLettres(jour: string): string {
     { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-function ouvrirLeCompetitif(pousser = true): void {
+function ouvrirLeCompetitif(pousser = true, jour: string | null = null): void {
   $("corps-partie").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
@@ -10231,11 +10326,12 @@ function ouvrirLeCompetitif(pousser = true): void {
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-competitif").hidden = false;
   $("join").hidden = false;
   if (cpLexique === "") cpLexique = lexiqueDuJourParDefaut();
-  cpJour = null;
-  $("cp-jours").hidden = true;
+  cpJour = jour;
   // Le bouton n'existe que pour l'administration ; le serveur refuse le reste.
   $("cp-admin").hidden = moiCompte?.admin !== true;
   peindreLesLexiquesDuJour();
@@ -10249,6 +10345,8 @@ function fermerLeCompetitif(pousser = true): void {
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = false;
   $("cp-parties").replaceChildren();
@@ -10346,8 +10444,11 @@ async function jouerLaPartieDuJour(jour: string, lexique: string, n: number): Pr
 }
 
 /** Jouer une partie d'epreuve, du jour ou de tournoi : `corps` dit laquelle. */
-async function jouerUnePartie(corps: Record<string, unknown>, erreur: HTMLElement): Promise<void> {
-  if (moiCompte === null) { ouvrirLeCompte("connexion"); return; }
+async function jouerUnePartie(
+  corps: Record<string, unknown>, erreur: HTMLElement, sansCompte = false,
+): Promise<void> {
+  // UN DEFI SE JOUE SANS COMPTE (SPEC.md §29) ; tout le reste en demande un.
+  if (moiCompte === null && !sansCompte) { ouvrirLeCompte("connexion"); return; }
   erreur.hidden = true;
   try {
     const r = await fetch("/api/competitif/jouer", {
@@ -10360,7 +10461,7 @@ async function jouerUnePartie(corps: Record<string, unknown>, erreur: HTMLElemen
       erreur.hidden = false;
       return;
     }
-    ($("name") as HTMLInputElement).value = moiCompte.pseudo;
+    ($("name") as HTMLInputElement).value = moiCompte?.pseudo ?? pseudo();
     allerA(d.salon);
   } catch {
     erreur.textContent = t("serveur injoignable");
@@ -10370,6 +10471,9 @@ async function jouerUnePartie(corps: Record<string, unknown>, erreur: HTMLElemen
 
 /** Le calendrier : les jours qui ont eu des parties, le plus recent d'abord. */
 function peindreLeCalendrier(jours: string[], vu: string): void {
+  // LE CALENDRIER S'OUVRE DES QU'ON N'EST PLUS SUR AUJOURD'HUI, et reste ferme
+  // sinon : c'est la seule chose qui dise ou l'on se trouve dans le temps.
+  $("cp-jours").hidden = jours.length === 0 || vu === jours[0];
   const boite = $("cp-jours");
   boite.replaceChildren(...jours.map((j) => {
     const b = el("button", "", new Date(`${j}T12:00:00Z`).toLocaleDateString(
@@ -10439,6 +10543,8 @@ let rsJour = "";
 let rsLexique = "";
 /** Le tournoi dont on lit les resultats, ou `null` pour les parties du jour. */
 let rsTournoi: string | null = null;
+/** Le defi dont on lit le classement, ou `null`. */
+let rsDefi: string | null = null;
 let rsPartie: number | "cumul" = 1;
 let rsDonnees: ResultatsVue | null = null;
 let rsTri: "temps" | "negatif" = "temps";
@@ -10458,11 +10564,14 @@ function ouvrirLesResultats(jour: string, lexique: string, partie: number | "cum
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
   $("corps-palmares").hidden = true;
+  $("corps-perso").hidden = true;
+  $("corps-defi").hidden = true;
   $("corps-resultats").hidden = false;
   $("join").hidden = false;
   rsJour = jour;
   rsLexique = lexique;
   rsTournoi = null;
+  rsDefi = null;
   rsPartie = partie;
   rsVue = null;
   rsTri = "temps";
@@ -10482,6 +10591,7 @@ function ouvrirLesResultatsDuTournoi(id: string, partie: number | "cumul" = "cum
 
 /** L'adresse des resultats regardes, pour l'historique et les liens. */
 function adresseDesResultats(partie: number | "cumul"): string {
+  if (rsDefi !== null) return `?page=resultats&defi=${encodeURIComponent(rsDefi)}`;
   return rsTournoi !== null
     ? `?page=resultats&tournoi=${encodeURIComponent(rsTournoi)}&partie=${partie}`
     : `?page=resultats&jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${partie}`;
@@ -10491,14 +10601,18 @@ function adresseDesResultats(partie: number | "cumul"): string {
 function ouvrirLesResultatsDeLAdresse(): void {
   const p = new URLSearchParams(location.search);
   const partie = p.get("partie") === "cumul" ? "cumul" : Math.max(1, Number(p.get("partie")) || 1);
+  if (p.get("defi") !== null) { ouvrirLesResultatsDuDefi(p.get("defi")!, false); return; }
   if (p.get("tournoi") !== null) { ouvrirLesResultatsDuTournoi(p.get("tournoi")!, partie, false); return; }
   ouvrirLesResultats(p.get("jour") ?? "", p.get("lexique") ?? "ods9", partie, false);
 }
 
 $("rs-retour").addEventListener("click", () => {
+  if (rsDefi !== null) { ouvrirLeDefi(rsDefi); return; }
   if (rsTournoi !== null) { ouvrirLeTournoi(rsTournoi); return; }
   cpLexique = rsLexique;
-  ouvrirLeCompetitif();
+  // ON REVIENT AU JOUR QU'ON REGARDAIT, calendrier ouvert : revenir a
+  // aujourd'hui apres avoir etudie le 3 septembre n'a pas de sens.
+  ouvrirLeCompetitif(true, rsJour === "" ? null : rsJour);
 });
 
 async function chargerLesResultats(): Promise<void> {
@@ -10508,9 +10622,12 @@ async function chargerLesResultats(): Promise<void> {
   $("rs-resume").replaceChildren();
   let d: ResultatsVue;
   try {
-    const r = await fetch(rsTournoi !== null
-      ? `/api/competitif/resultats?tournoi=${encodeURIComponent(rsTournoi)}&partie=${rsPartie}`
-      : `/api/competitif/resultats?jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${rsPartie}`);
+    const sans = moiCompte === null && pseudo() !== "" ? `&pseudo=${encodeURIComponent(pseudo())}` : "";
+    const r = await fetch(rsDefi !== null
+      ? `/api/competitif/resultats?defi=${encodeURIComponent(rsDefi)}${sans}`
+      : rsTournoi !== null
+        ? `/api/competitif/resultats?tournoi=${encodeURIComponent(rsTournoi)}&partie=${rsPartie}`
+        : `/api/competitif/resultats?jour=${rsJour}&lexique=${encodeURIComponent(rsLexique)}&partie=${rsPartie}`);
     d = await r.json();
     if (!r.ok) {
       if (mien !== rsDemande) return;
@@ -11888,12 +12005,15 @@ function primesCustom(c: { primes?: Readonly<Record<number, number>>; jouables: 
  * quand les primes ne sont pas celles d'usage.
  */
 function ecrireLeNomDeLaPartie(
-  c: ConfigSerialisee | ConfigPartie, dans: HTMLElement,
+  c: ConfigSerialisee | ConfigPartie, dans: HTMLElement, avecBouton = true,
 ): HTMLElement {
   const custom = primesCustom(c);
+  // TOUT SUR UNE LIGNE : le nom et son dernier morceau vivent dans la meme
+  // boite en ligne, sinon une colonne les separe en deux lignes.
+  const ligne = el("span", "nom-partie");
   const sansPrimes = nomDeLaPartie({ ...c, primes: undefined }, t);
-  dans.appendChild(document.createTextNode(custom ? `${sansPrimes}, ` : sansPrimes));
-  if (custom) {
+  ligne.appendChild(document.createTextNode(custom ? `${sansPrimes}, ` : sansPrimes));
+  if (custom && avecBouton) {
     const b = el("button", "primes-libres", t("primes de farfouilles custom")) as HTMLButtonElement;
     b.type = "button";
     b.title = t("Voir les primes de cette partie");
@@ -11901,8 +12021,13 @@ function ecrireLeNomDeLaPartie(
       e.stopPropagation();
       ouvrirLesPrimes(c);
     });
-    dans.appendChild(b);
+    ligne.appendChild(b);
+  } else if (custom) {
+    // Dans la barre du salon, la pastille entiere est deja un bouton : un
+    // bouton dans un bouton ne se fait pas.
+    ligne.appendChild(el("span", "primes-libres", t("primes de farfouilles custom")));
   }
+  dans.appendChild(ligne);
   return dans;
 }
 
@@ -11912,11 +12037,11 @@ function ouvrirLesPrimes(c: ConfigSerialisee | ConfigPartie): void {
   $("primes-titre").textContent = t("Primes de farfouilles");
   $("primes-quoi").textContent = custom
     ? t("Cette partie ne récompense pas comme d'habitude.")
-    : t("Cette partie récompense comme d'habitude.");
+    : t("Les primes sont standards.");
   const usage = primesDUsage(c.jouables);
   const table = el("table");
   table.appendChild(tete([
-    { texte: t("Caramels posés") }, { texte: t("Prime") }, { texte: t("Habituellement") },
+    { texte: t("Lettres posées") }, { texte: t("Prime") }, { texte: t("Standard") },
   ]));
   const corps = el("tbody");
   for (let n = 2; n <= c.jouables; n++) {
@@ -11944,11 +12069,378 @@ $("voile-primes").addEventListener("click", (e) => {
 function peindreLeTypeDePartie(): void {
   const b = $("type-partie") as HTMLButtonElement;
   b.replaceChildren();
-  ecrireLeNomDeLaPartie(cfg, b);
+  ecrireLeNomDeLaPartie(cfg, b, false);
   b.hidden = false;
   b.title = primesCustom(cfg)
     ? t("Voir les primes de cette partie") : t("Ce que cette partie a de particulier");
   b.onclick = () => ouvrirLesPrimes(cfg);
+}
+
+/** LES PAGES DU SITE : en montrer une, c'est cacher toutes les autres. */
+const CORPS = ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
+  "corps-competitif", "corps-resultats", "corps-admin", "corps-tournoi", "corps-palmares",
+  "corps-perso", "corps-defi"];
+
+function montrerLaPage(id: string): void {
+  for (const x of CORPS) $(x).hidden = x !== id;
+  $("join").hidden = false;
+}
+
+// ------------------------------------------------- CHOISIR DES JOUEURS
+//
+// LA MEME FENETRE DEFIE ET INVITE A UN TOURNOI (SPEC.md §29). Elle liste les
+// comptes du site, connectes ou non : une notification les rattrape.
+
+let choixSelection = new Set<string>();
+let choixTous: string[] = [];
+let choixFaire: ((pseudos: string[]) => Promise<string | null>) | null = null;
+
+async function choisirDesJoueurs(o: {
+  titre: string; quoi: string; valider: string; lien?: string;
+  faire: (pseudos: string[]) => Promise<string | null>;
+}): Promise<void> {
+  choixSelection = new Set();
+  choixFaire = o.faire;
+  $("choix-titre").textContent = o.titre;
+  $("choix-quoi").textContent = o.quoi;
+  ($("choix-valider") as HTMLButtonElement).textContent = o.valider;
+  ($("choix-filtre") as HTMLInputElement).value = "";
+  direLErreur($("choix-error"), null);
+  const lien = $("choix-lien") as HTMLButtonElement;
+  lien.hidden = o.lien === undefined;
+  lien.textContent = t("Copier le lien");
+  lien.onclick = o.lien === undefined ? null : () => { void copierLeLien(o.lien!, lien); };
+  $("choix-liste").replaceChildren(el("div", "none", t("Chargement…")));
+  $("voile-choix").hidden = false;
+  try {
+    const r = await fetch("/api/comptes");
+    const d = await r.json();
+    choixTous = (d.pseudos ?? []) as string[];
+  } catch {
+    choixTous = [];
+  }
+  peindreLeChoix();
+}
+
+function peindreLeChoix(): void {
+  const q = ($("choix-filtre") as HTMLInputElement).value.trim().toLowerCase();
+  const moi = moiCompte?.pseudo ?? "";
+  const vus = choixTous.filter((n) => n !== moi && (q === "" || n.toLowerCase().includes(q)));
+  if (vus.length === 0) {
+    $("choix-liste").replaceChildren(el("div", "none", t("Aucun compte à ce nom.")));
+    return;
+  }
+  $("choix-liste").replaceChildren(...vus.map((n) => {
+    const b = el("button", "", n) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(choixSelection.has(n)));
+    b.addEventListener("click", () => {
+      if (choixSelection.has(n)) choixSelection.delete(n); else choixSelection.add(n);
+      b.setAttribute("aria-pressed", String(choixSelection.has(n)));
+    });
+    return b;
+  }));
+}
+
+($("choix-filtre") as HTMLInputElement).addEventListener("input", () => peindreLeChoix());
+$("choix-close").addEventListener("click", () => { $("voile-choix").hidden = true; });
+$("voile-choix").addEventListener("click", (e) => {
+  if (e.target === $("voile-choix")) $("voile-choix").hidden = true;
+});
+$("choix-valider").addEventListener("click", () => {
+  void (async () => {
+    if (choixFaire === null) return;
+    if (choixSelection.size === 0) {
+      direLErreur($("choix-error"), "Choisissez au moins un joueur");
+      return;
+    }
+    const b = $("choix-valider") as HTMLButtonElement;
+    b.disabled = true;
+    const erreur = await choixFaire([...choixSelection]);
+    b.disabled = false;
+    if (erreur !== null) { direLErreur($("choix-error"), erreur); return; }
+    $("voile-choix").hidden = true;
+    flash(t2("{n} joueur(s) prévenu(s)", { n: choixSelection.size }), "ok");
+  })();
+});
+
+/** Copie un lien, et le dit. Sans presse-papier, on le montre a recopier. */
+async function copierLeLien(lien: string, bouton: HTMLButtonElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(lien);
+    bouton.textContent = t("Lien copié");
+    setTimeout(() => { bouton.textContent = t("Copier le lien"); }, 2000);
+  } catch {
+    $("choix-quoi").textContent = lien;
+  }
+}
+
+// ------------------------------------------------------------- LES DEFIS
+//
+// Voir SPEC.md §29. Une partie qu'on a jouee se refige depuis sa graine et se
+// fait circuler ; elle n'entre pas aux records, puisqu'on peut la connaitre
+// d'avance.
+
+const lienDuDefi = (id: string): string =>
+  `${location.origin}${location.pathname}?page=defi&id=${encodeURIComponent(id)}`;
+
+$("defier").addEventListener("click", () => { void defierSurCettePartie(); });
+
+async function defierSurCettePartie(): Promise<void> {
+  const b = $("defier") as HTMLButtonElement;
+  const dit = b.textContent;
+  b.disabled = true;
+  b.textContent = t("Préparation…");
+  const { ok, d } = await envoyerAuServeur("/api/defi", { salon: salonChoisi, pseudo: me });
+  b.disabled = false;
+  b.textContent = dit;
+  if (!ok) { flash(t(d.erreur ?? "serveur injoignable"), "bad"); return; }
+  const id = String(d.defi.id);
+  void choisirDesJoueurs({
+    titre: t("Défier sur cette partie"),
+    quoi: t("Chacun reçoit une notification, connecté ou non."),
+    valider: t("Défier"),
+    lien: lienDuDefi(id),
+    faire: async (pseudos) => {
+      const r = await envoyerAuServeur(`/api/defi/${encodeURIComponent(id)}/inviter`,
+        { pseudos, pseudo: me });
+      return r.ok ? null : String(r.d.erreur ?? "serveur injoignable");
+    },
+  });
+}
+
+let deId = "";
+
+function ouvrirLeDefi(id: string, pousser = true): void {
+  montrerLaPage("corps-defi");
+  deId = id;
+  void chargerLeDefi();
+  if (pousser) window.history.pushState({ page: "defi" }, "", `?page=defi&id=${encodeURIComponent(id)}`);
+}
+
+$("de-retour").addEventListener("click", () => {
+  montrerLaPage("corps-salons");
+  peindreAccueil();
+  window.history.pushState({ page: "salons" }, "", "/");
+});
+
+async function chargerLeDefi(): Promise<void> {
+  direLErreur($("de-error"), null);
+  $("de-partie").replaceChildren(tableauVide(t("chargement…")));
+  let d: { defi: { id: string; nom: string; config: ConfigSerialisee; par: string; at: number };
+    moi: { etat: string; temps: number | null; negatif: number | null; manche: string | null }; };
+  try {
+    const url = `/api/defi/${encodeURIComponent(deId)}`
+      + (moiCompte === null && pseudo() !== "" ? `?pseudo=${encodeURIComponent(pseudo())}` : "");
+    const r = await fetch(url);
+    d = await r.json();
+    if (!r.ok) { direLErreur($("de-error"), (d as any).erreur ?? "serveur injoignable"); return; }
+  } catch {
+    direLErreur($("de-error"), "serveur injoignable");
+    return;
+  }
+  const x = d.defi;
+  $("de-detail").textContent = [
+    t2("Défi de {qui}", { qui: x.par }), x.nom, dateDeTournoi(x.at),
+  ].filter((s) => s !== "").join(" · ");
+
+  const ligne = el("div", "cp-partie");
+  ligne.appendChild(el("div", "cp-num", "1"));
+  ligne.appendChild(ecrireLeNomDeLaPartie(x.config, el("div", "cp-nom")));
+  const jouer = el("button", "cp-jouer") as HTMLButtonElement;
+  jouer.type = "button";
+  if (d.moi.etat === "jouee" && d.moi.temps !== null) {
+    jouer.className = "cp-faite";
+    jouer.textContent = `${tempsCentiemes(d.moi.temps)} · ${negatifDit(d.moi.negatif ?? 0)}`;
+    jouer.title = t("Revoir la partie");
+    jouer.addEventListener("click", () => {
+      const m = d.moi.manche;
+      if (m === null) { ouvrirLesResultatsDuDefi(x.id); return; }
+      void ouvrirLaPartie(m, 1, "competitif", () => ouvrirLeDefi(x.id));
+    });
+  } else {
+    jouer.textContent = d.moi.etat === "en-cours" ? t("Reprendre") : t("Relever le défi");
+    jouer.addEventListener("click", () => { void jouerLeDefi(x.id); });
+  }
+  ligne.appendChild(jouer);
+  const resultats = el("button", "", t("Résultats")) as HTMLButtonElement;
+  resultats.type = "button";
+  resultats.addEventListener("click", () => ouvrirLesResultatsDuDefi(x.id));
+  ligne.appendChild(resultats);
+  $("de-partie").replaceChildren(ligne);
+
+  const gestes = $("de-gestes");
+  gestes.replaceChildren();
+  const defier = el("button", "", t("Défier d'autres joueurs")) as HTMLButtonElement;
+  defier.type = "button";
+  defier.addEventListener("click", () => {
+    void choisirDesJoueurs({
+      titre: t("Défier sur cette partie"),
+      quoi: t("Chacun reçoit une notification, connecté ou non."),
+      valider: t("Défier"),
+      lien: lienDuDefi(x.id),
+      faire: async (pseudos) => {
+        const r = await envoyerAuServeur(`/api/defi/${encodeURIComponent(x.id)}/inviter`,
+          { pseudos, pseudo: pseudo() });
+        return r.ok ? null : String(r.d.erreur ?? "serveur injoignable");
+      },
+    });
+  });
+  gestes.appendChild(defier);
+}
+
+/**
+ * UN DEFI SE JOUE SANS COMPTE (SPEC.md §29). Sans pseudo, la fenetre habituelle
+ * en demande un, et le defi reprend la ou on l'avait laisse.
+ */
+async function jouerLeDefi(id: string): Promise<void> {
+  if (moiCompte === null && pseudo() === "") {
+    reprendreApresLePseudo = () => { void jouerLeDefi(id); };
+    demanderLePseudo(null);
+    return;
+  }
+  await jouerUnePartie({ defi: id, pseudo: moiCompte?.pseudo ?? pseudo() }, $("de-error"), true);
+}
+
+/** Le classement d'un defi : la meme page que les autres resultats. */
+function ouvrirLesResultatsDuDefi(id: string, pousser = true): void {
+  ouvrirLesResultats("", "", 1, false);
+  rsDefi = id;
+  $("rs-retour").textContent = t("← Défi");
+  void chargerLesResultats();
+  if (pousser) window.history.pushState({ page: "resultats" }, "", adresseDesResultats(1));
+}
+
+// ------------------------------------------------------ LA PAGE PERSONNELLE
+//
+// Voir SPEC.md §30. Publique, avec l'historique de ce qu'un joueur a joue. Les
+// reglages sont derriere « Modifier mon profil », et n'y paraissent que chez
+// soi.
+
+let peQui = "";
+let peOnglet = "tout";
+let peLignes: LigneDHistorique[] = [];
+
+interface LigneDHistorique {
+  type: "salon" | "pdj" | "tournoi" | "defi";
+  source: "records" | "competitif" | "historique";
+  id: string;
+  at: number;
+  config: (ConfigSerialisee & { mode?: string }) | null;
+  dou: string;
+  partie: number;
+  temps: number | null;
+  negatif: number;
+  score: number;
+  coups: number;
+  equipe: string[];
+  grille?: string;
+  lexique?: string;
+  chrono?: number | null;
+}
+
+function ouvrirLaPagePerso(qui: string, pousser = true): void {
+  montrerLaPage("corps-perso");
+  peQui = qui;
+  peOnglet = "tout";
+  presser("pe-onglets", peOnglet);
+  $("pe-pseudo").textContent = qui;
+  $("pe-nom").textContent = "";
+  $("pe-badge").hidden = true;
+  $("pe-avatar").replaceChildren();
+  $("pe-historique").replaceChildren(tableauVide(t("chargement…")));
+  void chargerLaPagePerso();
+  if (pousser) {
+    window.history.pushState({ page: "perso" }, "", `?page=perso&joueur=${encodeURIComponent(qui)}`);
+  }
+}
+
+$("pe-retour").addEventListener("click", () => { window.history.back(); });
+$("pe-onglets").addEventListener("click", (e) => {
+  const v = ((e.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset["v"];
+  if (v === undefined) return;
+  peOnglet = v;
+  presser("pe-onglets", v);
+  peindreLHistorique();
+});
+
+async function chargerLaPagePerso(): Promise<void> {
+  const qui = peQui;
+  try {
+    const r = await fetch(`/api/joueur/${encodeURIComponent(qui)}`);
+    const d = await r.json();
+    const j = d.joueur;
+    if (j !== undefined && peQui === qui) {
+      $("pe-pseudo").textContent = j.pseudo;
+      $("pe-badge").hidden = !j.verifie;
+      peindreAvatar($("pe-avatar"), j.avatar, 44, j.avatarSombre);
+      $("pe-nom").textContent = j.nom ?? "";
+    }
+  } catch { /* la fiche n'est qu'un ornement */ }
+
+  // MODIFIER MON PROFIL n'apparait que chez soi (SPEC.md §30).
+  const gestes = $("pe-gestes");
+  gestes.replaceChildren();
+  if (moiCompte !== null && moiCompte.pseudo === qui) {
+    const b = el("button", "", t("Modifier mon profil")) as HTMLButtonElement;
+    b.type = "button";
+    b.addEventListener("click", () => ouvrirLeProfil());
+    gestes.appendChild(b);
+  }
+
+  try {
+    const r = await fetch(`/api/joueur/${encodeURIComponent(qui)}/historique`);
+    const d = await r.json();
+    if (peQui !== qui) return;
+    peLignes = (d.lignes ?? []) as LigneDHistorique[];
+  } catch {
+    peLignes = [];
+  }
+  peindreLHistorique();
+}
+
+const GENRES: Record<string, string> = {
+  salon: "Salon", pdj: "Partie du jour", tournoi: "Tournoi", defi: "Défi",
+};
+
+function peindreLHistorique(): void {
+  const vues = peLignes.filter((l) => peOnglet === "tout" || l.type === peOnglet);
+  if (vues.length === 0) {
+    $("pe-historique").replaceChildren(tableauVide(t("Aucune partie ici.")));
+    return;
+  }
+  $("pe-historique").replaceChildren(...vues.map((l) => {
+    const ligne = el("div", "pe-ligne");
+    ligne.appendChild(el("span", "pe-quand", dateDeTournoi(l.at)));
+    const quoi = el("span", "pe-quoi");
+    quoi.appendChild(el("span", "pe-genre", t(GENRES[l.type] ?? l.type)));
+    if (l.config !== null) {
+      ecrireLeNomDeLaPartie(l.config, quoi);
+    } else {
+      // Une vieille manche de records ne garde pas sa configuration entiere.
+      quoi.appendChild(document.createTextNode([
+        l.grille === "super" ? t("Super grille") : t("Normale"),
+        l.chrono == null ? "" : chronoDuNom(l.chrono),
+      ].filter((s) => s !== "").join(", ")));
+    }
+    const dou = [
+      l.type === "pdj" && l.dou !== "" ? `${jourEnLettres(l.dou)} · P${l.partie}` : "",
+      l.type === "tournoi" || l.type === "defi" ? `${l.dou}${l.partie > 1 ? ` · P${l.partie}` : ""}` : "",
+      l.type === "salon" ? l.dou : "",
+      l.equipe.length > 1 ? l.equipe.join(", ") : "",
+    ].filter((s) => s !== "").join(" · ");
+    if (dou !== "") quoi.appendChild(el("i", "", dou));
+    ligne.appendChild(quoi);
+    ligne.appendChild(el("span", "pe-chiffre", l.temps === null ? "—" : tempsCentiemes(l.temps)));
+    ligne.appendChild(el("span", "pe-chiffre", negatifDit(l.negatif)));
+    const revoir = el("button", "pe-revoir", t("Revoir")) as HTMLButtonElement;
+    revoir.type = "button";
+    revoir.addEventListener("click", () => {
+      void ouvrirLaPartie(l.id, 1, l.source, () => ouvrirLaPagePerso(peQui, false));
+    });
+    ligne.appendChild(revoir);
+    return ligne;
+  }));
 }
 
 // ------------------------------------------------------- LES NOTIFICATIONS
@@ -11988,6 +12480,24 @@ function phraseDeLaNotification(n: NotificationVue): { quoi: string; aller: (() 
     return {
       quoi: t2("{de} vous inscrit en équipe dans « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
       aller: p["tournoi"] === undefined ? null : () => ouvrirLeTournoi(p["tournoi"]!),
+    };
+  }
+  if (n.genre === "tournoi-invite") {
+    return {
+      quoi: t2("{de} vous invite au tournoi « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
+      aller: p["tournoi"] === undefined ? null : () => ouvrirLeTournoi(p["tournoi"]!),
+    };
+  }
+  if (n.genre === "defi") {
+    return {
+      quoi: t2("{de} vous défie sur « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
+      aller: p["defi"] === undefined ? null : () => ouvrirLeDefi(p["defi"]!),
+    };
+  }
+  if (n.genre === "defi-joue") {
+    return {
+      quoi: t2("{de} vient de relever le défi « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
+      aller: p["defi"] === undefined ? null : () => ouvrirLeDefi(p["defi"]!),
     };
   }
   if (n.genre === "tournoi-debut") {
@@ -12088,7 +12598,7 @@ let adOccupe = false;
 function ouvrirLAdministrationDuCompetitif(pousser = true): void {
   if (moiCompte?.admin !== true) { ouvrirLeCompetitif(pousser); return; }
   for (const id of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
-    "corps-competitif", "corps-resultats", "corps-tournoi", "corps-palmares"]) $(id).hidden = true;
+    "corps-competitif", "corps-resultats", "corps-tournoi", "corps-palmares", "corps-perso", "corps-defi"]) $(id).hidden = true;
   $("corps-admin").hidden = false;
   $("join").hidden = false;
   peindreLOngletAdmin();
@@ -12912,7 +13422,7 @@ let toDemande = 0;
 
 function ouvrirLeTournoi(id: string, pousser = true): void {
   for (const pid of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
-    "corps-competitif", "corps-resultats", "corps-admin", "corps-palmares"]) $(pid).hidden = true;
+    "corps-competitif", "corps-resultats", "corps-admin", "corps-palmares", "corps-perso", "corps-defi"]) $(pid).hidden = true;
   $("corps-tournoi").hidden = false;
   $("join").hidden = false;
   toId = id;
@@ -13037,6 +13547,24 @@ async function chargerLeTournoi(): Promise<void> {
         : formulaireDuTournoiDeTopping(() => ouvrirLeTournoi(x.id, false), x));
     });
     gestes.appendChild(modifier);
+  }
+  // INVITER DES JOUEURS (SPEC.md §29) : ils recoivent une notification, meme
+  // s'ils ne sont pas connectes.
+  if (moiCompte !== null) {
+    const inviter = el("button", "", t("Inviter des joueurs")) as HTMLButtonElement;
+    inviter.type = "button";
+    inviter.addEventListener("click", () => {
+      void choisirDesJoueurs({
+        titre: t("Inviter au tournoi"),
+        quoi: t2("Chacun reçoit une notification qui le mène à « {nom} ».", { nom: x.nom }),
+        valider: t("Inviter"),
+        faire: async (pseudos) => {
+          const r = await envoyerAuServeur(`/api/tournoi/${encodeURIComponent(x.id)}/inviter`, { pseudos });
+          return r.ok ? null : String(r.d.erreur ?? "serveur injoignable");
+        },
+      });
+    });
+    gestes.appendChild(inviter);
   }
   if (d.moi?.proprietaire === true) {
     const supprimer = el("button", "", t("Supprimer le tournoi")) as HTMLButtonElement;
