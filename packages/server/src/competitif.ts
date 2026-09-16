@@ -26,8 +26,10 @@ import type { LayoutName } from "../../engine/src/bonus.ts";
 import { deserialiser, type ConfigSerialisee } from "../../engine/src/config.ts";
 import type { Dir } from "../../engine/src/coords.ts";
 import {
-  LEXIQUES_DU_JOUR, PARTIES_DU_JOUR, configDuModele, decalerLeJour, jourDe, modeleDeLaConfig,
-  nomDeLaPartie, tirerUnModele, type ModeleDePartie,
+  JOURS_DE_LA_SEMAINE, LEXIQUES_DU_JOUR, PARTIES_DU_JOUR, configDuModele, consigneExacte,
+  debutDuJour, decalerLeJour, jourDe, jourDeLaSemaine, joursEntre, modeleDeLaConfig,
+  nomDeLaPartie, tirerUnModele, tirerUneConsigne,
+  type ConsigneDePartie, type ModeleDePartie,
 } from "../../engine/src/epreuves.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +46,9 @@ export function definirDossierDuCompetitif(dir: string): void {
   manches.clear();
   tournois.clear();
   apercus.clear();
+  semaine.clear();
+  hebdos.clear();
+  hebdosFaits.clear();
 }
 
 /** Le dossier ou vivent les parties figees de l'epreuve. */
@@ -159,11 +164,21 @@ export interface Tournoi {
   par: string;
   at: number;
   inscrits: Inscription[];
+  /** L'instance d'un tournoi de la semaine dit de quel modele et de quel jour. */
+  hebdo: { modele: string; jour: string } | null;
 }
 
 const jours = new Map<string, JourDePdj>();
 const manches = new Map<string, Manche>();
 const tournois = new Map<string, Tournoi>();
+/** Les consignes d'un lexique pour un jour de la semaine : `lexique|0..6`. */
+const semaine = new Map<string, ConsigneDePartie[]>();
+const hebdos = new Map<string, ModeleHebdo>();
+/**
+ * LES INSTANCES DEJA NEES : `modele|jour`. Elle survit a la suppression du
+ * tournoi -- sinon il renaitrait au passage suivant.
+ */
+const hebdosFaits = new Set<string>();
 /**
  * QUI A REGARDE QUELLE PARTIE FIGEE AVANT DE LA JOUER : `figee|compte`.
  *
@@ -222,6 +237,9 @@ function inscrire(ev: Record<string, unknown>): void {
 export function ouvrirLeCompetitif(): void {
   jours.clear();
   manches.clear();
+  semaine.clear();
+  hebdos.clear();
+  hebdosFaits.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
   for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
@@ -245,6 +263,16 @@ function appliquer(e: Record<string, any>): void {
       compte: e["compte"], jeu: e["jeu"], noms: e["noms"] ?? "", equipe: e["equipe"] ?? [e["compte"]],
       at: e["at"], fin: null,
     });
+  } else if (e["t"] === "semaine") {
+    semaine.set(cleDeLaSemaine(e["lexique"], Number(e["jour"])), e["consignes"] ?? []);
+  } else if (e["t"] === "hebdo") {
+    hebdos.set(e["id"], {
+      id: e["id"], nom: e["nom"], lexique: e["lexique"], equipe: e["equipe"] ?? 1,
+      jourDebut: Number(e["jourDebut"]), jourFin: Number(e["jourFin"]),
+      consignes: e["consignes"] ?? [], actif: e["actif"] !== false, par: e["par"], at: e["at"],
+    });
+  } else if (e["t"] === "hebdo-supprime") {
+    hebdos.delete(e["id"]);
   } else if (e["t"] === "apercu") {
     if (typeof e["figee"] === "string") apercus.add(`${e["figee"]}|${e["par"]}`);
   } else if (e["t"] === "tournoi-supprime") {
@@ -257,8 +285,9 @@ function appliquer(e: Record<string, any>): void {
       id: e["id"], type: e["type"], nom: e["nom"], lexique: e["lexique"],
       debut: e["debut"], fin: e["fin"] ?? null, equipe: e["equipe"] ?? 1,
       parties: e["parties"] ?? [], battle: e["battle"] ?? null, par: e["par"], at: e["at"],
-      inscrits,
+      inscrits, hebdo: e["hebdo"] ?? null,
     });
+    if (e["hebdo"] != null) hebdosFaits.add(`${e["hebdo"]["modele"]}|${e["hebdo"]["jour"]}`);
   } else if (e["t"] === "inscription") {
     const t = tournois.get(e["tournoi"]);
     if (t !== undefined && !t.inscrits.some((i) => i.compte === e["compte"])) {
@@ -331,9 +360,10 @@ export function assurerLesPartiesDuJour(layout: LayoutName, maintenant = Date.no
 async function figerLeJour(jour: string, lexique: string, layout: LayoutName): Promise<void> {
   const t0 = Date.now();
   const parties: PartieDEpreuve[] = [];
-  const modeles = PARTIES_DU_JOUR[lexique] ?? [];
-  for (let i = 0; i < modeles.length; i++) {
-    const cfg = configDuModele(modeles[i]!, lexique);
+  // LES CONSIGNES DU JOUR DE LA SEMAINE, tirees une a une (SPEC.md §29).
+  const consignes = consignesPourLeJour(jour, lexique);
+  for (let i = 0; i < consignes.length; i++) {
+    const cfg = configDuModele(tirerUneConsigne(consignes[i]!), lexique);
     const f = await figerUnePartie(cfg, layout);
     ecrireLaPartieFigee(DATA_DIR, f);
     parties.push({ n: i + 1, figee: f.id, config: f.config });
@@ -711,6 +741,142 @@ export function salonDeLaPartie(epreuve: string, partie: number, compte: string)
   return `pdj-${e?.jour ?? "jour"}-${lexique}-p${partie}-${empreinte}`;
 }
 
+// ------------------------------------- les modeles de la semaine
+
+const cleDeLaSemaine = (lexique: string, jour: number): string => `${lexique}|${jour}`;
+
+/** Les consignes d'un lexique pour un jour de la semaine, si elles existent. */
+export function consignesDeLaSemaine(lexique: string, jour: number): ConsigneDePartie[] | undefined {
+  const c = semaine.get(cleDeLaSemaine(lexique, jour));
+  return c === undefined || c.length === 0 ? undefined : c;
+}
+
+/** Les sept jours d'un lexique, du lundi au dimanche. */
+export function laSemaineDe(lexique: string): (ConsigneDePartie[] | null)[] {
+  return JOURS_DE_LA_SEMAINE.map((_, j) => consignesDeLaSemaine(lexique, j) ?? null);
+}
+
+/**
+ * CE QUI DECIDE DES PARTIES D'UN JOUR (SPEC.md §29) : les consignes de son jour
+ * de la semaine, et a defaut les parties d'office du lexique.
+ */
+export function consignesPourLeJour(jour: string, lexique: string): ConsigneDePartie[] {
+  return consignesDeLaSemaine(lexique, jourDeLaSemaine(jour))
+    ?? (PARTIES_DU_JOUR[lexique] ?? []).map(consigneExacte);
+}
+
+/**
+ * Ecrit les consignes d'un jour de la semaine. C'est persistant : tous les
+ * lundis suivants suivront celles du lundi. Rien ne se refige ici -- les
+ * parties de demain sont deja tirees, et « Tout retirer » les retire.
+ */
+export function reglerLaSemaine(
+  lexique: string, jour: number, consignes: ConsigneDePartie[], par: string,
+): void {
+  const ev = { t: "semaine", lexique, jour, consignes, par, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+  console.log(`[competitif] ${JOURS_DE_LA_SEMAINE[jour]} (${lexique}) : `
+    + `${consignes.length} partie(s) par ${par}`);
+}
+
+// ------------------------------------- les tournois de la semaine
+
+/**
+ * UN TOURNOI QUI REVIENT CHAQUE SEMAINE. Ses horaires ne se reglent pas : il
+ * commence a 5 h 30 le matin de `jourDebut`, et finit a 5 h 30 le lendemain de
+ * `jourFin`. `du dimanche au dimanche` est donc la journee du dimanche.
+ */
+export interface ModeleHebdo {
+  id: string;
+  nom: string;
+  lexique: string;
+  equipe: number;
+  /** 0 pour lundi, 6 pour dimanche. */
+  jourDebut: number;
+  jourFin: number;
+  consignes: ConsigneDePartie[];
+  actif: boolean;
+  par: string;
+  at: number;
+}
+
+export function tousLesModelesHebdo(): ModeleHebdo[] {
+  return [...hebdos.values()].sort((a, b) => a.jourDebut - b.jourDebut || a.at - b.at);
+}
+
+export function modeleHebdo(id: string): ModeleHebdo | undefined {
+  return hebdos.get(id);
+}
+
+/** Cree un modele hebdomadaire, ou reecrit celui dont l'identifiant est donne. */
+export function ecrireUnModeleHebdo(o: {
+  id?: string; nom: string; lexique: string; equipe: number;
+  jourDebut: number; jourFin: number; consignes: ConsigneDePartie[]; actif: boolean; par: string;
+}): ModeleHebdo {
+  const ancien = o.id === undefined ? undefined : hebdos.get(o.id);
+  const ev = {
+    t: "hebdo", id: ancien?.id ?? randomUUID(), nom: o.nom, lexique: o.lexique, equipe: o.equipe,
+    jourDebut: o.jourDebut, jourFin: o.jourFin, consignes: o.consignes, actif: o.actif,
+    par: ancien?.par ?? o.par, at: ancien?.at ?? Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+  console.log(`[competitif] tournoi de la semaine "${o.nom}" `
+    + `${ancien === undefined ? "cree" : "modifie"} par ${o.par}`);
+  return hebdos.get(ev.id)!;
+}
+
+/** Retire un modele hebdomadaire. Les instances deja nees restent. */
+export function supprimerUnModeleHebdo(id: string, par: string): void {
+  const ev = { t: "hebdo-supprime", id, par, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/**
+ * FAIT NAITRE LES INSTANCES DE LA SEMAINE, la veille de leur debut comme les
+ * parties du lendemain : le tournoi parait avec ses dates, et l'on peut s'y
+ * inscrire avant qu'il commence.
+ *
+ * Une instance supprimee ne renait pas : le journal garde qu'elle a existe.
+ */
+export function assurerLesTournoisDeLaSemaine(
+  layout: LayoutName, maintenant = Date.now(),
+): Promise<void> {
+  return unParUn(async () => {
+    const aujourdhui = jourDe(maintenant);
+    for (const m of hebdos.values()) {
+      if (!m.actif || m.consignes.length === 0) continue;
+      for (const jour of [aujourdhui, decalerLeJour(aujourdhui, 1)]) {
+        if (jourDeLaSemaine(jour) !== m.jourDebut) continue;
+        if (hebdosFaits.has(`${m.id}|${jour}`)) continue;
+        await naitreUnTournoiDeLaSemaine(m, jour, layout);
+      }
+    }
+  });
+}
+
+async function naitreUnTournoiDeLaSemaine(
+  m: ModeleHebdo, jour: string, layout: LayoutName,
+): Promise<void> {
+  const parties: PartieDEpreuve[] = [];
+  for (let i = 0; i < m.consignes.length; i++) {
+    const f = await figerUnePartie(configDuModele(tirerUneConsigne(m.consignes[i]!), m.lexique), layout);
+    ecrireLaPartieFigee(DATA_DIR, f);
+    parties.push({ n: i + 1, figee: f.id, config: f.config });
+  }
+  const dernier = decalerLeJour(jour, joursEntre(m.jourDebut, m.jourFin) + 1);
+  const ev = {
+    t: "tournoi", id: randomUUID(), type: "topping", nom: m.nom, lexique: m.lexique,
+    debut: debutDuJour(jour), fin: debutDuJour(dernier), equipe: m.equipe,
+    parties, battle: null, par: m.par, at: Date.now(), hebdo: { modele: m.id, jour },
+  };
+  inscrire(ev);
+  appliquer(ev);
+  console.log(`[competitif] "${m.nom}" du ${jour} : ${parties.length} partie(s) figees`);
+}
+
 // ------------------------------------------ l'administration des parties du jour
 
 /** Les changements d'administration passent un par un : ils figent, et durent. */
@@ -726,7 +892,7 @@ export type ChangementDuJour =
   | { action: "nombre"; nombre: number }
   | { action: "retirer" }
   | { action: "graine"; partie: number }
-  | { action: "reglages"; partie: number; modele: ModeleDePartie };
+  | { action: "reglages"; partie: number; consigne: ConsigneDePartie };
 
 /**
  * CHANGE LES PARTIES DE DEMAIN (SPEC.md §29), et seulement celles-la : celles
@@ -749,22 +915,31 @@ export function changerLesPartiesDeDemain(
       ecrireLaPartieFigee(DATA_DIR, f);
       return { n, figee: f.id, config: f.config };
     };
+    // LES CONSIGNES DU JOUR DE LA SEMAINE, quand il y en a : une partie qu'on
+    // ajoute ou qu'on retire obeit a la regle du jour (SPEC.md §29).
+    const regles = consignesDeLaSemaine(lexique, jourDeLaSemaine(demain));
     let parties: PartieDEpreuve[];
     if (changement.action === "nombre") {
       const n = Math.round(changement.nombre);
       if (!Number.isInteger(n) || n < 1 || n > 8) return "de 1 à 8 parties";
       parties = j.parties.slice(0, n);
       for (let i = parties.length; i < n; i++) {
-        parties.push(await figer(i + 1, PARTIES_DU_JOUR[lexique]?.[i] ?? tirerUnModele()));
+        const c = regles?.[i];
+        parties.push(await figer(i + 1, c === undefined
+          ? (PARTIES_DU_JOUR[lexique]?.[i] ?? tirerUnModele()) : tirerUneConsigne(c)));
       }
     } else if (changement.action === "retirer") {
       parties = [];
-      for (let i = 0; i < j.parties.length; i++) parties.push(await figer(i + 1, tirerUnModele()));
+      if (regles !== undefined) {
+        for (let i = 0; i < regles.length; i++) parties.push(await figer(i + 1, tirerUneConsigne(regles[i]!)));
+      } else {
+        for (let i = 0; i < j.parties.length; i++) parties.push(await figer(i + 1, tirerUnModele()));
+      }
     } else {
       const k = j.parties.findIndex((p) => p.n === changement.partie);
       if (k === -1) return "cette partie n'existe pas";
       const modele = changement.action === "graine"
-        ? modeleDeLaConfig(j.parties[k]!.config) : changement.modele;
+        ? modeleDeLaConfig(j.parties[k]!.config) : tirerUneConsigne(changement.consigne);
       parties = [...j.parties];
       parties[k] = await figer(changement.partie, modele);
     }
@@ -812,7 +987,7 @@ export function tournoiPublic(t: Tournoi) {
   return {
     id: t.id, type: t.type, nom: t.nom, lexique: t.lexique, debut: t.debut, fin: t.fin,
     equipe: t.equipe, parties: t.parties.map((p) => ({ n: p.n, config: p.config })),
-    battle: t.battle, par: t.par, at: t.at,
+    battle: t.battle, par: t.par, at: t.at, hebdo: t.hebdo,
     inscrits: t.inscrits.map((i) => ({ compte: i.compte, noms: i.noms, partenaires: i.partenaires })),
   };
 }
@@ -843,6 +1018,7 @@ export function creerUnTournoiDeTopping(o: {
     const ev = {
       t: "tournoi", id: randomUUID(), type: "topping", nom: o.nom, lexique: o.lexique,
       debut: o.debut, fin: o.fin, equipe: o.equipe, parties, battle: null, par: o.par, at: Date.now(),
+      hebdo: null,
     };
     inscrire(ev);
     appliquer(ev);
@@ -875,7 +1051,7 @@ export function modifierUnTournoiDeTopping(t: Tournoi, o: {
     const ev = {
       t: "tournoi", id: t.id, type: "topping", nom: o.nom, lexique: o.lexique,
       debut: o.debut, fin: o.fin, equipe: o.equipe, parties, battle: null, par: t.par, at: t.at,
-      modifieLe: Date.now(),
+      hebdo: t.hebdo, modifieLe: Date.now(),
     };
     inscrire(ev);
     appliquer(ev);
@@ -891,7 +1067,7 @@ export function modifierUnTournoiDeBattle(t: Tournoi, o: {
   const ev = {
     t: "tournoi", id: t.id, type: "battle", nom: o.nom, lexique: o.lexique,
     debut: o.debut, fin: null, equipe: o.equipe, parties: [], battle: o.battle,
-    par: t.par, at: t.at, modifieLe: Date.now(),
+    par: t.par, at: t.at, hebdo: null, modifieLe: Date.now(),
   };
   inscrire(ev);
   appliquer(ev);
@@ -923,6 +1099,7 @@ export function creerUnTournoiDeBattle(o: {
   const ev = {
     t: "tournoi", id: randomUUID(), type: "battle", nom: o.nom, lexique: o.lexique,
     debut: o.debut, fin: null, equipe: o.equipe, parties: [], battle: o.battle, par: o.par, at: Date.now(),
+    hebdo: null,
   };
   inscrire(ev);
   appliquer(ev);

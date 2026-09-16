@@ -37,7 +37,11 @@ import {
 } from "../../engine/src/coords.ts";
 import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 import { chercherLeMot } from "../../engine/src/chercher.ts";
-import { LEXIQUES_DU_JOUR, chronoDuNom, heureDeParis, nomDeLaPartie } from "../../engine/src/epreuves.ts";
+import {
+  JOURS_DE_LA_SEMAINE, LEXIQUES_DU_JOUR, chronoDuNom, consigneExacte, heureDeParis,
+  modeleDeLaConfig, nomDeLaConsigne, nomDeLaPartie, primesDUsage,
+  type ConsigneDePartie, type ModeleDePartie,
+} from "../../engine/src/epreuves.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const cv = $<HTMLCanvasElement>("cv");
@@ -5831,7 +5835,11 @@ function connect() {
     // ON VIENT DE M'INVITER DANS UN SALON PRIVE, ou que je sois sur le site en
     // ce moment. Un simple message suffit : je vais l'y rejoindre quand je le
     // veux, rien ne m'y pousse.
-    if (m.t === "invite") { flash(t2("Invité(e) dans « {nom} »", { nom: m.nomSalon }), "ok"); return; }
+    if (m.t === "invite") {
+      flash(t2("Invité(e) dans « {nom} »", { nom: m.nomSalon }), "ok");
+      void chargerLesNotifications();
+      return;
+    }
   });
 }
 
@@ -7191,6 +7199,17 @@ function peindreCompte(): void {
     boite.appendChild(b);
     return;
   }
+
+  // LA CLOCHE : ce qui s'est passe pendant qu'on n'etait pas la (SPEC.md §29).
+  const cloche = el("button", "icon cloche") as HTMLButtonElement;
+  cloche.id = "cloche-notifs";
+  cloche.type = "button";
+  cloche.setAttribute("aria-label", t("Notifications"));
+  cloche.innerHTML = ICONE_CLOCHE;
+  cloche.addEventListener("click", () => ouvrirLesNotifications());
+  boite.appendChild(cloche);
+  peindreLaCloche();
+  void chargerLesNotifications();
 
   const b = el("button", "moi") as HTMLButtonElement;
   b.type = "button";
@@ -11050,7 +11069,7 @@ const GRAPHES: { v: Graphe; nom: string }[] = [
   { v: "temps", nom: "Temps par coup" },
   { v: "rang", nom: "Rang au fil des coups" },
   { v: "repartition", nom: "Répartition des temps" },
-  { v: "course", nom: "La course" },
+  { v: "course", nom: "Écart au cumul médian" },
   { v: "difficulte", nom: "Difficulté des coups" },
 ];
 
@@ -11441,31 +11460,45 @@ function grapheDeLaRepartition(lignes: LigneVue[], vue: LigneVue): Cadre {
 
 // --------------------------------------------------- L'EDITEUR DE PARTIE
 //
-// Voir SPEC.md §29. Une partie d'epreuve ne varie que par quatre choses -- la
-// grille, le format, le joker, le temps par coup -- et l'editeur ne montre
-// qu'elles. Le nom se lit en direct dessous : c'est lui qu'on verifie.
+// Voir SPEC.md §29. Une partie d'epreuve ne varie que par cinq choses -- la
+// grille, le format, le joker, le temps par coup, les primes -- et l'editeur ne
+// montre qu'elles. Le nom se lit en direct dessous : c'est lui qu'on verifie.
 //
-// Le meme editeur sert aux parties du jour et aux deux tournois.
+// CHAQUE LIGNE PORTE UN BOUTON ALEATOIRE, et ce que l'editeur rend n'est donc
+// pas une partie mais une CONSIGNE. Un modele de la semaine la garde telle
+// quelle et la tire chaque nuit ; une partie de demain la tire tout de suite.
+//
+// Le meme editeur sert aux parties du jour, aux modeles de la semaine et aux
+// deux tournois.
 
-/** Ce que l'editeur regle : le modele d'une partie. */
-interface ModeleVue {
-  bornes: 7 | 10;
-  tirage: number;
-  jouables: number;
-  joker: boolean;
-  jokersParCoup?: 1 | 2;
-  chrono: number;
+/** Ce que l'editeur regle. */
+type ConsigneVue = ConsigneDePartie;
+
+/** Un modele deja tire : ce que le serveur rend d'une partie figee. */
+type ModeleVue = ModeleDePartie;
+
+const CONSIGNE_NORMALE: ConsigneVue = {
+  bornes: 7, format: { t: "exact", tirage: 7, jouables: 7 },
+  egal: false, joker: 0, chrono: 60, primes: null,
+};
+
+/** Une copie franche : le format et les primes sont des objets a part. */
+function clonerLaConsigne(c: ConsigneVue): ConsigneVue {
+  return {
+    ...c,
+    format: { ...c.format },
+    primes: c.primes === null || c.primes === "alea" ? c.primes : { ...c.primes },
+  };
 }
-
-const MODELE_NORMAL: ModeleVue = { bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 60 };
 
 /** Le modele d'une configuration recue du serveur. */
 function modeleDe(c: ConfigSerialisee): ModeleVue {
-  return {
-    bornes: c.bornes === 10 ? 10 : 7, tirage: c.tirage, jouables: c.jouables, joker: c.joker,
-    ...(c.joker && c.jokersParCoup === 2 ? { jokersParCoup: 2 as const } : {}),
-    chrono: c.chrono ?? 60,
-  };
+  return modeleDeLaConfig(c);
+}
+
+/** La consigne qui ne peut donner que cette configuration-la. */
+function consigneDe(c: ConfigSerialisee): ConsigneVue {
+  return consigneExacte(modeleDe(c));
 }
 
 /** Une rangee de boutons a valeur, et ce qui se passe au clic. */
@@ -11504,104 +11537,320 @@ function champNombre(min: number, max: number, valeur: number, titre: string): H
   return i;
 }
 
+/** Un bouton a bascule, au bout d'une rangee : « Aléatoire », « Égal ». */
+function bascule(
+  texte: string, actif: boolean, surChange: (v: boolean) => void, titre = "",
+): { el: HTMLButtonElement; poser: (v: boolean) => void; valeur: () => boolean } {
+  const b = el("button", "ed-bascule", texte) as HTMLButtonElement;
+  b.type = "button";
+  if (titre !== "") b.title = titre;
+  let v = actif;
+  const peindre = (): void => { b.setAttribute("aria-pressed", String(v)); };
+  b.addEventListener("click", () => { v = !v; peindre(); surChange(v); });
+  peindre();
+  return { el: b, poser: (x) => { v = x; peindre(); }, valeur: () => v };
+}
+
+/** Le nombre de caramels lu dans un champ, borne. */
+function nombreLu(champ: HTMLInputElement, defaut: number): number {
+  const n = Math.round(Number(champ.value));
+  return Number.isFinite(n) && n >= 2 && n <= 15 ? n : defaut;
+}
+
 /**
- * L'EDITEUR DE PARTIE. `surChange` est prevenu a chaque reglage ; `valeur` rend
- * le modele du moment, et `poser` en impose un autre (« Toutes comme la
+ * L'EDITEUR DE CONSIGNE. `surChange` est prevenu a chaque reglage ; `valeur`
+ * rend la consigne du moment, et `poser` en impose une autre (« Toutes comme la
  * premiere »).
  */
 function editeurDePartie(
-  initial: ModeleVue, surChange: (m: ModeleVue) => void = () => undefined,
-): { el: HTMLElement; valeur: () => ModeleVue; poser: (m: ModeleVue) => void } {
-  let m: ModeleVue = { ...initial };
+  initial: ConsigneVue, surChange: (c: ConsigneVue) => void = () => undefined,
+): { el: HTMLElement; valeur: () => ConsigneVue; poser: (c: ConsigneVue) => void } {
+  let c: ConsigneVue = clonerLaConsigne(initial);
   const boite = el("div", "editeur");
   const nom = el("div", "ed-nom");
+
+  // Ce qu'on a choisi avant de passer une ligne au hasard : la revenir la rend.
+  let bornes: 7 | 10 = c.bornes === "alea" ? 7 : c.bornes;
+  let exact = c.format.t === "exact"
+    ? { tirage: c.format.tirage, jouables: c.format.jouables } : { tirage: 7, jouables: 7 };
+  let plage = c.format.t === "plage"
+    ? { jouablesMin: c.format.jouablesMin, jouablesMax: c.format.jouablesMax,
+        tirageMin: c.format.tirageMin, tirageMax: c.format.tirageMax }
+    : { jouablesMin: 5, jouablesMax: 9, tirageMin: 10, tirageMax: 15 };
+  let quelFormat: "exact" | "plage" = c.format.t === "plage" ? "plage" : "exact";
+  let joker: 0 | 1 | 2 = c.joker === "alea" ? 0 : c.joker;
+  let chrono = c.chrono === "alea" ? 60 : c.chrono;
+  let primes: Record<number, number> | null = c.primes === "alea" || c.primes === null ? null : c.primes;
+
   const changer = (): void => {
-    nom.replaceChildren(document.createTextNode(`${t("Nom de la partie")} : `), el("b", "", nomDeLaPartie(m, t)));
-    surChange({ ...m });
+    peuplerLesPrimes();
+    nom.replaceChildren(document.createTextNode(`${t("Nom de la partie")} : `),
+      el("b", "", nomDeLaConsigne(c, t)));
+    surChange(clonerLaConsigne(c));
   };
 
+  // ------------------------------------------------------------- la grille
   const grille = rangeeDeChoix(t("Grille"), [
     { v: "7", texte: t("Normale") }, { v: "10", texte: t("Super grille") },
-  ], String(m.bornes), (v) => { m.bornes = v === "10" ? 10 : 7; changer(); });
+  ], String(bornes), (v) => {
+    bornes = v === "10" ? 10 : 7;
+    c.bornes = bornes;
+    changer();
+  });
+  const grilleAlea = bascule(t("Aléatoire"), c.bornes === "alea", (on) => {
+    c.bornes = on ? "alea" : bornes;
+    grille.rang.classList.toggle("ed-mort", on);
+    changer();
+  }, t("Normale ou super grille, à pile ou face"));
+  grille.rang.classList.toggle("ed-mort", c.bornes === "alea");
+  grille.rang.appendChild(grilleAlea.el);
 
-  // LE FORMAT : trois qu'on connait, et « Autre » qui montre deux nombres.
-  const posables = champNombre(2, 15, m.jouables, t("Lettres posables"));
-  const tires = champNombre(2, 15, m.tirage, t("Lettres tirées"));
+  // -------------------------------------------------------------- le format
+  const posables = champNombre(2, 15, exact.jouables, t("Lettres posables"));
+  const tires = champNombre(2, 15, exact.tirage, t("Lettres tirées"));
+  const autreTirage = el("span", "");
+  autreTirage.append(document.createTextNode(` ${t("sur")} `), tires);
   const autreFormat = el("span", "ed-rang");
-  autreFormat.append(posables, document.createTextNode(` ${t("sur")} `), tires);
-  const formatDe = (x: ModeleVue): string =>
-    x.tirage === 7 && x.jouables === 7 ? "7/7" : x.tirage === 8 && x.jouables === 7 ? "7/8"
-      : x.tirage === 8 && x.jouables === 8 ? "8/8" : "autre";
+  autreFormat.append(posables, autreTirage);
+
+  const pJMin = champNombre(2, 15, plage.jouablesMin, t("Posables au moins"));
+  const pJMax = champNombre(2, 15, plage.jouablesMax, t("Posables au plus"));
+  const pTMin = champNombre(2, 15, plage.tirageMin, t("Tirées au moins"));
+  const pTMax = champNombre(2, 15, plage.tirageMax, t("Tirées au plus"));
+  const plageTirage = el("span", "");
+  plageTirage.append(document.createTextNode(` ${t("sur")} `), pTMin,
+    document.createTextNode(` ${t("à")} `), pTMax);
+  const plageFormat = el("span", "ed-rang");
+  plageFormat.append(document.createTextNode(`${t("De")} `), pJMin,
+    document.createTextNode(` ${t("à")} `), pJMax, plageTirage);
+
+  const choixDuFormat = (): string =>
+    quelFormat === "plage" ? "plage"
+      : exact.tirage === 7 && exact.jouables === 7 ? "7/7"
+        : exact.tirage === 8 && exact.jouables === 7 ? "7/8"
+          : exact.tirage === 8 && exact.jouables === 8 ? "8/8" : "autre";
+  let choix = choixDuFormat();
+
+  const poserLeFormat = (): void => {
+    c.format = formatAlea.valeur() ? { t: "alea" }
+      : quelFormat === "plage" ? { t: "plage", ...plage }
+        : { t: "exact", tirage: exact.tirage, jouables: exact.jouables };
+  };
+  const montrerLeFormat = (): void => {
+    const alea = formatAlea.valeur();
+    format.rang.classList.toggle("ed-mort", alea);
+    autreFormat.hidden = alea || choix !== "autre";
+    plageFormat.hidden = alea || choix !== "plage";
+    autreTirage.hidden = c.egal;
+    plageTirage.hidden = c.egal;
+  };
+  const remplirLeFormat = (): void => {
+    posables.value = String(exact.jouables);
+    tires.value = String(exact.tirage);
+    pJMin.value = String(plage.jouablesMin);
+    pJMax.value = String(plage.jouablesMax);
+    pTMin.value = String(plage.tirageMin);
+    pTMax.value = String(plage.tirageMax);
+  };
+
   const format = rangeeDeChoix(t("Format"), [
     { v: "7/7", texte: t("7 sur 7") }, { v: "7/8", texte: t("7 sur 8") },
     { v: "8/8", texte: t("8 sur 8") }, { v: "autre", texte: t("Autre") },
-  ], formatDe(m), (v) => {
-    autreFormat.hidden = v !== "autre";
-    if (v === "7/7") { m.jouables = 7; m.tirage = 7; }
-    if (v === "7/8") { m.jouables = 7; m.tirage = 8; }
-    if (v === "8/8") { m.jouables = 8; m.tirage = 8; }
-    posables.value = String(m.jouables);
-    tires.value = String(m.tirage);
+    { v: "plage", texte: t("Plage") },
+  ], choix, (v) => {
+    choix = v;
+    quelFormat = v === "plage" ? "plage" : "exact";
+    if (v === "7/7") { exact.jouables = 7; exact.tirage = 7; }
+    if (v === "7/8") { exact.jouables = 7; exact.tirage = 8; }
+    if (v === "8/8") { exact.jouables = 8; exact.tirage = 8; }
+    if (c.egal) exact.tirage = exact.jouables;
+    remplirLeFormat();
+    montrerLeFormat();
+    poserLeFormat();
     changer();
   });
-  format.rang.appendChild(autreFormat);
-  autreFormat.hidden = formatDe(m) !== "autre";
-  const surNombres = (): void => {
-    const p = Math.round(Number(posables.value)), ti = Math.round(Number(tires.value));
-    if (Number.isFinite(p)) m.jouables = p;
-    if (Number.isFinite(ti)) m.tirage = ti;
+  const formatAlea = bascule(t("Aléatoire"), c.format.t === "alea", () => {
+    montrerLeFormat();
+    poserLeFormat();
+    changer();
+  }, t("Le tirage de 2 à 15 lettres, les posables de 2 au tirage"));
+  const egal = bascule(t("Égal"), c.egal, (on) => {
+    c.egal = on;
+    if (on) { exact.tirage = exact.jouables; remplirLeFormat(); }
+    montrerLeFormat();
+    poserLeFormat();
+    changer();
+  }, t("Le tirage et les posables sont le même nombre : 2 sur 2, 3 sur 3…"));
+  format.rang.append(autreFormat, plageFormat, formatAlea.el, egal.el);
+
+  const surLesNombres = (): void => {
+    exact.jouables = nombreLu(posables, exact.jouables);
+    exact.tirage = c.egal ? exact.jouables : nombreLu(tires, exact.tirage);
+    plage.jouablesMin = nombreLu(pJMin, plage.jouablesMin);
+    plage.jouablesMax = nombreLu(pJMax, plage.jouablesMax);
+    plage.tirageMin = nombreLu(pTMin, plage.tirageMin);
+    plage.tirageMax = nombreLu(pTMax, plage.tirageMax);
+    poserLeFormat();
     changer();
   };
-  posables.addEventListener("input", surNombres);
-  tires.addEventListener("input", surNombres);
+  for (const champ of [posables, tires, pJMin, pJMax, pTMin, pTMax]) {
+    champ.addEventListener("input", surLesNombres);
+  }
 
-  const jokerDe = (x: ModeleVue): string => (!x.joker ? "0" : x.jokersParCoup === 2 ? "2" : "1");
-  const joker = rangeeDeChoix(t("Joker"), [
+  // --------------------------------------------------------------- le joker
+  const jokerRang = rangeeDeChoix(t("Joker"), [
     { v: "0", texte: t("Sans") }, { v: "1", texte: t("Un") }, { v: "2", texte: t("Deux") },
-  ], jokerDe(m), (v) => {
-    m.joker = v !== "0";
-    if (v === "2") m.jokersParCoup = 2; else delete m.jokersParCoup;
+  ], String(joker), (v) => {
+    joker = (v === "2" ? 2 : v === "1" ? 1 : 0);
+    c.joker = joker;
     changer();
   });
+  const jokerAlea = bascule(t("Aléatoire"), c.joker === "alea", (on) => {
+    c.joker = on ? "alea" : joker;
+    jokerRang.rang.classList.toggle("ed-mort", on);
+    changer();
+  }, t("Sans, un ou deux jokers"));
+  jokerRang.rang.classList.toggle("ed-mort", c.joker === "alea");
+  jokerRang.rang.appendChild(jokerAlea.el);
 
-  // LE TEMPS PAR COUP : les chronos de tous les jours, et « Autre ».
+  // -------------------------------------------------------- le temps par coup
   const CHRONOS = [15, 30, 60, 90, 120, 180];
-  const secondes = champNombre(5, 3600, m.chrono, t("Secondes par coup"));
+  const secondes = champNombre(5, 3600, chrono, t("Secondes par coup"));
+  secondes.max = "3600";
   const autreChrono = el("span", "ed-rang");
   autreChrono.append(secondes, document.createTextNode(` ${t("secondes")}`));
-  const chrono = rangeeDeChoix(t("Temps par coup"), [
-    ...CHRONOS.map((c) => ({ v: String(c), texte: chronoDuNom(c) })), { v: "autre", texte: t("Autre") },
-  ], CHRONOS.includes(m.chrono) ? String(m.chrono) : "autre", (v) => {
-    autreChrono.hidden = v !== "autre";
-    if (v !== "autre") m.chrono = Number(v);
-    secondes.value = String(m.chrono);
+  const chronoRang = rangeeDeChoix(t("Temps par coup"), [
+    ...CHRONOS.map((x) => ({ v: String(x), texte: chronoDuNom(x) })), { v: "autre", texte: t("Autre") },
+  ], CHRONOS.includes(chrono) ? String(chrono) : "autre", (v) => {
+    autreChrono.hidden = v !== "autre" || chronoAlea.valeur();
+    if (v !== "autre") chrono = Number(v);
+    secondes.value = String(chrono);
+    c.chrono = chrono;
     changer();
   });
-  chrono.rang.appendChild(autreChrono);
-  autreChrono.hidden = CHRONOS.includes(m.chrono);
+  const chronoAlea = bascule(t("Aléatoire"), c.chrono === "alea", (on) => {
+    c.chrono = on ? "alea" : chrono;
+    chronoRang.rang.classList.toggle("ed-mort", on);
+    autreChrono.hidden = on || CHRONOS.includes(chrono);
+    changer();
+  }, t("De 15 secondes à 3 minutes"));
+  chronoRang.rang.classList.toggle("ed-mort", c.chrono === "alea");
+  chronoRang.rang.append(autreChrono, chronoAlea.el);
+  autreChrono.hidden = c.chrono === "alea" || CHRONOS.includes(chrono);
   secondes.addEventListener("input", () => {
     const s = Math.round(Number(secondes.value));
-    if (Number.isFinite(s)) m.chrono = s;
+    if (Number.isFinite(s) && s >= 5 && s <= 3600) chrono = s;
+    c.chrono = chrono;
     changer();
   });
 
-  boite.append(grille.rang, format.rang, joker.rang, chrono.rang, nom);
+  // --------------------------------------------------------------- les primes
+  //
+  // UNE CASE PAR NOMBRE DE CARAMELS POSABLES. Au-dela de ce que le format
+  // permet, la prime ne servirait jamais -- et quand le format est au hasard,
+  // on montre tout : la partie tiree peut poser quinze caramels.
+  const grillePrimes = el("div", "primes-grille");
+  let primesAffichees = -1;
+  const jouablesMax = (): number =>
+    c.format.t === "exact" ? c.format.jouables : c.format.t === "plage" ? c.format.jouablesMax : 15;
+  function peuplerLesPrimes(): void {
+    const max = jouablesMax();
+    if (max === primesAffichees) return;
+    primesAffichees = max;
+    grillePrimes.replaceChildren();
+    for (let n = 2; n <= max; n++) {
+      const l = document.createElement("label");
+      l.className = "prime";
+      const champ = document.createElement("input");
+      champ.type = "text";
+      champ.inputMode = "numeric";
+      champ.maxLength = 4;
+      champ.value = String(primes?.[n] ?? 0);
+      champ.addEventListener("input", () => {
+        const propre = champ.value.replace(/[^0-9]/g, "");
+        if (propre !== champ.value) champ.value = propre;
+        primes = primes ?? {};
+        primes[n] = Math.max(0, Math.min(9999, Number(propre) || 0));
+        if (c.primes !== "alea") c.primes = primes;
+        changer();
+      });
+      const b = document.createElement("b");
+      b.textContent = String(n);
+      l.append(b, champ);
+      grillePrimes.appendChild(l);
+    }
+  }
+  const primesRang = rangeeDeChoix(t("Primes de farfouilles"), [
+    { v: "usage", texte: t("Habituelles") }, { v: "libres", texte: t("Choisies") },
+  ], primes === null ? "usage" : "libres", (v) => {
+    if (v === "usage") { primes = null; c.primes = null; }
+    else {
+      primes = primes ?? primesDUsage(jouablesMax());
+      c.primes = primes;
+      primesAffichees = -1;
+    }
+    grillePrimes.hidden = v !== "libres";
+    changer();
+  });
+  const primesAlea = bascule(t("Aléatoire"), c.primes === "alea", (on) => {
+    c.primes = on ? "alea" : primes;
+    primesRang.rang.classList.toggle("ed-mort", on);
+    grillePrimes.hidden = on || primes === null;
+    changer();
+  }, t("Un seuil et une progression tirés au sort"));
+  primesRang.rang.classList.toggle("ed-mort", c.primes === "alea");
+  primesRang.rang.appendChild(primesAlea.el);
+  grillePrimes.hidden = c.primes === "alea" || primes === null;
+
+  boite.append(grille.rang, format.rang, jokerRang.rang, chronoRang.rang,
+    primesRang.rang, grillePrimes, nom);
+  montrerLeFormat();
   changer();
 
-  const poser = (x: ModeleVue): void => {
-    m = { ...x };
-    grille.presser(String(m.bornes));
-    format.presser(formatDe(m));
-    autreFormat.hidden = formatDe(m) !== "autre";
-    posables.value = String(m.jouables);
-    tires.value = String(m.tirage);
-    joker.presser(jokerDe(m));
-    chrono.presser(CHRONOS.includes(m.chrono) ? String(m.chrono) : "autre");
-    autreChrono.hidden = CHRONOS.includes(m.chrono);
-    secondes.value = String(m.chrono);
+  const poser = (x: ConsigneVue): void => {
+    c = clonerLaConsigne(x);
+    if (c.bornes !== "alea") bornes = c.bornes;
+    grille.presser(String(bornes));
+    grilleAlea.poser(c.bornes === "alea");
+    grille.rang.classList.toggle("ed-mort", c.bornes === "alea");
+
+    if (c.format.t === "exact") {
+      quelFormat = "exact";
+      exact = { tirage: c.format.tirage, jouables: c.format.jouables };
+    } else if (c.format.t === "plage") {
+      quelFormat = "plage";
+      plage = { jouablesMin: c.format.jouablesMin, jouablesMax: c.format.jouablesMax,
+        tirageMin: c.format.tirageMin, tirageMax: c.format.tirageMax };
+    }
+    choix = choixDuFormat();
+    format.presser(choix);
+    formatAlea.poser(c.format.t === "alea");
+    egal.poser(c.egal);
+    remplirLeFormat();
+    montrerLeFormat();
+
+    if (c.joker !== "alea") joker = c.joker;
+    jokerRang.presser(String(joker));
+    jokerAlea.poser(c.joker === "alea");
+    jokerRang.rang.classList.toggle("ed-mort", c.joker === "alea");
+
+    if (c.chrono !== "alea") chrono = c.chrono;
+    chronoRang.presser(CHRONOS.includes(chrono) ? String(chrono) : "autre");
+    chronoAlea.poser(c.chrono === "alea");
+    chronoRang.rang.classList.toggle("ed-mort", c.chrono === "alea");
+    autreChrono.hidden = c.chrono === "alea" || CHRONOS.includes(chrono);
+    secondes.value = String(chrono);
+
+    primes = c.primes === "alea" || c.primes === null ? primes : { ...c.primes };
+    primesRang.presser(c.primes === null ? "usage" : "libres");
+    primesAlea.poser(c.primes === "alea");
+    primesRang.rang.classList.toggle("ed-mort", c.primes === "alea");
+    grillePrimes.hidden = c.primes === "alea" || c.primes === null;
+    primesAffichees = -1;
+
     changer();
   };
-  return { el: boite, valeur: () => ({ ...m }), poser };
+  return { el: boite, valeur: () => clonerLaConsigne(c), poser };
 }
 
 /** Envoie un formulaire au serveur, et rend sa reponse ou son erreur. */
@@ -11622,9 +11871,136 @@ function direLErreur(boite: HTMLElement, message: string | null): void {
   boite.hidden = message === null;
 }
 
+// ------------------------------------------------------- LES NOTIFICATIONS
+//
+// Voir SPEC.md §29. ELLES VIVENT HORS DES SALONS : le client n'a de liaison
+// avec le serveur que dans un salon, et une invitation envoyee a quelqu'un qui
+// lisait la page Competitif ne trouvait personne. On les demande donc au
+// serveur, toutes les trente secondes, d'ou qu'on soit.
+
+interface NotificationVue {
+  id: string;
+  genre: string;
+  params: Record<string, string>;
+  at: number;
+  lue: boolean;
+}
+
+let notifs: NotificationVue[] = [];
+let notifsNonLues = 0;
+
+const ICONE_CLOCHE =
+  '<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">'
+  + '<path fill="currentColor" d="M12 2.6c-3.2 0-5.4 2.5-5.4 5.6v3.4L4.8 15c-.3.6.1 1.3.8 1.3h12.8'
+  + 'c.7 0 1.1-.7.8-1.3l-1.8-3.4V8.2c0-3.1-2.2-5.6-5.4-5.6Z"/>'
+  + '<path fill="currentColor" d="M9.8 17.8a2.3 2.3 0 0 0 4.4 0Z"/></svg>';
+
+/** La phrase d'une notification, et ou elle mene. */
+function phraseDeLaNotification(n: NotificationVue): { quoi: string; aller: (() => void) | null } {
+  const p = n.params;
+  if (n.genre === "salon") {
+    return {
+      quoi: t2("{de} vous invite dans « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
+      aller: p["salon"] === undefined ? null : () => allerA(p["salon"]!),
+    };
+  }
+  if (n.genre === "equipe") {
+    return {
+      quoi: t2("{de} vous inscrit en équipe dans « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
+      aller: p["tournoi"] === undefined ? null : () => ouvrirLeTournoi(p["tournoi"]!),
+    };
+  }
+  if (n.genre === "tournoi-debut") {
+    return {
+      quoi: t2("« {nom} » commence", { nom: p["nom"] ?? "" }),
+      aller: p["tournoi"] === undefined ? null : () => ouvrirLeTournoi(p["tournoi"]!),
+    };
+  }
+  return { quoi: n.genre, aller: null };
+}
+
+async function chargerLesNotifications(): Promise<void> {
+  if (moiCompte === null) {
+    notifs = [];
+    notifsNonLues = 0;
+    peindreLaCloche();
+    return;
+  }
+  try {
+    const r = await fetch("/api/notifications");
+    if (!r.ok) return;
+    const d = await r.json();
+    notifs = (d.notifications ?? []) as NotificationVue[];
+    notifsNonLues = Number(d.nonLues ?? 0);
+  } catch {
+    return;
+  }
+  peindreLaCloche();
+  if (!$("voile-notifs").hidden) rendreLesNotifications();
+}
+
+function peindreLaCloche(): void {
+  const b = document.getElementById("cloche-notifs");
+  if (b === null) return;
+  const vieux = b.querySelector(".compteur");
+  if (vieux !== null) vieux.remove();
+  if (notifsNonLues > 0) {
+    b.appendChild(el("span", "compteur", notifsNonLues > 9 ? "9+" : String(notifsNonLues)));
+  }
+  b.title = notifsNonLues > 0
+    ? t2(notifsNonLues > 1 ? "{n} notifications" : "{n} notification", { n: notifsNonLues })
+    : t("Notifications");
+}
+
+function rendreLesNotifications(): void {
+  const boite = $("notifs-liste");
+  if (notifs.length === 0) {
+    boite.replaceChildren(el("div", "none", t("Rien pour l'instant.")));
+    return;
+  }
+  boite.replaceChildren(...notifs.map((n) => {
+    const { quoi, aller } = phraseDeLaNotification(n);
+    const ligne = el("button", `ligne${n.lue ? "" : " neuve"}`) as HTMLButtonElement;
+    ligne.type = "button";
+    ligne.append(el("span", "quoi", quoi), el("span", "quand", dateDeTournoi(n.at)));
+    ligne.addEventListener("click", () => {
+      $("voile-notifs").hidden = true;
+      if (aller !== null) aller();
+    });
+    return ligne;
+  }));
+}
+
+function ouvrirLesNotifications(): void {
+  $("voile-notifs").hidden = false;
+  rendreLesNotifications();
+  if (notifsNonLues === 0) return;
+  void (async () => {
+    try {
+      const r = await fetch("/api/notifications/lues", { method: "POST" });
+      if (!r.ok) return;
+      const d = await r.json();
+      notifs = (d.notifications ?? []) as NotificationVue[];
+      notifsNonLues = Number(d.nonLues ?? 0);
+    } catch {
+      return;
+    }
+    peindreLaCloche();
+    rendreLesNotifications();
+  })();
+}
+
+$("notifs-close").addEventListener("click", () => { $("voile-notifs").hidden = true; });
+$("voile-notifs").addEventListener("click", (e) => {
+  if (e.target === $("voile-notifs")) $("voile-notifs").hidden = true;
+});
+
+// TOUTES LES TRENTE SECONDES, et rien ne depend d'une liaison ouverte.
+setInterval(() => { void chargerLesNotifications(); }, 30_000);
+
 // ------------------------------------------------ LA PAGE D'ADMINISTRATION
 
-type OngletAdmin = "pdj" | "topping" | "battle";
+type OngletAdmin = "pdj" | "hebdo" | "topping" | "battle";
 let adOnglet: OngletAdmin = "pdj";
 let adLexique = "ods9";
 let adOccupe = false;
@@ -11642,9 +12018,15 @@ function ouvrirLAdministrationDuCompetitif(pousser = true): void {
 function peindreLOngletAdmin(): void {
   presser("ad-onglets", adOnglet);
   $("ad-pdj").hidden = adOnglet !== "pdj";
+  $("ad-hebdo").hidden = adOnglet !== "hebdo";
   $("ad-topping").hidden = adOnglet !== "topping";
   $("ad-battle").hidden = adOnglet !== "battle";
-  if (adOnglet === "pdj") { peindreLesLexiquesDAdmin(); void chargerLesPartiesDeDemain(); }
+  if (adOnglet === "pdj") {
+    peindreLesLexiquesDAdmin();
+    void chargerLesPartiesDeDemain();
+    void chargerLaSemaine();
+  }
+  if (adOnglet === "hebdo") void chargerLesTournoisDeLaSemaine();
   if (adOnglet === "topping" && $("ad-topping").childElementCount === 0) {
     $("ad-topping").appendChild(formulaireDuTournoiDeTopping((id) => ouvrirLeTournoi(id)));
   }
@@ -11656,7 +12038,7 @@ function peindreLOngletAdmin(): void {
 $("ad-onglets").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button") as HTMLElement | null;
   const v = b?.dataset["v"];
-  if (v !== "pdj" && v !== "topping" && v !== "battle") return;
+  if (v !== "pdj" && v !== "hebdo" && v !== "topping" && v !== "battle") return;
   adOnglet = v;
   peindreLOngletAdmin();
 });
@@ -11674,6 +12056,7 @@ function peindreLesLexiquesDAdmin(): void {
       adLexique = id;
       peindreLesLexiquesDAdmin();
       void chargerLesPartiesDeDemain();
+      void chargerLaSemaine();
     });
     return b;
   }));
@@ -11744,12 +12127,12 @@ function peindreLesPartiesDeDemain(d: PartiesDeDemain): void {
     zone.style.flexBasis = "100%";
     bouton(t("Réglages"), () => {
       if (editeur !== null) { zone.replaceChildren(); editeur = null; return; }
-      editeur = editeurDePartie(modeleDe(p.config));
+      editeur = editeurDePartie(consigneDe(p.config));
       const pied = el("div", "ed-pied");
       const appliquer = el("button", "", t("Appliquer")) as HTMLButtonElement;
       appliquer.type = "button";
       appliquer.addEventListener("click", () => {
-        void changerDemain({ action: "reglages", partie: p.n, modele: editeur!.valeur() });
+        void changerDemain({ action: "reglages", partie: p.n, consigne: editeur!.valeur() });
       });
       pied.appendChild(appliquer);
       editeur.el.appendChild(pied);
@@ -11812,6 +12195,251 @@ $("apercu-close").addEventListener("click", () => { $("voile-apercu").hidden = t
 $("voile-apercu").addEventListener("click", (e) => {
   if (e.target === $("voile-apercu")) $("voile-apercu").hidden = true;
 });
+
+// ------------------------------------------ LES MODELES DE LA SEMAINE
+//
+// Sept listes de consignes par lexique (SPEC.md §29). Ce sont elles qui
+// decident des parties du lendemain ; les parties de demain, deja tirees, se
+// corrigent au-dessus.
+
+/** 0 pour lundi, 6 pour dimanche. */
+let adJour = 0;
+let semaineVue: (ConsigneVue[] | null)[] = [];
+let semEditeurs: ReturnType<typeof editeurDePartie>[] = [];
+
+/** Le nom d'un jour de la semaine, majuscule en tete. */
+function nomDuJourDeLaSemaine(i: number): string {
+  const j = JOURS_DE_LA_SEMAINE[i] ?? "";
+  return t(j.charAt(0).toUpperCase() + j.slice(1));
+}
+
+function peindreLeChoixDuJour(): void {
+  const s = $("ad-jour") as HTMLSelectElement;
+  if (s.childElementCount === 0) {
+    for (let i = 0; i < JOURS_DE_LA_SEMAINE.length; i++) {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = nomDuJourDeLaSemaine(i);
+      s.appendChild(o);
+    }
+    s.addEventListener("change", () => {
+      adJour = Number(s.value);
+      peindreLeJourDeLaSemaine();
+    });
+  }
+  s.value = String(adJour);
+}
+
+async function chargerLaSemaine(): Promise<void> {
+  peindreLeChoixDuJour();
+  direLErreur($("ad-sem-error"), null);
+  try {
+    const r = await fetch(`/api/admin/semaine?lexique=${encodeURIComponent(adLexique)}`);
+    const d = await r.json();
+    if (!r.ok) { direLErreur($("ad-sem-error"), d.erreur ?? "serveur injoignable"); return; }
+    semaineVue = d.semaine as (ConsigneVue[] | null)[];
+    peindreLeJourDeLaSemaine();
+  } catch {
+    direLErreur($("ad-sem-error"), "serveur injoignable");
+  }
+}
+
+function peindreLeJourDeLaSemaine(): void {
+  const consignes = semaineVue[adJour] ?? [];
+  semEditeurs = [];
+  peindreLesConsignesDuJour(consignes.length, consignes);
+  $("ad-sem-etat").hidden = consignes.length > 0;
+  $("ad-sem-etat").textContent = t("Aucune consigne : les parties d'office.");
+}
+
+function peindreLesConsignesDuJour(n: number, depart: ConsigneVue[] = []): void {
+  while (semEditeurs.length < n) {
+    semEditeurs.push(editeurDePartie(depart[semEditeurs.length]
+      ?? semEditeurs[semEditeurs.length - 1]?.valeur() ?? CONSIGNE_NORMALE));
+  }
+  semEditeurs.length = n;
+  $("ad-sem-nombre").textContent = String(n);
+  $("ad-sem-parties").replaceChildren(...semEditeurs.map((e, i) => {
+    const bloc = el("div", "ad-sem-partie");
+    const titre = el("h3", "", `P${i + 1}`);
+    bloc.append(titre, e.el);
+    return bloc;
+  }));
+}
+
+$("ad-sem-moins").addEventListener("click", () => {
+  if (semEditeurs.length > 0) peindreLesConsignesDuJour(semEditeurs.length - 1);
+});
+$("ad-sem-plus").addEventListener("click", () => {
+  if (semEditeurs.length < 8) peindreLesConsignesDuJour(semEditeurs.length + 1);
+});
+$("ad-sem-valider").addEventListener("click", () => { void enregistrerLeJour(semEditeurs.map((e) => e.valeur())); });
+$("ad-sem-vider").addEventListener("click", () => {
+  confirmer(t2("Retirer les consignes du {jour} ? Ce jour reprendra les parties d'office.",
+    { jour: nomDuJourDeLaSemaine(adJour).toLowerCase() }), () => void enregistrerLeJour([]));
+});
+
+async function enregistrerLeJour(consignes: ConsigneVue[]): Promise<void> {
+  const { ok, d } = await envoyerAuServeur("/api/admin/semaine",
+    { lexique: adLexique, jour: adJour, consignes });
+  if (!ok) { direLErreur($("ad-sem-error"), d.erreur ?? "serveur injoignable"); return; }
+  direLErreur($("ad-sem-error"), null);
+  semaineVue = d.semaine as (ConsigneVue[] | null)[];
+  peindreLeJourDeLaSemaine();
+  flash(t2("{jour} enregistré", { jour: nomDuJourDeLaSemaine(adJour) }), "ok");
+}
+
+// ------------------------------------------ LES TOURNOIS DE LA SEMAINE
+
+interface ModeleHebdoVue {
+  id: string;
+  nom: string;
+  lexique: string;
+  equipe: number;
+  jourDebut: number;
+  jourFin: number;
+  consignes: ConsigneVue[];
+  actif: boolean;
+}
+
+async function chargerLesTournoisDeLaSemaine(): Promise<void> {
+  const boite = $("ad-hebdo");
+  boite.replaceChildren(el("p", "fo-aide", t("Chargement…")));
+  let modeles: ModeleHebdoVue[];
+  try {
+    const r = await fetch("/api/admin/hebdo");
+    const d = await r.json();
+    if (!r.ok) { boite.replaceChildren(el("p", "fo-aide", t(d.erreur ?? "serveur injoignable"))); return; }
+    modeles = d.modeles as ModeleHebdoVue[];
+  } catch {
+    boite.replaceChildren(el("p", "fo-aide", t("serveur injoignable")));
+    return;
+  }
+  boite.replaceChildren();
+  boite.appendChild(el("p", "fo-aide", t("Un tournoi commence à 5 h 30 le matin de son jour de début, "
+    + "et finit à 5 h 30 le lendemain de son jour de fin. Son instance naît la veille, avec ses parties.")));
+  if (modeles.length === 0) boite.appendChild(el("p", "fo-aide", t("Aucun tournoi de la semaine.")));
+  for (const m of modeles) {
+    const ligne = el("div", "ad-hebdo-modele");
+    const tete = el("div", "ad-ligne");
+    const nom = el("div", "ad-nom", m.nom);
+    nom.style.flex = "1";
+    nom.appendChild(el("i", "", [
+      t2("du {a} au {b}", { a: nomDuJourDeLaSemaine(m.jourDebut).toLowerCase(),
+        b: nomDuJourDeLaSemaine(m.jourFin).toLowerCase() }),
+      dictionnaire(m.lexique).nom,
+      t2(m.consignes.length > 1 ? "{n} parties" : "{n} partie", { n: m.consignes.length }),
+      m.actif ? "" : t("en sommeil"),
+    ].filter((s) => s !== "").join(" · ")));
+    tete.appendChild(nom);
+    const zone = el("div", "");
+    const modifier = el("button", "", t("Modifier")) as HTMLButtonElement;
+    modifier.type = "button";
+    modifier.addEventListener("click", () => {
+      if (zone.childElementCount > 0) { zone.replaceChildren(); return; }
+      zone.replaceChildren(formulaireDuTournoiDeLaSemaine(() => void chargerLesTournoisDeLaSemaine(), m));
+    });
+    const jeter = el("button", "", t("Supprimer")) as HTMLButtonElement;
+    jeter.type = "button";
+    jeter.addEventListener("click", () => {
+      confirmer(t2("Supprimer « {nom} » ?", { nom: m.nom }), () => {
+        void (async () => {
+          await envoyerAuServeur("/api/admin/hebdo", { supprimer: true, id: m.id });
+          void chargerLesTournoisDeLaSemaine();
+        })();
+      });
+    });
+    tete.append(modifier, jeter);
+    ligne.append(tete, zone);
+    boite.appendChild(ligne);
+  }
+  const neuf = el("div", "ad-hebdo-modele");
+  neuf.appendChild(formulaireDuTournoiDeLaSemaine(() => void chargerLesTournoisDeLaSemaine()));
+  boite.appendChild(neuf);
+}
+
+/** Les sept jours en puces, pour le début et la fin d'un tournoi de la semaine. */
+function choixDuJourDeLaSemaine(valeur: number, surChoix: (n: number) => void): HTMLElement {
+  return rangeeDeChoix("", JOURS_DE_LA_SEMAINE.map((_, i) => ({ v: String(i), texte: nomDuJourDeLaSemaine(i) })),
+    String(valeur), (v) => surChoix(Number(v))).rang;
+}
+
+/**
+ * LE FORMULAIRE D'UN TOURNOI DE LA SEMAINE. Le meme cree et modifie : ses
+ * horaires ne se reglent pas, seulement ses deux jours (SPEC.md §29).
+ */
+function formulaireDuTournoiDeLaSemaine(surFait: () => void, initial?: ModeleHebdoVue): HTMLElement {
+  const f = el("div", "formulaire");
+  const nom = document.createElement("input");
+  nom.type = "text";
+  nom.maxLength = 60;
+  nom.placeholder = t("Nom du tournoi");
+  nom.value = initial?.nom ?? "";
+  let lexique = initial?.lexique ?? adLexique;
+  let equipe = initial?.equipe ?? 1;
+  let jourDebut = initial?.jourDebut ?? 6;
+  let jourFin = initial?.jourFin ?? 6;
+  let actif = initial?.actif ?? true;
+
+  const parties = el("div", "fo-deux");
+  parties.style.flexDirection = "column";
+  const depart = initial?.consignes ?? [];
+  const editeurs: ReturnType<typeof editeurDePartie>[] = [];
+  const peindreLesParties = (n: number): void => {
+    while (editeurs.length < n) {
+      editeurs.push(editeurDePartie(
+        depart[editeurs.length] ?? editeurs[editeurs.length - 1]?.valeur() ?? CONSIGNE_NORMALE));
+    }
+    editeurs.length = n;
+    parties.replaceChildren(...editeurs.map((e, i) => {
+      const bloc = el("div", "fo-partie");
+      const titre = el("h3", "", `P${i + 1}`);
+      if (i === 0 && n > 1) {
+        const toutes = el("button", "", t("Toutes comme la première")) as HTMLButtonElement;
+        toutes.type = "button";
+        toutes.addEventListener("click", () => {
+          for (const autre of editeurs.slice(1)) autre.poser(editeurs[0]!.valeur());
+        });
+        titre.appendChild(toutes);
+      }
+      bloc.append(titre, e.el);
+      return bloc;
+    }));
+  };
+  peindreLesParties(Math.max(1, depart.length));
+
+  const sommeil = bascule(t("Actif"), actif, (on) => { actif = on; });
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const faire = el("button", "valider",
+    t(initial === undefined ? "Créer le tournoi de la semaine" : "Enregistrer les changements")) as HTMLButtonElement;
+  faire.type = "button";
+  faire.addEventListener("click", () => {
+    void (async () => {
+      faire.disabled = true;
+      const { ok, d } = await envoyerAuServeur("/api/admin/hebdo", {
+        ...(initial === undefined ? {} : { id: initial.id }),
+        nom: nom.value, lexique, equipe, jourDebut, jourFin, actif,
+        parties: editeurs.map((e) => e.valeur()),
+      });
+      faire.disabled = false;
+      if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
+      direLErreur(erreur, null);
+      surFait();
+    })();
+  });
+
+  f.append(
+    champ(t("Nom du tournoi"), nom),
+    champ(t("Lexique"), choixDuLexique(lexique, (v) => { lexique = v; })),
+    champ(t("Du"), choixDuJourDeLaSemaine(jourDebut, (n) => { jourDebut = n; })),
+    champ(t("Au"), choixDuJourDeLaSemaine(jourFin, (n) => { jourFin = n; })),
+    champ(t("Joueurs par équipe"), compteur(1, 4, equipe, (n) => { equipe = n; })),
+    champ(t("Nombre de parties"), compteur(1, 10, Math.max(1, depart.length), (n) => peindreLesParties(n))),
+    parties, champ("", sommeil.el), erreur, faire,
+  );
+  return f;
+}
 
 // ------------------------------------------------ CREER UN TOURNOI DE TOPPING
 //
@@ -11889,12 +12517,12 @@ function formulaireDuTournoiDeTopping(surFait: (id: string) => void, initial?: T
 
   const parties = el("div", "fo-deux");
   parties.style.flexDirection = "column";
-  const modelesDeDepart = (initial?.parties ?? []).map((p) => modeleDe(p.config));
+  const modelesDeDepart = (initial?.parties ?? []).map((p) => consigneDe(p.config));
   const editeurs: ReturnType<typeof editeurDePartie>[] = [];
   const peindreLesParties = (n: number): void => {
     while (editeurs.length < n) {
       editeurs.push(editeurDePartie(
-        modelesDeDepart[editeurs.length] ?? editeurs[editeurs.length - 1]?.valeur() ?? MODELE_NORMAL));
+        modelesDeDepart[editeurs.length] ?? editeurs[editeurs.length - 1]?.valeur() ?? CONSIGNE_NORMALE));
     }
     editeurs.length = n;
     parties.replaceChildren(...editeurs.map((e, i) => {
@@ -11977,7 +12605,7 @@ function formulaireDuTournoiDeBattle(surFait: (id: string) => void, initial?: To
     meilleurDeFinale: b0?.meilleurDeFinale ?? 3,
     joursParTour: b0?.joursParTour ?? 3,
   };
-  const editeur = editeurDePartie(b0?.partie ?? MODELE_NORMAL);
+  const editeur = editeurDePartie(b0 == null ? CONSIGNE_NORMALE : consigneExacte(b0.partie));
 
   /** Un choix « tous / un nombre », pour les rencontres et les qualifies. */
   const tousOuNombre = (
@@ -12177,7 +12805,9 @@ function tuileDeTournoi(x: TournoiVue): HTMLElement {
   etat.appendChild(el("span", "ou", t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length })));
   dedans.appendChild(etat);
   c.appendChild(dedans);
-  c.addEventListener("click", () => ouvrirLeTournoi(x.id));
+  c.addEventListener("click", () => {
+    if (fini) ouvrirLesResultatsDuTournoi(x.id, "cumul"); else ouvrirLeTournoi(x.id);
+  });
   return c;
 }
 

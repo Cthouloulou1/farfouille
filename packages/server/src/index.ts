@@ -42,7 +42,9 @@ import {
   journalDeLaPartie, journalDuSalon, paliersDuCoup, relire, relireEtGarder,
 } from "./lecteur.ts";
 import {
-  apercuDeDemain, apercusDe, assurerLesPartiesDuJour, changerLesPartiesDeDemain,
+  apercuDeDemain, apercusDe, assurerLesPartiesDuJour, assurerLesTournoisDeLaSemaine,
+  changerLesPartiesDeDemain, ecrireUnModeleHebdo, laSemaineDe, modeleHebdo, reglerLaSemaine,
+  supprimerUnModeleHebdo, tousLesModelesHebdo,
   creerUnTournoiDeBattle, creerUnTournoiDeTopping, cumulDeLEpreuve, epreuveDuJour,
   classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
   partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
@@ -54,7 +56,11 @@ import {
   type ChangementDuJour, type Jeu, type Manche, type ReglagesBattle, type Tournoi,
 } from "./competitif.ts";
 import {
-  LEXIQUES_DU_JOUR, decalerLeJour, instantDeParis, jourDe, jourValide, modeleRecevable,
+  marquerLues, notificationsDe, notifier, ouvrirLesNotifications,
+} from "./notifications.ts";
+import {
+  LEXIQUES_DU_JOUR, consigneRecevable, decalerLeJour, instantDeParis, jourDe, jourValide,
+  tirerUneConsigne, type ConsigneDePartie,
   nomDeLaPartie, type ModeleDePartie,
 } from "../../engine/src/epreuves.ts";
 
@@ -651,6 +657,26 @@ function mancheRelue(id: string, moi: Compte | undefined): Record<string, unknow
 }
 
 /**
+ * PREVIENT LES INSCRITS D'UN TOURNOI QUI VIENT DE COMMENCER (SPEC.md §29).
+ *
+ * La cle `debut:<id>` ne laisse passer qu'une notification par tournoi et par
+ * compte, meme si le serveur redemarre entre deux battements. Un tournoi
+ * commence depuis plus d'un jour ne previent plus personne : au premier
+ * demarrage apres cette version, l'ancien n'a pas a sonner.
+ */
+function prevenirLesTournoisQuiCommencent(maintenant = Date.now()): void {
+  for (const t of tousLesTournois()) {
+    if (maintenant < t.debut || maintenant - t.debut > 86_400_000) continue;
+    if (t.fin !== null && maintenant >= t.fin) continue;
+    for (const i of t.inscrits) {
+      for (const qui of [i.compte, ...i.partenaires]) {
+        notifier(qui, "tournoi-debut", { tournoi: t.id, nom: t.nom }, `debut:${t.id}`);
+      }
+    }
+  }
+}
+
+/**
  * QUI PEUT CREER UN TOURNOI (SPEC.md §29). Un seul endroit, a dessein : le jour
  * ou le tournoi de topping s'ouvre a tous, c'est cette ligne qui change.
  */
@@ -676,6 +702,35 @@ function lireLEnteteDuTournoi(c: any): { nom: string; lexique: string; equipe: n
   return { nom, lexique, equipe };
 }
 
+/** Une liste de consignes de partie, verifiee une a une. */
+function lireDesConsignes(x: unknown, max: number): ConsigneDePartie[] | string {
+  if (!Array.isArray(x) || x.length < 1 || x.length > max) return `de 1 à ${max} parties`;
+  const out: ConsigneDePartie[] = [];
+  for (const [i, brut] of x.entries()) {
+    const c = consigneRecevable(brut);
+    if (typeof c === "string") return `P${i + 1} : ${c}`;
+    out.push(c);
+  }
+  return out;
+}
+
+/** Le formulaire d'un tournoi de la semaine, verifie champ par champ. */
+function lireUnModeleHebdo(c: any): {
+  id?: string; nom: string; lexique: string; equipe: number;
+  jourDebut: number; jourFin: number; consignes: ConsigneDePartie[]; actif: boolean;
+} | string {
+  const entete = lireLEnteteDuTournoi(c);
+  if (typeof entete === "string") return entete;
+  const jourDebut = entierEntre(c.jourDebut, 0, 6), jourFin = entierEntre(c.jourFin, 0, 6);
+  if (jourDebut === null || jourFin === null) return "Donnez le jour de début et le jour de fin";
+  const consignes = lireDesConsignes(c.parties, 10);
+  if (typeof consignes === "string") return consignes;
+  return {
+    ...(typeof c.id === "string" && c.id !== "" ? { id: c.id } : {}),
+    ...entete, jourDebut, jourFin, consignes, actif: c.actif !== false,
+  };
+}
+
 /** Le formulaire du tournoi de topping, verifie champ par champ. */
 function lireUnTournoiDeTopping(c: any): {
   nom: string; lexique: string; debut: number; fin: number; equipe: number; modeles: ModeleDePartie[];
@@ -686,16 +741,11 @@ function lireUnTournoiDeTopping(c: any): {
   if (debut === null || fin === null) return "Donnez une date de début et une date de fin";
   if (fin <= debut) return "La fin vient après le début";
   if (fin <= Date.now()) return "La fin est déjà passée";
-  if (!Array.isArray(c.parties) || c.parties.length < 1 || c.parties.length > 10) {
-    return "Un tournoi compte de 1 à 10 parties";
-  }
-  const modeles: ModeleDePartie[] = [];
-  for (const [i, brut] of c.parties.entries()) {
-    const m = modeleRecevable(brut);
-    if (typeof m === "string") return `P${i + 1} : ${m}`;
-    modeles.push(m);
-  }
-  return { ...entete, debut, fin, modeles };
+  // LES PARTIES ARRIVENT EN CONSIGNES (SPEC.md §29) : l'editeur est le meme
+  // partout, et ce qu'il laisse au sort se tire ici, une fois pour toutes.
+  const consignes = lireDesConsignes(c.parties, 10);
+  if (typeof consignes === "string") return consignes;
+  return { ...entete, debut, fin, modeles: consignes.map((x) => tirerUneConsigne(x)) };
 }
 
 /** Le formulaire du tournoi de battle, verifie champ par champ. */
@@ -734,8 +784,9 @@ function lireUnTournoiDeBattle(c: any): {
     return "Une rencontre de tableau se joue au meilleur d'un nombre impair de manches";
   }
   if (joursParTour === null) return "Un tour de tableau dure de 1 à 30 jours";
-  const partie = modeleRecevable(c.partie);
-  if (typeof partie === "string") return `Partie d'une manche : ${partie}`;
+  const consigne = consigneRecevable(c.partie);
+  if (typeof consigne === "string") return `Partie d'une manche : ${consigne}`;
+  const partie = tirerUneConsigne(consigne);
   return {
     ...entete, debut,
     battle: {
@@ -1449,9 +1500,9 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       else if (corps.action === "retirer") changement = { action: "retirer" };
       else if (corps.action === "graine") changement = { action: "graine", partie: Number(corps.partie) };
       else if (corps.action === "reglages") {
-        const modele = modeleRecevable(corps.modele);
-        if (typeof modele === "string") { json(res, 400, { erreur: modele }); return; }
-        changement = { action: "reglages", partie: Number(corps.partie), modele };
+        const consigne = consigneRecevable(corps.consigne);
+        if (typeof consigne === "string") { json(res, 400, { erreur: consigne }); return; }
+        changement = { action: "reglages", partie: Number(corps.partie), consigne };
       } else { json(res, 400, { erreur: "action inconnue" }); return; }
       const r = await changerLesPartiesDeDemain(lexique, changement, moi.pseudo, LAYOUT);
       if (typeof r === "string") { json(res, 400, { erreur: r }); return; }
@@ -1478,6 +1529,76 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (a === null) { json(res, 404, { erreur: "cette partie n'existe pas" }); return; }
     console.log(`[competitif] apercu de la P${a.partie} du ${a.jour} par ${moi.pseudo}`);
     json(res, 200, a);
+    return;
+  }
+
+  // LES MODELES DE LA SEMAINE (SPEC.md §29) : sept listes de consignes par
+  // lexique, qui decident des parties du lendemain.
+  if (url === "/api/admin/semaine" && (req.method === "GET" || req.method === "POST")) {
+    const moi = quiParle(req);
+    if (moi === undefined || !moi.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    let lexique = parametres(req).get("lexique") ?? "";
+    if (req.method === "POST") {
+      let corps: any;
+      try { corps = await corpsJson(req); }
+      catch { json(res, 400, { erreur: "requête illisible" }); return; }
+      lexique = String(corps.lexique ?? "");
+      if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique)) {
+        json(res, 400, { erreur: "lexique inconnu" });
+        return;
+      }
+      const jour = entierEntre(corps.jour, 0, 6);
+      if (jour === null) { json(res, 400, { erreur: "jour de la semaine inconnu" }); return; }
+      // UNE LISTE VIDE EST UN ORDRE : ce jour n'a plus de consignes, et reprend
+      // les parties d'office du lexique.
+      const consignes = Array.isArray(corps.consignes) && corps.consignes.length === 0
+        ? [] : lireDesConsignes(corps.consignes, 8);
+      if (typeof consignes === "string") { json(res, 400, { erreur: consignes }); return; }
+      reglerLaSemaine(lexique, jour, consignes, moi.pseudo);
+    }
+    if (!(LEXIQUES_DU_JOUR as readonly string[]).includes(lexique)) lexique = LEXIQUES_DU_JOUR[0];
+    json(res, 200, { lexique, semaine: laSemaineDe(lexique) });
+    return;
+  }
+
+  // LES TOURNOIS DE LA SEMAINE : les modeles, pas leurs instances.
+  if (url === "/api/admin/hebdo" && (req.method === "GET" || req.method === "POST")) {
+    const moi = quiParle(req);
+    if (moi === undefined || !moi.admin) { json(res, 403, { erreur: "réservé" }); return; }
+    if (req.method === "POST") {
+      let corps: any;
+      try { corps = await corpsJson(req); }
+      catch { json(res, 400, { erreur: "requête illisible" }); return; }
+      if (corps.supprimer === true) {
+        const id = String(corps.id ?? "");
+        if (modeleHebdo(id) === undefined) { json(res, 404, { erreur: "ce tournoi n'existe pas" }); return; }
+        supprimerUnModeleHebdo(id, moi.pseudo);
+      } else {
+        const o = lireUnModeleHebdo(corps);
+        if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
+        ecrireUnModeleHebdo({ ...o, par: moi.pseudo });
+        // Une instance peut naitre tout de suite si le tournoi commence demain.
+        void assurerLesTournoisDeLaSemaine(LAYOUT).catch(() => undefined);
+      }
+    }
+    json(res, 200, { modeles: tousLesModelesHebdo() });
+    return;
+  }
+
+  // LES NOTIFICATIONS (SPEC.md §29) : elles vivent hors des salons, et se
+  // relisent d'ou qu'on soit.
+  if (url === "/api/notifications" && req.method === "GET") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 200, { notifications: [], nonLues: 0 }); return; }
+    json(res, 200, notificationsDe(moi.pseudo));
+    return;
+  }
+
+  if (url === "/api/notifications/lues" && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "connectez-vous" }); return; }
+    marquerLues(moi.pseudo);
+    json(res, 200, notificationsDe(moi.pseudo));
     return;
   }
 
@@ -1607,6 +1728,11 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     }
     const erreur = inscrireAuTournoi(t, moi.pseudo, String(corps.noms ?? ""), partenaires);
     if (erreur !== null) { json(res, 400, { erreur }); return; }
+    // NOMME DANS UNE EQUIPE, ON L'APPREND : c'est une tentative qu'on engage
+    // pour quelqu'un d'autre (SPEC.md §29).
+    for (const p of partenaires) {
+      notifier(p, "equipe", { tournoi: t.id, nom: t.nom, de: moi.pseudo });
+    }
     console.log(`[competitif] ${moi.pseudo} s'inscrit au tournoi "${t.nom}"`);
     json(res, 200, { tournoi: tournoiPublic(t) });
     return;
@@ -2471,6 +2597,12 @@ wss.on("connection", (ws, req) => {
       // PREVENU TOUT DE SUITE s'il est deja connecte quelque part : inutile
       // qu'il pense lui-meme a revenir sur ce salon precis pour le decouvrir.
       for (const c of socketsDe(invite)) send(c, { t: "invite", salon: s.id, nomSalon: s.nom });
+      // ET LA NOTIFICATION LE RATTRAPE AILLEURS (SPEC.md §29) : un client n'a de
+      // liaison qu'en salon, et l'invitation ne trouvait personne hors d'un.
+      const invitee = compte(invite);
+      if (invitee !== undefined) {
+        notifier(invitee.pseudo, "salon", { salon: s.id, nom: s.nom, de: moi.nom });
+      }
       send(ws, { t: "result", ok: true, message: `${invite} peut désormais rejoindre` });
       return;
     }
@@ -2716,6 +2848,7 @@ http.listen(PORT, () => {
   lireLesComptes();
   ouvrirLesRecords();
   ouvrirLeCompetitif();
+  ouvrirLesNotifications();
   void assurerLesAdmins(ADMINS, ADMIN_MDP);
 
   console.log(`
@@ -2727,8 +2860,11 @@ http.listen(PORT, () => {
   // LES PARTIES DU JOUR SE FIGENT EN ARRIERE-PLAN : aujourd'hui et demain, puis
   // toutes les dix minutes, pour que le changement de jour les trouve pretes.
   const figer = (): void => {
-    void assurerLesPartiesDuJour(LAYOUT).catch((e) =>
-      console.error(`[competitif] parties du jour non figees : ${(e as Error).message}`));
+    void assurerLesPartiesDuJour(LAYOUT)
+      .then(() => assurerLesTournoisDeLaSemaine(LAYOUT))
+      .then(() => prevenirLesTournoisQuiCommencent())
+      .catch((e) =>
+        console.error(`[competitif] parties du jour non figees : ${(e as Error).message}`));
   };
   figer();
   setInterval(figer, 10 * 60_000).unref();

@@ -1470,10 +1470,44 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .ad-partie .editeur { flex-basis: 100%; }
 .ad-occupe { font-size: 13px; color: var(--ink-faint); }
 
+/* L'EDITEUR DE CONSIGNE : les bascules « Aléatoire » et « Égal », et la ligne
+   morte d'un réglage laissé au sort. */
+.editeur .ed-bascule { padding: 5px 10px; border: 1px solid var(--field-line); border-radius: 4px; background: var(--panel); color: var(--ink-faint); font-size: 12px; }
+.editeur .ed-bascule:hover { color: var(--ink); background: var(--hover); }
+.editeur .ed-bascule[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.editeur .ed-rang.ed-mort > .rc-choix, .editeur .ed-rang.ed-mort > .ed-rang { opacity: .35; pointer-events: none; }
+.editeur .primes-grille { padding-left: 132px; }
+.editeur .prime { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 52px; margin: 0; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+.editeur .prime b { display: block; width: 100%; text-align: center; font-size: 11px; color: var(--ink-soft); font-weight: 500; }
+.editeur .ed-rang > span { font-size: 13px; color: var(--ink-soft); }
+
+/* LES MODELES DE LA SEMAINE, sous les parties de demain. */
+.ad-semaine { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.ad-semaine .fo-aide { margin: 6px 0 0; }
+.ad-semaine select { padding: 6px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+.ad-sem-partie { padding: 10px 0; border-top: 1px solid var(--rule); }
+.ad-sem-partie h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.ad-hebdo-modele { padding: 12px 0; border-top: 1px solid var(--rule); }
+.ad-hebdo-modele .ad-nom { font-size: 14px; color: var(--ink); }
+.ad-hebdo-modele .ad-nom i { font-style: normal; font-size: 12px; color: var(--ink-faint); margin-left: 8px; }
+
+/* LA CLOCHE DU BANDEAU, et sa liste. */
+.bandeau .cloche { position: relative; }
+.bandeau .cloche .compteur { position: absolute; top: -3px; right: -5px; min-width: 15px; padding: 0 3px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 10px; line-height: 15px; text-align: center; font-weight: 600; }
+.notifs-liste { display: flex; flex-direction: column; gap: 1px; max-height: 52vh; overflow-y: auto; margin: 14px 0 18px; }
+.notifs-liste .ligne { display: flex; flex-direction: column; gap: 2px; padding: 8px 9px; border-radius: 4px; text-align: left; background: none; border: none; }
+.notifs-liste .ligne:hover { background: var(--hover); }
+.notifs-liste .ligne.neuve { background: var(--field); }
+.notifs-liste .quoi { font-size: 13.5px; color: var(--ink); }
+.notifs-liste .quand { font-size: 11.5px; color: var(--ink-faint); }
+.notifs-liste .none { padding: 10px 0; font-size: 13px; color: var(--ink-faint); }
+
 /* L'EDITEUR DE PARTIE : quatre reglages, et le nom qui en sort. */
 .editeur { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--field); border-radius: 6px; }
-.editeur [hidden] { display: none; }
 .editeur .ed-rang { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+/* APRES `.ed-rang`, ET NON AVANT : a specificite egale, la derniere regle gagne,
+   et les rangees cachees du format sont elles-memes des `.ed-rang`. */
+.editeur [hidden] { display: none; }
 .editeur .ed-rang > label { width: 120px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); }
 .editeur input[type="number"] { width: 70px; padding: 5px 7px; }
 .editeur .ed-nom { font-size: 14px; color: var(--ink); }
@@ -1880,6 +1914,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
     <div class="rc-barre">
       <div class="rc-vues" id="ad-onglets">
         <button type="button" data-v="pdj">Parties du jour</button>
+        <button type="button" data-v="hebdo">Tournois de la semaine</button>
         <button type="button" data-v="topping">Tournoi de topping</button>
         <button type="button" data-v="battle">Tournoi de battle</button>
       </div>
@@ -1900,7 +1935,30 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       </div>
       <div class="join-error" id="ad-error" hidden></div>
       <div id="ad-parties"></div>
+
+      <!-- LES MODELES DE LA SEMAINE (SPEC.md §29) : sept listes de consignes par
+           lexique, dont se tirent les parties du lendemain. -->
+      <div class="ad-semaine">
+        <div class="cp-tete"><h2>Modèles de la semaine</h2></div>
+        <p class="fo-aide">Les parties du lendemain se tirent de ces consignes. C'est persistant : tous les lundis suivants suivront celles du lundi.</p>
+        <div class="ad-ligne">
+          <span>Jour</span>
+          <select id="ad-jour"></select>
+          <span>Nombre de parties</span>
+          <button type="button" id="ad-sem-moins" aria-label="Une partie de moins">−</button>
+          <b id="ad-sem-nombre">—</b>
+          <button type="button" id="ad-sem-plus" aria-label="Une partie de plus">+</button>
+          <span class="ad-occupe" id="ad-sem-etat" hidden></span>
+        </div>
+        <div class="join-error" id="ad-sem-error" hidden></div>
+        <div id="ad-sem-parties"></div>
+        <div class="ad-ligne">
+          <button type="button" id="ad-sem-valider">Enregistrer ce jour</button>
+          <button type="button" id="ad-sem-vider">Aucune consigne</button>
+        </div>
+      </div>
     </div>
+    <div class="ad-bloc" id="ad-hebdo" hidden></div>
     <div class="ad-bloc" id="ad-topping" hidden></div>
     <div class="ad-bloc" id="ad-battle" hidden></div>
   </div>
@@ -2126,6 +2184,16 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 <!-- INVITER DANS UN SALON PRIVE (SPEC.md §26) : la liste de qui est connecte
      sur le site, un bouton "Inviter" en face de chaque nom. -->
+<!-- LES NOTIFICATIONS (SPEC.md §29) : elles vivent hors des salons, et la
+     cloche du bandeau les rassemble. -->
+<div class="voile" id="voile-notifs" hidden>
+  <div class="pseudo">
+    <h2>Notifications</h2>
+    <div class="notifs-liste" id="notifs-liste"></div>
+    <button class="lien renoncer" id="notifs-close" type="button">Fermer</button>
+  </div>
+</div>
+
 <div class="voile" id="voile-inviter" hidden>
   <div class="pseudo">
     <h2>Inviter</h2>

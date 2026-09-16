@@ -5838,26 +5838,65 @@ pour les trois lexiques en attendant les règles du jour :
 
 Une page à part, `?page=admin-competitif`, ouverte par un bouton
 **Administration** en tête de la page Compétitif. Le bouton n'existe que pour un
-compte d'administration, et le serveur refuse tout le reste. Trois onglets :
-**Parties du jour**, **Tournoi de topping**, **Tournoi de battle**.
+compte d'administration, et le serveur refuse tout le reste. Quatre onglets :
+**Parties du jour**, **Tournois de la semaine**, **Tournoi de topping**,
+**Tournoi de battle**.
 
 ### L'éditeur de partie
 
 Le panneau des réglages d'un salon (§16) porte une douzaine de réglages qui
-n'ont rien à faire ici — pioche, primes, terme, mode, décompte, topping
-collaboratif, montante — et il est câblé pour relancer un salon. **Une partie
-d'épreuve ne varie que par quatre choses**, et l'éditeur ne montre qu'elles :
+n'ont rien à faire ici — pioche, terme, mode, décompte, topping collaboratif,
+montante — et il est câblé pour relancer un salon. **Une partie d'épreuve ne
+varie que par cinq choses**, et l'éditeur ne montre qu'elles :
 
 | réglage | choix |
 |---|---|
 | **Grille** | Normale · Super grille |
-| **Format** | 7 sur 7 · 7 sur 8 · 8 sur 8 · Autre (posables, tirés) |
+| **Format** | 7 sur 7 · 7 sur 8 · 8 sur 8 · Autre (posables, tirés) · Plage |
 | **Joker** | Sans · Un · Deux |
-| **Temps par coup** | 15s · 30s · 60s · 90s · 2min · 3min · Autre |
+| **Temps par coup** | 15s · 30s · 60s · 1min30 · 2min · 3min · Autre |
+| **Primes de farfouilles** | Habituelles · Choisies, une case par nombre de caramels |
 
 Le lexique vient de l'épreuve, le reste des valeurs d'une partie normale. **Le
 nom se lit en direct** sous l'éditeur : c'est lui qu'on vérifie avant de valider.
-Le même éditeur sert aux parties du jour et aux deux tournois.
+Le même éditeur sert aux parties du jour, aux modèles de la semaine et aux deux
+tournois.
+
+#### Ce que l'éditeur rend n'est pas une partie, c'est une consigne
+
+**Chaque ligne porte un bouton Aléatoire**, et une consigne est un modèle dont
+certaines lignes sont laissées au sort. C'est le même objet qu'on écrit pour les
+modèles de la semaine et qu'on applique aux parties de demain : là-bas il se
+garde tel quel et se tire chaque nuit, ici il se tire tout de suite et la partie
+se fige.
+
+| ligne | ce que tire *Aléatoire* |
+|---|---|
+| **Grille** | normale ou super grille, à pile ou face |
+| **Format** | le tirage de 2 à 15, les posables de 2 au tirage |
+| **Joker** | sans (3 chances), un (2), deux (1) |
+| **Temps par coup** | de 15 s à 3 min, par pas de 5 secondes |
+| **Primes** | un seuil et une progression, voir plus bas |
+
+**Plage** ouvre quatre nombres : *de W à X sur Y à Z*. `5 à 9 sur 10 à 15` se
+lit : entre 5 et 9 lettres posables, sur un tirage de 10 à 15 lettres. Les
+posables ne dépassent jamais le tirage tiré, quelle que soit la plage.
+
+**Égal** force le tirage et les posables à être le même nombre : 2 sur 2, 3 sur
+3, jusqu'à 15 sur 15. Il vaut pour les trois façons de donner le format, et
+**l'aléatoire lui obéit** : un format tiré au hasard sous *Égal* donne toujours
+un n sur n.
+
+**Les primes tirées au sort restent des primes.** Le sort donne un **seuil** —
+le nombre de caramels à partir duquel la prime existe, jamais plus de deux en
+dessous du maximum posable —, une **base** de 20 à 80 points par pas de 5, et un
+**pas** de 10 à 40 par pas de 5. Chaque caramel au-delà du seuil ajoute le pas.
+Une table qui décroîtrait, ou qui récompenserait deux caramels autant que huit,
+ne serait pas une variante mais une erreur.
+
+**Une partie aux primes inhabituelles le dit dans son nom** : *Normale, 30s,
+primes libres*. Deux parties qui portent le même nom se jouent de la même façon,
+et c'est une promesse qu'on ne peut pas tenir à moitié.
 
 ### Créer un tournoi de topping
 
@@ -5898,25 +5937,51 @@ seul, garde sa création et sa suppression ; les manches déjà jouées restent
 écrites, elles ne se rattachent simplement plus à rien.
 
 
-### Les règles du jour
+### Les modèles de la semaine
 
-Une règle se donne **par lexique et par numéro de partie**, et peut se limiter à
-certains jours de la semaine. Elle porte une liste de **modèles pondérés**. Un
-modèle est un jeu de réglages dont certains sont des **plages** ; un modèle
-marqué `aleatoire` tire chaque réglage parmi toutes les valeurs permises.
+**Ce qui décide des parties du jour, ce sont sept listes de consignes par
+lexique** — une par jour de la semaine. Le lundi n'a pas à ressembler au
+dimanche, et l'ODS n'a pas à ressembler au CSW.
 
-```
-{ "lexique": "ods", "partie": 2, "jours": ["dim"],
-  "modeles": [
-    { "poids": 3, "grille": "21", "format": "7/7", "chrono": [30, 120, 30] },
-    { "poids": 1, "aleatoire": true } ] }
-```
+Elles se règlent sur la page d'administration, **sous les parties de demain**,
+dans une liste déroulante des sept jours. La liste d'un jour se manie comme
+celle de demain : le nombre de parties, l'éditeur de partie pour chacune. Ce
+qu'on y écrit sont des **consignes**, plages et aléatoires compris.
 
-`[30, 120, 30]` se lit : de 30 à 120 secondes, par pas de 30.
+**C'est persistant.** Changer les parties du lundi change tous les lundis
+suivants. Rien n'est daté : une consigne n'a pas de fin.
 
-**Pour commencer, chaque partie a un seul modèle, fixe**, celui du tableau
-ci-dessus. La structure est là pour le jour où la pool s'élargit ; ce qu'on y
-met ne se décide pas maintenant.
+**Le tirage a lieu la veille**, quand le serveur fige les parties du lendemain :
+il lit les consignes du jour de la semaine de ce lendemain-là, les tire une à
+une, et fige. Un lexique sans consignes pour ce jour garde les parties d'office.
+
+**Les parties de demain se changent toujours à la main**, et ce qu'on y fait
+prime : elles sont déjà tirées, on les corrige. Le bouton **Tout retirer**
+retire selon les consignes du jour — c'est le moyen de voir ce que donne une
+règle qu'on vient d'écrire.
+
+### Les tournois de la semaine
+
+Un deuxième onglet de l'administration, à côté des parties du jour. Il porte la
+liste des **tournois qui reviennent chaque semaine** : un nom, un lexique, des
+équipes, des consignes de parties, et deux jours de la semaine.
+
+**Les horaires ne se règlent pas** : ils sont ceux des parties du jour. Un
+tournoi commence à **5 h 30** le matin de son jour de début, et finit à 5 h 30
+le lendemain de son jour de fin. *Du lundi au dimanche* est donc une semaine
+pleine ; *du dimanche au dimanche* est la journée du dimanche, jusqu'au lundi
+matin — c'est **Le tournoi du dimanche**.
+
+**L'instance naît la veille**, en même temps que les parties du lendemain : ses
+parties se tirent de ses consignes et se figent, et le tournoi paraît sur la
+page Compétitif avec ses dates. Les inscriptions sont donc ouvertes avant qu'il
+commence, comme pour n'importe quel tournoi.
+
+**Modifier le modèle ne touche pas les instances déjà nées.** La semaine qui
+vient est tirée ; c'est celle d'après qui change. Et **supprimer une instance ne
+la fait pas renaître** : le journal garde qu'elle a existé.
+
+Un modèle **se désactive** sans se supprimer : il cesse simplement de produire.
 
 ### La page Compétitif
 
@@ -6078,7 +6143,8 @@ coûté à tout le monde.
    coups ratés sont posés au chrono, en rouge. La médiane en trait plein, la
    moyenne en pointillé, le meilleur temps en bas. Vos propres points sont reliés
    et portent la couleur d'accent.
-2. **La course.** Pour chaque coup, votre temps cumulé moins le cumul médian.
+2. **Écart au cumul médian.** Pour chaque coup, votre temps cumulé moins le
+   cumul médian.
    Au-dessus de zéro, on est en retard sur la médiane. La courbe dit **où** l'on a
    perdu du temps, et pas seulement combien.
 3. **Difficulté des coups.** Une barre par coup : la part des joueurs qui l'ont
@@ -6095,7 +6161,8 @@ lettres posées).
 temps ; une barre, combien de joueurs. Une infobulle suffit ici, la feuille de
 route au-dessus porte déjà tous les chiffres.
 
-**La course ne garde pas de moitié vide.** Son échelle va de l'écart le plus bas
+**L'écart au cumul médian ne garde pas de moitié vide.** Son échelle va de
+l'écart le plus bas
 au plus haut, zéro compris : un joueur toujours en retard sur la médiane n'a pas
 à regarder une moitié de graphique où il n'est jamais passé. Ses graduations
 sont des durées qui se lisent — cinq secondes, trente, une minute —, et non des
@@ -6128,18 +6195,33 @@ parties du jour : la pastille ne s'éteindrait jamais.
 
 ### Les notifications
 
-Une **pastille** sur le bouton du compte, dans le bandeau. Un clic ouvre la
-liste. Ce qui en allume une :
+Une **cloche** dans le bandeau, à gauche du compte, avec le nombre de
+notifications non lues. Un clic ouvre la liste, et la lecture éteint la
+pastille.
 
-- un défi reçu ;
-- un défi que vous avez joué vient d'être joué par quelqu'un ;
-- une invitation dans un tournoi de topping, de duplicate ou de battle : un
-  partenaire vous a nommé en s'inscrivant ;
-- une rencontre de battle à jouer, et sa date limite ;
-- un tournoi où vous êtes inscrit qui commence.
+**Elles vivent hors des salons.** C'était le défaut de la première invitation :
+le client n'a de liaison avec le serveur que dans un salon, et une invitation
+envoyée à quelqu'un qui lisait la page Compétitif ne trouvait personne. Une
+notification s'écrit maintenant au journal, et se relit d'où qu'on soit.
 
-Elles vivent dans un journal en ajout seul, comme les comptes : une ligne quand
-elle naît, une ligne quand elle est lue.
+Ce qui en allume une :
+
+- une **invitation dans un salon** : quelqu'un vous a nommé dans sa liste
+  d'invités ;
+- une **inscription en équipe** : un partenaire vous a nommé en s'inscrivant à
+  un tournoi ;
+- un **tournoi qui commence**, si l'on y est inscrit.
+
+**Un clic sur une notification y mène** : le salon, la page du tournoi. Elle
+porte l'heure, et reste après lecture — une liste qui s'efface toute seule ne
+sert qu'une fois.
+
+**Le client les demande toutes les trente secondes**, et tout de suite après
+avoir reçu une invitation dans un salon : rien ne dépend d'une liaison ouverte,
+et une notification écrite pendant qu'on avait fermé l'onglet attend.
+
+Ce qui reste à brancher : les défis, les rencontres de battle et leur date
+limite.
 
 ### Le palmarès : les médailles et les solos
 
@@ -6233,6 +6315,9 @@ après la fin.
 **Un tournoi dont on a joué toutes les parties se voit d'un regard** : sa tuile
 passe en gris et porte une pastille « ✓ Fini ». C'est ce qu'on cherche des yeux
 en revenant sur la page — ce qu'il reste à jouer.
+
+**Et sa tuile mène au Général**, non plus à sa page : on n'a plus rien à y jouer,
+ce qu'on vient voir c'est où l'on finit.
 
 **Sur la page Compétitif**, chaque tournoi est une tuile : la vignette de la
 grille de sa première partie, son nom, son type, ses dates. Trois groupes : en
@@ -6391,24 +6476,32 @@ topping jusqu'à ses résultats, Général en tête.
 partie, la manche porte toute l'équipe de l'inscription, présente ou non : la
 tentative de chacun part, et la ligne du classement nomme l'équipe entière.
 
+**Le 16 septembre 2026 :** le rejeu d'une manche et le palmarès (médailles et
+solos), les tournois modifiables et supprimables ; puis **l'éditeur de
+consigne** — chaque ligne a son *Aléatoire*, le format a ses plages et son
+*Égal*, les primes se règlent et se tirent —, les **modèles de la semaine**, les
+**tournois de la semaine** et leurs instances, et les **notifications** avec leur
+cloche.
+
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
-par joueur dans un salon qui n'en tient qu'une), les règles du jour, les défis
-et les notifications, le tirage des poules et les rencontres du battle, le
-tournoi de duplicate.
+par joueur dans un salon qui n'en tient qu'une), les défis, le tirage des poules
+et les rencontres du battle, le tournoi de duplicate.
 
 ```bash
-node packages/server/test/check_figees.ts       # figer, servir, la pause
-node packages/server/test/check_competitif.ts   # manches, bilans, classements
+node packages/server/test/check_figees.ts        # figer, servir, la pause
+node packages/server/test/check_competitif.ts    # manches, bilans, classements
+node packages/server/test/check_notifications.ts # la boite d'un compte
+node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 ```
 
 ### L'ordre de construction
 
-1. Partie figée, manche, salon d'épreuve, parties du jour des trois lexiques,
-   page, classement et feuille de route.
-2. Le panneau d'administration et les règles du jour.
-3. Les graphiques.
-4. Les défis et les notifications.
-5. Les tournois de topping.
+1. ~~Partie figée, manche, salon d'épreuve, parties du jour des trois lexiques,
+   page, classement et feuille de route.~~
+2. ~~Le panneau d'administration et les modèles de la semaine.~~
+3. ~~Les graphiques.~~
+4. Les notifications ~~(faites)~~ ; les défis restent.
+5. ~~Les tournois de topping~~, et ceux de la semaine.
 6. Les tournois de duplicate.
 7. Les tournois de battle.
 
@@ -6419,6 +6512,8 @@ node packages/server/test/check_competitif.ts   # manches, bilans, classements
 | **L'aperçu de l'administrateur** | Il sort son auteur du classement de la partie regardée. À confirmer. |
 | **Équipe ou chacun pour soi** | Le choix se fait au salon, dès que des comptes invités sont là. À confirmer. |
 | **Les inscriptions** | Jusqu'à la date de fin, ou jusqu'à une date à part ? |
+| **Un modèle de la semaine modifié** | L'instance déjà née garde ses réglages. Faut-il pouvoir la retirer d'un geste pour qu'elle renaisse ? |
+| **Le tirage d'une consigne** | Il a lieu la veille. Une consigne qui donnerait une partie injouable ne se voit qu'à l'aperçu ; faut-il un tirage d'essai dans l'éditeur ? |
 | **Un partenaire nommé qui refuse** | L'inscription d'une équipe attend-elle l'accord de chaque partenaire nommé par pseudo ? |
 | **Le départage d'une poule** | Après les points et les manches gagnées : les points de manche, la rencontre directe ? |
 | **Un tableau incomplet** | Des effectifs qui ne sont pas des puissances de deux demandent des exempts. Aux mieux classés des poules ? |

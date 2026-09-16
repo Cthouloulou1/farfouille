@@ -14,8 +14,14 @@ import {
   bilanDeLaManche, cumulDeLEpreuve, definirDossierDuCompetitif, epreuveDuJour, finirLaManche,
   mancheDuCompte, ouvrirLeCompetitif, ouvrirUneManche, resultatsDeLaPartie,
   creerUnTournoiDeTopping, epreuveDuTournoi, inscriptionDe, inscrireAuTournoi, tournoiDeLEpreuve,
+  assurerLesTournoisDeLaSemaine, consignesDeLaSemaine, consignesPourLeJour, ecrireUnModeleHebdo,
+  laSemaineDe, modeleHebdo, reglerLaSemaine, supprimerUnModeleHebdo, tousLesModelesHebdo,
+  tousLesTournois,
   classementDesMedailles, listeDesSolos,
 } from "../src/competitif.ts";
+import {
+  debutDuJour, decalerLeJour, jourDe, jourDeLaSemaine, type ConsigneDePartie,
+} from "../../engine/src/epreuves.ts";
 import type { PlayedMove } from "../src/game.ts";
 
 const dossier = mkdtempSync(join(tmpdir(), "competitif-"));
@@ -74,7 +80,11 @@ verifie("une equipe garde la meilleure solution de ses membres",
   equipe.score === 110 && equipe.negatif === 20 && equipe.coups[1]!.trouve);
 
 // ------------------------------------------------------------------ manches
-const jour = "2026-09-15";
+//
+// LE JOUR EN COURS, jamais une date ecrite en dur : une journee close ouvre son
+// detail a tout le monde, et une manche de la veille n'est plus a temps. Un
+// test qui vieillit tombe le lendemain de son ecriture.
+const jour = jourDe(Date.now());
 const ep = epreuveDuJour(jour, "ods9");
 const m1 = ouvrirUneManche({ epreuve: ep, partie: 1, salon: "s1", compte: "ana", jeu: "seul", noms: "", equipe: [] });
 verifie("une manche ouverte consomme la tentative", mancheDuCompte("ana", ep, 1)?.id === m1.id);
@@ -111,7 +121,8 @@ verifie("le journal se relit a l'identique", resultatsDeLaPartie(ep, 1, "ana").l
 const tard = ouvrirUneManche({ epreuve: ep, partie: 3, salon: "s4", compte: "ana", jeu: "seul", noms: "", equipe: [] });
 mkdirSync(dossier, { recursive: true });
 appendFileSync(join(dossier, "competitif.journal.jsonl"), JSON.stringify({
-  t: "fin", manche: tard.id, at: Date.parse("2026-09-16T08:00:00Z"), temps: 1, negatif: 0, score: 0, coups: [],
+  t: "fin", manche: tard.id, at: debutDuJour(decalerLeJour(jour, 1)) + 3_600_000,
+  temps: 1, negatif: 0, score: 0, coups: [],
 }) + "\n");
 ouvrirLeCompetitif();
 const lignesTard = resultatsDeLaPartie(ep, 3, null).lignes;
@@ -196,6 +207,64 @@ for (let i = 0; i < 9; i++) {
 }
 verifie("neuf joueurs ne font pas un solo",
   listeDesSolos({ lexique: "csw24", maintenant: Date.parse("2026-09-15T12:00:00Z") }).length === 0);
+
+// ------------------------------------------------- la semaine et l'hebdo
+//
+// SEPT LISTES DE CONSIGNES PAR LEXIQUE (SPEC.md §29), et les tournois qui
+// reviennent chaque semaine.
+const auHasard: ConsigneDePartie = {
+  bornes: "alea", format: { t: "alea" }, egal: true, joker: "alea", chrono: "alea", primes: "alea",
+};
+verifie("sans consigne, le jour garde les parties d'office",
+  consignesPourLeJour("2026-09-14", "ods9").length === 2
+  && consignesDeLaSemaine("ods9", 0) === undefined);
+
+reglerLaSemaine("ods9", 0, [auHasard, auHasard, auHasard], "admin");
+verifie("le lundi suit ses consignes",
+  consignesPourLeJour("2026-09-14", "ods9").length === 3
+  && consignesPourLeJour("2026-09-21", "ods9").length === 3,
+  "deux lundis de suite");
+verifie("le mardi ne bouge pas", consignesPourLeJour("2026-09-15", "ods9").length === 2);
+verifie("un autre lexique non plus", consignesPourLeJour("2026-09-14", "csw24").length === 3
+  && consignesDeLaSemaine("csw24", 0) === undefined);
+verifie("la semaine a sept jours", laSemaineDe("ods9").length === 7
+  && laSemaineDe("ods9")[0] !== null && laSemaineDe("ods9")[1] === null);
+
+reglerLaSemaine("ods9", 0, [], "admin");
+verifie("une liste vide rend le jour aux parties d'office",
+  consignesDeLaSemaine("ods9", 0) === undefined
+  && consignesPourLeJour("2026-09-14", "ods9").length === 2);
+
+const hebdo = ecrireUnModeleHebdo({
+  nom: "Le tournoi du dimanche", lexique: "ods9", equipe: 1,
+  jourDebut: 6, jourFin: 6, consignes: [auHasard, auHasard], actif: true, par: "admin",
+});
+verifie("un tournoi de la semaine s'ecrit", tousLesModelesHebdo().length === 1
+  && modeleHebdo(hebdo.id)?.nom === "Le tournoi du dimanche");
+ecrireUnModeleHebdo({ ...hebdo, nom: "Le dimanche", jourDebut: 5, par: "quelqu-un-d-autre" });
+verifie("le modifier ne le duplique pas, et garde son auteur",
+  tousLesModelesHebdo().length === 1 && modeleHebdo(hebdo.id)?.nom === "Le dimanche"
+  && modeleHebdo(hebdo.id)?.jourDebut === 5 && modeleHebdo(hebdo.id)?.par === "admin");
+
+// UNE INSTANCE DEJA NEE NE RENAIT PAS, meme supprimee : le journal garde
+// qu'elle a existe.
+const ceJour = jourDe(Date.now());
+ecrireUnModeleHebdo({ ...hebdo, jourDebut: jourDeLaSemaine(ceJour), par: "admin" });
+appendFileSync(join(dossier, "competitif.journal.jsonl"), JSON.stringify({
+  t: "tournoi", id: "deja", type: "topping", nom: "Le dimanche", lexique: "ods9",
+  debut: debutDuJour(ceJour), fin: debutDuJour(decalerLeJour(ceJour, 1)), equipe: 1,
+  parties: [], battle: null, par: "admin", at: Date.now(), hebdo: { modele: hebdo.id, jour: ceJour },
+}) + "\n");
+ouvrirLeCompetitif();
+const avantHebdo = tousLesTournois().length;
+await assurerLesTournoisDeLaSemaine("classique15");
+verifie("l'instance du jour ne renait pas", tousLesTournois().length === avantHebdo,
+  `${tousLesTournois().length} tournoi(s)`);
+
+supprimerUnModeleHebdo(hebdo.id, "admin");
+verifie("un modele retire ne produit plus", tousLesModelesHebdo().length === 0);
+ouvrirLeCompetitif();
+verifie("et la suppression se relit", tousLesModelesHebdo().length === 0);
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);
