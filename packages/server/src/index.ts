@@ -48,7 +48,8 @@ import {
   creerUnTournoiDeBattle, creerUnTournoiDeTopping, cumulDeLEpreuve, epreuveDuJour,
   classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
   partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
-  epreuveDuTournoi, finirLaManche, inscriptionDe, inscrireAuTournoi, joursConnus,
+  epreuveDuTournoi, finirLaManche, finisseursDuTournoi, inscriptionDe, inscrireAuTournoi,
+  joursConnus,
   lexiqueDeLEpreuve, lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId,
   ouvrirLeCompetitif, ouvrirUneManche, partieFigee, partiesDeLEpreuve, partiesDuJour,
   resultatsDeLaPartie, salonDeLaPartie, tournoi, tournoiDeLEpreuve, tournoiPublic,
@@ -1336,9 +1337,12 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const maintenant = Date.now();
       if (maintenant < t.debut) { json(res, 403, { erreur: "Le tournoi n'a pas commencé" }); return; }
       if (t.fin !== null && maintenant >= t.fin) { json(res, 403, { erreur: "Le tournoi est terminé" }); return; }
+      // CLIQUER SUR JOUER INSCRIT (SPEC.md §29) : s'inscrire d'abord n'apprenait
+      // rien a personne. Le formulaire ne sert plus qu'a nommer une equipe.
       if (inscriptionDe(t, moi.pseudo) === undefined) {
-        json(res, 403, { erreur: "Inscrivez-vous d'abord au tournoi" });
-        return;
+        const erreur = inscrireAuTournoi(t, moi.pseudo, "", [], maintenant);
+        if (erreur !== null) { json(res, 403, { erreur }); return; }
+        console.log(`[competitif] ${moi.pseudo} s'inscrit au tournoi "${t.nom}" en le jouant`);
       }
       const epreuve = epreuveDuTournoi(t.id);
       const m = mancheDuCompte(moi.pseudo, epreuve, n);
@@ -1610,6 +1614,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       tournois: tousLesTournois().map((t) => ({
         ...tournoiPublic(t),
         // CE QUE J'Y AI FAIT : la tuile d'un tournoi fini se voit d'un regard.
+        // COMBIEN ONT FINI : autant que d'inscrits, c'est un tournoi joue.
+        resultats: finisseursDuTournoi(t),
         moi: moi === undefined ? null : {
           inscrit: inscriptionDe(t, moi.pseudo) !== undefined,
           finies: partiesFiniesDe(t, moi.pseudo),
@@ -1690,6 +1696,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     json(res, 200, {
       maintenant: Date.now(),
       tournoi: tournoiPublic(t),
+      resultats: finisseursDuTournoi(t),
       moi: moi === undefined ? null : {
         inscrit: inscription !== undefined,
         // Modifier et supprimer sont a son createur (SPEC.md §29).

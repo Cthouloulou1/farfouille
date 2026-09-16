@@ -15,6 +15,7 @@ import {
   mancheDuCompte, ouvrirLeCompetitif, ouvrirUneManche, resultatsDeLaPartie,
   creerUnTournoiDeTopping, epreuveDuTournoi, inscriptionDe, inscrireAuTournoi, tournoiDeLEpreuve,
   assurerLesTournoisDeLaSemaine, consignesDeLaSemaine, consignesPourLeJour, ecrireUnModeleHebdo,
+  finisseursDuTournoi,
   laSemaineDe, modeleHebdo, reglerLaSemaine, supprimerUnModeleHebdo, tousLesModelesHebdo,
   tousLesTournois,
   classementDesMedailles, listeDesSolos,
@@ -265,6 +266,39 @@ supprimerUnModeleHebdo(hebdo.id, "admin");
 verifie("un modele retire ne produit plus", tousLesModelesHebdo().length === 0);
 ouvrirLeCompetitif();
 verifie("et la suppression se relit", tousLesModelesHebdo().length === 0);
+
+// ------------------------------------------------- combien ont fini le tournoi
+//
+// UN RESULTAT EST UNE LIGNE DU GENERAL : une equipe qui a tout joue, et non
+// chacun de ses membres (SPEC.md §29).
+const tr = await creerUnTournoiDeTopping({
+  nom: "Deux parties", lexique: "ods9", debut: Date.now() - 1000, fin: Date.now() + 3_600_000,
+  equipe: 2, par: "admin",
+  modeles: [{ bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 30 },
+    { bornes: 7, tirage: 7, jouables: 7, joker: false, chrono: 30 }],
+}, "classique15");
+const etr = epreuveDuTournoi(tr.id);
+verifie("un tournoi neuf n'a aucun resultat", finisseursDuTournoi(tr) === 0);
+
+const solo = ouvrirUneManche({
+  epreuve: etr, partie: 1, salon: "r1", compte: "zoe", jeu: "seul", noms: "", equipe: [],
+});
+finirLaManche(solo.id, [coup(1, 40, "zoe", 1000, { zoe: 40 })], 7);
+verifie("une seule partie sur deux ne fait pas un resultat", finisseursDuTournoi(tr) === 0);
+const solo2 = ouvrirUneManche({
+  epreuve: etr, partie: 2, salon: "r2", compte: "zoe", jeu: "seul", noms: "", equipe: [],
+});
+finirLaManche(solo2.id, [coup(1, 40, "zoe", 1000, { zoe: 40 })], 7);
+verifie("les deux parties finies font un resultat", finisseursDuTournoi(tr) === 1);
+
+for (const [n, salon] of [[1, "r3"], [2, "r4"]] as [number, string][]) {
+  const eq = ouvrirUneManche({
+    epreuve: etr, partie: n, salon, compte: "ana", jeu: "equipe", noms: "", equipe: ["ana", "bob"],
+  });
+  finirLaManche(eq.id, [coup(1, 40, "ana", 1000, { ana: 40 })], 7);
+}
+verifie("une equipe de deux ne fait qu'un resultat", finisseursDuTournoi(tr) === 2,
+  String(finisseursDuTournoi(tr)));
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);

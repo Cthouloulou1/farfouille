@@ -5895,8 +5895,25 @@ Une table qui décroîtrait, ou qui récompenserait deux caramels autant que hui
 ne serait pas une variante mais une erreur.
 
 **Une partie aux primes inhabituelles le dit dans son nom** : *Normale, 30s,
-primes libres*. Deux parties qui portent le même nom se jouent de la même façon,
-et c'est une promesse qu'on ne peut pas tenir à moitié.
+primes de farfouilles custom*. Deux parties qui portent le même nom se jouent de
+la même façon, et c'est une promesse qu'on ne peut pas tenir à moitié.
+
+**Et ce bout de nom s'ouvre.** Personne ne devine une prime de 500 points à cinq
+caramels, et une partie se joue tout autrement quand on la sait : cliquer dessus
+montre la table entière, case par case, **en face de ce qu'elle vaut
+d'habitude**. Le tableau se lit partout où le nom paraît — la liste des parties
+du jour, celle d'un tournoi — et **pendant la partie**.
+
+### Ce qu'on joue se lit pendant qu'on le joue
+
+**La barre du salon porte le type de la partie** : *7/8 joker*, *Normale, super
+grille, 30s*. On joue mieux en sachant qu'on pose sept caramels sur huit, et
+rien d'autre ne le disait une fois la partie commencée — les réglages ne
+s'ouvrent pas en jouant.
+
+C'est vrai de **tous les salons**, pas seulement des épreuves : le nom se lit
+dans la configuration de la partie, qui voyage déjà avec elle (§16). Quand les
+primes sortent de l'usage, le même clic ouvre leur table.
 
 ### Créer un tournoi de topping
 
@@ -5927,6 +5944,11 @@ paraît sans elles ne se jouerait pas. Le bouton le dit pendant ce temps.
 ou par l'administration. Le formulaire est le même que celui de la création,
 rempli de ses réglages ; valider **refige toutes ses parties**. Une fois commencé,
 il a des manches jouées : ses réglages ne changent plus, et le serveur le refuse.
+
+**Cliquer sur Jouer inscrit.** S'inscrire d'abord n'apprenait rien à personne et
+ajoutait un geste entre l'envie de jouer et la partie. Le formulaire
+d'inscription reste, et ne sert plus qu'à ce qu'il est seul à faire : **nommer
+une équipe** avant de commencer.
 
 **Ses inscrits survivent à une modification** : la ligne qu'on réécrit porte ses
 réglages, pas les gens.
@@ -5981,7 +6003,9 @@ commence, comme pour n'importe quel tournoi.
 vient est tirée ; c'est celle d'après qui change. Et **supprimer une instance ne
 la fait pas renaître** : le journal garde qu'elle a existé.
 
-Un modèle **se désactive** sans se supprimer : il cesse simplement de produire.
+Un modèle est **en service** ou **en sommeil**. En sommeil, il garde ses
+réglages et cesse simplement de produire : c'est ce qu'on veut d'un tournoi
+qu'on suspend une saison sans vouloir le réécrire.
 
 ### La page Compétitif
 
@@ -6311,6 +6335,12 @@ tournoi a un vainqueur.
 **Ce qu'on voit des résultats** (voir « Le classement ») : l'onglet d'une partie
 à qui l'a jouée, le Général à qui les a toutes jouées, et tout à tout le monde
 après la fin.
+
+**Une tuile dit combien se sont inscrits ET combien ont fini** : « 3 inscrits ·
+2 résultats ». Le premier nombre dit qui est venu, le second dit si le tournoi
+est vivant, et c'est le second qu'on regarde. Un résultat est une **ligne du
+Général** : une équipe qui a fini toutes les parties, et non chacun de ses
+membres.
 
 **Un tournoi dont on a joué toutes les parties se voit d'un regard** : sa tuile
 passe en gris et porte une pastille « ✓ Fini ». C'est ce qu'on cherche des yeux

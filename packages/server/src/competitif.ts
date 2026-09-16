@@ -1086,6 +1086,26 @@ export function supprimerUnTournoi(t: Tournoi, par: string): void {
   console.log(`[competitif] tournoi "${t.nom}" supprime par ${par}`);
 }
 
+/**
+ * COMBIEN ONT FINI LE TOURNOI : le nombre de lignes qu'aura son General.
+ *
+ * On compte des EQUIPES et non des comptes, comme le cumul : deux joueurs
+ * inscrits ensemble ne font qu'un resultat (SPEC.md §29).
+ */
+export function finisseursDuTournoi(t: Tournoi): number {
+  if (t.type !== "topping" || t.parties.length === 0) return 0;
+  const epreuve = epreuveDuTournoi(t.id);
+  const par = new Map<string, Set<number>>();
+  for (const m of manches.values()) {
+    if (m.epreuve !== epreuve || m.fin === null) continue;
+    const cle = cleDeCumul(m);
+    const faites = par.get(cle) ?? new Set<number>();
+    faites.add(m.partie);
+    par.set(cle, faites);
+  }
+  return [...par.values()].filter((faites) => t.parties.every((p) => faites.has(p.n))).length;
+}
+
 /** Combien de parties d'un tournoi ce compte a finies. */
 export function partiesFiniesDe(t: Tournoi, compte: string): number {
   const epreuve = epreuveDuTournoi(t.id);

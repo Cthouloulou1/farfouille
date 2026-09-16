@@ -1501,6 +1501,21 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .notifs-liste .quoi { font-size: 13.5px; color: var(--ink); }
 .notifs-liste .quand { font-size: 11.5px; color: var(--ink-faint); }
 .notifs-liste .none { padding: 10px 0; font-size: 13px; color: var(--ink-faint); }
+/* LE TYPE DE PARTIE, dans la barre du salon : on joue mieux en sachant ce
+   qu'on joue, et les primes s'ouvrent d'un clic quand elles sortent de
+   l'usage (SPEC.md §29). */
+.bar .type-partie { padding: 3px 9px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--ink-soft); font-size: 12px; font-family: var(--mono); }
+.bar .type-partie:hover { color: var(--ink); background: var(--hover); }
+.bar .type-partie[hidden] { display: none; }
+.primes-libres { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.primes-vue { margin: 12px 0 16px; }
+.primes-vue table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.primes-vue th { padding: 4px 6px; border-bottom: 1px solid var(--rule); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); font-weight: 500; text-align: right; }
+.primes-vue th:first-child { text-align: left; }
+.primes-vue td { padding: 4px 6px; text-align: right; font-family: var(--mono); color: var(--ink-soft); }
+.primes-vue td:first-child { text-align: left; color: var(--ink); }
+.primes-vue tr.change td { color: var(--ink); font-weight: 600; }
+.primes-vue tr.change td:last-child { font-weight: 400; color: var(--ink-faint); }
 
 /* L'EDITEUR DE PARTIE : quatre reglages, et le nom qui en sort. */
 .editeur { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--field); border-radius: 6px; }
@@ -2186,6 +2201,17 @@ button.word:hover { color: var(--accent); border-color: transparent; }
      sur le site, un bouton "Inviter" en face de chaque nom. -->
 <!-- LES NOTIFICATIONS (SPEC.md §29) : elles vivent hors des salons, et la
      cloche du bandeau les rassemble. -->
+<!-- LES PRIMES D'UNE PARTIE (SPEC.md §29) : personne ne devine une prime de
+     500 points a cinq caramels, et la partie se joue autrement si on la sait. -->
+<div class="voile" id="voile-primes" hidden>
+  <div class="pseudo">
+    <h2 id="primes-titre">Primes de farfouilles</h2>
+    <p class="fo-aide" id="primes-quoi"></p>
+    <div class="primes-vue" id="primes-vue"></div>
+    <button class="lien renoncer" id="primes-close" type="button">Fermer</button>
+  </div>
+</div>
+
 <div class="voile" id="voile-notifs" hidden>
   <div class="pseudo">
     <h2>Notifications</h2>
@@ -2246,6 +2272,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 
 <div class="bar">
   <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
+  <button type="button" class="type-partie" id="type-partie" hidden></button>
   <div class="who">
     <button class="lien" id="bug-jeu">Signaler un bug</button>
     <button class="lien" id="reglages-open" hidden>Réglages</button>

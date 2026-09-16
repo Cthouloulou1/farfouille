@@ -405,7 +405,7 @@ export function chronoDuNom(secondes: number): string {
  * On ne precise que ce qui s'ecarte de la partie normale : le format, le joker,
  * la super grille, les primes. Chaque morceau se separe du suivant par une
  * virgule : `Normale, 60s`, `5/9, 1min30`, `Normale, super grille, 60s`,
- * `11/11, super grille, 3min`, `Normale, 30s, primes libres`.
+ * `11/11, super grille, 3min`, `Normale, 30s, primes de farfouilles custom`.
  * `t` traduit les mots ; le serveur, qui n'affiche rien, s'en passe.
  */
 export function nomDeLaPartie(
@@ -417,9 +417,12 @@ export function nomDeLaPartie(
   const format = c.tirage === 7 && c.jouables === 7
     ? (joker === "" ? t("Normale") : joker.charAt(0).toUpperCase() + joker.slice(1))
     : `${c.jouables}/${c.tirage}${joker === "" ? "" : ` ${joker}`}`;
-  return [format, ...(c.bornes === 10 ? [t("super grille")] : []),
+  // LA GRILLE SANS FIN SE DIT AUSSI : le nom sert maintenant de bandeau dans un
+  // salon (SPEC.md §29), et une grille infinie ne se joue pas comme un 15x15.
+  return [format, ...(c.bornes === 10 ? [t("super grille")]
+    : c.bornes === null ? [t("grille infinie")] : []),
     ...(c.chrono === null ? [] : [chronoDuNom(c.chrono)]),
-    ...(primesLibres(c.primes, c.jouables) ? [t("primes libres")] : [])].join(", ");
+    ...(primesLibres(c.primes, c.jouables) ? [t("primes de farfouilles custom")] : [])].join(", ");
 }
 
 /**
@@ -460,7 +463,8 @@ export function nomDeLaConsigne(
     ...(c.bornes === "alea" ? [t("grille au hasard")] : c.bornes === 10 ? [t("super grille")] : []),
     ...(c.chrono === "alea" ? [t("temps au hasard")] : [chronoDuNom(c.chrono)]),
     ...(c.primes === "alea" ? [t("primes au hasard")]
-      : c.primes !== null && Object.keys(c.primes).length > 0 ? [t("primes libres")] : []),
+      : c.primes !== null && Object.keys(c.primes).length > 0
+        ? [t("primes de farfouilles custom")] : []),
   ].join(", ");
 }
 

@@ -39,7 +39,7 @@ import { resolveTypedWord, PLAY_MESSAGE } from "../../engine/src/play.ts";
 import { chercherLeMot } from "../../engine/src/chercher.ts";
 import {
   JOURS_DE_LA_SEMAINE, LEXIQUES_DU_JOUR, chronoDuNom, consigneExacte, heureDeParis,
-  modeleDeLaConfig, nomDeLaConsigne, nomDeLaPartie, primesDUsage,
+  modeleDeLaConfig, nomDeLaConsigne, nomDeLaPartie, primesDUsage, primesLibres,
   type ConsigneDePartie, type ModeleDePartie,
 } from "../../engine/src/epreuves.ts";
 
@@ -5472,6 +5472,7 @@ function applyState(s: {
   if (s.moveNumber !== moveNumber) oublierLAttente();
   const sac = s.sac ?? "";
   $("rb-dico").textContent = dictionnaire(cfg.dictionnaire).nom;
+  peindreLeTypeDePartie();
   $("sac").hidden = cfg.pioche === "probabilites";
   $("sac").textContent = sac;
   chrono = s.chrono ?? null;
@@ -10306,7 +10307,7 @@ async function chargerLeCompetitif(): Promise<void> {
 function ligneDePartieDuJour(jour: string, lexique: string, p: PartieDuJourVue): HTMLElement {
   const ligne = el("div", "cp-partie");
   ligne.appendChild(el("div", "cp-num", String(p.n)));
-  const nom = el("div", "cp-nom", nomDeLaPartie(p.config, t));
+  const nom = ecrireLeNomDeLaPartie(p.config, el("div", "cp-nom"));
   nom.appendChild(el("span", "", t2(p.joueurs > 1 ? "{n} joueurs" : "{n} joueur", { n: p.joueurs })));
   ligne.appendChild(nom);
 
@@ -11871,6 +11872,85 @@ function direLErreur(boite: HTMLElement, message: string | null): void {
   boite.hidden = message === null;
 }
 
+// ------------------------------------------------- LES PRIMES D'UNE PARTIE
+//
+// PERSONNE NE DEVINE UNE PRIME DE 500 POINTS A CINQ CARAMELS (SPEC.md §29), et
+// une partie se joue tout autrement quand on la sait. Le nom d'une partie dit
+// donc que ses primes sortent de l'usage, et ce bout de nom s'ouvre.
+
+/** Une partie a-t-elle des primes qui sortent de l'usage ? */
+function primesCustom(c: { primes?: Readonly<Record<number, number>>; jouables: number }): boolean {
+  return primesLibres(c.primes, c.jouables);
+}
+
+/**
+ * Le nom d'une partie, ecrit dans `dans`. Le dernier morceau devient un bouton
+ * quand les primes ne sont pas celles d'usage.
+ */
+function ecrireLeNomDeLaPartie(
+  c: ConfigSerialisee | ConfigPartie, dans: HTMLElement,
+): HTMLElement {
+  const custom = primesCustom(c);
+  const sansPrimes = nomDeLaPartie({ ...c, primes: undefined }, t);
+  dans.appendChild(document.createTextNode(custom ? `${sansPrimes}, ` : sansPrimes));
+  if (custom) {
+    const b = el("button", "primes-libres", t("primes de farfouilles custom")) as HTMLButtonElement;
+    b.type = "button";
+    b.title = t("Voir les primes de cette partie");
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      ouvrirLesPrimes(c);
+    });
+    dans.appendChild(b);
+  }
+  return dans;
+}
+
+/** La table des primes d'une partie, case par case, en face de l'usage. */
+function ouvrirLesPrimes(c: ConfigSerialisee | ConfigPartie): void {
+  const custom = primesCustom(c);
+  $("primes-titre").textContent = t("Primes de farfouilles");
+  $("primes-quoi").textContent = custom
+    ? t("Cette partie ne récompense pas comme d'habitude.")
+    : t("Cette partie récompense comme d'habitude.");
+  const usage = primesDUsage(c.jouables);
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: t("Caramels posés") }, { texte: t("Prime") }, { texte: t("Habituellement") },
+  ]));
+  const corps = el("tbody");
+  for (let n = 2; n <= c.jouables; n++) {
+    const valeur = c.primes[n] ?? 0, ordinaire = usage[n] ?? 0;
+    if (valeur === 0 && ordinaire === 0) continue;
+    const tr = el("tr");
+    if (valeur !== ordinaire) tr.classList.add("change");
+    tr.append(el("td", "", String(n)), el("td", "", String(valeur)), el("td", "", String(ordinaire)));
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("primes-vue").replaceChildren(table);
+  $("voile-primes").hidden = false;
+}
+
+$("primes-close").addEventListener("click", () => { $("voile-primes").hidden = true; });
+$("voile-primes").addEventListener("click", (e) => {
+  if (e.target === $("voile-primes")) $("voile-primes").hidden = true;
+});
+
+/**
+ * LE TYPE DE PARTIE, DANS LA BARRE DU SALON. On joue mieux en sachant qu'on
+ * joue une 7/8 joker, et c'est la seule chose qui le dise pendant la partie.
+ */
+function peindreLeTypeDePartie(): void {
+  const b = $("type-partie") as HTMLButtonElement;
+  b.replaceChildren();
+  ecrireLeNomDeLaPartie(cfg, b);
+  b.hidden = false;
+  b.title = primesCustom(cfg)
+    ? t("Voir les primes de cette partie") : t("Ce que cette partie a de particulier");
+  b.onclick = () => ouvrirLesPrimes(cfg);
+}
+
 // ------------------------------------------------------- LES NOTIFICATIONS
 //
 // Voir SPEC.md §29. ELLES VIVENT HORS DES SALONS : le client n'a de liaison
@@ -12408,7 +12488,11 @@ function formulaireDuTournoiDeLaSemaine(surFait: () => void, initial?: ModeleHeb
   };
   peindreLesParties(Math.max(1, depart.length));
 
-  const sommeil = bascule(t("Actif"), actif, (on) => { actif = on; });
+  // EN SERVICE OU EN SOMMEIL : un modele en sommeil garde ses reglages mais
+  // cesse de produire un tournoi chaque semaine.
+  const sommeil = rangeeDeChoix("", [
+    { v: "1", texte: t("En service") }, { v: "0", texte: t("En sommeil") },
+  ], actif ? "1" : "0", (v) => { actif = v === "1"; }).rang;
   const erreur = el("div", "join-error");
   erreur.hidden = true;
   const faire = el("button", "valider",
@@ -12436,7 +12520,9 @@ function formulaireDuTournoiDeLaSemaine(surFait: () => void, initial?: ModeleHeb
     champ(t("Au"), choixDuJourDeLaSemaine(jourFin, (n) => { jourFin = n; })),
     champ(t("Joueurs par équipe"), compteur(1, 4, equipe, (n) => { equipe = n; })),
     champ(t("Nombre de parties"), compteur(1, 10, Math.max(1, depart.length), (n) => peindreLesParties(n))),
-    parties, champ("", sommeil.el), erreur, faire,
+    champ(t("Ce modèle"), sommeil),
+    el("p", "fo-aide", t("En sommeil, il garde ses réglages et ne crée plus de tournoi chaque semaine.")),
+    parties, erreur, faire,
   );
   return f;
 }
@@ -12709,6 +12795,8 @@ interface TournoiVue {
   inscrits: { compte: string; noms: string; partenaires: string[] }[];
   /** Ce que j'y ai fait, quand je suis connecte. */
   moi?: { inscrit: boolean; finies: number; modifiable: boolean; proprietaire?: boolean } | null;
+  /** Combien d'inscrits ont fini toutes les parties. */
+  resultats?: number;
 }
 
 /** Une date de tournoi, a l'heure de Paris : « 20 sept., 18:00 ». */
@@ -12802,7 +12890,13 @@ function tuileDeTournoi(x: TournoiVue): HTMLElement {
   ].filter((s) => s !== "").join(" · ")));
   const etat = el("span", "etat");
   etat.appendChild(el("span", "", datesDuTournoi(x)));
-  etat.appendChild(el("span", "ou", t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length })));
+  etat.appendChild(el("span", "ou", [
+    t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length }),
+    // COMBIEN ONT FINI : c'est ce qui dit si un tournoi est vivant, et un zero
+    // le dit autant qu'un autre nombre.
+    ...(x.type === "topping"
+      ? [t2((x.resultats ?? 0) > 1 ? "{n} résultats" : "{n} résultat", { n: x.resultats ?? 0 })] : []),
+  ].join(" · ")));
   dedans.appendChild(etat);
   c.appendChild(dedans);
   c.addEventListener("click", () => {
@@ -12832,7 +12926,7 @@ async function chargerLeTournoi(): Promise<void> {
   const mien = ++toDemande;
   direLErreur($("to-error"), null);
   let d: {
-    maintenant: number; tournoi: TournoiVue;
+    maintenant: number; tournoi: TournoiVue; resultats?: number;
     moi: {
       inscrit: boolean; modifiable?: boolean; proprietaire?: boolean;
       parties: {
@@ -12865,7 +12959,7 @@ async function chargerLeTournoi(): Promise<void> {
       const mienne = d.moi?.parties.find((q) => q.n === p.n);
       const ligne = el("div", "cp-partie");
       ligne.appendChild(el("div", "cp-num", String(p.n)));
-      ligne.appendChild(el("div", "cp-nom", nomDeLaPartie(p.config, t)));
+      ligne.appendChild(ecrireLeNomDeLaPartie(p.config, el("div", "cp-nom")));
       const jouer = el("button", "cp-jouer") as HTMLButtonElement;
       jouer.type = "button";
       if (mienne?.etat === "jouee" && mienne.temps !== null) {
@@ -12879,10 +12973,12 @@ async function chargerLeTournoi(): Promise<void> {
         });
       } else {
         jouer.textContent = mienne?.etat === "en-cours" ? t("Reprendre") : t("Jouer");
-        jouer.disabled = etat !== "encours" || d.moi?.inscrit !== true;
+        // JOUER INSCRIT (SPEC.md §29) : le formulaire ne sert plus qu'aux equipes.
+        jouer.disabled = etat !== "encours" || moiCompte === null;
         jouer.title = etat === "avenir" ? t("Le tournoi n'a pas commencé")
           : etat === "termine" ? t("Le tournoi est terminé")
-          : d.moi?.inscrit !== true ? t("Inscrivez-vous d'abord au tournoi") : "";
+          : moiCompte === null ? t("Connectez-vous pour jouer")
+            : d.moi?.inscrit !== true ? t("Jouer vous inscrit au tournoi") : "";
         jouer.addEventListener("click", () => void jouerUnePartie({ tournoi: x.id, partie: p.n }, $("to-error")));
       }
       ligne.appendChild(jouer);
@@ -12953,7 +13049,11 @@ async function chargerLeTournoi(): Promise<void> {
 
   // L'INSCRIPTION.
   peindreLInscription(x, d.moi?.inscrit === true, d.maintenant);
-  $("to-inscrits-titre").textContent = t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length });
+  $("to-inscrits-titre").textContent = [
+    t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length }),
+    ...(x.type === "topping"
+      ? [t2((d.resultats ?? 0) > 1 ? "{n} résultats" : "{n} résultat", { n: d.resultats ?? 0 })] : []),
+  ].join(" · ");
   $("to-inscrits").replaceChildren(...x.inscrits.map((i) => {
     const s = el("span", "rc-joueur");
     s.appendChild(pseudoCliquable(i.compte));

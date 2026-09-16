@@ -84,9 +84,9 @@ const exacte = tirerUneConsigne(consigneExacte({ bornes: 10, tirage: 8, jouables
 verifie("une consigne exacte rend son modele", exacte.bornes === 10 && exacte.tirage === 8
   && exacte.jouables === 7 && exacte.joker && exacte.chrono === 90);
 
-verifie("des primes libres se lisent dans le nom",
+verifie("des primes custom se lisent dans le nom",
   nomDeLaPartie({ tirage: 7, jouables: 7, joker: false, bornes: 7, chrono: 30, primes: { 5: 40, 7: 60 } })
-    === "Normale, 30s, primes libres"
+    === "Normale, 30s, primes de farfouilles custom"
   && nomDeLaPartie({ tirage: 7, jouables: 7, joker: false, bornes: 7, chrono: 30, primes: primesDUsage(7) })
     === "Normale, 30s");
 

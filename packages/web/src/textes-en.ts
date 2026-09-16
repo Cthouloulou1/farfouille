@@ -803,7 +803,18 @@ export const EN: Readonly<Record<string, string>> = {
   "grille au hasard": "random board",
   "temps au hasard": "random time",
   "primes au hasard": "random bonuses",
-  "primes libres": "free bonuses",
+  "primes de farfouilles custom": "custom bingo bonuses",
+  "grille infinie": "endless board",
+  "Voir les primes de cette partie": "See this game's bonuses",
+  "Ce que cette partie a de particulier": "What is special about this game",
+  "Cette partie ne récompense pas comme d'habitude.": "This game does not reward as usual.",
+  "Cette partie récompense comme d'habitude.": "This game rewards as usual.",
+  "Caramels posés": "Tiles played",
+  "Prime": "Bonus",
+  "Habituellement": "Usually",
+  "{n} résultat": "{n} result",
+  "{n} résultats": "{n} results",
+  "Jouer vous inscrit au tournoi": "Playing enters you in the tournament",
 
   "Modèles de la semaine": "Weekly patterns",
   "Les parties du lendemain se tirent de ces consignes. C'est persistant : tous les lundis suivants suivront celles du lundi.":
@@ -831,7 +842,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Modifier": "Edit",
   "Du": "From",
   "Au": "To",
-  "Actif": "Active",
+  "En service": "Live",
+  "En sommeil": "Asleep",
+  "Ce modèle": "This pattern",
+  "En sommeil, il garde ses réglages et ne crée plus de tournoi chaque semaine.":
+    "Asleep, it keeps its settings and stops creating a tournament every week.",
   "Créer le tournoi de la semaine": "Create the weekly tournament",
 
   "Notifications": "Notifications",
