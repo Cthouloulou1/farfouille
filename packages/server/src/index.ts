@@ -38,10 +38,14 @@ import {
   passerALEtapeSuivante, reprendreLEtape,
 } from "./montante.ts";
 import { configDeLEtape, etapeMontante, montantePossible } from "../../engine/src/montante.ts";
-import { journalDeLaPartie, paliersDuCoup, relire, relireEtGarder } from "./lecteur.ts";
+import {
+  journalDeLaPartie, journalDuSalon, paliersDuCoup, relire, relireEtGarder,
+} from "./lecteur.ts";
 import {
   apercuDeDemain, apercusDe, assurerLesPartiesDuJour, changerLesPartiesDeDemain,
   creerUnTournoiDeBattle, creerUnTournoiDeTopping, cumulDeLEpreuve, epreuveDuJour,
+  classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
+  partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
   epreuveDuTournoi, finirLaManche, inscriptionDe, inscrireAuTournoi, joursConnus,
   lexiqueDeLEpreuve, lireLEpreuve, mancheDuCompte, mancheDuSalon, mancheParId,
   ouvrirLeCompetitif, ouvrirUneManche, partieFigee, partiesDeLEpreuve, partiesDuJour,
@@ -602,6 +606,48 @@ function apresOuvertureDEpreuve(s: Salon): void {
   if (m !== undefined && m.fin === null && !s.partie.demarree) void s.partie.demarrer();
   // Personne n'y entrera peut-etre : il se referme alors comme un autre.
   rangerPlusTard(s.id);
+}
+
+/** Le message d'un refus de rejeu. */
+function messageDeRefus(raison: string): string {
+  if (raison === "inconnue") return "Cette partie n'existe pas";
+  if (raison === "fichier") return "Cette partie n'est plus sur le disque";
+  return "Cette partie s'ouvre une fois que vous l'avez jouée";
+}
+
+/**
+ * UNE MANCHE RELUE, telle que la page de rejeu la lit.
+ *
+ * Elle emprunte la forme d'une partie archivee (SPEC.md §23) : la page de rejeu
+ * est la meme, avec sa grille et ses solutions. Ce qui change, c'est d'ou vient
+ * le journal, et qui a le droit de le lire.
+ */
+function mancheRelue(id: string, moi: Compte | undefined): Record<string, unknown> | string {
+  const m = mancheParId(id);
+  if (m === undefined || m.fin === null) return "inconnue";
+  if (resultatsDeLaPartie(m.epreuve, m.partie, moi?.pseudo ?? null).details === null) return "interdit";
+  const fichier = journalDuSalon(m.salon);
+  const p = fichier === null ? null : relire(fichier);
+  if (p === null) return "fichier";
+  const t = tournoiDeLEpreuve(m.epreuve);
+  const jour = lireLEpreuve(m.epreuve);
+  const tops: Record<string, number> = {};
+  for (const c of p.coups) if (c.player !== null) tops[c.player] = (tops[c.player] ?? 0) + 1;
+  return {
+    partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
+    fin: p.fin, coups: p.coups,
+    // Le titre de la page : la partie d'epreuve, et d'ou elle vient.
+    titre: `P${m.partie} · ${nomDeLaPartie(p.config)}`,
+    dou: t !== undefined ? t.nom : jour?.jour ?? "",
+    manche: {
+      ref: m.id, categorie: "", grille: p.config.bornes === 10 ? "super" : "normale",
+      lexique: p.config.dictionnaire, chrono: p.config.chrono,
+      at: m.fin.at, temps: m.fin.temps, cumul: m.fin.coups.reduce((a, c) => a + c.score, 0),
+      topee: m.fin.negatif === 0, negatif: m.fin.negatif,
+      joueurs: m.equipe.map((nom) => ({ nom, tops: tops[nom] ?? 0, invite: false })),
+      solo: null,
+    },
+  };
 }
 
 /**
@@ -1209,6 +1255,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
           n: x.n, config: x.config,
           etat: m === undefined ? "a-jouer" : m.fin === null ? "en-cours" : "jouee",
           temps: m?.fin?.temps ?? null, negatif: m?.fin?.negatif ?? null,
+          manche: m?.fin === null || m === undefined ? null : m.id,
           joueurs: resultatsDeLaPartie(epreuve, x.n, null).lignes.length,
         };
       }),
@@ -1329,6 +1376,57 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // LE PALMARES : les medailles des parties du jour, et la liste des solos.
+  // Publics tous les deux, comme les records.
+  if ((url === "/api/competitif/medailles" || url === "/api/competitif/solos") && req.method === "GET") {
+    const p = parametres(req);
+    const lexique = (LEXIQUES_DU_JOUR as readonly string[]).includes(p.get("lexique") ?? "")
+      ? p.get("lexique")! : undefined;
+    // TROIS PERIODES : tout, l'annee en cours, les trente derniers jours.
+    const periode = p.get("periode") ?? "tout";
+    const aujourdhui = jourDe(Date.now());
+    const depuis = periode === "annee" ? `${aujourdhui.slice(0, 4)}-01-01`
+      : periode === "30j" ? decalerLeJour(aujourdhui, -30) : null;
+    if (url.endsWith("/medailles")) {
+      json(res, 200, { lexique: lexique ?? null, periode, lignes: classementDesMedailles({ lexique, depuis }) });
+      return;
+    }
+    json(res, 200, {
+      lexique: lexique ?? null, periode, minimum: JOUEURS_POUR_UN_SOLO,
+      solos: listeDesSolos({ lexique, depuis }),
+    });
+    return;
+  }
+
+  // LE REJEU D'UNE MANCHE (SPEC.md §29). La partie vit dans le salon ou elle
+  // s'est jouee ; on ne la sert qu'a qui a le droit d'en voir le detail --
+  // c'est-a-dire a qui a fini cette partie-la.
+  if (url.startsWith("/api/competitif/partie/") && req.method === "GET") {
+    const id = decodeURIComponent(url.slice("/api/competitif/partie/".length));
+    const r = mancheRelue(id, quiParle(req));
+    if (typeof r === "string") { json(res, r === "inconnue" ? 404 : 403, { message: messageDeRefus(r) }); return; }
+    json(res, 200, r);
+    return;
+  }
+
+  if (url.startsWith("/api/competitif/paliers/") && req.method === "GET") {
+    const reste = url.slice("/api/competitif/paliers/".length).split("/");
+    const id = decodeURIComponent(reste[0] ?? "");
+    const n = Number(reste[1]);
+    const m = mancheParId(id);
+    const moi = quiParle(req);
+    if (m === undefined || !Number.isInteger(n)) { json(res, 404, { message: "Partie introuvable" }); return; }
+    if (resultatsDeLaPartie(m.epreuve, m.partie, moi?.pseudo ?? null).details === null) {
+      json(res, 403, { message: "Cette partie s'ouvre une fois que vous l'avez jouée" });
+      return;
+    }
+    const fichier = journalDuSalon(m.salon);
+    const p = fichier === null ? null : relireEtGarder(fichier);
+    if (p === null) { json(res, 404, { message: "Partie introuvable" }); return; }
+    json(res, 200, { n, paliers: await paliersDuCoup(p, n) });
+    return;
+  }
+
   // ------------------------------------------------ l'administration du competitif
   //
   // LE SERVEUR REFUSE, et pas seulement l'ecran : un bouton cache est un
@@ -1385,7 +1483,56 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
 
   // LES TOURNOIS : la liste et la fiche sont publiques.
   if (url === "/api/tournois" && req.method === "GET") {
-    json(res, 200, { maintenant: Date.now(), tournois: tousLesTournois().map(tournoiPublic) });
+    const moi = quiParle(req);
+    json(res, 200, {
+      maintenant: Date.now(),
+      tournois: tousLesTournois().map((t) => ({
+        ...tournoiPublic(t),
+        // CE QUE J'Y AI FAIT : la tuile d'un tournoi fini se voit d'un regard.
+        moi: moi === undefined ? null : {
+          inscrit: inscriptionDe(t, moi.pseudo) !== undefined,
+          finies: partiesFiniesDe(t, moi.pseudo),
+          modifiable: tournoiModifiable(t, moi.pseudo, moi.admin) === null,
+        },
+      })),
+    });
+    return;
+  }
+
+  // MODIFIER OU SUPPRIMER UN TOURNOI : son createur, tant qu'il n'a pas commence.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/modifier") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/modifier".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const refus = tournoiModifiable(t, moi.pseudo, moi.admin);
+    if (refus !== null) { json(res, 403, { erreur: refus }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    if (t.type === "topping") {
+      const o = lireUnTournoiDeTopping(corps);
+      if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
+      json(res, 200, { tournoi: tournoiPublic(await modifierUnTournoiDeTopping(t, o, LAYOUT)) });
+      return;
+    }
+    const o = lireUnTournoiDeBattle(corps);
+    if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
+    json(res, 200, { tournoi: tournoiPublic(modifierUnTournoiDeBattle(t, o)) });
+    return;
+  }
+
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/supprimer") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/supprimer".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (t.par !== moi.pseudo && !moi.admin) {
+      json(res, 403, { erreur: "Seul son créateur supprime ce tournoi" });
+      return;
+    }
+    supprimerUnTournoi(t, moi.pseudo);
+    json(res, 200, { ok: true });
     return;
   }
 
@@ -1424,11 +1571,15 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       tournoi: tournoiPublic(t),
       moi: moi === undefined ? null : {
         inscrit: inscription !== undefined,
+        // Modifier et supprimer sont a son createur (SPEC.md §29).
+        modifiable: tournoiModifiable(t, moi.pseudo, moi.admin) === null,
+        proprietaire: t.par === moi.pseudo || moi.admin,
         parties: t.parties.map((x) => {
           const m = mancheDuCompte(moi.pseudo, epreuve, x.n);
           return {
             n: x.n, etat: m === undefined ? "a-jouer" : m.fin === null ? "en-cours" : "jouee",
             temps: m?.fin?.temps ?? null, negatif: m?.fin?.negatif ?? null,
+            manche: m?.fin === null || m === undefined ? null : m.id,
           };
         }),
       },
@@ -2149,10 +2300,14 @@ wss.on("connection", (ws, req) => {
       // Une seconde au moins : le chrono ne part qu'APRES le calcul du top, donc
       // rien n'oblige a laisser du temps au serveur.
       const mode = msg.mode === "duplicate" ? "duplicate" as const : "topping" as const;
-      const decompte = msg.decompte === true;
+      // CE QUE LE MESSAGE NE DIT PAS NE CHANGE PAS. Une relance qui omet un
+      // reglage -- « Rejouer », un client plus ancien -- gardait la valeur par
+      // defaut plutot que celle de la partie, et l'eteignait donc en silence.
+      const decompte = msg.decompte === undefined ? base.decompte : msg.decompte === true;
       // Reserve au topping : le duplicate compte des points, il n'a rien a
       // taire au classement.
-      const toppingCollaboratif = mode === "topping" && msg.toppingCollaboratif === true;
+      const toppingCollaboratif = mode === "topping"
+        && (msg.toppingCollaboratif === undefined ? base.toppingCollaboratif : msg.toppingCollaboratif === true);
       // Les deux bornes s'excluent : une partie a deux termes concurrents ne
       // saurait pas lequel respecter.
       const coupsMax = msg.coupsMax === null || msg.coupsMax === undefined ? null

@@ -742,4 +742,38 @@ export const EN: Readonly<Record<string, string>> = {
   "Ce tournoi se joue seul": "This tournament is played alone",
   "Un même joueur est nommé deux fois": "The same player is named twice",
   "Connectez-vous pour jouer": "Log in to play",
+
+  // Le palmares, le rejeu d'une manche, la modification d'un tournoi (SPEC.md §29).
+  "Palmarès": "Honours",
+  "Médailles": "Medals",
+  "Solos": "Solos",
+  "Période": "Period",
+  "Depuis toujours": "All time",
+  "Cette année": "This year",
+  "30 derniers jours": "Last 30 days",
+  "Or": "Gold",
+  "Argent": "Silver",
+  "Bronze": "Bronze",
+  "Total": "Total",
+  "Jour": "Day",
+  "Les trois premiers de chaque partie du jour, une fois la journée close.":
+    "The top three of every daily game, once the day is closed.",
+  "Aucune médaille pour l'instant.": "No medal yet.",
+  "Les coups qu'un seul joueur a trouvés, sur les parties jouées par au moins {n} joueurs.":
+    "The moves a single player found, on games played by at least {n} players.",
+  "Aucun solo pour l'instant.": "No solo yet.",
+  "Revoir ce coup": "Review this move",
+  "Fini": "Done",
+  "Modifier le tournoi": "Edit the tournament",
+  "Supprimer le tournoi": "Delete the tournament",
+  "Supprimer « {nom} » ?": "Delete “{nom}”?",
+  "Retire le tournoi et ses classements. Sans retour.":
+    "Removes the tournament and its rankings. No going back.",
+  "Enregistrer les changements": "Save the changes",
+  "Seul son créateur modifie ce tournoi": "Only its creator can edit this tournament",
+  "Seul son créateur supprime ce tournoi": "Only its creator can delete this tournament",
+  "Le tournoi a commencé : ses réglages ne changent plus":
+    "The tournament has started: its settings no longer change",
+  "Cette partie s'ouvre une fois que vous l'avez jouée": "This game opens once you have played it",
+  "Cette partie n'existe pas": "This game does not exist",
 };

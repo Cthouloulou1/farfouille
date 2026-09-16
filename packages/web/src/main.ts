@@ -4957,6 +4957,9 @@ $("rejouer").addEventListener("click", () => {
     primes: cfg.primes, chrono: cfg.chrono, bornes: cfg.bornes,
     mode: cfg.mode, coupsMax: cfg.coupsMax, dureeMax: cfg.dureeMax,
     decompte: cfg.decompte, dictionnaire: cfg.dictionnaire,
+    // REJOUER NE CHANGE AUCUN REGLAGE : sans cette ligne, le topping
+    // collaboratif s'eteignait tout seul a chaque relance.
+    toppingCollaboratif: cfg.toppingCollaboratif,
   });
 });
 
@@ -6044,6 +6047,7 @@ function ouvrirLeProfil(pousser = true): void {
   $("corps-competitif").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-resultats").hidden = true;
   $("perso-pseudo").textContent = moiCompte.pseudo;
   $("perso-badge").hidden = !moiCompte.verifie;
@@ -6088,6 +6092,7 @@ function ouvrirLeSolveur(pousser = true): void {
   $("corps-competitif").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-solveur").hidden = false;
@@ -6116,6 +6121,7 @@ addEventListener("popstate", () => {
   if (page === "solveur") { ouvrirLeSolveur(false); return; }
   if (page === "records") { fermerLaPartie(false); ouvrirLesRecords(false); return; }
   if (page === "competitif") { ouvrirLeCompetitif(false); return; }
+  if (page === "palmares") { ouvrirLePalmares(false); return; }
   if (page === "admin-competitif") { ouvrirLAdministrationDuCompetitif(false); return; }
   if (page === "tournoi") { ouvrirLeTournoi(new URLSearchParams(location.search).get("id") ?? "", false); return; }
   if (page === "resultats") { ouvrirLesResultatsDeLAdresse(); return; }
@@ -6123,7 +6129,8 @@ addEventListener("popstate", () => {
     const p = new URLSearchParams(location.search);
     const id = p.get("partie");
     if (id !== null) {
-      void ouvrirLaPartie(id, Math.max(1, Number(p.get("coup")) || 1));
+      void ouvrirLaPartie(id, Math.max(1, Number(p.get("coup")) || 1),
+        p.get("source") === "competitif" ? "competitif" : "records");
       return;
     }
   }
@@ -8263,7 +8270,7 @@ $("site-nom").addEventListener("click", () => {
   if (!$("corps-solveur").hidden) { fermerLeSolveur(); return; }
   if (!$("corps-partie").hidden) { fermerLaPartie(); return; }
   if (!$("corps-records").hidden) { fermerLesRecords(); return; }
-  if (!$("corps-competitif").hidden || !$("corps-resultats").hidden
+  if (!$("corps-competitif").hidden || !$("corps-resultats").hidden || !$("corps-palmares").hidden
       || !$("corps-admin").hidden || !$("corps-tournoi").hidden) { fermerLeCompetitif(); return; }
   if ($("join").hidden) quitterSalon();
 });
@@ -8642,11 +8649,13 @@ void lireLeCompte().then(() => {
   const ou = new URLSearchParams(location.search);
   if (ou.get("page") === "records") ouvrirLesRecords(false);
   if (ou.get("page") === "competitif") ouvrirLeCompetitif(false);
+  if (ou.get("page") === "palmares") ouvrirLePalmares(false);
   if (ou.get("page") === "admin-competitif") ouvrirLAdministrationDuCompetitif(false);
   if (ou.get("page") === "tournoi" && ou.get("id") !== null) ouvrirLeTournoi(ou.get("id")!, false);
   if (ou.get("page") === "resultats") ouvrirLesResultatsDeLAdresse();
   if (ou.get("page") === "partie" && ou.get("partie") !== null) {
-    void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1));
+    void ouvrirLaPartie(ou.get("partie")!, Math.max(1, Number(ou.get("coup")) || 1),
+      ou.get("source") === "competitif" ? "competitif" : "records");
   }
   // Retour du lien de confirmation : on le dit, et on nettoie l'adresse pour
   // qu'un rafraichissement ne rejoue pas le message.
@@ -9516,6 +9525,7 @@ function ouvrirLesRecords(pousser = true): void {
   $("corps-competitif").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = true;
   $("corps-profil").hidden = true;
@@ -9612,6 +9622,10 @@ interface CoupRelu {
 
 interface PartieRelue {
   partie: string;
+  /** Le titre de la page, quand la partie n'est pas une manche de records. */
+  titre?: string;
+  /** D'ou elle vient : le nom d'un tournoi, ou le jour d'une partie du jour. */
+  dou?: string;
   layout: string;
   createdAt: number;
   config: ConfigSerialisee;
@@ -9943,7 +9957,8 @@ async function prChercherLesPaliers(n: number): Promise<void> {
   prPeindreLesPaliers(n, null);
   try {
     const r = await fetch(
-    `/api/paliers/${encodeURIComponent(prPartie.manche.ref)}/${n}`);
+    `${prSource === "competitif" ? "/api/competitif/paliers/" : "/api/paliers/"}`
+    + `${encodeURIComponent(prPartie.manche.ref)}/${n}`);
     const d = await r.json();
     if (mien !== prAttente) return;
     const paliers = (d.paliers ?? []) as PalierRelu[];
@@ -9974,9 +9989,19 @@ function prAller(n: number): void {
  * la reprend au premier coup, « FdR » la montre finie, ce qu'on lit d'abord.
  */
 /** Va chercher une partie archivee. Rend le message d'erreur, ou la partie. */
+/**
+ * D'OU VIENT LA PARTIE QU'ON RELIT : une manche de records, ou une manche du
+ * competitif (SPEC.md §29). Les deux se lisent sur la meme page ; seules
+ * l'adresse et la porte de sortie changent.
+ */
+let prSource: "records" | "competitif" = "records";
+/** Ou revenir en fermant le rejeu, quand ce n'est pas la page des records. */
+let prRetour: (() => void) | null = null;
+
 async function chercherLaPartie(id: string): Promise<PartieRelue | string> {
   try {
-    const r = await fetch(`/api/partie/${encodeURIComponent(id)}`);
+    const base = prSource === "competitif" ? "/api/competitif/partie/" : "/api/partie/";
+    const r = await fetch(`${base}${encodeURIComponent(id)}`);
     const brut = await r.json();
     if (!r.ok) {
       return typeof brut?.message === "string" ? brut.message : t("serveur injoignable");
@@ -10049,22 +10074,31 @@ $("voile-route").addEventListener("click", (e) => {
 });
 
 /** « Revoir » : la grille coup par coup, et les solutions de chacun. */
-async function ouvrirLaPartie(id: string, coup = 1): Promise<void> {
-  $("corps-records").hidden = true;
+async function ouvrirLaPartie(
+  id: string, coup = 1, source: "records" | "competitif" = "records",
+  retour: (() => void) | null = null,
+): Promise<void> {
+  prSource = source;
+  prRetour = retour;
+  for (const pid of ["corps-records", "corps-salons", "corps-profil", "corps-solveur",
+    "corps-competitif", "corps-resultats", "corps-admin", "corps-tournoi", "corps-palmares"]) $(pid).hidden = true;
   $("corps-partie").hidden = false;
+  $("join").hidden = false;
   $("pr-titre").textContent = t("chargement…");
   $("pr-detail").textContent = "";
   $("pr-coup").replaceChildren();
-  window.history.pushState({ page: "partie", id, coup },
-    "", `?page=partie&partie=${encodeURIComponent(id)}&coup=${coup}`);
+  window.history.pushState({ page: "partie", id, coup }, "",
+    `?page=partie&partie=${encodeURIComponent(id)}&coup=${coup}`
+    + (source === "competitif" ? "&source=competitif" : ""));
 
   const d = await chercherLaPartie(id);
   if (typeof d === "string") { $("pr-titre").textContent = d; return; }
   prPartie = d;
 
   const cat = CATEGORIES.find((c) => c.id === d.manche.categorie);
-  $("pr-titre").textContent = t(cat?.nom ?? d.manche.categorie);
-  $("pr-detail").textContent = resumeDeLaPartie(d);
+  $("pr-titre").textContent = d.titre ?? t(cat?.nom ?? d.manche.categorie);
+  $("pr-detail").textContent = (d.dou === undefined || d.dou === "" ? "" : `${d.dou} · `)
+    + resumeDeLaPartie(d);
 
   const curseur = $("pr-curseur") as HTMLInputElement;
   curseur.max = String(d.coups.length);
@@ -10073,7 +10107,11 @@ async function ouvrirLaPartie(id: string, coup = 1): Promise<void> {
 
 function fermerLaPartie(pousser = true): void {
   $("corps-partie").hidden = true;
-  $("corps-records").hidden = false;
+  const retour = prRetour;
+  const duCompetitif = prSource === "competitif";
+  prRetour = null;
+  prSource = "records";
+  if (!duCompetitif) $("corps-records").hidden = false;
   // ON NE GARDE RIEN DERRIERE UNE PAGE FERMEE. Une partie relue, ce sont des
   // centaines de placements et jusqu'a cent solutions par coup : masquee, elle
   // continuerait de peser sur le document et sur la memoire.
@@ -10083,6 +10121,11 @@ function fermerLaPartie(pousser = true): void {
   $("pr-piste").replaceChildren();
   $("pr-coup").replaceChildren();
   $("pr-sols-compte").textContent = "";
+  if (duCompetitif) {
+    if (retour !== null) retour();
+    else ouvrirLeCompetitif(pousser);
+    return;
+  }
   if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
 }
 
@@ -10117,6 +10160,8 @@ interface PartieDuJourVue {
   etat: "a-jouer" | "en-cours" | "jouee";
   temps: number | null;
   negatif: number | null;
+  /** La manche qu'on a jouee, s'il y en a une : c'est elle qu'on revoit. */
+  manche: string | null;
   joueurs: number;
 }
 
@@ -10165,6 +10210,7 @@ function ouvrirLeCompetitif(pousser = true): void {
   $("corps-resultats").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-competitif").hidden = false;
   $("join").hidden = false;
   if (cpLexique === "") cpLexique = lexiqueDuJourParDefaut();
@@ -10182,6 +10228,7 @@ function fermerLeCompetitif(pousser = true): void {
   $("corps-competitif").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-resultats").hidden = true;
   $("corps-salons").hidden = false;
   $("cp-parties").replaceChildren();
@@ -10247,10 +10294,15 @@ function ligneDePartieDuJour(jour: string, lexique: string, p: PartieDuJourVue):
   const jouer = el("button", "cp-jouer") as HTMLButtonElement;
   jouer.type = "button";
   if (p.etat === "jouee" && p.temps !== null) {
-    // UNE PARTIE JOUEE MONTRE CE QU'ON Y A FAIT, a la place du bouton.
+    // UNE PARTIE JOUEE MONTRE CE QU'ON Y A FAIT, a la place du bouton -- et
+    // mene au rejeu : c'est ce qu'on veut rouvrir d'une partie qu'on a jouee.
     jouer.className = "cp-faite";
     jouer.textContent = `${tempsCentiemes(p.temps)} · ${negatifDit(p.negatif ?? 0)}`;
-    jouer.addEventListener("click", () => ouvrirLesResultats(jour, lexique, p.n));
+    jouer.title = t("Revoir la partie");
+    jouer.addEventListener("click", () => {
+      if (p.manche === null) { ouvrirLesResultats(jour, lexique, p.n); return; }
+      void ouvrirLaPartie(p.manche, 1, "competitif", () => ouvrirLeCompetitif());
+    });
   } else {
     jouer.textContent = p.etat === "en-cours" ? t("Reprendre") : t("Jouer");
     jouer.addEventListener("click", () => void jouerLaPartieDuJour(jour, lexique, p.n));
@@ -10385,6 +10437,7 @@ function ouvrirLesResultats(jour: string, lexique: string, partie: number | "cum
   $("corps-competitif").hidden = true;
   $("corps-admin").hidden = true;
   $("corps-tournoi").hidden = true;
+  $("corps-palmares").hidden = true;
   $("corps-resultats").hidden = false;
   $("join").hidden = false;
   rsJour = jour;
@@ -10647,6 +10700,7 @@ function peindreLeCumul(d: ResultatsVue): void {
   }
   // A DROITE, ses propres parties, une ligne chacune.
   $("rs-graphes").hidden = true;
+  ($("rs-revoir") as HTMLButtonElement).hidden = true;
   $("rs-feuille-titre").textContent = t("Vos parties");
   const miennes = (d.moi ?? []) as { partie: number; fini: boolean; temps: number | null;
     negatif: number | null; score: number | null }[];
@@ -10697,6 +10751,7 @@ function peindreLaFeuille(d: ResultatsVue, lignes: LigneVue[]): void {
   const details = d.details ?? null;
   $("rs-feuille-titre").textContent = t("Feuille de route");
   $("rs-graphes").hidden = true;
+  ($("rs-revoir") as HTMLButtonElement).hidden = true;
   if (details === null) {
     $("rs-feuille").replaceChildren(el("div", "rs-vide",
       d.moi?.enCours === true ? t("La feuille de route s'affiche une fois la partie finie.")
@@ -10711,8 +10766,21 @@ function peindreLaFeuille(d: ResultatsVue, lignes: LigneVue[]): void {
     $("rs-resume").replaceChildren();
     return;
   }
+  // REVOIR LA PARTIE : la meme page que le rejeu d'une partie archivee, sur la
+  // manche qu'on regarde (SPEC.md §29).
+  const revoir = $("rs-revoir") as HTMLButtonElement;
+  revoir.hidden = false;
+  revoir.onclick = () => {
+    const ou = { tournoi: rsTournoi, jour: rsJour, lexique: rsLexique, partie: rsPartie };
+    void ouvrirLaPartie(vue.manche, 1, "competitif", () => {
+      if (ou.tournoi !== null) ouvrirLesResultatsDuTournoi(ou.tournoi, ou.partie);
+      else ouvrirLesResultats(ou.jour, ou.lexique, ou.partie);
+    });
+  };
   const mienne = vue.manche === d.moi?.manche;
-  if (!mienne) $("rs-feuille-titre").textContent = t2("Feuille de route de {nom}", { nom: nomDeLaLigne(vue) });
+  // LE NOM EST TOUJOURS DIT, le sien compris : on lit plusieurs feuilles de
+  // suite, et rien d'autre ne dit laquelle on regarde.
+  $("rs-feuille-titre").textContent = t2("Feuille de route de {nom}", { nom: nomDeLaLigne(vue) });
   const partie = d.parties.find((p) => p.n === d.partie);
   const bornes = partie?.config.bornes ?? 7;
   const chronoMs = (partie?.config.chrono ?? 0) * 1000;
@@ -10980,10 +11048,10 @@ type Graphe = "temps" | "course" | "difficulte" | "rang" | "repartition";
 
 const GRAPHES: { v: Graphe; nom: string }[] = [
   { v: "temps", nom: "Temps par coup" },
-  { v: "course", nom: "La course" },
-  { v: "difficulte", nom: "Difficulté des coups" },
   { v: "rang", nom: "Rang au fil des coups" },
   { v: "repartition", nom: "Répartition des temps" },
+  { v: "course", nom: "La course" },
+  { v: "difficulte", nom: "Difficulté des coups" },
 ];
 
 let rsGraphe: Graphe = "temps";
@@ -11564,7 +11632,7 @@ let adOccupe = false;
 function ouvrirLAdministrationDuCompetitif(pousser = true): void {
   if (moiCompte?.admin !== true) { ouvrirLeCompetitif(pousser); return; }
   for (const id of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
-    "corps-competitif", "corps-resultats", "corps-tournoi"]) $(id).hidden = true;
+    "corps-competitif", "corps-resultats", "corps-tournoi", "corps-palmares"]) $(id).hidden = true;
   $("corps-admin").hidden = false;
   $("join").hidden = false;
   peindreLOngletAdmin();
@@ -11803,23 +11871,30 @@ function prochaineHeure(decalageJours = 0): number {
   return Math.ceil(Date.now() / h) * h + decalageJours * 86_400_000;
 }
 
-function formulaireDuTournoiDeTopping(surCree: (id: string) => void): HTMLElement {
+/**
+ * LE FORMULAIRE D'UN TOURNOI DE TOPPING. Le meme sert a le creer et a le
+ * modifier tant qu'il n'a pas commence (SPEC.md §29) : `initial` le remplit.
+ */
+function formulaireDuTournoiDeTopping(surFait: (id: string) => void, initial?: TournoiVue): HTMLElement {
   const f = el("div", "formulaire");
   const nom = document.createElement("input");
   nom.type = "text";
   nom.maxLength = 60;
   nom.placeholder = t("Nom du tournoi");
-  let lexique = cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique;
-  let equipe = 1;
-  const debut = champDate(prochaineHeure());
-  const fin = champDate(prochaineHeure(7));
+  nom.value = initial?.nom ?? "";
+  let lexique = initial?.lexique ?? (cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique);
+  let equipe = initial?.equipe ?? 1;
+  const debut = champDate(initial?.debut ?? prochaineHeure());
+  const fin = champDate(initial?.fin ?? prochaineHeure(7));
 
   const parties = el("div", "fo-deux");
   parties.style.flexDirection = "column";
+  const modelesDeDepart = (initial?.parties ?? []).map((p) => modeleDe(p.config));
   const editeurs: ReturnType<typeof editeurDePartie>[] = [];
   const peindreLesParties = (n: number): void => {
     while (editeurs.length < n) {
-      editeurs.push(editeurDePartie(editeurs[editeurs.length - 1]?.valeur() ?? MODELE_NORMAL));
+      editeurs.push(editeurDePartie(
+        modelesDeDepart[editeurs.length] ?? editeurs[editeurs.length - 1]?.valeur() ?? MODELE_NORMAL));
     }
     editeurs.length = n;
     parties.replaceChildren(...editeurs.map((e, i) => {
@@ -11838,27 +11913,30 @@ function formulaireDuTournoiDeTopping(surCree: (id: string) => void): HTMLElemen
       return bloc;
     }));
   };
-  peindreLesParties(1);
+  peindreLesParties(Math.max(1, modelesDeDepart.length));
 
   const dates = el("div", "fo-deux");
   dates.append(champ(t("Début (heure de Paris)"), debut), champ(t("Fin (heure de Paris)"), fin));
   const erreur = el("div", "join-error");
   erreur.hidden = true;
-  const creer = el("button", "valider", t("Créer le tournoi")) as HTMLButtonElement;
-  creer.type = "button";
-  creer.addEventListener("click", () => {
+  const faire = el("button", "valider",
+    t(initial === undefined ? "Créer le tournoi" : "Enregistrer les changements")) as HTMLButtonElement;
+  faire.type = "button";
+  faire.addEventListener("click", () => {
     void (async () => {
-      creer.disabled = true;
-      creer.textContent = t("Création…");
-      const { ok, d } = await envoyerAuServeur("/api/tournois", {
-        type: "topping", nom: nom.value, lexique, equipe, debut: debut.value, fin: fin.value,
-        parties: editeurs.map((e) => e.valeur()),
-      });
-      creer.disabled = false;
-      creer.textContent = t("Créer le tournoi");
+      const dit = faire.textContent;
+      faire.disabled = true;
+      faire.textContent = t("Création…");
+      const { ok, d } = await envoyerAuServeur(
+        initial === undefined ? "/api/tournois" : `/api/tournoi/${encodeURIComponent(initial.id)}/modifier`, {
+          type: "topping", nom: nom.value, lexique, equipe, debut: debut.value, fin: fin.value,
+          parties: editeurs.map((e) => e.valeur()),
+        });
+      faire.disabled = false;
+      faire.textContent = dit;
       if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
       direLErreur(erreur, null);
-      surCree(d.tournoi.id);
+      surFait(d.tournoi.id);
     })();
   });
 
@@ -11867,37 +11945,51 @@ function formulaireDuTournoiDeTopping(surCree: (id: string) => void): HTMLElemen
     champ(t("Lexique"), choixDuLexique(lexique, (v) => { lexique = v; })),
     dates,
     el("p", "fo-aide", t("Chaque partie se joue une fois, dans l'ordre qu'on veut, entre ces deux dates.")),
-    champ(t("Joueurs par équipe"), compteur(1, 4, 1, (n) => { equipe = n; })),
-    champ(t("Nombre de parties"), compteur(1, 10, 1, (n) => peindreLesParties(n))),
-    parties, erreur, creer,
+    champ(t("Joueurs par équipe"), compteur(1, 4, equipe, (n) => { equipe = n; })),
+    champ(t("Nombre de parties"), compteur(1, 10, Math.max(1, modelesDeDepart.length), (n) => peindreLesParties(n))),
+    parties, erreur, faire,
   );
   return f;
 }
 
 // ------------------------------------------------ CREER UN TOURNOI DE BATTLE
 
-function formulaireDuTournoiDeBattle(surCree: (id: string) => void): HTMLElement {
+function formulaireDuTournoiDeBattle(surFait: (id: string) => void, initial?: TournoiVue): HTMLElement {
   const f = el("div", "formulaire");
   const nom = document.createElement("input");
   nom.type = "text";
   nom.maxLength = 60;
   nom.placeholder = t("Nom du tournoi");
-  let lexique = cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique;
-  const debut = champDate(prochaineHeure(3));
-  const limite = champDate(prochaineHeure(10));
+  nom.value = initial?.nom ?? "";
+  let lexique = initial?.lexique ?? (cpLexique === "" ? lexiqueDuJourParDefaut() : cpLexique);
+  const b0 = initial?.battle ?? null;
+  const debut = champDate(initial?.debut ?? prochaineHeure(3));
+  const limite = champDate(b0?.limitePoules ?? prochaineHeure(10));
   const r = {
-    equipe: 1, joueursParPoule: 4, rencontresParPoule: null as number | null, manchesParPoule: 2,
-    qualifies: null as number | null, tableauHaut: null as number | null,
-    meilleurDe: 3, meilleurDeDemi: 3, meilleurDeFinale: 3, joursParTour: 3,
+    equipe: initial?.equipe ?? 1,
+    joueursParPoule: b0?.joueursParPoule ?? 4,
+    rencontresParPoule: b0?.rencontresParPoule ?? null,
+    manchesParPoule: b0?.manchesParPoule ?? 2,
+    qualifies: b0?.qualifies ?? null,
+    tableauHaut: b0?.tableauHaut ?? null,
+    meilleurDe: b0?.meilleurDe ?? 3,
+    meilleurDeDemi: b0?.meilleurDeDemi ?? 3,
+    meilleurDeFinale: b0?.meilleurDeFinale ?? 3,
+    joursParTour: b0?.joursParTour ?? 3,
   };
-  const editeur = editeurDePartie(MODELE_NORMAL);
+  const editeur = editeurDePartie(b0?.partie ?? MODELE_NORMAL);
 
   /** Un choix « tous / un nombre », pour les rencontres et les qualifies. */
-  const tousOuNombre = (texteTous: string, min: number, max: number, surChange: (n: number | null) => void): HTMLElement => {
+  const tousOuNombre = (
+    texteTous: string, min: number, max: number, valeur: number | null,
+    surChange: (n: number | null) => void,
+  ): HTMLElement => {
     const boite = el("div", "ed-rang");
-    const nombre = champNombre(min, max, min, texteTous);
-    nombre.hidden = true;
-    const rangee = rangeeDeChoix("", [{ v: "tous", texte: texteTous }, { v: "n", texte: t("Un nombre") }], "tous", (v) => {
+    const nombre = champNombre(min, max, valeur ?? min, texteTous);
+    nombre.hidden = valeur === null;
+    const rangee = rangeeDeChoix("", [
+      { v: "tous", texte: texteTous }, { v: "n", texte: t("Un nombre") },
+    ], valeur === null ? "tous" : "n", (v) => {
       nombre.hidden = v === "tous";
       surChange(v === "tous" ? null : Math.round(Number(nombre.value)));
     });
@@ -11916,19 +12008,21 @@ function formulaireDuTournoiDeBattle(surCree: (id: string) => void): HTMLElement
 
   const erreur = el("div", "join-error");
   erreur.hidden = true;
-  const creer = el("button", "valider", t("Créer le tournoi")) as HTMLButtonElement;
-  creer.type = "button";
-  creer.addEventListener("click", () => {
+  const faire = el("button", "valider",
+    t(initial === undefined ? "Créer le tournoi" : "Enregistrer les changements")) as HTMLButtonElement;
+  faire.type = "button";
+  faire.addEventListener("click", () => {
     void (async () => {
-      creer.disabled = true;
-      const { ok, d } = await envoyerAuServeur("/api/tournois", {
-        type: "battle", nom: nom.value, lexique, debut: debut.value, limitePoules: limite.value,
-        ...r, partie: editeur.valeur(),
-      });
-      creer.disabled = false;
+      faire.disabled = true;
+      const { ok, d } = await envoyerAuServeur(
+        initial === undefined ? "/api/tournois" : `/api/tournoi/${encodeURIComponent(initial.id)}/modifier`, {
+          type: "battle", nom: nom.value, lexique, debut: debut.value, limitePoules: limite.value,
+          ...r, partie: editeur.valeur(),
+        });
+      faire.disabled = false;
       if (!ok) { direLErreur(erreur, d.erreur ?? "serveur injoignable"); return; }
       direLErreur(erreur, null);
-      surCree(d.tournoi.id);
+      surFait(d.tournoi.id);
     })();
   });
 
@@ -11937,29 +12031,31 @@ function formulaireDuTournoiDeBattle(surCree: (id: string) => void): HTMLElement
     champ(t("Date limite des poules (heure de Paris)"), limite));
   const poules = el("div", "fo-deux");
   poules.append(
-    champ(t("Joueurs par poule"), compteur(3, 12, 4, (n) => { r.joueursParPoule = n; })),
-    champ(t("Manches par rencontre de poule"), compteur(1, 9, 2, (n) => { r.manchesParPoule = n; })),
+    champ(t("Joueurs par poule"), compteur(3, 12, r.joueursParPoule, (n) => { r.joueursParPoule = n; })),
+    champ(t("Manches par rencontre de poule"), compteur(1, 9, r.manchesParPoule, (n) => { r.manchesParPoule = n; })),
   );
   const tableau = el("div", "fo-deux");
   tableau.append(
-    champ(t("Meilleur de, en tableau"), impair(3, (n) => { r.meilleurDe = n; })),
-    champ(t("En demi-finale"), impair(3, (n) => { r.meilleurDeDemi = n; })),
-    champ(t("En finale"), impair(3, (n) => { r.meilleurDeFinale = n; })),
+    champ(t("Meilleur de, en tableau"), impair(r.meilleurDe, (n) => { r.meilleurDe = n; })),
+    champ(t("En demi-finale"), impair(r.meilleurDeDemi, (n) => { r.meilleurDeDemi = n; })),
+    champ(t("En finale"), impair(r.meilleurDeFinale, (n) => { r.meilleurDeFinale = n; })),
   );
   f.append(
     champ(t("Nom du tournoi"), nom),
     champ(t("Lexique"), choixDuLexique(lexique, (v) => { lexique = v; })),
     debuts,
     el("p", "fo-aide", t("Les inscriptions ferment au début des rencontres. Les poules se tirent ensuite.")),
-    champ(t("Joueurs par équipe"), compteur(1, 4, 1, (n) => { r.equipe = n; })),
+    champ(t("Joueurs par équipe"), compteur(1, 4, r.equipe, (n) => { r.equipe = n; })),
     poules,
-    champ(t("Rencontres par poule"), tousOuNombre(t("Tous contre tous"), 1, 11, (n) => { r.rencontresParPoule = n; })),
-    champ(t("Qualifiés"), tousOuNombre(t("Tous"), 2, 256, (n) => { r.qualifies = n; })),
-    champ(t("Dont au tableau haut"), tousOuNombre(t("La moitié"), 1, 256, (n) => { r.tableauHaut = n; })),
+    champ(t("Rencontres par poule"),
+      tousOuNombre(t("Tous contre tous"), 1, 11, r.rencontresParPoule, (n) => { r.rencontresParPoule = n; })),
+    champ(t("Qualifiés"), tousOuNombre(t("Tous"), 2, 256, r.qualifies, (n) => { r.qualifies = n; })),
+    champ(t("Dont au tableau haut"),
+      tousOuNombre(t("La moitié"), 1, 256, r.tableauHaut, (n) => { r.tableauHaut = n; })),
     tableau,
-    champ(t("Jours par tour de tableau"), compteur(1, 30, 3, (n) => { r.joursParTour = n; })),
+    champ(t("Jours par tour de tableau"), compteur(1, 30, r.joursParTour, (n) => { r.joursParTour = n; })),
     champ(t("La partie d'une manche"), editeur.el),
-    erreur, creer,
+    erreur, faire,
   );
   return f;
 }
@@ -11983,6 +12079,8 @@ interface TournoiVue {
   } | null;
   par: string;
   inscrits: { compte: string; noms: string; partenaires: string[] }[];
+  /** Ce que j'y ai fait, quand je suis connecte. */
+  moi?: { inscrit: boolean; finies: number; modifiable: boolean; proprietaire?: boolean } | null;
 }
 
 /** Une date de tournoi, a l'heure de Paris : « 20 sept., 18:00 ». */
@@ -12004,6 +12102,14 @@ function etatDuTournoi(x: TournoiVue, maintenant: number): "avenir" | "encours" 
   if (maintenant < x.debut) return "avenir";
   if (x.fin !== null && maintenant >= x.fin) return "termine";
   return "encours";
+}
+
+/** Retire un tournoi, puis repeint ce qui le montrait. */
+async function supprimerLeTournoi(id: string): Promise<void> {
+  const { ok, d } = await envoyerAuServeur(`/api/tournoi/${encodeURIComponent(id)}/supprimer`, {});
+  if (!ok) { direLErreur($("cp-error"), d.erreur ?? "serveur injoignable"); return; }
+  if ($("corps-tournoi").hidden) void chargerLesTournois();
+  else ouvrirLeCompetitif();
 }
 
 async function chargerLesTournois(): Promise<void> {
@@ -12037,6 +12143,24 @@ function tuileDeTournoi(x: TournoiVue): HTMLElement {
   const c = el("button", "carte") as HTMLButtonElement;
   c.type = "button";
   const vue = el("span", "vue");
+  // UN TOURNOI QU'ON A FINI SE VOIT D'UN REGARD : grise, et coche.
+  const fini = x.type === "topping" && x.parties.length > 0
+    && (x.moi?.finies ?? 0) >= x.parties.length;
+  if (fini) {
+    c.classList.add("terminee");
+    vue.appendChild(el("span", "fini", `✓ ${t("Fini")}`));
+  }
+  // Son createur peut le retirer, comme un salon.
+  if (x.moi?.proprietaire === true) {
+    const jeter = el("button", "jeter", t("Supprimer")) as HTMLButtonElement;
+    jeter.type = "button";
+    jeter.title = t("Retire le tournoi et ses classements. Sans retour.");
+    jeter.addEventListener("click", (e) => {
+      e.stopPropagation();
+      confirmer(t2("Supprimer « {nom} » ?", { nom: x.nom }), () => void supprimerLeTournoi(x.id));
+    });
+    vue.appendChild(jeter);
+  }
   const bornes = x.type === "battle" ? x.battle?.partie.bornes : x.parties[0]?.config.bornes;
   vue.appendChild(el("span", `vignette ${bornes === 10 ? "super" : "bornee"}`));
   vue.appendChild(el("span", "badge", x.type === "battle" ? t("Battle") : t("Topping")));
@@ -12064,7 +12188,7 @@ let toDemande = 0;
 
 function ouvrirLeTournoi(id: string, pousser = true): void {
   for (const pid of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
-    "corps-competitif", "corps-resultats", "corps-admin"]) $(pid).hidden = true;
+    "corps-competitif", "corps-resultats", "corps-admin", "corps-palmares"]) $(pid).hidden = true;
   $("corps-tournoi").hidden = false;
   $("join").hidden = false;
   toId = id;
@@ -12079,7 +12203,12 @@ async function chargerLeTournoi(): Promise<void> {
   direLErreur($("to-error"), null);
   let d: {
     maintenant: number; tournoi: TournoiVue;
-    moi: { inscrit: boolean; parties: { n: number; etat: string; temps: number | null; negatif: number | null }[] } | null;
+    moi: {
+      inscrit: boolean; modifiable?: boolean; proprietaire?: boolean;
+      parties: {
+        n: number; etat: string; temps: number | null; negatif: number | null; manche?: string | null;
+      }[];
+    } | null;
     erreur?: string;
   };
   try {
@@ -12112,7 +12241,12 @@ async function chargerLeTournoi(): Promise<void> {
       if (mienne?.etat === "jouee" && mienne.temps !== null) {
         jouer.className = "cp-faite";
         jouer.textContent = `${tempsCentiemes(mienne.temps)} · ${negatifDit(mienne.negatif ?? 0)}`;
-        jouer.addEventListener("click", () => ouvrirLesResultatsDuTournoi(x.id, p.n));
+        jouer.title = t("Revoir la partie");
+        jouer.addEventListener("click", () => {
+          const manche = mienne.manche ?? null;
+          if (manche === null) { ouvrirLesResultatsDuTournoi(x.id, p.n); return; }
+          void ouvrirLaPartie(manche, 1, "competitif", () => ouvrirLeTournoi(x.id));
+        });
       } else {
         jouer.textContent = mienne?.etat === "en-cours" ? t("Reprendre") : t("Jouer");
         jouer.disabled = etat !== "encours" || d.moi?.inscrit !== true;
@@ -12158,6 +12292,33 @@ async function chargerLeTournoi(): Promise<void> {
       p.append(document.createTextNode(`${k} : `), el("b", "", v));
       return p;
     }));
+  }
+
+  // MODIFIER ET SUPPRIMER : a son createur, tant qu'il n'a pas commence.
+  const gestes = $("to-gestes");
+  gestes.replaceChildren();
+  $("to-modif").hidden = true;
+  $("to-modif").replaceChildren();
+  $("to-colonnes").hidden = false;
+  if (d.moi?.modifiable === true) {
+    const modifier = el("button", "", t("Modifier le tournoi")) as HTMLButtonElement;
+    modifier.type = "button";
+    modifier.addEventListener("click", () => {
+      $("to-colonnes").hidden = true;
+      $("to-modif").hidden = false;
+      $("to-modif").replaceChildren(x.type === "battle"
+        ? formulaireDuTournoiDeBattle(() => ouvrirLeTournoi(x.id, false), x)
+        : formulaireDuTournoiDeTopping(() => ouvrirLeTournoi(x.id, false), x));
+    });
+    gestes.appendChild(modifier);
+  }
+  if (d.moi?.proprietaire === true) {
+    const supprimer = el("button", "", t("Supprimer le tournoi")) as HTMLButtonElement;
+    supprimer.type = "button";
+    supprimer.addEventListener("click", () => {
+      confirmer(t2("Supprimer « {nom} » ?", { nom: x.nom }), () => void supprimerLeTournoi(x.id));
+    });
+    gestes.appendChild(supprimer);
   }
 
   // L'INSCRIPTION.
@@ -12217,4 +12378,177 @@ function peindreLInscription(x: TournoiVue, inscrit: boolean, maintenant: number
   });
   f.append(erreur, b);
   boite.replaceChildren(f);
+}
+
+// ------------------------------------------------------------- LE PALMARES
+//
+// Voir SPEC.md §29. Les medailles des parties du jour closes, et les solos --
+// les coups qu'un seul joueur a trouves. Deux vues, trois periodes, un lexique.
+
+type OngletPalmares = "medailles" | "solos";
+
+interface LigneDeMedailles { compte: string; or: number; argent: number; bronze: number }
+
+interface SoloVue {
+  jour: string;
+  lexique: string;
+  partie: number;
+  coup: number;
+  mot: string;
+  dir: Dir;
+  x: number;
+  y: number;
+  score: number;
+  equipe: string[];
+  manche: string;
+  joueurs: number;
+}
+
+let paOnglet: OngletPalmares = "medailles";
+/** `null` : tous les lexiques a la meme table. */
+let paLexique: string | null = null;
+let paPeriode: "tout" | "annee" | "30j" = "tout";
+let paDemande = 0;
+
+function ouvrirLePalmares(pousser = true): void {
+  for (const id of ["corps-partie", "corps-salons", "corps-profil", "corps-solveur", "corps-records",
+    "corps-competitif", "corps-resultats", "corps-admin", "corps-tournoi"]) $(id).hidden = true;
+  $("corps-palmares").hidden = false;
+  $("join").hidden = false;
+  peindreLesChoixDuPalmares();
+  void chargerLePalmares();
+  if (pousser) window.history.pushState({ page: "palmares" }, "", "?page=palmares");
+}
+
+$("pa-retour").addEventListener("click", () => ouvrirLeCompetitif());
+$("cp-palmares").addEventListener("click", () => ouvrirLePalmares());
+
+$("pa-onglets").addEventListener("click", (e) => {
+  const v = ((e.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset["v"];
+  if (v !== "medailles" && v !== "solos") return;
+  paOnglet = v;
+  peindreLesChoixDuPalmares();
+  void chargerLePalmares();
+});
+
+$("pa-periode").addEventListener("click", (e) => {
+  const v = ((e.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset["v"];
+  if (v !== "tout" && v !== "annee" && v !== "30j") return;
+  paPeriode = v;
+  peindreLesChoixDuPalmares();
+  void chargerLePalmares();
+});
+
+function peindreLesChoixDuPalmares(): void {
+  presser("pa-onglets", paOnglet);
+  presser("pa-periode", paPeriode);
+  const boite = $("pa-lexique");
+  boite.replaceChildren(...[null, ...LEXIQUES_DU_JOUR].map((id) => {
+    const b = el("button", "", id === null ? t("Tous") : dictionnaire(id).nom.split(" ")[0]!) as HTMLButtonElement;
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(id === paLexique));
+    b.addEventListener("click", () => {
+      paLexique = id;
+      peindreLesChoixDuPalmares();
+      void chargerLePalmares();
+    });
+    return b;
+  }));
+}
+
+async function chargerLePalmares(): Promise<void> {
+  const mien = ++paDemande;
+  $("pa-tableau").replaceChildren(tableauVide(t("chargement…")));
+  const quoi = paOnglet === "medailles" ? "medailles" : "solos";
+  try {
+    const r = await fetch(`/api/competitif/${quoi}?periode=${paPeriode}`
+      + (paLexique === null ? "" : `&lexique=${encodeURIComponent(paLexique)}`));
+    const d = await r.json();
+    if (mien !== paDemande) return;
+    if (!r.ok) { $("pa-tableau").replaceChildren(tableauVide(t(d.erreur ?? "serveur injoignable"))); return; }
+    if (paOnglet === "medailles") rendreLesMedailles(d.lignes ?? []);
+    else rendreLesSolos(d.solos ?? [], d.minimum ?? 10);
+  } catch {
+    if (mien !== paDemande) return;
+    $("pa-tableau").replaceChildren(tableauVide(t("serveur injoignable")));
+  }
+}
+
+/** Une pastille de metal, devant son compte. */
+function metal(classe: string, n: number): HTMLElement {
+  const td = el("td", "");
+  td.appendChild(el("span", `pa-metal pa-${classe}`));
+  td.appendChild(document.createTextNode(` ${n}`));
+  return td;
+}
+
+function rendreLesMedailles(lignes: LigneDeMedailles[]): void {
+  $("pa-detail").textContent = t("Les trois premiers de chaque partie du jour, une fois la journée close.");
+  if (lignes.length === 0) {
+    $("pa-tableau").replaceChildren(tableauVide(t("Aucune médaille pour l'instant.")));
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: "#" }, { texte: t("Joueur"), classe: "g" }, { texte: t("Or") },
+    { texte: t("Argent") }, { texte: t("Bronze") }, { texte: t("Total") },
+  ], t("Or")));
+  const corps = el("tbody");
+  lignes.forEach((l, i) => {
+    const tr = el("tr");
+    tr.appendChild(celluleDuRang(i + 1));
+    const qui = el("td", "g");
+    qui.appendChild(pseudoCliquable(l.compte));
+    tr.appendChild(qui);
+    tr.append(metal("or", l.or), metal("argent", l.argent), metal("bronze", l.bronze));
+    tr.appendChild(el("td", "fort", String(l.or + l.argent + l.bronze)));
+    corps.appendChild(tr);
+  });
+  table.appendChild(corps);
+  $("pa-tableau").replaceChildren(table);
+}
+
+function rendreLesSolos(solos: SoloVue[], minimum: number): void {
+  $("pa-detail").textContent = t2("Les coups qu'un seul joueur a trouvés, sur les parties jouées par au moins {n} joueurs.",
+    { n: minimum });
+  if (solos.length === 0) {
+    $("pa-tableau").replaceChildren(tableauVide(t("Aucun solo pour l'instant.")));
+    return;
+  }
+  const table = el("table");
+  table.appendChild(tete([
+    { texte: t("Jour") }, { texte: t("Partie"), classe: "g" }, { texte: t("Cp.") },
+    { texte: t("Mot"), classe: "g" }, { texte: t("Pos.") }, { texte: t("Score") },
+    { texte: t("Joueur"), classe: "g" }, { texte: t("Joueurs") }, { texte: "", classe: "c" },
+  ]));
+  const corps = el("tbody");
+  for (const s of solos) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "", new Date(`${s.jour}T12:00:00Z`).toLocaleDateString(
+      langue() === "en" ? "en-GB" : "fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })));
+    tr.appendChild(el("td", "g", `P${s.partie} · ${dictionnaire(s.lexique).nom.split(" ")[0]}`));
+    tr.appendChild(el("td", "", String(s.coup)));
+    tr.appendChild(el("td", "g rs-mot", s.mot));
+    tr.appendChild(el("td", "", noteCoup(s.dir, s.x, s.y, 7)));
+    tr.appendChild(el("td", "", String(s.score)));
+    const qui = el("td", "g");
+    s.equipe.forEach((nom, i) => {
+      if (i > 0) qui.appendChild(document.createTextNode(" + "));
+      qui.appendChild(pseudoCliquable(nom));
+    });
+    tr.appendChild(qui);
+    tr.appendChild(el("td", "", String(s.joueurs)));
+    const outils = el("td", "c");
+    const revoir = el("button", "rc-outil", t("Revoir")) as HTMLButtonElement;
+    revoir.type = "button";
+    revoir.title = t("Revoir ce coup");
+    revoir.addEventListener("click", () => {
+      void ouvrirLaPartie(s.manche, s.coup, "competitif", () => ouvrirLePalmares());
+    });
+    outils.appendChild(revoir);
+    tr.appendChild(outils);
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("pa-tableau").replaceChildren(table);
 }

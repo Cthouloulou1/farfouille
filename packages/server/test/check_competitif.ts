@@ -14,6 +14,7 @@ import {
   bilanDeLaManche, cumulDeLEpreuve, definirDossierDuCompetitif, epreuveDuJour, finirLaManche,
   mancheDuCompte, ouvrirLeCompetitif, ouvrirUneManche, resultatsDeLaPartie,
   creerUnTournoiDeTopping, epreuveDuTournoi, inscriptionDe, inscrireAuTournoi, tournoiDeLEpreuve,
+  classementDesMedailles, listeDesSolos,
 } from "../src/competitif.ts";
 import type { PlayedMove } from "../src/game.ts";
 
@@ -40,6 +41,18 @@ function coup(n: number, score: number, player: string | null, ms: number,
 
 console.log("\nLe compétitif\n");
 ouvrirLeCompetitif();
+
+/** Un jour de parties du jour, ecrit a la main : les tests ne figent rien. */
+function inscrireUnJour(jour: string, lexique: string, parties: number): void {
+  appendFileSync(join(dossier, "competitif.journal.jsonl"), JSON.stringify({
+    t: "pdj", jour, lexique, at: Date.now(),
+    parties: Array.from({ length: parties }, (_, i) => ({
+      n: i + 1, figee: `figee-${jour}-${lexique}-${i + 1}`,
+      config: { tirage: 7, jouables: 7, bornes: 7, joker: false, jokersParCoup: 1, chrono: 30 },
+    })),
+  }) + "\n");
+  ouvrirLeCompetitif();
+}
 
 // ------------------------------------------------------------------ bilans
 const coups = [
@@ -136,6 +149,53 @@ verifie("apres la fin, on ne s'inscrit plus",
 ouvrirLeCompetitif();
 verifie("les tournois et les inscriptions se relisent au journal",
   tournoiDeLEpreuve(ept)?.inscrits.length === 1 && tournoiDeLEpreuve(ept)?.parties.length === 2);
+
+
+// ----------------------------------------------------- medailles et solos
+//
+// Une journee close, douze joueurs : les trois premiers prennent un metal, et
+// le coup qu'un seul a trouve devient un solo (SPEC.md §29).
+const veille = "2026-09-14";
+const epv = epreuveDuJour(veille, "ods9");
+inscrireUnJour(veille, "ods9", 1);
+for (let i = 0; i < 12; i++) {
+  const nom = `j${i}`;
+  const m = ouvrirUneManche({
+    epreuve: epv, partie: 1, salon: `v${i}`, compte: nom, jeu: "seul", noms: "", equipe: [],
+  });
+  // Le coup 1 n'est trouve que par j0 : c'est le solo. Les temps s'echelonnent.
+  finirLaManche(m.id, [
+    coup(1, 40, i === 0 ? nom : null, 1000 + i * 100, { [nom]: i === 0 ? 40 : 10 }),
+    coup(2, 30, nom, 2000 + i * 10, { [nom]: 30 }),
+  ], 7, Date.parse("2026-09-14T20:00:00Z"));
+}
+const medailles = classementDesMedailles({ lexique: "ods9", maintenant: Date.parse("2026-09-15T12:00:00Z") });
+verifie("les trois premiers prennent leur metal",
+  medailles.length === 3 && medailles[0]!.compte === "j0" && medailles[0]!.or === 1
+  && medailles[1]!.argent === 1 && medailles[2]!.bronze === 1,
+  medailles.map((m) => `${m.compte}:${m.or}/${m.argent}/${m.bronze}`).join(" "));
+const solos = listeDesSolos({ lexique: "ods9", maintenant: Date.parse("2026-09-15T12:00:00Z") });
+verifie("le coup qu'un seul a trouve est un solo", solos.length === 1
+  && solos[0]!.equipe[0] === "j0" && solos[0]!.coup === 1 && solos[0]!.joueurs === 12);
+verifie("une journee en cours ne distribue rien",
+  classementDesMedailles({ lexique: "ods9", maintenant: Date.parse("2026-09-14T12:00:00Z") }).length === 0);
+verifie("la periode filtre les jours",
+  classementDesMedailles({ lexique: "ods9", depuis: "2026-09-15",
+    maintenant: Date.parse("2026-09-16T12:00:00Z") }).length === 0);
+
+// A NEUF JOUEURS, PAS DE SOLO : le coup n'a rien prouve.
+const veille2 = "2026-09-13";
+const epv2 = epreuveDuJour(veille2, "csw24");
+inscrireUnJour(veille2, "csw24", 1);
+for (let i = 0; i < 9; i++) {
+  const m = ouvrirUneManche({
+    epreuve: epv2, partie: 1, salon: `w${i}`, compte: `k${i}`, jeu: "seul", noms: "", equipe: [],
+  });
+  finirLaManche(m.id, [coup(1, 40, i === 0 ? `k${i}` : null, 1000 + i, { [`k${i}`]: 40 })], 7,
+    Date.parse("2026-09-13T20:00:00Z"));
+}
+verifie("neuf joueurs ne font pas un solo",
+  listeDesSolos({ lexique: "csw24", maintenant: Date.parse("2026-09-15T12:00:00Z") }).length === 0);
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);

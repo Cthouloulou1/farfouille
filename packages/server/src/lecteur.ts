@@ -258,6 +258,19 @@ function graineDuJournal(fichier: string): string | null {
 const RELUES_GARDEES = 4;
 const relues = new Map<string, PartieRelue>();
 
+/**
+ * LE JOURNAL D'UN SALON, par son identifiant.
+ *
+ * Sert aux manches du competitif (SPEC.md §29) : leur partie vit dans le salon
+ * ou elle s'est jouee, et ne passe pas par le journal des records. Rend `null`
+ * si le fichier n'est pas la.
+ */
+export function journalDuSalon(salon: string): string | null {
+  if (!/^[a-zA-Z0-9_.-]+$/.test(salon)) return null;
+  const f = join(DATA_DIR, `${salon}.journal.jsonl`);
+  return existsSync(f) ? f : null;
+}
+
 export function relireEtGarder(fichier: string): PartieRelue | null {
   const deja = relues.get(fichier);
   if (deja !== undefined) return deja;

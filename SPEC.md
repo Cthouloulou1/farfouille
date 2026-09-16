@@ -5806,6 +5806,10 @@ Le panneau n'existe que pour un compte d'administration, sur la page Compétitif
 Le calcul se refait après chaque changement, pour que l'aperçu soit immédiat et
 la parution certaine.
 
+**Une nouvelle graine efface l'aperçu.** L'aperçu porte sur une **partie figée**,
+pas sur un numéro de partie : retirée, c'est une autre partie, que personne n'a
+vue, et son auteur y est de nouveau classé comme tout le monde.
+
 **Un aperçu s'écrit au journal, et sort son auteur du classement de cette
 partie.** Celui qui l'a regardée la connaît : il peut la jouer, hors classement.
 Sa ligne paraît teintée, en bas, sans rang. Sans aperçu, l'administrateur est
@@ -5880,8 +5884,18 @@ convertit.
 parties : le tournoi n'existe qu'une fois ses parties écrites, et un tournoi qui
 paraît sans elles ne se jouerait pas. Le bouton le dit pendant ce temps.
 
-**Un tournoi créé ne se modifie pas encore.** Le retoucher avant son début, ou le
-supprimer, reste ouvert.
+**Un tournoi se modifie tant qu'il n'a pas commencé**, par celui qui l'a créé —
+ou par l'administration. Le formulaire est le même que celui de la création,
+rempli de ses réglages ; valider **refige toutes ses parties**. Une fois commencé,
+il a des manches jouées : ses réglages ne changent plus, et le serveur le refuse.
+
+**Ses inscrits survivent à une modification** : la ligne qu'on réécrit porte ses
+réglages, pas les gens.
+
+**Son créateur peut le supprimer**, avant comme après le début : un bouton sur sa
+tuile et un autre sur sa page, tous deux avec confirmation. Le journal, en ajout
+seul, garde sa création et sa suppression ; les manches déjà jouées restent
+écrites, elles ne se rattachent simplement plus à rien.
 
 
 ### Les règles du jour
@@ -5967,6 +5981,25 @@ tout s'ouvre à tout le monde.
 **Cliquer une ligne** ouvre la feuille de route de ce joueur à droite, si l'on a
 soi-même fini la partie.
 
+### Revoir une partie d'épreuve
+
+**Une manche se rejoue comme une partie archivée** (§23) : la même page, sa
+grille à gauche, ses solutions à droite, et les flèches pour avancer coup par
+coup. Le journal de la manche est celui du salon où elle s'est jouée ; le serveur
+ne le sert qu'à qui a le droit d'en voir le détail, c'est-à-dire à qui a fini
+cette partie-là.
+
+Trois portes y mènent :
+
+- le **temps et le négatif** qui ont remplacé le bouton *Jouer* dans la liste des
+  parties du jour, et dans celle d'un tournoi : on rouvre une partie qu'on a
+  jouée pour la revoir, pas pour relire son classement ;
+- le bouton **Revoir la partie**, en tête de la feuille de route des résultats,
+  sur la manche qu'on regarde — la sienne ou celle d'un autre ;
+- chaque **solo** du palmarès, qui ouvre le rejeu sur son coup.
+
+Fermer le rejeu ramène d'où l'on venait, et non à la page des records.
+
 ### La feuille de route du classement
 
 Elle n'apparaît **qu'une fois la partie finie** par qui regarde. Elle reprend la
@@ -5985,6 +6018,10 @@ police et l'alignement de la feuille de route du salon (§10).
 
 **Le mot retenu passe avant le vôtre** : on lit d'abord ce qu'il fallait
 trouver. Sur la feuille d'un autre joueur, *Votre mot* devient *Mot de Ana*.
+
+**Le titre nomme toujours la feuille** — « Feuille de route de Ana », la sienne
+comprise : on en lit plusieurs de suite, et rien d'autre ne dit laquelle on
+regarde.
 
 **Pas de colonne de pénalité** : rien ne se pénalise ici.
 
@@ -6029,6 +6066,10 @@ Sous la feuille de route, dans l'espace qui reste, **cinq onglets**, à la même
 condition : la partie finie. Ils sont dessinés en SVG par le client, sans
 bibliothèque. Le client n'a aucune dépendance, et cinq graphiques n'en
 justifient pas une.
+
+L'ordre des onglets est celui-ci, et il se lit : ce qu'on a fait coup par coup,
+puis où l'on se situe, puis comment on s'est classé, puis ce que la partie a
+coûté à tout le monde.
 
 1. **Temps par coup.** En abscisse le coup, en ordonnée le temps, en **échelle
    logarithmique** : sur une échelle linéaire, un coup trouvé en 2 secondes
@@ -6100,6 +6141,52 @@ liste. Ce qui en allume une :
 Elles vivent dans un journal en ajout seul, comme les comptes : une ligne quand
 elle naît, une ligne quand elle est lue.
 
+### Le palmarès : les médailles et les solos
+
+Une page à part, `?page=palmares`, ouverte par un lien discret sous les parties
+du jour, à côté du calendrier. Deux onglets, **Médailles** et **Solos**, et deux
+filtres qui valent pour les deux : le **lexique** (les trois, ou tous confondus)
+et la **période** — depuis toujours, cette année, les trente derniers jours.
+
+**Tout se calcule sur les journées closes.** Une partie du jour ne distribue ses
+médailles qu'à 5 h 30 le lendemain, quand son classement ne bouge plus.
+
+**Seules comptent les manches jouées à temps.** Une partie rejouée depuis le
+calendrier ne prend de médaille à personne, et ne prive personne de son solo :
+elle a eu tout le temps d'en entendre parler. Une manche jouée par qui avait vu
+la partie d'avance (§ l'aperçu) ne compte pas davantage.
+
+#### Les médailles
+
+**Les trois premiers de chaque partie du jour** gardent leur métal : or, argent,
+bronze. Le classement est celui du temps, celui de la page des résultats.
+
+**Deux temps égaux au centième sont ex æquo** : ils prennent le même métal, et le
+rang suivant saute d'autant — deux premiers, puis un troisième, qui prend le
+bronze. C'est la règle des records (§23).
+
+**Une équipe en donne un à chacun de ses membres.** Ils ont joué la partie
+ensemble ; la médaille est à eux deux.
+
+Le tableau classe **au nombre de médailles d'or, puis d'argent, puis de bronze**.
+Un joueur qui n'a que des bronzes passe donc après un joueur qui a un seul or, et
+c'est voulu : un palmarès se lit par le haut.
+
+#### Les solos
+
+**Un solo est un coup qu'un seul joueur a trouvé.** C'est ce qui se raconte le
+soir même, et c'est la seule mesure d'un coup difficile qui ne dépende pas du
+chrono.
+
+**Il faut dix joueurs à temps sur la partie pour qu'un solo compte.** À trois, ne
+pas être trouvé par les deux autres ne dit rien. Le compte se fait à la fermeture
+de la journée, sur les manches qui comptent ; quelqu'un qui rejoue la partie le
+lendemain ne peut donc ni défaire un solo, ni en fabriquer un.
+
+Chaque ligne porte le jour, la partie, le numéro du coup, le mot, sa case, ses
+points, qui l'a trouvé, **combien de joueurs ont joué cette partie**, et un bouton
+**Revoir** qui ouvre le rejeu sur ce coup-là.
+
 ### Les tournois de topping
 
 Leur création est **réservée à l'administration**, pour l'instant.
@@ -6142,6 +6229,10 @@ tournoi a un vainqueur.
 **Ce qu'on voit des résultats** (voir « Le classement ») : l'onglet d'une partie
 à qui l'a jouée, le Général à qui les a toutes jouées, et tout à tout le monde
 après la fin.
+
+**Un tournoi dont on a joué toutes les parties se voit d'un regard** : sa tuile
+passe en gris et porte une pastille « ✓ Fini ». C'est ce qu'on cherche des yeux
+en revenant sur la page — ce qu'il reste à jouer.
 
 **Sur la page Compétitif**, chaque tournoi est une tuile : la vignette de la
 grille de sa première partie, son nom, son type, ses dates. Trois groupes : en

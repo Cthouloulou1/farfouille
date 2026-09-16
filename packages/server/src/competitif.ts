@@ -164,7 +164,13 @@ export interface Tournoi {
 const jours = new Map<string, JourDePdj>();
 const manches = new Map<string, Manche>();
 const tournois = new Map<string, Tournoi>();
-/** Qui a regarde quelle partie avant de la jouer : `epreuve|partie|compte`. */
+/**
+ * QUI A REGARDE QUELLE PARTIE FIGEE AVANT DE LA JOUER : `figee|compte`.
+ *
+ * La cle est la partie figee, et non le numero de la partie : une nouvelle
+ * graine donne une autre partie, que personne n'a vue -- son auteur y est donc
+ * classe comme tout le monde (SPEC.md §29).
+ */
 const apercus = new Set<string>();
 
 const cleDuJour = (jour: string, lexique: string): string => `${jour}|${lexique}`;
@@ -240,13 +246,18 @@ function appliquer(e: Record<string, any>): void {
       at: e["at"], fin: null,
     });
   } else if (e["t"] === "apercu") {
-    apercus.add(`${e["epreuve"]}|${e["partie"]}|${e["par"]}`);
+    if (typeof e["figee"] === "string") apercus.add(`${e["figee"]}|${e["par"]}`);
+  } else if (e["t"] === "tournoi-supprime") {
+    tournois.delete(e["id"]);
   } else if (e["t"] === "tournoi") {
+    // UN TOURNOI MODIFIE GARDE SES INSCRITS : la ligne qu'on reecrit porte ses
+    // reglages, pas les gens.
+    const inscrits = tournois.get(e["id"])?.inscrits ?? [];
     tournois.set(e["id"], {
       id: e["id"], type: e["type"], nom: e["nom"], lexique: e["lexique"],
       debut: e["debut"], fin: e["fin"] ?? null, equipe: e["equipe"] ?? 1,
       parties: e["parties"] ?? [], battle: e["battle"] ?? null, par: e["par"], at: e["at"],
-      inscrits: [],
+      inscrits,
     });
   } else if (e["t"] === "inscription") {
     const t = tournois.get(e["tournoi"]);
@@ -415,10 +426,12 @@ export function bilanDeLaManche(
 }
 
 /** Clot une manche et l'ecrit. Sans effet sur une manche deja close. */
-export function finirLaManche(id: string, coups: readonly PlayedMove[], jouables: number): FinDeManche | null {
+export function finirLaManche(
+  id: string, coups: readonly PlayedMove[], jouables: number, at = Date.now(),
+): FinDeManche | null {
   const m = manches.get(id);
   if (m === undefined || m.fin !== null) return null;
-  const fin = bilanDeLaManche(m, coups, jouables);
+  const fin = bilanDeLaManche(m, coups, jouables, at);
   const ev = { t: "fin", manche: id, ...fin };
   inscrire(ev);
   appliquer(ev);
@@ -453,9 +466,11 @@ function aTemps(m: Manche): boolean {
   return e === null || jourDe(m.fin.at) <= e.jour;
 }
 
-/** La manche est-elle jouee par quelqu'un qui avait vu la partie ? */
+/** La manche est-elle jouee par quelqu'un qui avait vu CETTE partie figee ? */
 function vueDAvance(m: Manche): boolean {
-  return m.equipe.some((nom) => apercus.has(`${m.epreuve}|${m.partie}|${nom}`));
+  const figee = partiesDeLEpreuve(m.epreuve)?.find((p) => p.n === m.partie)?.figee;
+  if (figee === undefined) return false;
+  return m.equipe.some((nom) => apercus.has(`${figee}|${nom}`));
 }
 
 function ligneDe(m: Manche): LigneDeResultat {
@@ -484,6 +499,8 @@ export function resultatsDeLaPartie(
   // d'une partie a qui l'a jouee, et tout a tout le monde apres la fin.
   const t = tournoiDeLEpreuve(epreuve);
   const cache = t !== undefined && !fini && (t.fin === null || maintenant < t.fin);
+  // Une epreuve close est publique, detail compris.
+  const ouverte = fini || epreuveClose(epreuve, maintenant);
   return {
     cache,
     lignes: cache ? [] : closes.map(ligneDe),
@@ -492,8 +509,22 @@ export function resultatsDeLaPartie(
       fini,
       enCours: mienne !== undefined && mienne.fin === null,
     },
-    details: fini ? Object.fromEntries(closes.map((m) => [m.id, m.fin!.coups])) : null,
+    details: ouverte ? Object.fromEntries(closes.map((m) => [m.id, m.fin!.coups])) : null,
   };
+}
+
+/**
+ * L'EPREUVE EST-ELLE CLOSE ? Une journee passee, un tournoi fini.
+ *
+ * Ce qui est clos est public : ses feuilles de route et ses rejeux s'ouvrent a
+ * tout le monde. C'est ce que le palmares suppose -- un solo se revoit, meme par
+ * qui n'a pas joue ce jour-la (SPEC.md §29).
+ */
+export function epreuveClose(epreuve: string, maintenant = Date.now()): boolean {
+  const t = tournoiDeLEpreuve(epreuve);
+  if (t !== undefined) return t.fin !== null && maintenant >= t.fin;
+  const e = lireLEpreuve(epreuve);
+  return e !== null && e.jour < jourDe(maintenant);
 }
 
 /** La cle d'une ligne de cumul : un compte seul, ou une equipe entiere. */
@@ -543,6 +574,131 @@ export function cumulDeLEpreuve(epreuve: string, pour: string | null, maintenant
       temps: m.fin?.temps ?? null, negatif: m.fin?.negatif ?? null, score: m.fin?.score ?? null,
     })),
   };
+}
+
+
+// ------------------------------------------------- les medailles et les solos
+//
+// Voir SPEC.md §29. Les deux se calculent sur les JOURNEES CLOSES, et sur les
+// seules manches jouees a temps : une partie rejouee le lendemain ne prend de
+// medaille a personne, et ne prive personne de son solo.
+
+/** Le palmares d'un joueur : ses trois metaux. */
+export interface Medailles {
+  compte: string;
+  or: number;
+  argent: number;
+  bronze: number;
+}
+
+/** Un coup que personne d'autre n'a trouve, ce jour-la. */
+export interface Solo {
+  jour: string;
+  lexique: string;
+  partie: number;
+  /** Le numero du coup. */
+  coup: number;
+  mot: string;
+  dir: Dir;
+  x: number;
+  y: number;
+  score: number;
+  /** Qui l'a trouve : un compte, ou les membres d'une equipe. */
+  equipe: string[];
+  /** La manche ou le revoir. */
+  manche: string;
+  /** Combien de joueurs ont joue cette partie a temps. */
+  joueurs: number;
+}
+
+/** Il en faut dix pour qu'un solo veuille dire quelque chose (SPEC.md §29). */
+export const JOUEURS_POUR_UN_SOLO = 10;
+
+/** Les manches closes, a temps et hors apercu, d'une partie d'un jour. */
+function manchesQuiComptent(epreuve: string, partie: number): Manche[] {
+  return [...manches.values()].filter((m) => m.epreuve === epreuve && m.partie === partie
+    && m.fin !== null && aTemps(m) && !vueDAvance(m));
+}
+
+/** Les jours clos d'un lexique, du plus ancien au plus recent. */
+function joursClos(lexique: string | undefined, depuis: string | null, maintenant: number): JourDePdj[] {
+  const aujourdhui = jourDe(maintenant);
+  return [...jours.values()]
+    .filter((j) => j.jour < aujourdhui && (lexique === undefined || j.lexique === lexique)
+      && (depuis === null || j.jour >= depuis))
+    .sort((a, b) => (a.jour < b.jour ? -1 : 1));
+}
+
+/**
+ * LE CLASSEMENT DES MEDAILLES (SPEC.md §29).
+ *
+ * Les trois premiers de chaque partie du jour gardent leur metal a la fermeture
+ * de la journee. Deux temps egaux au centieme sont ex aequo : ils prennent le
+ * meme metal, et le rang suivant saute d'autant -- deux premiers, puis un
+ * troisieme. Une equipe en donne un a chacun de ses membres.
+ */
+export function classementDesMedailles(
+  o: { lexique?: string; depuis?: string | null; maintenant?: number } = {},
+): Medailles[] {
+  const maintenant = o.maintenant ?? Date.now();
+  const par = new Map<string, Medailles>();
+  const donner = (compte: string, rang: number): void => {
+    const m = par.get(compte) ?? { compte, or: 0, argent: 0, bronze: 0 };
+    if (rang === 1) m.or++;
+    else if (rang === 2) m.argent++;
+    else m.bronze++;
+    par.set(compte, m);
+  };
+  for (const j of joursClos(o.lexique, o.depuis ?? null, maintenant)) {
+    const epreuve = epreuveDuJour(j.jour, j.lexique);
+    for (const p of j.parties) {
+      const lignes = manchesQuiComptent(epreuve, p.n)
+        .sort((a, b) => a.fin!.temps - b.fin!.temps);
+      let rang = 0, precedent = -1;
+      lignes.forEach((m, i) => {
+        const centiemes = Math.round(m.fin!.temps / 10);
+        if (centiemes !== precedent) { rang = i + 1; precedent = centiemes; }
+        if (rang > 3) return;
+        for (const nom of m.equipe) donner(nom, rang);
+      });
+    }
+  }
+  return [...par.values()].sort((a, b) => b.or - a.or || b.argent - a.argent || b.bronze - a.bronze
+    || (a.compte < b.compte ? -1 : 1));
+}
+
+/**
+ * LA LISTE DES SOLOS (SPEC.md §29) : les coups qu'un seul joueur a trouves.
+ *
+ * Il faut dix joueurs a temps sur la partie pour qu'un solo compte : a trois, ne
+ * pas etre trouve par les deux autres ne dit rien. Les plus recents d'abord.
+ */
+export function listeDesSolos(
+  o: { lexique?: string; depuis?: string | null; maintenant?: number; plafond?: number } = {},
+): Solo[] {
+  const maintenant = o.maintenant ?? Date.now();
+  const out: Solo[] = [];
+  for (const j of joursClos(o.lexique, o.depuis ?? null, maintenant)) {
+    const epreuve = epreuveDuJour(j.jour, j.lexique);
+    for (const p of j.parties) {
+      const lignes = manchesQuiComptent(epreuve, p.n);
+      if (lignes.length < JOUEURS_POUR_UN_SOLO) continue;
+      const combien = lignes[0]!.fin!.coups.length;
+      for (let i = 0; i < combien; i++) {
+        const trouveurs = lignes.filter((m) => m.fin!.coups[i]?.trouve === true);
+        if (trouveurs.length !== 1) continue;
+        const m = trouveurs[0]!;
+        const c = m.fin!.coups[i]!;
+        out.push({
+          jour: j.jour, lexique: j.lexique, partie: p.n, coup: c.n, mot: c.mot,
+          dir: c.dir, x: c.x, y: c.y, score: c.score,
+          equipe: m.equipe, manche: m.id, joueurs: lignes.length,
+        });
+      }
+    }
+  }
+  out.reverse();
+  return out.slice(0, o.plafond ?? 300);
 }
 
 /** Un identifiant de salon sur, et propre a ce compte sur cette partie. */
@@ -632,19 +788,21 @@ export function apercuDeDemain(lexique: string, partie: number, par: string, mai
   const f = partieFigee(p.figee);
   if (f === null) return null;
   const epreuve = epreuveDuJour(demain, lexique);
-  if (!apercus.has(`${epreuve}|${partie}|${par}`)) {
-    const ev = { t: "apercu", epreuve, partie, par, at: Date.now() };
+  if (!apercus.has(`${p.figee}|${par}`)) {
+    const ev = { t: "apercu", epreuve, partie, figee: p.figee, par, at: Date.now() };
     inscrire(ev);
     appliquer(ev);
   }
   return { jour: demain, partie, config: f.config, coups: f.coups, fin: f.fin };
 }
 
-/** Les parties de demain que ce compte a deja regardees. */
+/**
+ * Les parties de demain que ce compte a deja regardees. Une partie retiree
+ * depuis n'y figure plus : ce n'est plus la meme partie.
+ */
 export function apercusDe(par: string, lexique: string, maintenant = Date.now()): number[] {
-  const epreuve = epreuveDuJour(decalerLeJour(jourDe(maintenant), 1), lexique);
-  return [...apercus].filter((a) => a.startsWith(`${epreuve}|`) && a.endsWith(`|${par}`))
-    .map((a) => Number(a.split("|")[1]));
+  const j = partiesDuJour(decalerLeJour(jourDe(maintenant), 1), lexique);
+  return (j?.parties ?? []).filter((p) => apercus.has(`${p.figee}|${par}`)).map((p) => p.n);
 }
 
 // ------------------------------------------------------------------ tournois
@@ -691,6 +849,71 @@ export function creerUnTournoiDeTopping(o: {
     console.log(`[competitif] tournoi de topping "${o.nom}" cree par ${o.par} : ${parties.length} partie(s)`);
     return tournois.get(ev.id)!;
   });
+}
+
+/**
+ * UN TOURNOI SE MODIFIE TANT QU'IL N'A PAS COMMENCE (SPEC.md §29), et par celui
+ * qui l'a cree. Apres, il a des manches jouees : ses reglages sont figes.
+ */
+export function tournoiModifiable(t: Tournoi, compte: string, admin: boolean, maintenant = Date.now()): string | null {
+  if (t.par !== compte && !admin) return "Seul son créateur modifie ce tournoi";
+  if (maintenant >= t.debut) return "Le tournoi a commencé : ses réglages ne changent plus";
+  return null;
+}
+
+/** Reecrit les reglages d'un tournoi de topping, et refige toutes ses parties. */
+export function modifierUnTournoiDeTopping(t: Tournoi, o: {
+  nom: string; lexique: string; debut: number; fin: number; equipe: number; modeles: ModeleDePartie[];
+}, layout: LayoutName): Promise<Tournoi> {
+  return unParUn(async () => {
+    const parties: PartieDEpreuve[] = [];
+    for (let i = 0; i < o.modeles.length; i++) {
+      const f = await figerUnePartie(configDuModele(o.modeles[i]!, o.lexique), layout);
+      ecrireLaPartieFigee(DATA_DIR, f);
+      parties.push({ n: i + 1, figee: f.id, config: f.config });
+    }
+    const ev = {
+      t: "tournoi", id: t.id, type: "topping", nom: o.nom, lexique: o.lexique,
+      debut: o.debut, fin: o.fin, equipe: o.equipe, parties, battle: null, par: t.par, at: t.at,
+      modifieLe: Date.now(),
+    };
+    inscrire(ev);
+    appliquer(ev);
+    console.log(`[competitif] tournoi "${o.nom}" modifie : ${parties.length} partie(s) refigees`);
+    return tournois.get(t.id)!;
+  });
+}
+
+/** Reecrit les reglages d'un tournoi de battle. */
+export function modifierUnTournoiDeBattle(t: Tournoi, o: {
+  nom: string; lexique: string; debut: number; equipe: number; battle: ReglagesBattle;
+}): Tournoi {
+  const ev = {
+    t: "tournoi", id: t.id, type: "battle", nom: o.nom, lexique: o.lexique,
+    debut: o.debut, fin: null, equipe: o.equipe, parties: [], battle: o.battle,
+    par: t.par, at: t.at, modifieLe: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+  return tournois.get(t.id)!;
+}
+
+/**
+ * SUPPRIME UN TOURNOI. Le journal garde sa creation et sa suppression -- rien ne
+ * s'efface d'un fichier en ajout seul -- et les manches deja jouees restent au
+ * journal ; elles ne se rattachent simplement plus a rien.
+ */
+export function supprimerUnTournoi(t: Tournoi, par: string): void {
+  const ev = { t: "tournoi-supprime", id: t.id, par, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+  console.log(`[competitif] tournoi "${t.nom}" supprime par ${par}`);
+}
+
+/** Combien de parties d'un tournoi ce compte a finies. */
+export function partiesFiniesDe(t: Tournoi, compte: string): number {
+  const epreuve = epreuveDuTournoi(t.id);
+  return t.parties.filter((p) => mancheDuCompte(compte, epreuve, p.n)?.fin != null).length;
 }
 
 /** Cree un tournoi de battle : ses parties se tirent a chaque manche. */

@@ -344,9 +344,11 @@ button.word { cursor: pointer; }
 button.word:hover { color: var(--accent); border-color: transparent; }
 /* LE TOP DU BANDEAU LATERAL SE VOIT DE LOIN : c'est la seule chose que la
    table entiere regarde en meme temps, coup apres coup. */
-#last-word { font-size: calc(26px * var(--z, 1)); }
-#last-word .pts { font-size: calc(30px * var(--z, 1)); }
-#last-word.none { font-size: calc(16px * var(--z, 1)); }
+/* LA MEILLEURE SOLUTION DU MOMENT SE LIT COMME LE TOP : c'est la meme mesure,
+   celle qu'on compare d'un coup d'oeil a l'autre. */
+#last-word, #cur-word { font-size: calc(26px * var(--z, 1)); }
+#last-word .pts, #cur-word .pts { font-size: calc(30px * var(--z, 1)); }
+#last-word.none, #cur-word.none { font-size: calc(16px * var(--z, 1)); }
 .sub { font-size: calc(12.5px * var(--z, 1)); color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
 .bad { margin-top: 5px; font-size: calc(12.5px * var(--z, 1)); color: var(--warn); font-family: "IBM Plex Mono", monospace; }
 .bad[hidden] { display: none; }
@@ -1513,6 +1515,25 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rc-tableau.rs-classement tbody tr.rs-apercu td { color: var(--ink-faint); }
 .rc-tableau.rs-classement tbody tr.rs-apercu { background: var(--field); }
 
+/* LA TUILE D'UN TOURNOI QU'ON A FINI : grisee, avec sa pastille. */
+.carte.terminee .vue { filter: grayscale(1); opacity: .55; }
+.carte.terminee .nom { color: var(--ink-soft); }
+.carte .fini { position: absolute; left: 8px; top: 8px; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 12px; background: var(--accent); color: var(--panel); font-family: Archivo, system-ui, sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.cp-pied { display: flex; justify-content: center; gap: 18px; }
+
+/* La feuille de route et son bouton de rejeu. */
+.rs-feuille-tete { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.rs-feuille-tete h2 { margin: 0; }
+.rs-feuille-tete button { margin-left: auto; padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12.5px; }
+.rs-feuille-tete button:hover { color: var(--ink); background: var(--hover); border-color: var(--rule); }
+.rs-feuille-tete button[hidden] { display: none; }
+
+/* Le palmares : les trois metaux, et les solos. */
+.pa-metal { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; }
+.pa-or { background: linear-gradient(160deg, #F2D07A, #C9A227); }
+.pa-argent { background: linear-gradient(160deg, #DDE2E4, #A8B0B4); }
+.pa-bronze { background: linear-gradient(160deg, #E0B08A, #A9713F); }
+
 /* LES GRAPHIQUES. L'encre pour la table, l'accent pour la ligne regardee,
    l'avertissement pour un coup rate : ce que la feuille de route dit deja. */
 .rs-graphes { margin-top: 18px; }
@@ -1806,6 +1827,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="cp-parties" id="cp-parties"></div>
         <!-- LE CALENDRIER EST DISCRET : on revient rarement sur un jour passe. -->
         <div class="cp-pied">
+          <button type="button" class="lien-pied" id="cp-palmares">Palmarès</button>
           <button type="button" class="lien-pied" id="cp-calendrier">Calendrier</button>
         </div>
         <div class="cp-jours" id="cp-jours" hidden></div>
@@ -1815,6 +1837,37 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="cp-tournois" id="cp-tournois"></div>
       </section>
     </div>
+  </div>
+
+  <!-- LE PALMARES DES PARTIES DU JOUR (SPEC.md §29) : les medailles des
+       journees closes, et les solos. -->
+  <div class="corps competitif-page" id="corps-palmares" hidden>
+    <div class="pr-tete">
+      <button type="button" class="pr-retour" id="pa-retour">← Compétitif</button>
+      <h1>Palmarès</h1>
+      <span class="pr-detail" id="pa-detail"></span>
+    </div>
+    <div class="rc-barre">
+      <div class="rc-vues" id="pa-onglets">
+        <button type="button" data-v="medailles">Médailles</button>
+        <button type="button" data-v="solos">Solos</button>
+      </div>
+    </div>
+    <div class="rc-declinaisons">
+      <div class="rc-groupe">
+        <label>Lexique</label>
+        <div class="rc-choix" id="pa-lexique"></div>
+      </div>
+      <div class="rc-groupe">
+        <label>Période</label>
+        <div class="rc-choix" id="pa-periode">
+          <button type="button" data-v="tout">Depuis toujours</button>
+          <button type="button" data-v="annee">Cette année</button>
+          <button type="button" data-v="30j">30 derniers jours</button>
+        </div>
+      </div>
+    </div>
+    <div class="rc-tableau" id="pa-tableau"></div>
   </div>
 
   <!-- L'ADMINISTRATION DU COMPETITIF (SPEC.md §29) : les parties de demain, et la
@@ -1860,7 +1913,9 @@ button.word:hover { color: var(--accent); border-color: transparent; }
       <span class="pr-detail" id="to-detail"></span>
     </div>
     <div class="join-error" id="to-error" hidden></div>
-    <div class="cp-colonnes" style="margin-top: 14px">
+    <div class="ad-ligne" id="to-gestes"></div>
+    <div class="ad-bloc" id="to-modif" hidden></div>
+    <div class="cp-colonnes" id="to-colonnes" style="margin-top: 14px">
       <section>
         <div class="cp-tete"><h1 id="to-parties-titre">Parties</h1></div>
         <div class="cp-parties" id="to-parties"></div>
@@ -1897,7 +1952,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
         <div class="rc-tableau rs-classement" id="rs-classement"></div>
       </div>
       <div class="rs-droite">
-        <h2 id="rs-feuille-titre">Feuille de route</h2>
+        <div class="rs-feuille-tete">
+          <h2 id="rs-feuille-titre">Feuille de route</h2>
+          <button type="button" id="rs-revoir" hidden>Revoir la partie</button>
+        </div>
         <div class="pr-route rs-feuille" id="rs-feuille"></div>
         <div class="rs-resume" id="rs-resume"></div>
         <!-- LES GRAPHIQUES, a la meme condition que la feuille : la partie finie. -->
