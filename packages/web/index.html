@@ -1532,11 +1532,15 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .g-tableur .tb-nom { width: 152px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
 .g-tableur thead .tb-nom, .g-tableur thead .tb-rang, .g-tableur thead .tb-neg { text-align: left; }
 .g-tableur .tb-neg { width: 54px; font-family: var(--mono); color: var(--ink); }
-.g-tableur .tb-case { padding: 5px 3px; font-family: var(--mono); color: var(--ink-soft); }
-.g-tableur .tb-rate { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); }
-/* Rien de propose du tout : le coup n'a meme pas ete cherche. */
-.g-tableur .tb-rien { background: color-mix(in srgb, var(--warn) 26%, transparent); }
-.g-tableur tbody tr:hover td { background: var(--hover); }
+/* LA TEINTE D'UNE CASE VIT DANS UNE VARIABLE, et non dans `background` tout
+   court : le survol d'une ligne l'aurait sinon effacee, et c'est justement la
+   ligne qu'on survole qu'on veut lire. Le survol allume donc les trois
+   colonnes de gauche, ou l'oeil se pose, et laisse le degrade tranquille. */
+.g-tableur .tb-case { padding: 5px 3px; font-family: var(--mono); color: var(--ink-soft); background: var(--teinte, transparent); }
+.g-tableur .tb-rate { color: var(--ink); }
+.g-tableur tbody tr:hover .tb-rang,
+.g-tableur tbody tr:hover .tb-nom,
+.g-tableur tbody tr:hover .tb-neg { background: var(--hover); }
 .g-tableur .tb-vue td { box-shadow: inset 0 -1px 0 var(--accent), inset 0 1px 0 var(--accent); }
 .g-tableur .tb-vue .tb-nom { font-weight: 600; }
 
@@ -1723,6 +1727,7 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 .g-cle .g-cle-barre, .g-cle .g-cle-barre-ratee, .g-cle .g-cle-barre-moi { width: 10px; height: 10px; border-radius: 2px; background: var(--ink-soft); }
 .g-cle .g-cle-barre-ratee { background: var(--warn); }
 .g-cle .g-cle-barre-moi { background: var(--accent); }
+.g-cle .g-cle-carre { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--rule); }
 
 /* LE BLOC D'UNE PARTIE D'EPREUVE, dans le panneau du salon. */
 #epreuve-wrap .ep-gestes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }

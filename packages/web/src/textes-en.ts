@@ -810,6 +810,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Les primes de cette partie ne sont pas standards.": "This game's bonuses are not standard.",
   "Les primes sont standards.": "The bonuses are standard.",
   "Rang": "Rank",
+  "trouvé vite": "found fast",
+  "trouvé tard": "found late",
+  "raté de peu": "just missed",
+  "raté en entier": "wholly missed",
+  "{n} de moins": "{n} short",
   "Inviter des joueurs": "Invite players",
   "On ne défie que sur une partie terminée et gardée":
     "You can only challenge on a finished, kept game",

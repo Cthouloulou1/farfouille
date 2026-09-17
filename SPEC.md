@@ -6464,16 +6464,40 @@ avec cinquante joueurs n'a pas plus de calcul à faire qu'un salon d'un seul.
 Création réservée à l'administration, et pour l'instant seulement elle : ce
 module-là n'a pas vocation à devenir public.
 
+#### Trois temps, trois gestes
+
+Un tournoi de battle vit en trois temps, et chacun se ferme par un geste de son
+créateur, ou d'un administrateur.
+
+| temps | il s'ouvre | il se ferme par |
+|---|---|---|
+| **Inscriptions** | à la création | l'heure de début, toute seule |
+| **Poules** | au début | **Valider et lancer la phase de poules** |
+| **Double tableau** | les poules finies ou la limite passée | **Valider et lancer le tableau** |
+
+**Les réglages restent ouverts jusqu'au geste qui les consomme.** Un tournoi de
+topping se fige au premier coup joué ; celui de battle, non. Rien sur le site ne
+mesure un niveau, et l'organisateur ne sait combien de poules faire qu'une fois
+qu'il sait combien de joueurs sont venus.
+
+| réglage | modifiable jusqu'à |
+|---|---|
+| Nom, lexique, début, joueurs par équipe | le début |
+| Joueurs par poule, rencontres par poule, manches par rencontre, date limite des poules | la validation des poules |
+| Qualifiés, dont au tableau haut | la validation des poules |
+| Meilleur de X en tableau, en demi-finale, en finale ; jours par tour | la validation du tableau |
+| L'en-tête de la page | toujours |
+
 #### Le formulaire de création
 
 | champ | par défaut |
 |---|---|
 | **Nom**, **lexique** | |
-| **Fin des inscriptions** | le début des rencontres |
+| **Début** | l'heure où les inscriptions ferment |
 | **Joueurs par équipe** | 1 |
 | **Joueurs par poule** | 4 |
 | **Rencontres par poule** | tous contre tous |
-| **Manches par rencontre de poule** | 2 |
+| **Manches par rencontre de poule** | 3 |
 | **Qualifiés** | tous |
 | **Dont au tableau haut** | la moitié des qualifiés |
 | **Meilleur de X**, en tableau | 3 |
@@ -6482,32 +6506,72 @@ module-là n'a pas vocation à devenir public.
 | **Date limite des poules** | une semaine après le début |
 | **Jours par tour de tableau** | 3 |
 
-X est impair : le formulaire n'en propose pas d'autre. **Les poules se tirent une
-fois les inscriptions closes** ; leur tirage, leur retouche à la main et les
-rencontres viennent à l'étape suivante.
+X est impair : le formulaire n'en propose pas d'autre, en poule comme en
+tableau. Un nombre pair de manches rendrait la rencontre nulle une fois sur
+trois, et une rencontre de tableau a besoin d'un vainqueur.
 
-**Une manche** : deux joueurs, un salon, en même temps. Le premier qui trouve le
-top marque **1 point** ; un top que personne ne trouve donne **½ point** à
-chacun. Le total des deux fait donc toujours le nombre de coups. Qui a le plus de
-points gagne la manche ; à égalité, la manche est **nulle**.
+#### L'inscription
+
+**On s'inscrit jusqu'à l'heure de début, et pas une minute après.** Un tournoi
+de battle tire ses poules sur ceux qui sont là ; un inscrit de la dernière
+heure les referait toutes.
+
+La page d'inscription montre le format entier : joueurs par poule, rencontres
+par poule, **manches par rencontre**, dates limites, meilleur de X, et la partie
+d'une manche telle qu'elle se lit partout (*7/8 joker, 60s*).
+
+**À plusieurs, l'inscription porte un nom d'équipe.** Ce nom tient la place d'un
+joueur dans tout le tournoi : c'est lui qui figure en poule, au tableau et au
+classement final. Le cliquer ouvre la liste de ses joueurs, chaque pseudo de
+compte étant cliquable à son tour.
+
+**Inscrire quelqu'un le lui dit.** Un partenaire nommé reçoit une notification,
+et cette notification porte un bouton **Me retirer**.
+
+**On se désinscrit tant que les poules ne sont pas validées**, et le geste vaut
+pour n'importe quel tournoi : d'un tournoi de topping tant qu'on n'a lancé
+aucune partie, d'un battle tant que les poules ne sont pas tirées. Après, partir
+est un abandon, et seul l'administrateur l'acte.
+
+#### Une manche
+
+Deux joueurs, un salon, en même temps. Le premier qui trouve le top marque
+**1 point** ; un top que personne ne trouve donne **½ point** à chacun. Le total
+des deux fait donc toujours le nombre de coups. Qui a le plus de points gagne la
+manche ; à égalité, la manche est **nulle**.
+
+**À plusieurs par équipe, tout le monde est dans le même salon.** Chaque joueur
+a sa couleur, et le point d'un coup va à l'équipe du premier qui l'a trouvé. Le
+score d'une équipe est la somme des points de ses joueurs, et le salon montre
+les deux totaux d'équipe, gros, au-dessus du détail par joueur. Un coup que
+personne ne trouve donne ½ point à chaque équipe, et non à chaque joueur : le
+total reste le nombre de coups.
 
 **Les parties sont tirées au hasard à chaque manche**, sans partie figée. Une
 partie commune à plusieurs rencontres se raconterait d'une rencontre à l'autre ;
-tirée pour deux joueurs qui la jouent ensemble, elle ne peut pas fuiter. Le salon
-tourne comme un salon de battle ordinaire, avec son fil de calcul.
+tirée pour ceux qui la jouent ensemble, elle ne peut pas fuiter. Le salon tourne
+comme un salon de battle ordinaire, avec son fil de calcul.
+
+#### Une rencontre est un objet, pas une séance
+
+**Une rencontre garde son score entre deux séances.** Deux joueurs qui se
+quittent à 1-0 sur un meilleur de 3 rouvrent plus tard pour la manche 2, et la
+rencontre reprend là où elle était. Sans cela, une coupure de réseau annulerait
+une demi-heure de jeu, et personne ne rejouerait.
+
+Une rencontre finit quand un camp a le nombre de manches qu'il faut, ou, en
+poule, quand toutes ses manches ont été jouées. **Une manche nulle ne compte pas
+dans une rencontre de tableau** : elle se rejoue. En poule, elle compte pour
+rien à chacun, et la rencontre peut finir nulle.
 
 #### Les poules
 
-| réglage | par défaut |
-|---|---|
-| **Joueurs par poule**, ou nombre de poules | des poules aussi égales que possible |
-| **Composition** | tirée au sort, puis retouchable à la main |
-| **Rencontres par poule** | chacun rencontre tous les autres |
-| **Manches par rencontre** | |
-
 **La composition se tire, puis se retouche.** Rien sur le site ne mesure un
 niveau, et des poules déséquilibrées font un mauvais tournoi. L'administrateur
-qui connaît les joueurs déplace qui il veut d'une poule à l'autre.
+qui connaît les joueurs déplace qui il veut d'une poule à l'autre, et un bouton
+**Retirer au sort** recommence le tirage. Les poules sont aussi égales que
+possible ; onze inscrits par poules de quatre donnent 4, 4 et 3, et la main de
+l'administrateur peut les rendre inégales sans que la validation s'y oppose.
 
 **Une rencontre de poule** est gagnée par qui gagne le plus de manches ; à
 égalité, elle est nulle.
@@ -6517,11 +6581,35 @@ qui connaît les joueurs déplace qui il veut d'une poule à l'autre.
 | victoire | 3 |
 | nul | 2 |
 | défaite | 1 |
-| non jouée à la date limite | 0 pour les deux |
+| non jouée à la date butoir | 0 pour les deux |
 
 Une défaite rapporte plus qu'une rencontre non jouée : venir jouer compte.
 
-Le classement de poule se fait aux points, puis au nombre de manches gagnées.
+**Le départage**, dans l'ordre : les points, puis les manches gagnées, puis les
+**points de manche**, c'est-à-dire le cumul des 1 et des ½ pris coup par coup
+sur toutes ses manches. Les points de manche avant la rencontre directe parce
+qu'ils existent toujours, même quand la rencontre n'a pas été jouée.
+
+#### Le classement de poule
+
+Une table par poule, sur le modèle des tableaux de phase de groupes qu'on lit
+ailleurs.
+
+| colonne | ce qu'elle porte |
+|---|---|
+| **#** | le rang dans la poule |
+| **Joueur** | son nom, ou celui de son équipe |
+| **Rencontres** | gagnées, nulles, perdues |
+| **Manches** | gagnées et perdues |
+| **Points** | les points de poule |
+| **Tour 1 … n** | une case par rencontre : le score en manches, et l'adversaire |
+
+Une case de tour est **verte** quand la rencontre est gagnée, **grise** quand
+elle est nulle, **rouge** quand elle est perdue, **vide et barrée** quand elle
+n'a pas été jouée. La ligne porte à gauche une bande **verte** si elle qualifie
+pour le tableau haut, **jaune** pour le tableau bas, **rouge** si elle élimine.
+La bande se dessine dès que les réglages de qualification sont posés, avant même
+que la poule soit finie : chacun voit à quoi il joue.
 
 #### Le double tableau
 
@@ -6529,21 +6617,175 @@ Le classement de poule se fait aux points, puis au nombre de manches gagnées.
 mieux classés entrent dans le **tableau haut** ; les suivants entrent
 **directement dans le tableau bas**. Combien vont dans chacun est un réglage.
 
+**Le placement suit le classement de poule, en serpentin** : le premier de la
+meilleure poule et le dernier qualifié se retrouvent aux deux bouts du tableau,
+et deux joueurs d'une même poule ne se croisent pas au premier tour tant que
+c'est évitable.
+
+**On préfère des effectifs qui tombent juste.** L'aperçu propose des nombres de
+qualifiés qui remplissent le tableau sans exempt, et prévient quand le réglage
+choisi n'en fait pas partie. Quand un exempt est inévitable, il va **aux mieux
+classés**.
+
 **Perdre en haut envoie en bas. Perdre en bas élimine.** La **grande finale**
-oppose le vainqueur du tableau haut au vainqueur du tableau bas.
+oppose le vainqueur du tableau haut au vainqueur du tableau bas, et c'est une
+rencontre unique : pas de manche de rattrapage, pas de tableau remis à zéro.
+Celui qui sort du tableau bas a joué un tour de plus pour arriver là, et c'est
+cela qui équilibre sa défaite.
 
 **Chaque rencontre se joue au meilleur de X manches**, X impair. Un réglage à
 part permet un autre X pour les demi-finales et la finale.
 
-**Une manche nulle ne compte pas** dans une rencontre de tableau : elle se
-rejoue. Un tableau a besoin d'un vainqueur ; une poule, non.
+Le tableau se lit en colonnes, tableau haut en premier, tableau bas en dessous.
+Chaque rencontre montre les deux noms et le score en manches, le vainqueur en
+gras, et s'ouvre au clic sur la liste de ses manches ; chaque manche mène à son
+rejeu, avec le classement battle des deux camps.
 
-#### Les dates limites
+#### Le classement final et les médailles
 
-Chaque rencontre porte une **date limite**. Les deux joueurs s'arrangent entre
-eux ; la page de la rencontre ouvre un salon privé pour eux deux, aux réglages
-du tournoi, et les manches s'y enchaînent. Passé la date, une rencontre non
-jouée donne **0 point aux deux**.
+| place | qui |
+|---|---|
+| **Or** | le vainqueur de la grande finale |
+| **Argent** | le perdant de la grande finale |
+| **Bronze** | le perdant de la finale du tableau bas |
+
+**Il n'y a pas de petite finale** : le perdant d'une demi-finale du tableau haut
+tombe en finale du tableau bas, et c'est cette rencontre-là qui désigne le
+troisième. Les places suivantes se lisent à la profondeur atteinte dans le
+tableau bas, puis au classement de poule.
+
+Les médailles entrent au palmarès du §29, avec celles des tournois de topping.
+
+#### Les dates
+
+Deux régimes coexistent, et le second se pose phase par phase.
+
+**Le régime libre**, par défaut. Chaque rencontre porte une **date limite**, qui
+est la fin normale de son tour, et une **date butoir**, qui est le dernier
+délai. Entre les deux, les joueurs s'arrangent entre eux. Aucune heure n'est
+imposée.
+
+**Le régime imposé.** L'administrateur pose une date et une heure sur une phase.
+La rencontre ne s'ouvre qu'à cette heure-là. C'est ce qu'il faut pour une finale
+retransmise.
+
+**Rien ne se déclenche tout seul quand quelqu'un manque.** Un joueur absent à
+l'heure imposée ne perd pas par une horloge : la rencontre retombe simplement
+dans l'arbitrage. Une panne de réseau de dix minutes ne doit pas décider d'un
+tournoi.
+
+#### Les rappels
+
+La veille de la date limite, puis la veille de la date butoir, une notification
+part à qui n'a pas encore joué sa rencontre. Sans elle, la butoir tombe sur des
+gens qui avaient seulement oublié, et l'organisateur passe son temps à arbitrer.
+
+#### L'arbitrage
+
+Passé la butoir, l'administrateur voit, pour chaque rencontre non jouée, **les
+demandes de créneau et les messages des deux bords**. C'est de quoi juger qui a
+cherché à jouer. Il peut alors :
+
+- **accorder un délai**, en repoussant la butoir de cette rencontre ;
+- **donner la victoire** à l'un, ou à l'autre ;
+- **n'en donner à personne** : en poule, 0 point aux deux ; en tableau, personne
+  ne passe, et l'adversaire du tour suivant est exempt ;
+- **déclarer un forfait** : le joueur quitte le tournoi, et toutes ses
+  rencontres restantes sont perdues d'un coup.
+
+#### Mes rencontres
+
+Une section de la page du tournoi, pour qui y joue. Chaque rencontre à jouer y
+porte :
+
+- l'adversaire, la date limite et la date butoir ;
+- **Inviter**, quand il est connecté : il reçoit l'invitation aussitôt et le
+  salon s'ouvre pour eux deux ;
+- **Envoyer un message** sinon : il reçoit une notification *Demande de créneau
+  pour match* avec le texte ;
+- le fil des messages échangés sur cette rencontre, lisible des deux côtés ;
+- **Mes disponibilités**, une zone de texte écrite une seule fois pour le
+  tournoi et lue sur toutes ses rencontres. Écrire trois fois les mêmes horaires
+  pour trois adversaires n'aurait pas de sens.
+
+#### La page du tournoi
+
+- un **en-tête de texte libre**, écrit par le créateur ou un administrateur, où
+  se donnent les informations que le format ne dit pas ;
+- **Mes rencontres**, pour qui y joue ;
+- les **poules** et leurs classements ;
+- le **double tableau** ;
+- les **rencontres en cours**, avec un bouton **Regarder** ;
+- le **classement final**, une fois la grande finale jouée.
+
+**Elle se rafraîchit toute seule.** Le client n'a de liaison permanente avec le
+serveur que dans un salon ; hors salon, la page interroge le serveur comme le
+fait déjà la cloche des notifications. Un résultat paraît donc à la minute près,
+et non à la seconde.
+
+#### Les notifications du battle
+
+| genre | quand |
+|---|---|
+| `tournoi-inscrit` | quelqu'un vous a inscrit ; le bouton **Me retirer** est dessus |
+| `tournoi-poules` | les poules sont tirées et la phase est lancée |
+| `tournoi-qualifie` | vous êtes qualifié pour la phase suivante |
+| `tournoi-elimine` | vous n'avez pas atteint la phase suivante |
+| `tournoi-creneau` | une demande de créneau, avec le message de l'adversaire |
+| `tournoi-rappel` | la date limite ou la date butoir approche |
+
+Toutes mènent à la page du tournoi.
+
+### Les spectateurs
+
+**Regarder un salon sans y jouer.** C'est ce qu'il faut pour suivre une
+rencontre de tournoi, et c'est utile partout ailleurs : le salon star se regarde
+sans compte, alors que jouer la grille infinie en demande un.
+
+- Le spectateur **ne figure pas au classement** et ne compte dans aucun total.
+- Il **ne peut pas envoyer de coup**.
+- **Son chat attend la fin de la partie.** Ce qu'il écrit pendant qu'une partie
+  tourne n'arrive aux joueurs qu'une fois la partie finie, et il arrive avec
+  l'heure à laquelle il l'a écrit, pas celle de sa livraison.
+- **Le chuchotement** part tout de suite, mais ne va qu'aux autres spectateurs.
+  Les joueurs ne le voient jamais.
+
+**Ce que cela ouvre, et qu'on accepte.** Le spectateur voit le tirage en direct,
+et rien ne l'empêche de souffler le top à un joueur par un autre canal. Le chat
+retenu n'y change rien. On l'accepte : un tournoi qu'on ne peut pas regarder
+n'est pas un tournoi.
+
+### Les équipes du site
+
+Une équipe est un **nom**, un **logo**, un **responsable** et des **membres**.
+Elle sert de club : on la crée une fois, et on la retrouve d'un tournoi à
+l'autre.
+
+- **Qui crée l'équipe en est le responsable.** Il tient la page, le logo, et
+  répond aux demandes.
+- **On demande à la rejoindre**, et le responsable accepte ou non.
+- **La page d'une équipe est publique** : son nom, son logo, ses membres, chaque
+  pseudo cliquable.
+- Un tournoi réglé sur **Équipe existante**, au lieu de *joueurs par équipe*,
+  fait choisir une équipe du site à l'inscription, et demande le **nombre de
+  joueurs qui seront présents**, à titre indicatif. Rien ne le vérifie : on fait
+  confiance aux équipes.
+- **Dans un salon**, inviter les membres de son équipe est un seul geste.
+
+Journal `equipes.journal.jsonl`, en ajout seul comme les autres :
+
+```
+{ "t": "equipe", "id": "…", "nom": "Bougival", "par": "…", "at": … }
+{ "t": "demande", "equipe": "…", "compte": "…", "at": … }
+{ "t": "reponse", "equipe": "…", "compte": "…", "oui": true, "par": "…", "at": … }
+{ "t": "membre", "equipe": "…", "compte": "…", "dedans": false, "at": … }
+{ "t": "logo", "equipe": "…", "fichier": "…", "at": … }
+```
+
+**Le logo demande un envoi de fichier**, chose que le serveur ne fait nulle part
+aujourd'hui : une route d'envoi, une limite de taille, un dossier et son
+nettoyage. C'est la seule pièce neuve de ce module. Tant que les équipes
+n'existent pas, le champ **nom d'équipe** libre de l'inscription en tient lieu.
 
 ### Le journal
 
@@ -6562,6 +6804,17 @@ Tout suit la règle du §11 : **le journal fait foi**, le reste en est une vue.
 { "t": "coup", "manche": "…", "n": 3, "ms": 12345, "mot": "VETU", "case": "6B", "score": 19, "top": false }
 { "t": "pause", "manche": "…", "n": 4, "at": … }
 { "t": "fin", "manche": "…", "at": … }
+```
+
+Et pour un tournoi de battle, dans le même journal :
+
+```
+{ "t": "poules", "tournoi": "…", "poules": [["a","b"],["c","d"]], "par": "…", "at": … }
+{ "t": "rencontre", "tournoi": "…", "id": "…", "phase": "poule:1", "camps": ["a","b"], "bo": 3, "limite": …, "butoir": … }
+{ "t": "manche-rencontre", "rencontre": "…", "n": 1, "salon": "…", "points": [11.5, 9.5], "gagnant": "a", "at": … }
+{ "t": "message", "rencontre": "…", "de": "a", "texte": "…", "at": … }
+{ "t": "arbitrage", "rencontre": "…", "quoi": "victoire", "qui": "a", "par": "…", "at": … }
+{ "t": "tableau", "tournoi": "…", "haut": ["…"], "bas": ["…"], "par": "…", "at": … }
 ```
 
 `jeu` vaut `seul`, `compte` (à plusieurs sur un compte, avec le texte),
@@ -6592,9 +6845,13 @@ consigne** — chaque ligne a son *Aléatoire*, le format a ses plages et son
 **tournois de la semaine** et leurs instances, et les **notifications** avec leur
 cloche.
 
+**Le 17 septembre 2026 :** le dégradé du tableau des coups ratés, rouge pour ce
+qui manque et vert pour ce qu'on a pris ; puis les **tournois de battle**, leurs
+poules et leur double tableau.
+
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
-par joueur dans un salon qui n'en tient qu'une), les défis, le tirage des poules
-et les rencontres du battle, le tournoi de duplicate.
+par joueur dans un salon qui n'en tient qu'une), le tournoi de duplicate, les
+spectateurs, les équipes du site.
 
 ```bash
 node packages/server/test/check_figees.ts        # figer, servir, la pause
@@ -6609,10 +6866,15 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
    page, classement et feuille de route.~~
 2. ~~Le panneau d'administration et les modèles de la semaine.~~
 3. ~~Les graphiques.~~
-4. Les notifications ~~(faites)~~ ; les défis restent.
-5. ~~Les tournois de topping~~, et ceux de la semaine.
-6. Les tournois de duplicate.
-7. Les tournois de battle.
+4. ~~Les notifications, et les défis.~~
+5. ~~Les tournois de topping, et ceux de la semaine.~~
+6. Les tournois de battle : **les poules** (réglages rouverts, tirage, retouche,
+   validation, page, *Mes rencontres*, le salon d'une rencontre, la
+   désinscription, l'en-tête), puis **le tableau** (aperçu, validation, dates,
+   rappels, arbitrage, classement final et médailles).
+7. Les spectateurs.
+8. Les équipes du site.
+9. Les tournois de duplicate.
 
 ### Ce qui reste ouvert
 
@@ -6620,16 +6882,11 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 |---|---|
 | **L'aperçu de l'administrateur** | Il sort son auteur du classement de la partie regardée. À confirmer. |
 | **Équipe ou chacun pour soi** | Le choix se fait au salon, dès que des comptes invités sont là. À confirmer. |
-| **Les inscriptions** | Jusqu'à la date de fin, ou jusqu'à une date à part ? |
 | **Un modèle de la semaine modifié** | L'instance déjà née garde ses réglages. Faut-il pouvoir la retirer d'un geste pour qu'elle renaisse ? |
 | **Le tirage d'une consigne** | Il a lieu la veille. Une consigne qui donnerait une partie injouable ne se voit qu'à l'aperçu ; faut-il un tirage d'essai dans l'éditeur ? |
-| **Un partenaire nommé qui refuse** | L'inscription d'une équipe attend-elle l'accord de chaque partenaire nommé par pseudo ? |
-| **Le départage d'une poule** | Après les points et les manches gagnées : les points de manche, la rencontre directe ? |
-| **Un tableau incomplet** | Des effectifs qui ne sont pas des puissances de deux demandent des exempts. Aux mieux classés des poules ? |
-| **Une rencontre de tableau non jouée** | 0 point aux deux ne désigne pas de vainqueur : qui passe ? |
-| **La grande finale** | Le vainqueur du tableau bas n'a qu'une rencontre à gagner, alors que son adversaire n'a encore jamais perdu. Tel quel, ou une revanche ? |
 | **Les réglages des manches de battle** | Un seul jeu de réglages pour le tournoi, ou un par phase ? |
-| **Une rencontre commencée** | Interrompue après une manche, reprend-elle avant la date limite ? |
+| **Le nom d'équipe déjà pris** | Deux équipes du site peuvent-elles porter le même nom ? |
+| **Le délai de retransmission** | Un spectateur voit le tirage en direct. Un retard de diffusion le fermerait ; il n'est pas écrit. |
 
 ## 30. La page personnelle
 

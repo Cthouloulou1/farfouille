@@ -11381,8 +11381,24 @@ function trace(points: [number, number][], classe: string, style = ""): SVGEleme
  * COLONNE -- vingt-cinq mots a l'horizontale ne tiennent sur aucun ecran -- et
  * ce qu'il valait.
  */
+function teinteDuCoup(o: {
+  perdu: number; score: number; ms: number; mediane: number; chronoMs: number;
+}): string {
+  // LE ROUGE NE CONNAIT QU'UNE MESURE : la part du coup qu'on a laissee. Tout
+  // perdre le rend plein, deux points sur cinquante le laissent a peine.
+  if (o.perdu > 0) {
+    const part = Math.min(1, o.perdu / Math.max(1, o.score));
+    return `color-mix(in srgb, var(--mct) ${(9 + 66 * part).toFixed(1)}%, transparent)`;
+  }
+  const chrono = Math.max(1, o.chronoMs);
+  const brut = 1 - Math.min(1, o.ms / chrono);
+  const relatif = Math.min(1, Math.max(0, 0.5 + (o.mediane - o.ms) / chrono));
+  const v = 0.55 * brut + 0.45 * relatif;
+  return `color-mix(in srgb, var(--accent) ${(10 + 82 * v).toFixed(1)}%, transparent)`;
+}
+
 function tableauDesCoupsRates(
-  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>,
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>, chronoMs: number,
 ): HTMLElement {
   const modele = details[vue.manche] ?? [];
   const boite = el("div", "g-tableur");
@@ -11421,6 +11437,22 @@ function tableauDesCoupsRates(
   tete.appendChild(tr);
   table.appendChild(tete);
 
+  // LA MEDIANE DE CEUX QUI ONT TROUVE, coup par coup : c'est a elle que la
+  // teinte compare chacun. On prend la mediane et non le plus rapide -- a deux
+  // joueurs, le second passait sinon au plus pale pour deux dixiemes de retard.
+  const medianes = new Map<number, number>();
+  for (const c of modele) {
+    const temps: number[] = [];
+    for (const l of lignes) {
+      const sien = details[l.manche]?.find((x) => x.n === c.n);
+      if (sien !== undefined && (sien.prop?.score ?? 0) >= c.score) temps.push(sien.ms);
+    }
+    if (temps.length > 0) {
+      temps.sort((a, b) => a - b);
+      medianes.set(c.n, temps[(temps.length - 1) >> 1] ?? 0);
+    }
+  }
+
   const corps = el("tbody");
   for (const { l, rang } of classer(lignes)) {
     const ligne = el("tr");
@@ -11438,7 +11470,15 @@ function tableauDesCoupsRates(
       const perdu = sien === undefined ? null : c.score - (sien.prop?.score ?? 0);
       const td = el("td", "tb-case", perdu === null || perdu <= 0 ? "" : String(perdu));
       if (perdu !== null && perdu > 0) td.classList.add("tb-rate");
-      if (sien !== undefined && sien.prop === null) td.classList.add("tb-rien");
+      if (sien !== undefined && perdu !== null) {
+        td.style.setProperty("--teinte", teinteDuCoup({
+          perdu, score: c.score, ms: sien.ms,
+          mediane: medianes.get(c.n) ?? sien.ms, chronoMs,
+        }));
+        td.title = perdu > 0
+          ? `${nomDeLaLigne(l)} · ${t2("{n} de moins", { n: perdu })}`
+          : `${nomDeLaLigne(l)} · ${tempsCentiemes(sien.ms)}`;
+      }
       ligne.appendChild(td);
     }
     corps.appendChild(ligne);
@@ -11492,8 +11532,15 @@ function peindreLesGraphes(
   // LES COUPS RATES SONT UN TABLEAU, pas un dessin : ce qu'on y cherche est un
   // nombre par joueur et par coup, et un nuage de points ne le donnerait pas.
   if (rsGraphe === "rates") {
-    legende([]);
-    boite.replaceChildren(tableauDesCoupsRates(avec, vue, details));
+    // LA LEGENDE DIT LE DEGRADE, sans quoi une case verte pale ne se distingue
+    // pas d'une case vide : les deux veulent dire des choses opposees.
+    legende([
+      { classe: "g-cle-carre", texte: t("trouvé vite"), style: "background: color-mix(in srgb, var(--accent) 78%, transparent)" },
+      { classe: "g-cle-carre", texte: t("trouvé tard"), style: "background: color-mix(in srgb, var(--accent) 15%, transparent)" },
+      { classe: "g-cle-carre", texte: t("raté de peu"), style: "background: color-mix(in srgb, var(--mct) 20%, transparent)" },
+      { classe: "g-cle-carre", texte: t("raté en entier"), style: "background: color-mix(in srgb, var(--mct) 75%, transparent)" },
+    ]);
+    boite.replaceChildren(tableauDesCoupsRates(avec, vue, details, chronoMs));
     return;
   }
   let c: Cadre;
