@@ -808,7 +808,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Voir les primes de cette partie": "See this game's bonuses",
   "Ce que cette partie a de particulier": "What is special about this game",
   "Cette partie ne récompense pas comme d'habitude.": "This game does not reward as usual.",
-  "Les primes sont standards.": "The bonuses are standard.",
+  "Ces primes ne sont pas standards.": "These bonuses are not standard.",
+  "Rang": "Rank",
+  "Inviter des joueurs": "Invite players",
+  "On ne défie que sur une partie terminée et gardée":
+    "You can only challenge on a finished, kept game",
   "Lettres posées": "Tiles played",
   "Prime": "Bonus",
   "Standard": "Standard",
@@ -876,7 +880,6 @@ export const EN: Readonly<Record<string, string>> = {
   "{n} joueur(s) prévenu(s)": "{n} player(s) notified",
   "Copier le lien": "Copy the link",
   "Lien copié": "Link copied",
-  "Inviter des joueurs": "Invite players",
   "Inviter au tournoi": "Invite to the tournament",
   "Chacun reçoit une notification qui le mène à « {nom} ».":
     "Each one gets a notification that takes them to “{nom}”.",

@@ -287,6 +287,16 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .prow.lehaut .num, .prow.lehaut .tops { color: var(--accent); }
 /* Le mot « TOP » a la place du mot joue, quand on l'a trouve. */
 .word .topmot { color: var(--accent); letter-spacing: .16em; font-weight: 600; }
+/* LA REFERENCE SE LIT A DROITE DU MOT, et non sur la ligne d'en dessous ou
+   l'oeil n'allait pas la chercher. Le mot se coupe avant de la chevaucher. */
+.word .mot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.word .ref { flex: none; font-size: calc(12px * var(--z, 1)); letter-spacing: 0; color: var(--ink-faint); }
+/* Les deux scores voyagent ensemble, colles a droite : celui du mot qu'on tape
+   se pose a gauche du meilleur, pour qu'on les compare d'un coup d'oeil. */
+.word .scores { flex: none; margin-left: auto; display: flex; align-items: baseline; gap: 10px; }
+.word .pts-tape { font-size: calc(17px * var(--z, 1)); font-weight: 600; color: var(--ink-soft); }
+/* QUELQU'UN A PRIS LE TOP : un cadre vert le dit a toute la table. */
+.word .trouve-jeton { flex: none; padding: 1px 6px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-family: Archivo, system-ui, sans-serif; font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
 .word .pts.rate { color: var(--warn); }
 .banner { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; background: var(--accent-bg); color: var(--accent); border-radius: 4px; font-size: 12.5px; box-shadow: 0 4px 18px var(--shadow); }
 .banner[hidden] { display: none; }
@@ -339,6 +349,7 @@ body.redimensionne.colonne { cursor: col-resize; }
 
 .word { font-family: "IBM Plex Mono", monospace; font-size: calc(17.5px * var(--z, 1)); font-weight: 500; letter-spacing: .04em; display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; background: transparent; border: 0; padding: 0; border-radius: 0; }
 .word .pts { margin-left: auto; font-size: calc(24px * var(--z, 1)); color: var(--accent); font-weight: 600; }
+.word .scores .pts { margin-left: 0; }
 .word.none { color: var(--ink-faint); font-size: calc(14px * var(--z, 1)); letter-spacing: 0; }
 /* Un top que personne n'a trouve : le mot reste lisible -- c'est lui qu'on veut
    voir -- mais ses points passent au rouge, et un jeton le dit en toutes lettres. */
@@ -600,6 +611,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .rmrow:hover { background: var(--hover); border-color: transparent; color: var(--ink-soft); }
 .rmrow .n, .rmrow .q { color: var(--ink-faint); }
 .rmrow .q, .rmrow .w, .rmrow .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmrow[style*="--qui"] .w, .rmrow[style*="--qui"] .who { color: var(--qui); }
 .rmrow .w { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
 .rmrow .s { text-align: right; color: var(--accent); font-weight: 500; }
 .rmrow .t { text-align: right; color: var(--ink-faint); white-space: nowrap; }
@@ -1488,13 +1500,22 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LES DEUX FACONS DE REPARTIR, cote a cote et centrees sur leur ligne. */
 .rejouer-bloc { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .rejouer-bloc button { flex: 0 1 auto; }
+.r-inviter-ligne { display: flex; justify-content: center; }
+.r-inviter-ligne button { min-width: 220px; text-align: center; }
 /* LE TABLEAU DES COUPS RATES (SPEC.md §29) : une ligne par joueur, une colonne
    par coup, et dans la case ce qu'il a laisse au top. */
-.g-tableur { overflow: auto; max-height: 420px; }
-.g-tableur table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+/* IL PREND TOUTE LA LARGEUR QU'ON LUI DONNE, comme les graphiques : serre dans
+   un coin, on n'y lisait rien. Les colonnes de coups se partagent ce qui reste
+   apres le rang, le nom et le negatif. */
+.g-tableur { overflow: auto; max-height: 460px; }
+.g-tableur table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.g-tableur .triable { cursor: pointer; }
+.g-tableur .triable:hover { color: var(--ink); }
+.g-tableur .tri { color: var(--ink); }
+.g-tableur .rc-tri { margin-left: 3px; font-size: 9px; }
 .g-tableur th, .g-tableur td { border: 1px solid var(--rule); padding: 2px 4px; text-align: center; }
 .g-tableur thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); vertical-align: bottom; font-weight: 500; color: var(--ink-faint); }
-.g-tableur .tb-coup { min-width: 22px; padding: 3px 2px; }
+.g-tableur .tb-coup { width: auto; min-width: 26px; padding: 4px 3px; }
 .g-tableur .tb-n { display: block; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
 .g-tableur .tb-mot { display: block; margin: 3px 0; font-family: var(--mono); font-size: 11px; line-height: 1.15; letter-spacing: 0; color: var(--ink); }
 .g-tableur .tb-mot span { display: block; }
@@ -1503,7 +1524,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .g-tableur .tb-nom { min-width: 130px; text-align: left; white-space: nowrap; color: var(--ink); }
 .g-tableur thead .tb-nom, .g-tableur thead .tb-rang, .g-tableur thead .tb-neg { text-align: left; }
 .g-tableur .tb-neg { width: 44px; font-family: var(--mono); color: var(--ink); }
-.g-tableur .tb-case { width: 22px; font-family: var(--mono); color: var(--ink-soft); }
+.g-tableur .tb-case { width: auto; min-width: 26px; padding: 5px 3px; font-family: var(--mono); color: var(--ink-soft); }
 .g-tableur .tb-rate { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); }
 /* Rien de propose du tout : le coup n'a meme pas ete cherche. */
 .g-tableur .tb-rien { background: color-mix(in srgb, var(--warn) 26%, transparent); }
@@ -1556,6 +1577,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .pe-ligne .pe-quoi { min-width: 0; color: var(--ink); }
 .pe-ligne .pe-quoi i { display: block; font-style: normal; font-size: 12px; color: var(--ink-faint); }
 .pe-ligne .pe-chiffre { text-align: right; font-family: var(--mono); font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.pe-gestes-ligne { justify-self: end; display: flex; gap: 6px; }
 .pe-ligne .pe-revoir { justify-self: end; padding: 5px 11px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink-soft); font-size: 12.5px; }
 .pe-ligne .pe-revoir:hover { color: var(--ink); background: var(--hover); }
 .pe-genre { display: inline-block; margin-right: 7px; padding: 1px 6px; border-radius: 3px; background: var(--field); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); }
@@ -1566,8 +1588,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LE BOUTON QUI DEFIE, en vert : c'est ce qu'on veut voir a la fin d'une partie. */
 /* NOMME AVEC SON ELEMENT : `.block button` a la meme specificite et rendait le
    bouton blanc sur blanc au survol. */
-#defier-wrap button.defier { width: 100%; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-#defier-wrap button.defier:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; filter: brightness(1.1); }
+/* LES BOUTONS VERTS GARDENT LEUR TEINTE AU SURVOL. Les regles generales des
+   boutons les repeignaient en clair sur clair, et ils disparaissaient sous la
+   souris au moment precis ou l'on visait. `!important` parce que plusieurs
+   regles de meme specificite les habillent, chacune dans son coin. */
+button.vert { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; font-weight: 600; }
+button.vert:hover:not(:disabled) { filter: brightness(1.12); }
+#defier-wrap button.defier { width: 100%; }
 /* LE TYPE DE PARTIE, dans la barre du salon : on joue mieux en sachant ce
    qu'on joue, et les primes s'ouvrent d'un clic quand elles sortent de
    l'usage (SPEC.md §29). */
@@ -2497,7 +2524,7 @@ button.primes-libres:hover { background: none; color: var(--accent); }
       <!-- DEFIER SUR CETTE PARTIE (SPEC.md §29) : la partie qu'on vient de
            jouer se refige et se fait circuler. -->
       <div class="block" id="defier-wrap" hidden>
-        <button class="defier" id="defier" type="button">Défier sur cette partie</button>
+        <button class="defier vert" id="defier" type="button">Défier sur cette partie</button>
       </div>
       <!-- LA MONTANTE : trois gestes, et tous les trois sont a l'hote. Lancer
            l'etape suivante, recommencer une etape ratee, terminer la suite.
@@ -2550,7 +2577,7 @@ button.primes-libres:hover { background: none; color: var(--accent); }
         <div class="poignee dans-bloc" id="poignee-rank"
              title="Tirer pour redimensionner — double-clic pour rétablir"></div>
       </div>
-      <div class="block">
+      <div class="block" id="online-bloc">
         <h2>Joueurs connectés</h2>
         <div id="online" class="sub">—</div>
       </div>
@@ -2668,6 +2695,13 @@ button.primes-libres:hover { background: none; color: var(--accent); }
             Réglages avancés
           </button>
         </div>
+      </div>
+
+      <!-- INVITER EST LE GESTE QU'ON VIENT CHERCHER ICI, plus souvent que
+           n'importe quel reglage : il tient sa propre ligne, au milieu et a la
+           taille des autres boutons de tete. -->
+      <div class="reglage r-inviter-ligne">
+        <button type="button" class="interrupteur" id="r-inviter">Inviter des joueurs</button>
       </div>
 
       <!-- LA SUPER GRILLE EST UN REGLAGE AVANCE. C'est un plateau que personne
@@ -2794,7 +2828,6 @@ button.primes-libres:hover { background: none; color: var(--accent); }
       <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
         <label class="case"><input type="checkbox" id="r-prive"> Salon privé</label>
-        <button type="button" class="lien" id="r-inviter">Inviter</button>
         <label class="case" id="r-topping-collab-case"><input type="checkbox" id="r-topping-collab"> Topping collaboratif</label>
       </div>
 

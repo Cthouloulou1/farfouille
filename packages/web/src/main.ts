@@ -154,6 +154,8 @@ let debutDeLaPartie = 0;
 let tempsJoue = 0;
 /** Cette partie laisse-t-elle revoir ses coups avant d'etre finie ? */
 let rejeuOuvert = false;
+/** Le journal des coups a-t-il deja ete replie pour cette partie de battle ? */
+let journalReplie = false;
 
 /** Ce que le serveur dit de la partie d'epreuve du salon (SPEC.md §29). */
 interface EpreuveVue {
@@ -2200,29 +2202,71 @@ function oublierLAttente(): void {
   clearTimeout(attenteMinuteur);
 }
 
+/**
+ * UNE LIGNE DE MOT : le mot, SA REFERENCE A DROITE DE LUI, et ses points au
+ * bout. Elle etait sous le mot, sur la ligne des commentaires, ou l'oeil ne
+ * l'allait pas chercher.
+ *
+ * `tape` est le score du mot qu'on est en train d'ecrire : il se pose a GAUCHE
+ * du meilleur, pour qu'on compare les deux sans que l'un chasse l'autre.
+ */
+function ligneDeMot(o: {
+  mot: string; ref?: string; pts: string; tape?: number | null;
+  jeton?: { texte: string; classe: string };
+}): string {
+  return `<span class="mot">${echapper(o.mot)}</span>`
+    + (o.ref === undefined ? "" : `<span class="ref">${echapper(o.ref)}</span>`)
+    + (o.jeton === undefined ? "" : `<span class="${o.jeton.classe}">${echapper(o.jeton.texte)}</span>`)
+    + `<span class="scores">`
+    + (o.tape === undefined || o.tape === null ? "" : `<span class="pts-tape">${o.tape}</span>`)
+    + `<span class="pts">${echapper(o.pts)}</span></span>`;
+}
+
 /** Le mot en cours de frappe et son score, mis a jour a chaque lettre. */
 function paintCurrent() {
   const w = $("cur-word"), meta = $("cur-meta"), bad = $("cur-bad");
   bad.hidden = true;
 
   const canon = coupCanonique();
-  if (cursor !== null && typed.length > 0 && canon !== null) {
-    const r = resolveTypedWord(board, dict, canon.dir, canon.x, canon.y, canon.typed, rack, false, true);
-    if (r.ok) {
-      w.className = "word";
-      w.innerHTML = `<span>${r.move.word}</span><span class="pts">${r.move.score}</span>`;
-      meta.textContent = noteCoup(r.move.dir, r.move.x, r.move.y, cfg.bornes);
-      // ON NE NOMME PAS LES COLLAGES FAUTIFS PENDANT LA FRAPPE.
-      //
-      // La ligne le faisait, et c'etait un renseignement de trop : elle disait
-      // quel mot perpendiculaire n'existe pas AVANT qu'on ait rien risque,
-      // c'est-a-dire quelles lettres ne vont pas la. On l'apprend en validant,
-      // comme on apprend le reste.
-      return;
-    }
+  const enFrappe = cursor !== null && typed.length > 0 && canon !== null;
+  const r = enFrappe && canon !== null
+    ? resolveTypedWord(board, dict, canon.dir, canon.x, canon.y, canon.typed, rack, false, true)
+    : null;
+  const scoreTape = r !== null && r.ok ? r.move.score : null;
+
+  // LA MEILLEURE SOLUTION DU MOMENT : celle de la table en topping
+  // collaboratif (SPEC.md §28), la sienne autrement.
+  const collective = cfg.toppingCollaboratif && !duplicate && meilleureCollective !== null
+    ? meilleureCollective : null;
+  const meilleur = collective ?? best;
+  const dit = collective !== null ? "meilleure solution du groupe" : "votre meilleure solution";
+
+  if (meilleur !== null) {
     w.className = "word";
-    w.innerHTML = `<span>${r.word ?? typed}</span><span class="pts">—</span>`;
-    meta.textContent = t(PLAY_MESSAGE[r.error]);
+    w.innerHTML = ligneDeMot({
+      mot: meilleur.word, ref: noteCoup(meilleur.dir, meilleur.x, meilleur.y, cfg.bornes),
+      pts: String(meilleur.score), tape: scoreTape,
+    });
+    // ON NE NOMME PAS LES COLLAGES FAUTIFS PENDANT LA FRAPPE : ce serait dire
+    // quelles lettres ne vont pas la avant qu'on ait rien risque. Seul le mot
+    // impossible se dit, et il se dit ici.
+    meta.textContent = r !== null && !r.ok ? t(PLAY_MESSAGE[r.error]) : t(dit);
+    return;
+  }
+
+  // Rien de retenu encore : c'est le mot qu'on tape qui occupe la case.
+  if (r !== null) {
+    w.className = "word";
+    if (r.ok) {
+      w.innerHTML = ligneDeMot({
+        mot: r.move.word, ref: noteCoup(r.move.dir, r.move.x, r.move.y, cfg.bornes),
+        pts: String(r.move.score),
+      });
+      meta.textContent = "";
+    } else {
+      w.innerHTML = ligneDeMot({ mot: r.word ?? typed, pts: "—" });
+      meta.textContent = t(PLAY_MESSAGE[r.error]);
+    }
     return;
   }
 
@@ -2234,67 +2278,54 @@ function paintCurrent() {
       ? t("Mots non valides :") : t("Mot non valide :")) + " " + motsRefuses.join(", ");
   }
 
-  // TOPPING COLLABORATIF : la case montre la meilleure solution DE LA TABLE,
-  // place comprise, plutot que la seule proposition qu'on a soi-meme tapee --
-  // voir SPEC.md §28. La place peut mettre un autre joueur sur la voie du top,
-  // qui se trouve souvent au meme endroit.
-  if (cfg.toppingCollaboratif && !duplicate && meilleureCollective !== null) {
-    const mc = meilleureCollective;
-    w.className = "word";
-    w.innerHTML = `<span>${mc.word}</span><span class="pts">${mc.score}</span>`;
-    meta.textContent = `${noteCoup(mc.dir, mc.x, mc.y, cfg.bornes)} · meilleure solution du groupe`;
-    return;
-  }
-
-  if (best !== null) {
-    w.className = "word";
-    w.innerHTML = `<span>${best.word}</span><span class="pts">${best.score}</span>`;
-    meta.textContent = `${noteCoup(best.dir, best.x, best.y, cfg.bornes)} · votre meilleure solution`;
-    return;
-  }
-
   // LE VERDICT DU COUP QUI VIENT DE TOMBER.
   //
   // Entre deux coups, cette zone montrait un tiret -- et c'est precisement le
-  // moment ou l'on veut savoir ce qu'on vient de faire. On y lit donc « TOP »
-  // si on l'a trouve, sinon l'ecart, avec le mot qu'on avait propose. Cela
-  // s'efface a la premiere lettre tapee : la zone redevient celle du mot en
-  // cours.
-  const verdict = monVerdict();
-  if (verdict !== null) {
-    if (verdict.top) {
+  // moment ou l'on veut savoir ce qui vient de se passer. Trois cas, et un
+  // seul montre un negatif.
+  const dernier = rejeu === null ? last : null;
+  if (dernier !== null) {
+    const parQui = duplicate
+      ? trouveursDuCoup(dernier) : (dernier.player === null ? [] : [dernier.player]);
+    if (parQui.includes(me)) {
       w.className = "word trouve";
-      w.innerHTML = `<span class="topmot">TOP</span><span class="pts">${verdict.score}</span>`;
-      meta.textContent = `${verdict.mot} · vous avez trouvé le top`;
+      w.innerHTML = ligneDeMot({
+        mot: "TOP", pts: String(dernier.score),
+        jeton: { texte: t("trouvé"), classe: "trouve-jeton" },
+      });
+      meta.textContent = `${dernier.word} · ${t("vous avez trouvé le top")}`;
       return;
     }
-    w.className = "word";
-    w.innerHTML = `<span>${verdict.mot}</span><span class="pts rate">−${verdict.ecart}</span>`;
-    meta.textContent = `${verdict.score} pts · −${verdict.ecart}`;
-    return;
+    // QUELQU'UN L'A PRIS : son ecart personnel n'apprend rien a personne -- la
+    // grille avance parce que le top est tombe, et c'est CELA qu'on veut voir.
+    if (parQui.length > 0) {
+      w.className = "word trouve";
+      w.innerHTML = ligneDeMot({
+        mot: dernier.word, ref: noteCoup(dernier.dir, dernier.x, dernier.y, cfg.bornes),
+        pts: String(dernier.score),
+        jeton: { texte: t("trouvé"), classe: "trouve-jeton" },
+      });
+      meta.textContent = quiLaTrouve(dernier, true);
+      return;
+    }
+    // PERSONNE NE L'A TROUVE : c'est la, et seulement la, que l'ecart compte.
+    const sien = dernier.propositions?.[me];
+    if (sien !== undefined) {
+      const ecart = dernier.score - sien.score;
+      w.className = "word";
+      w.innerHTML = ligneDeMot({
+        mot: sien.word, ref: noteCoup(sien.dir, sien.x, sien.y, cfg.bornes),
+        pts: `−${ecart}`,
+      });
+      w.querySelector(".pts")?.classList.add("rate");
+      meta.textContent = `${sien.score} pts`;
+      return;
+    }
   }
 
   w.className = "word none";
   w.textContent = "—";
   meta.textContent = "";
-}
-
-/**
- * Ce que VOUS avez fait du dernier coup joue : le top, ou de combien vous
- * l'avez manque.
- *
- * Rend `null` quand vous n'avez rien propose sur ce coup -- il n'y a alors
- * rien a dire, et surtout rien a reprocher.
- */
-function monVerdict(): { top: boolean; mot: string; score: number; ecart: number } | null {
-  if (rejeu !== null || last === null || me === "") return null;
-  const gagne = duplicate ? (last.trouveurs ?? []).includes(me) : last.player === me;
-  const sien = last.propositions?.[me];
-  if (gagne) {
-    return { top: true, mot: sien?.word ?? last.word, score: last.score, ecart: 0 };
-  }
-  if (sien === undefined) return null;
-  return { top: false, mot: sien.word, score: sien.score, ecart: last.score - sien.score };
 }
 
 /**
@@ -2448,6 +2479,17 @@ function paintSide() {
   // seul devant a trois heures du matin n'en fait pas une partie solitaire.
   const monde = new Set([...online, ...Object.keys(players), ...Object.keys(points)]);
   const enGroupe = !duplicate && monde.size > 1;
+  // LA BATTLE : du topping a plusieurs, chacun pour soi. Le classement y est le
+  // coeur de la partie ; la liste des connectes ne dit rien de plus que lui, et
+  // le journal des coups peut attendre qu'on le deroule.
+  const battle = enGroupe && cfg.toppingCollaboratif !== true;
+  $("online-bloc").hidden = battle;
+  if (battle && !journalReplie) {
+    journalReplie = true;
+    $("journal").hidden = true;
+    $("journal-tri").textContent = "▸";
+    $("journal-tete").setAttribute("aria-expanded", "false");
+  }
   // LE SCORE PERSONNEL DISPARAIT DES QU'ON EST PLUSIEURS EN TOPPING.
   //
   // Ce qu'il additionne, ce sont les points des mots qu'on a SOUMIS a chaque
@@ -2508,14 +2550,16 @@ function paintSide() {
     // place.
     const trouve = duplicate ? trouveursDuCoup(last).length > 0 : last.player !== null;
     lw.className = trouve ? "word" : "word rate";
-    lw.innerHTML = `<span>${last.word}</span>`
-      + (trouve ? "" : `<span class="rate">${t("non trouvé")}</span>`)
-      + `<span class="pts">${last.score}</span>`;
+    lw.innerHTML = ligneDeMot({
+      mot: last.word, ref: noteCoup(last.dir, last.x, last.y, cfg.bornes),
+      pts: String(last.score),
+      ...(trouve ? {} : { jeton: { texte: t("non trouvé"), classe: "rate" } }),
+    });
     // Au duplicate, mon ecart au top sur CE coup. Il reste affiche tant que le
      // coup suivant ne l'a pas remplace : c'est le temps qu'on a de le lire.
     const mien = duplicate ? last.scores?.[me] : undefined;
     const ecart = mien === undefined ? 0 : mien - last.score;
-    lm.textContent = `${noteCoup(last.dir, last.x, last.y, cfg.bornes)} · ${quiLaTrouve(last, true)}` +
+    lm.textContent = quiLaTrouve(last, true) +
       (duplicate ? (ecart < 0 ? ` · ${ecart}` : "") : ` · ${fmtTime(last.ms)}`);
     ll.appendChild(likeButton(last));
   }
@@ -2604,8 +2648,11 @@ function paintSide() {
     // ce joueur-la.
     const profil = inscrits.has(name) && openPlayer === name
       ? '<button type="button" class="voir-profil" title="Voir le profil">profil</button>' : "";
+    // UNE COULEUR PAR JOUEUR EN BATTLE : on suit le sien d'un coup d'oeil, au
+    // classement comme sur la feuille de route.
+    const teinte = battle ? ` style="color:${couleurDuJoueur(name)}"` : "";
     row.innerHTML = `<span class="tri">${openPlayer === name ? "▾" : "▸"}</span>` +
-                    `<span class="nom"${infobulle}>${pseudoOrne(name)}${marque}${coeurs}${profil}</span>` + droite;
+                    `<span class="nom"${infobulle}${teinte}>${pseudoOrne(name)}${marque}${coeurs}${profil}</span>` + droite;
     row.querySelector(".voir-profil")?.addEventListener("click", (e) => {
       // Le clic sur la ligne DEROULE les coups : celui-ci ne doit pas y monter.
       e.stopPropagation();
@@ -3776,7 +3823,10 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   const tousLesTrouveurs = duplicate ? trouveursDuCoup(m) : [];
   const infobulle = tousLesTrouveurs.length > 2
     ? ` title="trouvé par ${echapper(tousLesTrouveurs.join(", "))}"` : "";
-  return `<div class="rmrow" tabindex="0" data-coup="${m.n}"${infobulle} style="top:${haut}px">` +
+  // LA LIGNE PORTE LA COULEUR DE CELUI QUI A TROUVE LE TOP : on retrouve les
+  // siens en descendant la feuille, sans lire un seul nom.
+  const teinte = m.player === null ? "" : `;--qui:${couleurDuJoueur(m.player)}`;
+  return `<div class="rmrow" tabindex="0" data-coup="${m.n}"${infobulle} style="top:${haut}px${teinte}">` +
     `<span class="n">${m.n}</span><span class="q">${echapper(m.notation)}</span>` +
     image + rejouer +
     `<span class="w">${echapper(m.word)}</span>` +
@@ -4615,8 +4665,13 @@ cv.addEventListener("pointerup", (e) => {
   if (!board.dansLesBornes(x, y)) return;
   marks = [];
   if (cursor !== null && cursor.x === x && cursor.y === y) {
-    // Recliquer la meme case fait pivoter le sens -- mais pas au milieu d'un mot.
-    if (typed.length === 0) cursor = pivoter(cursor);
+    // RECLIQUER LA CASE DE DEPART PIVOTE, comme la barre d'espace -- meme au
+    // milieu d'un mot, et c'est la tout l'interet : on s'apercoit qu'on ecrit
+    // MANGER a l'horizontale alors qu'on le voulait vertical, et la case de
+    // depart est justement celle qu'on vise. Le mot s'efface, le retourner tel
+    // quel poserait les memes caramels a l'envers.
+    cursor = pivoter(cursor);
+    typed = "";
   } else {
     cursor = { x, y, dir: p.button === 2 ? "V" : "H", rec: false };
     typed = "";
@@ -5393,7 +5448,10 @@ setInterval(() => {
   // Decompte d'avant-coup : 2, puis 1, puis le jeu commence.
   // Le compte a rebours du LANCEMENT se lit au meme endroit, en plus long :
   // dix secondes plutot que deux, et il ouvre la partie au lieu d'un coup.
-  const reste2 = Math.max(decompteJusqua, lancementA) - now;
+  // LE DECOMPTE S'EFFACE DES QUE LE TIRAGE EST LA, sans attendre son propre
+  // zero : les deux horloges ne tombent pas a la milliseconde, et l'on voyait
+  // le tirage paraitre sous un « 1 » qui trainait.
+  const reste2 = rack !== "" ? 0 : Math.max(decompteJusqua, lancementA) - now;
   if (reste2 > 0) {
     $("decompte").hidden = false;
     $("decompte").textContent = String(Math.ceil(reste2 / 1000));
@@ -8617,6 +8675,7 @@ async function rejoindre(id: string): Promise<void> {
   permanent = false;
   tempsJoue = 0;
   rejeuOuvert = false;
+  journalReplie = false;
   epreuve = null;
   enPause = false;
   ecoulePause = 0;
@@ -11335,8 +11394,17 @@ function tableauDesCoupsRates(
 
   const tete = el("thead");
   const tr = el("tr");
-  tr.append(el("th", "tb-rang", t("Tab")), el("th", "tb-nom", t("Joueur")),
-    el("th", "tb-neg", t("Nég")));
+  // LES DEUX PREMIERES COLONNES TRIENT, comme celles du classement au-dessus :
+  // c'est le meme classement, et il n'a pas a se lire dans deux ordres.
+  const colonne = (classe: string, texte: string, tri: "temps" | "negatif"): HTMLElement => {
+    const th = el("th", classe, texte);
+    th.classList.add("triable");
+    if (rsTri === tri) { th.classList.add("tri"); th.appendChild(el("span", "rc-tri", "▾")); }
+    th.addEventListener("click", () => { rsTri = tri; peindreLesResultats(); });
+    return th;
+  };
+  tr.append(colonne("tb-rang", t("Rang"), "temps"), el("th", "tb-nom", t("Joueur")),
+    colonne("tb-neg", t("Nég"), "negatif"));
   for (const c of modele) {
     const th = el("th", "tb-coup");
     th.title = `${t("Coup")} ${c.n} · ${c.mot} · ${c.score} ${t("points")}`;
@@ -12143,7 +12211,7 @@ function ouvrirLesPrimes(c: ConfigSerialisee | ConfigPartie): void {
   $("primes-titre").textContent = t("Primes de farfouilles");
   $("primes-quoi").textContent = custom
     ? t("Cette partie ne récompense pas comme d'habitude.")
-    : t("Les primes sont standards.");
+    : t("Ces primes ne sont pas standards.");
   const usage = primesDUsage(c.jouables);
   const table = el("table");
   table.appendChild(tete([
@@ -12451,6 +12519,9 @@ interface LigneDHistorique {
   grille?: string;
   lexique?: string;
   chrono?: number | null;
+  /** De quoi ouvrir le classement, quand la ligne en a un. */
+  defi?: string;
+  tournoi?: string;
 }
 
 function ouvrirLaPagePerso(qui: string, pousser = true): void {
@@ -12547,12 +12618,25 @@ function peindreLHistorique(): void {
     ligne.appendChild(quoi);
     ligne.appendChild(el("span", "pe-chiffre", l.temps === null ? "—" : tempsCentiemes(l.temps)));
     ligne.appendChild(el("span", "pe-chiffre", negatifDit(l.negatif)));
+    const gestes = el("span", "pe-gestes-ligne");
+    // LE CLASSEMENT SE LIT DEPUIS L'HISTORIQUE : c'est ce qu'on vient y chercher
+    // d'un defi ou d'une partie de tournoi, autant que la grille.
+    if (l.defi !== undefined || l.tournoi !== undefined) {
+      const clt = el("button", "pe-revoir", t("Classement")) as HTMLButtonElement;
+      clt.type = "button";
+      clt.addEventListener("click", () => {
+        if (l.defi !== undefined) ouvrirLesResultatsDuDefi(l.defi);
+        else ouvrirLesResultatsDuTournoi(l.tournoi!, l.partie);
+      });
+      gestes.appendChild(clt);
+    }
     const revoir = el("button", "pe-revoir", t("Revoir")) as HTMLButtonElement;
     revoir.type = "button";
     revoir.addEventListener("click", () => {
       void ouvrirLaPartie(l.id, 1, l.source, () => ouvrirLaPagePerso(peQui, false));
     });
-    ligne.appendChild(revoir);
+    gestes.appendChild(revoir);
+    ligne.appendChild(gestes);
     return ligne;
   }));
 }
@@ -13665,7 +13749,7 @@ async function chargerLeTournoi(): Promise<void> {
   // INVITER DES JOUEURS (SPEC.md §29) : ils recoivent une notification, meme
   // s'ils ne sont pas connectes.
   if (moiCompte !== null) {
-    const inviter = el("button", "", t("Inviter des joueurs")) as HTMLButtonElement;
+    const inviter = el("button", "vert", t("Inviter des joueurs")) as HTMLButtonElement;
     inviter.type = "button";
     inviter.addEventListener("click", () => {
       void choisirDesJoueurs({

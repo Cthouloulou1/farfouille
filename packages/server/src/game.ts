@@ -1783,6 +1783,11 @@ export class Game {
     // grille ou le solveur ne suit pas la cadence -- une seconde par coup --
     // cela faisait une seconde et demie d'ecran vide a chaque coup.
     this.solving = true;
+    // LE DECOMPTE S'OUVRE AVANT LE PREMIER ENVOI, et c'est capital : `rackPublic`
+    // ne tait le tirage que tant qu'il court. Ouvert plus bas, comme il l'etait,
+    // cet envoi-ci partait avec le tirage en clair -- les joueurs le voyaient
+    // flasher un dixieme de seconde avant que « 3, 2, 1 » ne le recouvre.
+    this.ouvrirLeDecompte();
     this.emit();
 
     // LE COUP EST-IL DEJA PRET ? Voir SPEC.md §17.

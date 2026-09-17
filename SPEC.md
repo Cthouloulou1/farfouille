@@ -5909,6 +5909,21 @@ du jour, celle d'un tournoi — et **pendant la partie**.
 **Le mot du coup en cours est plus gros que le top du coup précédent**, juste
 en dessous. Ils avaient la même taille et l'on lisait l'un pour l'autre.
 
+**La référence se lit à droite du mot**, et non sur la ligne d'en dessous où
+l'œil n'allait pas la chercher. **Le score du mot qu'on écrit se pose à gauche
+de celui de sa meilleure solution** : il ne la remplace plus, et ce sont
+justement les deux qu'on veut comparer.
+
+**Quand quelqu'un prend le top, un cadre vert le dit**, et l'écart personnel
+disparaît : la grille avance parce que le top est tombé, et c'est cela que la
+table regarde. L'écart ne s'affiche que sur un coup que **personne** n'a trouvé
+— là, et seulement là, il mesure quelque chose.
+
+**La battle** — du topping à plusieurs, chacun pour soi — donne **une couleur
+par joueur** : au classement, et sur la ligne de la feuille de route qu'il a
+remportée. La liste des connectés y disparaît, le classement la dit mieux, et le
+journal des coups s'ouvre replié.
+
 **En topping collaboratif, le négatif revient**, à gauche du chrono du coup. Ce
 n'est pas celui d'un joueur mais **celui de la feuille** : la table n'en tient
 qu'une, ce qu'elle a laissé au top la mesure entière, et c'est ce chiffre-là que
@@ -6091,6 +6106,11 @@ grille à gauche, ses solutions à droite, et les flèches pour avancer coup par
 coup. Le journal de la manche est celui du salon où elle s'est jouée ; le serveur
 ne le sert qu'à qui a le droit d'en voir le détail, c'est-à-dire à qui a fini
 cette partie-là.
+
+**On ne défie que sur une partie terminée et gardée.** Une partie abandonnée,
+ou qu'aucun fichier ne survivra, ne se revoit pas : le défi mènerait à un
+classement sans partie derrière. **Et un défi que personne n'a relevé ne paraît
+pas dans l'historique** : la ligne d'origine n'est que le temps à battre.
 
 **Une solution cliquée remplace le coup joué**, elle ne s'y ajoute pas : les
 deux mots posés ensemble sur la même grille ne se lisent pas. Recliquer la ligne

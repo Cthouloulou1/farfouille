@@ -121,6 +121,11 @@ export interface Manche {
   equipe: string[];
   at: number;
   fin: FinDeManche | null;
+  /**
+   * LA LIGNE D'UN JOUEUR DE LA PARTIE D'ORIGINE d'un defi (SPEC.md §29). Elle
+   * n'a pas ete jouee ici : elle est le temps a battre, pas une reponse.
+   */
+  origine?: boolean;
 }
 
 /** Ce qu'un tournoi de battle regle a sa creation (SPEC.md §29). */
@@ -272,6 +277,7 @@ function appliquer(e: Record<string, any>): void {
       id: e["id"], epreuve: e["epreuve"], partie: e["partie"], salon: e["salon"],
       compte: e["compte"], jeu: e["jeu"], noms: e["noms"] ?? "", equipe: e["equipe"] ?? [e["compte"]],
       at: e["at"], fin: null,
+      ...(e["origine"] === true ? { origine: true } : {}),
     });
   } else if (e["t"] === "defi") {
     defis.set(e["id"], {
@@ -423,14 +429,23 @@ export function mancheDuSalon(salon: string): Manche | undefined {
 }
 
 /** Ouvre une manche : la tentative de chacun de ses joueurs est consommee. */
+/** Ce defi a-t-il ete releve ? Une ligne d'origine ne compte pas pour une. */
+export function defiReleve(epreuve: string): boolean {
+  for (const m of manches.values()) {
+    if (m.epreuve === epreuve && m.fin !== null && m.origine !== true) return true;
+  }
+  return false;
+}
+
 export function ouvrirUneManche(o: {
   epreuve: string; partie: number; salon: string; compte: string;
-  jeu: Jeu; noms: string; equipe: string[];
+  jeu: Jeu; noms: string; equipe: string[]; origine?: boolean;
 }): Manche {
   const ev = {
     t: "manche", id: randomUUID(), epreuve: o.epreuve, partie: o.partie, salon: o.salon,
     compte: o.compte, jeu: o.jeu, noms: o.noms.slice(0, 120),
     equipe: [...new Set([o.compte, ...o.equipe])], at: Date.now(),
+    ...(o.origine === true ? { origine: true } : {}),
   };
   inscrire(ev);
   appliquer(ev);
@@ -768,6 +783,8 @@ export function manchesDe(nom: string, plafond = 300): {
   score: number;
   coups: number;
   equipe: string[];
+  defi?: string;
+  tournoi?: string;
 }[] {
   const out = [];
   for (const m of manches.values()) {
@@ -777,11 +794,17 @@ export function manchesDe(nom: string, plafond = 300): {
     const j = lireLEpreuve(m.epreuve);
     const p = partiesDeLEpreuve(m.epreuve)?.find((x) => x.n === m.partie);
     if (d === undefined && t === undefined && j === null) continue;
+    // UN DEFI QUE PERSONNE N'A RELEVE N'EST PAS UNE PARTIE JOUEE (SPEC.md §29) :
+    // la ligne d'origine n'est que le temps a battre.
+    if (d !== undefined && m.origine === true && !defiReleve(m.epreuve)) continue;
     out.push({
       type: (d !== undefined ? "defi" : t !== undefined ? "tournoi" : "pdj") as
         "pdj" | "tournoi" | "defi",
       manche: m.id, at: m.fin.at, config: p?.config ?? null,
       dou: d?.nom ?? t?.nom ?? j?.jour ?? "", partie: m.partie,
+      // De quoi ouvrir le classement depuis l'historique, sans le rejeu.
+      ...(d === undefined ? {} : { defi: d.id }),
+      ...(t === undefined ? {} : { tournoi: t.id }),
       temps: m.fin.temps, negatif: m.fin.negatif,
       score: m.fin.coups.reduce((a, c) => a + c.score, 0), coups: m.fin.coups.length,
       equipe: m.equipe,
@@ -1017,7 +1040,7 @@ export function creerUnDefi(o: {
     for (const [i, l] of o.lignes.entries()) {
       const m = ouvrirUneManche({
         epreuve, partie: 1, salon: `${o.salon}#origine${i}`, compte: l.equipe[0] ?? "",
-        jeu: l.jeu, noms: "", equipe: l.equipe,
+        jeu: l.jeu, noms: "", equipe: l.equipe, origine: true,
       });
       const fin = {
         t: "fin", manche: m.id, at: Date.now(), temps: l.bilan.temps,

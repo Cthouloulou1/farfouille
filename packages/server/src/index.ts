@@ -19,7 +19,8 @@ import { Game, type PlayedMove, type RaisonDeFin } from "./game.ts";
 import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
-  confierLesReglages, comptedesInfinies, peutEntrerDans, MAX_SALONS, MAX_INFINIES, type Salon,
+  confierLesReglages, comptedesInfinies, meriteDEtreGardee, peutEntrerDans,
+  MAX_SALONS, MAX_INFINIES, type Salon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import {
@@ -1773,6 +1774,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         dou: m.dou, partie: m.partie, temps: m.temps, negatif: m.negatif,
         score: m.score, coups: m.coups,
         equipe: m.equipe.length > 1 ? m.equipe : [],
+        ...(m.defi === undefined ? {} : { defi: m.defi }),
+        ...(m.tournoi === undefined ? {} : { tournoi: m.tournoi }),
       });
     }
     const vues = new Set<string>();
@@ -1848,6 +1851,13 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     }
     if (estPermanent(s)) { json(res, 403, { erreur: "Cette grille n'a pas de fin" }); return; }
     if (s.partie.moves.length === 0) { json(res, 400, { erreur: "Cette partie n'a pas de coups" }); return; }
+    // ON NE DEFIE QUE SUR UNE PARTIE QUI SE GARDE (SPEC.md §29). Une partie
+    // abandonnee, ou dont aucun fichier ne survivra, ne se revoit pas : le defi
+    // menerait a un classement sans partie derriere.
+    if (!s.partie.finie || s.partie.raisonDeLaFin === "abandon" || !meriteDEtreGardee(s)) {
+      json(res, 403, { erreur: "On ne défie que sur une partie terminée et gardée" });
+      return;
+    }
     const deja = defiDeLaPartie(s.id, s.partie.seed);
     if (deja !== undefined) { json(res, 200, { defi: defiPublic(deja) }); return; }
     const moi = quiParle(req);
