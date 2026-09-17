@@ -503,7 +503,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 #chat-log .jour { display: flex; align-items: center; gap: 8px; margin: 5px 0 1px; font-size: 10.5px; color: var(--ink-faint); text-transform: lowercase; }
 #chat-log .jour::before, #chat-log .jour::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
 .cellref { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 3px; background: var(--mark); color: #fff; font-family: "IBM Plex Mono", monospace; font-size: 11px; border: 0; cursor: pointer; line-height: 1.5; }
-.cellref:hover { border-color: transparent; color: #fff; filter: brightness(1.1); }
+.cellref:hover { border-color: transparent; color: #fff; background: color-mix(in srgb, var(--mark) 85%, #000000); }
 .chat-in { display: flex; gap: 6px; padding: 8px 12px 12px; border-top: 1px solid var(--rule); }
 /* `display: flex` bat la regle generale de `[hidden]`, qui n'est qu'un
    selecteur d'attribut : sans cette ligne, cacher la barre du chat ne la
@@ -664,7 +664,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bandeau .roue { width: 34px; height: 34px; color: var(--nuit-faint); }
 .bandeau .roue:hover { color: var(--nuit-accent); border-color: transparent; }
 .entrer { padding: 10px 20px; border: 0; border-radius: 5px; background: var(--nuit-accent); color: var(--nuit); font-size: 14.5px; font-weight: 600; }
-.entrer:hover:not(:disabled) { color: var(--nuit); border-color: transparent; filter: brightness(1.08); }
+.entrer:hover:not(:disabled) { color: var(--nuit); border-color: transparent; background: color-mix(in srgb, var(--nuit-accent) 85%, #000000); }
 .moi { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px; background: none; border: 1px solid transparent; border-radius: 20px; font-size: 14.5px; color: var(--nuit-ink); }
 .moi:hover { border-color: var(--nuit-rule); }
 .moi:hover:not(:disabled) { color: var(--nuit-accent); border-color: transparent; }
@@ -679,7 +679,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .puce[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
 .puce[aria-pressed="true"]:hover { color: var(--ground); border-color: var(--ink); }
 .creer-bar { margin-left: auto; padding: 10px 20px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 14.5px; font-weight: 500; }
-.creer-bar:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.creer-bar:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; background: color-mix(in srgb, var(--accent) 85%, #000000); }
 .corps .join-error { margin-bottom: 12px; }
 
 /* LE MUR DE SALONS. Quatre colonnes, puis deux, puis une : la tuile du salon
@@ -729,7 +729,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   color: var(--nuit-faint); }
 .star .jouer { padding: 11px 30px; border-radius: 4px; background: var(--nuit-accent); color: #0E1412; font-size: 14.5px; font-weight: 600; }
 .star .chiffres { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--nuit-faint); }
-.star:hover .jouer { filter: brightness(1.08); }
+.star:hover .jouer { background: color-mix(in srgb, var(--nuit-accent) 85%, #000000); }
 .point { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 /* La colonne de droite est etroite entre 780 et 1080 : une seule carte par
    rangee. En dessous, le mur s'empile et la largeur revient : deux cartes. */
@@ -838,7 +838,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .confirmer-boutons { display: flex; gap: 10px; margin-top: 18px; }
 .confirmer-btn { flex: 1; padding: 13px; border-radius: 5px; font-size: 15px; font-weight: 500; }
 .confirmer-oui { border: 0; background: var(--accent); color: #FFFFFF; }
-.confirmer-oui:hover { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.confirmer-oui:hover { color: #FFFFFF; border-color: transparent; background: color-mix(in srgb, var(--accent) 85%, #000000); }
 .confirmer-non { background: none; border: 1px solid var(--rule); color: var(--ink); }
 .confirmer-non:hover { border-color: var(--ink-soft); }
 /* Deux boutons plutot que deux onglets : on voit d'un coup ce qu'on peut
@@ -881,7 +881,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .profil-pied { display: flex; align-items: center; gap: 10px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
 .profil-pied .lien { font-size: 13px; padding: 7px 13px; }
 .profil-pied .valider { margin-left: auto; width: auto; padding: 11px 26px; font-size: 15px; font-weight: 500; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; }
-.profil-pied .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.profil-pied .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; background: color-mix(in srgb, var(--accent) 85%, #000000); }
 .profil .join-error { margin-top: 18px; font-size: 14px; }
 @media (max-width: 620px) { .deux-champs { flex-direction: column; } }
 /* UN LISERE AUTOUR DE L'AVATAR. Les cases nues du pavage ont la couleur du
@@ -1612,7 +1612,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    souris au moment precis ou l'on visait. `!important` parce que plusieurs
    regles de meme specificite les habillent, chacune dans son coin. */
 button.vert { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; font-weight: 600; }
-button.vert:hover:not(:disabled) { filter: brightness(1.12); }
+button.vert:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, #000000) !important; }
 #defier-wrap button.defier { width: 100%; }
 /* LE TYPE DE PARTIE, dans la barre du salon : on joue mieux en sachant ce
    qu'on joue, et les primes s'ouvrent d'un clic quand elles sortent de
