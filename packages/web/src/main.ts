@@ -3552,7 +3552,7 @@ function paintRoadmap() {
     cumulRoute.set(m.n, somme);
     if (duplicate) {
       const p = m.propositions?.[me];
-      const negMot = p === undefined ? 0 : p.score - m.score;
+      const negMot = p === undefined ? -m.score : p.score - m.score;
       sommeNeg += negMot;
       cumulNegMot.set(m.n, sommeNeg);
     }
@@ -3736,7 +3736,7 @@ function ajouterALaRoute(m: MoveInfo): void {
   cumulRoute.set(m.n, (cumulRoute.get(m.n - 1) ?? 0) + Math.max(0, m.ms));
   if (duplicate) {
     const p = m.propositions?.[me];
-    const negMot = p === undefined ? 0 : p.score - m.score;
+    const negMot = p === undefined ? -m.score : p.score - m.score;
     cumulNegMot.set(m.n, (cumulNegMot.get(m.n - 1) ?? 0) + negMot);
   }
   const piste = document.getElementById("rm-piste");
@@ -3807,10 +3807,11 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
         `<span class="mp">${noteCoup(p.dir, p.x, p.y, cfg.bornes)}</span>` +
         `<span class="ms">${p.score}</span>`;
 
-    const negMot = p === undefined ? 0 : p.score - m.score;
+    const negMot = p === undefined ? -m.score : p.score - m.score;
     const cumulNeg = cumulNegMot.get(m.n) ?? 0;
-    motInfo = `<span class="md-mot${negMot === 0 ? " top" : ""}">${negMot === 0 ? "top" : negMot}</span>` +
-              `<span class="cumul-mot">${cumulNeg}</span>`;
+    const affNegMot = negMot === 0 ? "top" : (negMot < 0 ? negMot : `+${negMot}`);
+    motInfo = `<span class="md-mot${negMot === 0 ? " top" : ""}">${affNegMot}</span>` +
+              `<span class="cumul-mot${cumulNeg >= 0 ? "" : " neg"}">${cumulNeg >= 0 ? cumulNeg : cumulNeg}</span>`;
   }
 
   let queue: string;
@@ -3914,15 +3915,16 @@ function enregistrerLaRoute(): void {
       const p = m.propositions?.[me];
       const mien = m.scores?.[me];
       const ecart = mien === undefined ? null : mien - m.score;
-      const negMot = p === undefined ? 0 : p.score - m.score;
+      const negMot = p === undefined ? -m.score : p.score - m.score;
       const cumulNeg = cumulNegMot.get(m.n) ?? 0;
       const trouveurs = trouveursDuCoup(m).length;
       const presents = Object.keys(m.scores ?? {}).length;
       const motJoue = p === undefined ? "" : p.word;
       const placeJoue = p === undefined ? "" : noteCoup(p.dir, p.x, p.y, cfg.bornes);
       const scoreJoue = p === undefined ? "" : String(p.score);
+      const affNeg = negMot === 0 ? "top" : (negMot < 0 ? String(negMot) : `+${negMot}`);
       fin = [motJoue, placeJoue, scoreJoue,
-             String(negMot === 0 ? "top" : negMot),
+             affNeg,
              String(cumulNeg),
              quiLaTrouve(m, true),
              ecart === null ? "—" : ecart === 0 ? "top" : String(ecart),
