@@ -6846,8 +6846,13 @@ consigne** — chaque ligne a son *Aléatoire*, le format a ses plages et son
 cloche.
 
 **Le 17 septembre 2026 :** le dégradé du tableau des coups ratés, rouge pour ce
-qui manque et vert pour ce qu'on a pris ; puis les **tournois de battle**, leurs
-poules et leur double tableau.
+qui manque et vert pour ce qu'on a pris ; puis **les poules des tournois de
+battle** : les réglages rouverts après le début, le tirage et sa retouche à la
+main, la validation et ses notifications, la table d'une poule, *Mes
+rencontres* avec ses invitations et ses messages de créneau, le salon d'une
+rencontre — qui ne part que lorsque les deux camps sont là —, les
+disponibilités, l'en-tête libre, la désinscription, les rappels, l'arbitrage et
+le forfait.
 
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
 par joueur dans un salon qui n'en tient qu'une), le tournoi de duplicate, les
@@ -6856,6 +6861,7 @@ spectateurs, les équipes du site.
 ```bash
 node packages/server/test/check_figees.ts        # figer, servir, la pause
 node packages/server/test/check_competitif.ts    # manches, bilans, classements
+node packages/server/test/check_battle.ts        # poules, rencontres, arbitrage
 node packages/server/test/check_notifications.ts # la boite d'un compte
 node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 ```
@@ -6868,10 +6874,9 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 3. ~~Les graphiques.~~
 4. ~~Les notifications, et les défis.~~
 5. ~~Les tournois de topping, et ceux de la semaine.~~
-6. Les tournois de battle : **les poules** (réglages rouverts, tirage, retouche,
-   validation, page, *Mes rencontres*, le salon d'une rencontre, la
-   désinscription, l'en-tête), puis **le tableau** (aperçu, validation, dates,
-   rappels, arbitrage, classement final et médailles).
+6. ~~Les tournois de battle : les poules.~~ Reste **le tableau** : aperçu,
+   validation, notifications de qualification, dates imposées, classement final
+   et médailles.
 7. Les spectateurs.
 8. Les équipes du site.
 9. Les tournois de duplicate.

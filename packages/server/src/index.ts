@@ -679,28 +679,64 @@ async function ouvrirLeSalonDeRencontre(t: Tournoi, r: Rencontre): Promise<Salon
   const b = t.battle;
   if (b === null) throw new Error("ce tournoi n'est pas un battle");
   const encours = r.manches.find((m) => m.fin === null);
-  const vieux = encours === undefined ? undefined : salon(encours.salon);
-  if (encours !== undefined && vieux !== undefined && !vieux.partie.finie) {
-    inviterLesCamps(t, r, vieux);
-    return vieux;
+  if (encours !== undefined) {
+    const vieux = salon(encours.salon);
+    if (vieux !== undefined) {
+      if (!vieux.partie.finie) { inviterLesCamps(t, r, vieux); return vieux; }
+      // Sa partie est close sans score : c'est un abandon, la manche s'annule.
+      annulerLaMancheDeRencontre(r, encours.n);
+    } else {
+      // LE SALON S'EST REFERME FAUTE DE MONDE, et le rangement le fait au bout
+      // de quelques minutes. On le rouvre TEL QUEL, avec sa partie : la manche
+      // ne se consomme pas parce que personne n'est venu.
+      return await poserLeSalon(t, r, encours.n, encours.salon, false);
+    }
   }
-  if (encours !== undefined) annulerLaMancheDeRencontre(r, encours.n);
-  const n = r.manches.length + 1;
-  const id = `bat-${r.id.slice(0, 8)}-${n}`;
+  return await poserLeSalon(t, r, r.manches.length + 1, `bat-${r.id.slice(0, 8)}-${r.manches.length + 1}`, true);
+}
+
+/** Ouvre (ou rouvre) le salon d'une manche de rencontre, et l'invite. */
+async function poserLeSalon(
+  t: Tournoi, r: Rencontre, n: number, id: string, neuve: boolean,
+): Promise<Salon> {
   const deja = salon(id);
   if (deja !== undefined) { inviterLesCamps(t, r, deja); return deja; }
   const s = await ouvrirSalon({
     id, nom: `${nomDuCamp(t, r.camps[0])} · ${nomDuCamp(t, r.camps[1])} · manche ${n}`,
     proprietaire: r.camps[0], prive: true, layout: LAYOUT,
-    cfg: configDuModele(b.partie, t.lexique), nouveau: true,
+    cfg: configDuModele(t.battle!.partie, t.lexique), nouveau: true,
   });
   // LA MANCHE S'OUVRE AVANT LA SURVEILLANCE : c'est sa ligne de journal qui
   // rattache le salon a la rencontre, et `surveiller` la lit.
-  ouvrirUneMancheDeRencontre(r, id);
+  if (neuve) ouvrirUneMancheDeRencontre(r, id);
   inviterLesCamps(t, r, s);
   surveiller(s);
   rangerPlusTard(s.id);
   return s;
+}
+
+/**
+ * UNE RENCONTRE DEMARRE QUAND LES DEUX CAMPS SONT LA (SPEC.md §29).
+ *
+ * Elle n'a pas de bouton « Lancer » : ses reglages sont ceux du tournoi, et
+ * personne n'a a les valider. Mais elle ne part pas non plus a l'arrivee du
+ * premier venu -- les deux camps jouent la MEME partie, en meme temps, et un
+ * tirage servi avant que l'autre arrive serait un coup joue seul.
+ *
+ * LE DECOMPTE EST IMPOSE : sans lui, celui qui est deja la verrait le tirage
+ * pendant que l'autre charge encore sa page.
+ */
+function lancerLaRencontreSiLesDeuxSontLa(s: Salon): void {
+  const rc = rencontreDuSalon(s.id);
+  if (rc === undefined || s.partie.demarree || s.partie.finie) return;
+  const t = tournoi(rc.rencontre.tournoi);
+  if (t === undefined) return;
+  const ici = new Set(occupants(s.id));
+  const present = (camp: string): boolean => joueursDuCamp(t, camp).some((n) => ici.has(n));
+  if (!rc.rencontre.camps.every(present)) return;
+  s.partie.decompteImpose = true;
+  console.log(`[competitif] rencontre "${s.nom}" lancee : les deux camps sont la`);
+  void s.partie.demarrer();
 }
 
 /**
@@ -799,6 +835,35 @@ function prevenirLesTournoisQuiCommencent(maintenant = Date.now()): void {
     for (const i of t.inscrits) {
       for (const qui of [i.compte, ...i.partenaires]) {
         notifier(qui, "tournoi-debut", { tournoi: t.id, nom: t.nom }, `debut:${t.id}`);
+      }
+    }
+  }
+}
+
+/**
+ * RAPPELLE UNE RENCONTRE QUI N'A PAS ETE JOUEE (SPEC.md §29).
+ *
+ * La veille de la date limite, puis la veille de la date butoir. Sans ces deux
+ * rappels, la butoir tombe sur des gens qui avaient seulement oublie, et
+ * l'organisateur passe son temps a arbitrer.
+ *
+ * La cle porte la rencontre ET l'echeance : deux rappels par rencontre, jamais
+ * trois, meme si le serveur redemarre dix fois entre les deux.
+ */
+function rappelerLesRencontres(maintenant = Date.now()): void {
+  const VEILLE = 86_400_000;
+  for (const t of tousLesTournois()) {
+    if (t.type !== "battle") continue;
+    for (const r of rencontresDuTournoi(t.id)) {
+      if (r.fin !== null) continue;
+      for (const [quoi, quand] of [["limite", r.limite], ["butoir", r.butoir]] as const) {
+        if (maintenant < quand - VEILLE || maintenant >= quand) continue;
+        for (const camp of r.camps) {
+          for (const qui of joueursDuCamp(t, camp)) {
+            notifier(qui, "tournoi-rappel", { tournoi: t.id, nom: t.nom, quoi },
+              `rappel:${r.id}:${quoi}`);
+          }
+        }
       }
     }
   }
@@ -2976,6 +3041,8 @@ wss.on("connection", (ws, req) => {
       cible.partie.presents.add(nom);
       majDuGerant(cible);
       void cible.partie.reveiller();
+      // UNE RENCONTRE DE TOURNOI PART QUAND LES DEUX CAMPS SONT LA (SPEC.md §29).
+      lancerLaRencontreSiLesDeuxSontLa(cible);
       send(ws, {
         t: "hello",
         you: nom,
@@ -3647,6 +3714,7 @@ http.listen(PORT, () => {
     void assurerLesPartiesDuJour(LAYOUT)
       .then(() => assurerLesTournoisDeLaSemaine(LAYOUT))
       .then(() => prevenirLesTournoisQuiCommencent())
+      .then(() => rappelerLesRencontres())
       .catch((e) =>
         console.error(`[competitif] parties du jour non figees : ${(e as Error).message}`));
   };

@@ -8409,6 +8409,26 @@ $("voile-regles").addEventListener("click", (e) => {
  * posee, `oui` ce que valide une reponse positive. Rien n'y est specifique a
  * l'abandon -- une autre confirmation future peut la reutiliser telle quelle.
  */
+/**
+ * UNE FENETRE A TOUT FAIRE : un titre, un corps, et rien d'autre.
+ *
+ * Le battle en ouvre une pour le detail d'une rencontre, la liste des joueurs
+ * d'une equipe, l'en-tete du tournoi. Chacune de ces vues est trop petite pour
+ * meriter sa page, et trop grande pour tenir dans une infobulle.
+ */
+function ouvrirUneFenetre(titre: string, corps: HTMLElement): void {
+  $("boite-titre").textContent = titre;
+  $("boite-corps").replaceChildren(corps);
+  $("voile-boite").hidden = false;
+}
+
+function fermerLaFenetre(): void { $("voile-boite").hidden = true; }
+
+$("boite-close").addEventListener("click", fermerLaFenetre);
+$("voile-boite").addEventListener("click", (e) => {
+  if (e.target === $("voile-boite")) fermerLaFenetre();
+});
+
 function confirmer(titre: string, oui: () => void): void {
   $("confirmer-titre").textContent = titre;
   ($("confirmer-oui") as HTMLButtonElement).onclick = () => {
@@ -12754,6 +12774,29 @@ function phraseDeLaNotification(n: NotificationVue): { quoi: string; aller: (() 
       aller: p["tournoi"] === undefined ? null : () => ouvrirLeTournoi(p["tournoi"]!),
     };
   }
+  // LE BATTLE (SPEC.md §29) : les trois temps du tournoi, et ce qui se passe
+  // entre deux joueurs qui cherchent une date.
+  const versLeTournoi = p["tournoi"] === undefined
+    ? null : () => ouvrirLeTournoi(p["tournoi"]!);
+  if (n.genre === "tournoi-poules") {
+    return { quoi: t2("Les poules de « {nom} » sont tirées", { nom: p["nom"] ?? "" }), aller: versLeTournoi };
+  }
+  if (n.genre === "tournoi-qualifie") {
+    return { quoi: t2("Vous êtes qualifié pour la phase suivante de « {nom} »", { nom: p["nom"] ?? "" }), aller: versLeTournoi };
+  }
+  if (n.genre === "tournoi-elimine") {
+    return { quoi: t2("Vous n'avez pas atteint la phase suivante de « {nom} »", { nom: p["nom"] ?? "" }), aller: versLeTournoi };
+  }
+  if (n.genre === "tournoi-creneau") {
+    return {
+      quoi: `${t2("{de} vous propose un créneau pour « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" })}`
+        + (p["texte"] === undefined ? "" : ` : ${p["texte"]}`),
+      aller: versLeTournoi,
+    };
+  }
+  if (n.genre === "tournoi-rappel") {
+    return { quoi: t2("La date limite de votre rencontre de « {nom} » approche", { nom: p["nom"] ?? "" }), aller: versLeTournoi };
+  }
   return { quoi: n.genre, aller: null };
 }
 
@@ -12835,6 +12878,21 @@ $("voile-notifs").addEventListener("click", (e) => {
 
 // TOUTES LES TRENTE SECONDES, et rien ne depend d'une liaison ouverte.
 setInterval(() => { void chargerLesNotifications(); }, 30_000);
+
+/**
+ * LA PAGE D'UN TOURNOI SE RAFRAICHIT TOUTE SEULE (SPEC.md §29).
+ *
+ * Le client n'a de liaison permanente avec le serveur que dans un salon : hors
+ * salon, on demande, comme le fait la cloche. Un resultat parait donc a la
+ * minute pres, et non a la seconde -- et c'est assez pour suivre des poules.
+ *
+ * ON NE DEMANDE RIEN QUAND L'ONGLET EST CACHE : personne ne regarde.
+ */
+setInterval(() => {
+  if ($("corps-tournoi").hidden || document.hidden) return;
+  if (!$("to-modif").hidden) return;
+  void chargerLeTournoi();
+}, 45_000);
 
 // ------------------------------------------------ LA PAGE D'ADMINISTRATION
 
@@ -13685,6 +13743,8 @@ async function chargerLeTournoi(): Promise<void> {
   direLErreur($("to-error"), null);
   let d: {
     maintenant: number; tournoi: TournoiVue; resultats?: number;
+    /** Ce qu'un tournoi de battle ajoute a sa page (SPEC.md §29). */
+    battle?: BattleVue | null;
     moi: {
       inscrit: boolean; modifiable?: boolean; proprietaire?: boolean;
       parties: {
@@ -13823,8 +13883,15 @@ async function chargerLeTournoi(): Promise<void> {
     gestes.appendChild(supprimer);
   }
 
+  // LE BATTLE : les poules, mes rencontres, ce qui se joue en ce moment.
+  $("to-battle").hidden = true;
+  $("to-entete").hidden = true;
+  if (d.battle != null) {
+    peindreLeBattle(x, d.battle, d.maintenant, d.moi?.proprietaire === true);
+  }
+
   // L'INSCRIPTION.
-  peindreLInscription(x, d.moi?.inscrit === true, d.maintenant);
+  peindreLInscription(x, d.moi?.inscrit === true, d.maintenant, d.battle ?? null);
   $("to-inscrits-titre").textContent = [
     t2(x.inscrits.length > 1 ? "{n} inscrits" : "{n} inscrit", { n: x.inscrits.length }),
     ...(x.type === "topping"
@@ -13843,10 +13910,35 @@ async function chargerLeTournoi(): Promise<void> {
 }
 
 /** Le bloc d'inscription : le bouton, et les partenaires quand on joue a plusieurs. */
-function peindreLInscription(x: TournoiVue, inscrit: boolean, maintenant: number): void {
+function peindreLInscription(
+  x: TournoiVue, inscrit: boolean, maintenant: number, bat: BattleVue | null = null,
+): void {
   const boite = $("to-inscription");
   const closes = x.type === "topping" ? (x.fin !== null && maintenant >= x.fin) : maintenant >= x.debut;
-  if (inscrit) { boite.replaceChildren(el("p", "to-bloc", t("Vous êtes inscrit."))); return; }
+  if (inscrit) {
+    boite.replaceChildren(el("p", "to-bloc", t("Vous êtes inscrit.")));
+    // SE DESINSCRIRE, tant que le tournoi n'est pas engage (SPEC.md §29) : d'un
+    // battle tant que les poules ne sont pas tirees, d'un topping tant qu'on
+    // n'a lance aucune partie. Le serveur tranche ; le bouton disparait quand
+    // il n'a plus rien a faire.
+    const engage = x.type === "battle" ? (bat !== null && bat.phase !== "inscriptions") : false;
+    if (!engage) {
+      const partir = el("button", "lien", t("Me retirer du tournoi")) as HTMLButtonElement;
+      partir.type = "button";
+      partir.addEventListener("click", () => {
+        confirmer(t2("Vous retirer de « {nom} » ?", { nom: x.nom }), () => {
+          void (async () => {
+            const { ok, d } = await envoyerAuServeur(
+              `/api/tournoi/${encodeURIComponent(x.id)}/desinscription`, {});
+            if (!ok) { direLErreur($("to-error"), String(d.erreur ?? "serveur injoignable")); return; }
+            ouvrirLeTournoi(x.id, false);
+          })();
+        });
+      });
+      boite.appendChild(partir);
+    }
+    return;
+  }
   if (closes) { boite.replaceChildren(el("p", "to-bloc", t("Les inscriptions sont closes."))); return; }
   if (moiCompte === null) {
     const b = el("button", "valider", t("Se connecter pour s'inscrire")) as HTMLButtonElement;
@@ -14057,4 +14149,642 @@ function rendreLesSolos(solos: SoloVue[], minimum: number): void {
   }
   table.appendChild(corps);
   $("pa-tableau").replaceChildren(table);
+}
+
+// ------------------------------------------------- LES TOURNOIS DE BATTLE
+
+interface LigneDePouleVue {
+  camp: string;
+  rang: number;
+  points: number;
+  gagnees: number;
+  nulles: number;
+  perdues: number;
+  manchesGagnees: number;
+  manchesPerdues: number;
+  pointsDeManche: number;
+  jouees: number;
+}
+
+interface MancheDeRencontreVue {
+  n: number;
+  salon: string;
+  points: [number, number] | null;
+  gagnant: string | null;
+  fin: number | null;
+  ouverte: boolean;
+}
+
+interface RencontreVue {
+  id: string;
+  phase: string;
+  tour: number;
+  camps: [string, string];
+  bo: number;
+  limite: number;
+  butoir: number;
+  fin: { gagnant: string | null; par: string; at: number } | null;
+  manches: MancheDeRencontreVue[];
+  messages: { de: string; texte: string; at: number }[];
+  moi: boolean;
+}
+
+interface BattleVue {
+  phase: "inscriptions" | "poules" | "tableau" | "fini";
+  entete: string;
+  camps: { camp: string; nom: string; joueurs: string[] }[];
+  poules: { n: number; camps: string[]; classement: LigneDePouleVue[]; tours: number }[];
+  rencontres: RencontreVue[];
+  moi: { camp: string | null; dispos: string; arbitre: boolean } | null;
+  dispos: Record<string, string>;
+}
+
+/** La composition en cours d'édition, tant que les poules ne sont pas validées. */
+let poulesEnCours: string[][] | null = null;
+
+/** Le nom d'un camp : celui de l'équipe s'il y en a un, le pseudo sinon. */
+function nomDuCamp(b: BattleVue, camp: string): string {
+  return b.camps.find((c) => c.camp === camp)?.nom ?? camp;
+}
+
+/**
+ * LE NOM D'UN CAMP, CLIQUABLE.
+ *
+ * Un camp d'un seul joueur mène à sa page ; une équipe ouvre la liste de ses
+ * joueurs, chaque pseudo cliquable à son tour (SPEC.md §29).
+ */
+function campCliquable(b: BattleVue, camp: string): HTMLElement {
+  const c = b.camps.find((x) => x.camp === camp);
+  if (c === undefined || c.joueurs.length <= 1) return pseudoCliquable(camp);
+  const s = el("button", "lien camp-equipe", c.nom) as HTMLButtonElement;
+  s.type = "button";
+  s.title = c.joueurs.join(", ");
+  s.addEventListener("click", () => {
+    const corps = el("div", "camp-joueurs");
+    for (const j of c.joueurs) corps.appendChild(pseudoCliquable(j));
+    ouvrirUneFenetre(c.nom, corps);
+  });
+  return s;
+}
+
+/** Le score d'une rencontre en manches gagnées, « 2-1 ». */
+function scoreDeLaRencontre(r: RencontreVue): [number, number] {
+  const compte = (i: 0 | 1): number =>
+    r.manches.filter((m) => m.gagnant !== null && m.gagnant === r.camps[i]).length;
+  return [compte(0), compte(1)];
+}
+
+/** Ce qu'une rencontre a donné pour un camp : gagnée, nulle, perdue, en attente. */
+function issueDeLaRencontre(r: RencontreVue, camp: string): "gagnee" | "nulle" | "perdue" | "absente" | "attente" {
+  if (r.fin === null) return "attente";
+  if (r.fin.gagnant === null) return r.fin.par === "arbitrage" ? "absente" : "nulle";
+  return r.fin.gagnant === camp ? "gagnee" : "perdue";
+}
+
+/**
+ * LA TABLE D'UNE POULE (SPEC.md §29).
+ *
+ * Le rang, le joueur, son bilan, puis UNE COLONNE PAR TOUR portant le score en
+ * manches et l'adversaire. La bande de gauche dit la qualification ; elle reste
+ * indicative tant que le tableau n'est pas validé, parce que les qualifiés se
+ * prennent sur toutes les poules à la fois.
+ */
+function tableDeLaPoule(
+  x: TournoiVue, b: BattleVue, p: BattleVue["poules"][number],
+): HTMLElement {
+  const boite = el("div", "pl-poule");
+  boite.appendChild(el("h2", "pl-titre", t2("Poule {n}", { n: p.n })));
+  const table = el("table");
+  const tete = el("tr");
+  tete.append(
+    el("th", "pl-rang", "#"), el("th", "pl-nom", t("Joueur")),
+    el("th", "pl-bilan", t("Renc.")), el("th", "pl-bilan", t("Manches")),
+    el("th", "pl-pts", t("Pts")),
+  );
+  for (let tour = 1; tour <= p.tours; tour++) tete.appendChild(el("th", "pl-tour", `T${tour}`));
+  const thead = el("thead");
+  thead.appendChild(tete);
+  table.appendChild(thead);
+
+  // COMBIEN PASSENT, PAR POULE. Le réglage compte les qualifiés du tournoi
+  // entier ; on le répartit pour dessiner la bande, faute de mieux avant que
+  // le tableau soit posé.
+  const nbPoules = Math.max(1, b.poules.length);
+  const parPoule = x.battle?.qualifies == null
+    ? p.classement.length : Math.ceil(x.battle.qualifies / nbPoules);
+  const hautParPoule = x.battle?.tableauHaut == null
+    ? Math.ceil(parPoule / 2) : Math.ceil(x.battle.tableauHaut / nbPoules);
+
+  const corps = el("tbody");
+  for (const l of p.classement) {
+    const tr = el("tr");
+    tr.classList.add(l.rang <= hautParPoule ? "pl-haut" : l.rang <= parPoule ? "pl-bas" : "pl-hors");
+    if (b.moi?.camp === l.camp) tr.classList.add("pl-moi");
+    tr.appendChild(el("td", "pl-rang", String(l.rang)));
+    const nom = el("td", "pl-nom");
+    nom.appendChild(campCliquable(b, l.camp));
+    tr.appendChild(nom);
+    tr.appendChild(el("td", "pl-bilan", l.nulles > 0
+      ? `${l.gagnees} - ${l.nulles} - ${l.perdues}` : `${l.gagnees} - ${l.perdues}`));
+    tr.appendChild(el("td", "pl-bilan", `${l.manchesGagnees} - ${l.manchesPerdues}`));
+    tr.appendChild(el("td", "pl-pts", String(l.points)));
+    for (let tour = 1; tour <= p.tours; tour++) {
+      const r = b.rencontres.find((y) =>
+        y.phase === `poule:${p.n - 1}` && y.tour === tour && y.camps.includes(l.camp));
+      const td = el("td", "pl-tour");
+      if (r === undefined) {
+        // EXEMPT DE CE TOUR : un effectif impair en laisse un par ronde.
+        td.classList.add("pl-exempt");
+        td.textContent = "—";
+        tr.appendChild(td);
+        continue;
+      }
+      const issue = issueDeLaRencontre(r, l.camp);
+      td.classList.add(`pl-${issue}`);
+      const sien = r.camps[0] === l.camp ? 0 : 1;
+      const score = scoreDeLaRencontre(r);
+      const autre = r.camps[sien === 0 ? 1 : 0]!;
+      // UNE RENCONTRE QU'ON N'A PAS ENCORE JOUEE N'AFFICHE PAS « 0:0 » : ce
+      // serait un resultat, et c'en n'est pas un. Reste l'adversaire, qui est
+      // justement ce qu'on vient lire.
+      const joue = r.manches.some((m) => m.points !== null);
+      td.appendChild(el("span", "pl-score", issue === "absente" || !joue ? "—"
+        : `${score[sien]}:${score[sien === 0 ? 1 : 0]}`));
+      td.appendChild(el("span", "pl-contre", nomDuCamp(b, autre)));
+      td.title = `${t("contre")} ${nomDuCamp(b, autre)}`;
+      td.addEventListener("click", () => ouvrirLaRencontre(x, b, r));
+      tr.appendChild(td);
+    }
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  boite.appendChild(table);
+  return boite;
+}
+
+/** Le détail d'une rencontre : ses manches, et le rejeu de chacune. */
+function ouvrirLaRencontre(x: TournoiVue, b: BattleVue, r: RencontreVue): void {
+  const corps = el("div", "rn-detail");
+  const score = scoreDeLaRencontre(r);
+  const titre = el("div", "rn-tete");
+  titre.append(campCliquable(b, r.camps[0]), el("b", "rn-score", `${score[0]} - ${score[1]}`),
+    campCliquable(b, r.camps[1]));
+  corps.appendChild(titre);
+  corps.appendChild(el("p", "sub", r.fin === null
+    ? t2("Au meilleur de {n} manches.", { n: r.bo })
+    : r.fin.gagnant === null
+      ? (r.fin.par === "arbitrage" ? t("Rencontre non jouée.") : t("Rencontre nulle."))
+      : t2("{nom} l'emporte.", { nom: nomDuCamp(b, r.fin.gagnant) })));
+  const faites = r.manches.filter((m) => m.points !== null);
+  if (faites.length === 0) corps.appendChild(el("p", "none", t("Aucune manche jouée.")));
+  for (const m of faites) {
+    const ligne = el("div", "rn-manche");
+    ligne.append(
+      el("span", "rn-n", t2("Manche {n}", { n: m.n })),
+      el("span", "rn-pts", `${m.points![0]} - ${m.points![1]}`),
+    );
+    const revoir = el("button", "lien", t("Revoir")) as HTMLButtonElement;
+    revoir.type = "button";
+    revoir.addEventListener("click", () => { fermerLaFenetre(); allerA(m.salon); });
+    ligne.appendChild(revoir);
+    corps.appendChild(ligne);
+  }
+  if (r.messages.length > 0) {
+    corps.appendChild(el("h3", "rn-sous", t("Messages")));
+    for (const msg of r.messages) {
+      const ligne = el("div", "rn-msg");
+      ligne.append(el("b", "", msg.de), document.createTextNode(` · ${msg.texte}`));
+      corps.appendChild(ligne);
+    }
+  }
+  if (b.moi?.arbitre === true && r.fin === null) corps.appendChild(boutonsDArbitrage(x, b, r));
+  ouvrirUneFenetre(t2("{a} contre {b}", {
+    a: nomDuCamp(b, r.camps[0]), b: nomDuCamp(b, r.camps[1]),
+  }), corps);
+}
+
+/** L'arbitrage d'une rencontre non jouée : à son créateur et à l'administration. */
+function boutonsDArbitrage(x: TournoiVue, b: BattleVue, r: RencontreVue): HTMLElement {
+  const boite = el("div", "rn-arbitrage");
+  boite.appendChild(el("h3", "rn-sous", t("Arbitrage")));
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const envoyer = async (corps: Record<string, unknown>): Promise<void> => {
+    const { ok, d } = await envoyerAuServeur(
+      `/api/rencontre/${encodeURIComponent(r.id)}/arbitrer`, corps);
+    if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+    fermerLaFenetre();
+    ouvrirLeTournoi(x.id, false);
+  };
+  const ligne = el("div", "ad-ligne");
+  for (const camp of r.camps) {
+    const bt = el("button", "", t2("{nom} gagne", { nom: nomDuCamp(b, camp) })) as HTMLButtonElement;
+    bt.type = "button";
+    bt.addEventListener("click", () => void envoyer({ quoi: "victoire", qui: camp }));
+    ligne.appendChild(bt);
+  }
+  const personne = el("button", "", t("Personne ne gagne")) as HTMLButtonElement;
+  personne.type = "button";
+  personne.addEventListener("click", () => void envoyer({ quoi: "personne" }));
+  ligne.appendChild(personne);
+  boite.appendChild(ligne);
+  const date = champDate(r.butoir);
+  const delai = el("button", "", t("Repousser la date butoir")) as HTMLButtonElement;
+  delai.type = "button";
+  delai.addEventListener("click", () => {
+    const quand = Date.parse(`${date.value}:00`);
+    if (!Number.isFinite(quand)) { direLErreur(erreur, t("Donnez une date")); return; }
+    void envoyer({ quoi: "delai", butoir: quand });
+  });
+  const ligne2 = el("div", "ad-ligne");
+  ligne2.append(date, delai);
+  boite.append(ligne2, erreur);
+  return boite;
+}
+
+/**
+ * MES RENCONTRES (SPEC.md §29).
+ *
+ * L'adversaire, les deux dates, et les deux gestes : l'inviter tout de suite,
+ * ou lui laisser un mot pour fixer un créneau.
+ */
+function mesRencontres(x: TournoiVue, b: BattleVue, maintenant: number): HTMLElement | null {
+  const miennes = b.rencontres.filter((r) => r.moi && r.fin === null);
+  if (b.moi?.camp == null) return null;
+  const boite = el("section", "to-b-bloc");
+  boite.appendChild(el("h1", "", t("Mes rencontres")));
+
+  // MES DISPONIBILITES, ECRITES UNE FOIS POUR LE TOURNOI : les réécrire pour
+  // chaque adversaire n'aurait pas de sens.
+  const dispos = document.createElement("textarea");
+  dispos.className = "to-dispos";
+  dispos.rows = 2;
+  dispos.value = b.moi.dispos;
+  dispos.placeholder = t("Mes disponibilités, lues par tous mes adversaires");
+  dispos.addEventListener("change", () => {
+    void envoyerAuServeur(`/api/tournoi/${encodeURIComponent(x.id)}/dispos`, { texte: dispos.value });
+  });
+  boite.appendChild(dispos);
+
+  if (miennes.length === 0) {
+    boite.appendChild(el("p", "none", t("Aucune rencontre à jouer.")));
+    return boite;
+  }
+  for (const r of miennes) {
+    const autre = r.camps[0] === b.moi.camp ? r.camps[1]! : r.camps[0]!;
+    const carte = el("div", "rn-carte");
+    const tete = el("div", "rn-carte-tete");
+    tete.append(el("span", "rn-contre", t("contre")), campCliquable(b, autre));
+    const score = scoreDeLaRencontre(r);
+    if (score[0] + score[1] > 0) {
+      const mien = r.camps[0] === b.moi.camp ? 0 : 1;
+      tete.appendChild(el("b", "rn-score",
+        `${score[mien]} - ${score[mien === 0 ? 1 : 0]}`));
+    }
+    carte.appendChild(tete);
+    carte.appendChild(el("div", "sub", [
+      t2("Au meilleur de {n} manches", { n: r.bo }),
+      t2("limite le {d}", { d: dateDeTournoi(r.limite) }),
+      t2("butoir le {d}", { d: dateDeTournoi(r.butoir) }),
+    ].join(" · ")));
+    const sien = b.dispos[autre] ?? "";
+    if (sien.trim() !== "") {
+      carte.appendChild(el("div", "rn-dispos",
+        `${t2("Disponibilités de {nom}", { nom: nomDuCamp(b, autre) })} : ${sien}`));
+    }
+    const erreur = el("div", "join-error");
+    erreur.hidden = true;
+    const gestes = el("div", "ad-ligne");
+    const jouer = el("button", "vert", t("Inviter et jouer")) as HTMLButtonElement;
+    jouer.type = "button";
+    jouer.addEventListener("click", () => {
+      void (async () => {
+        jouer.disabled = true;
+        const { ok, d } = await envoyerAuServeur(
+          `/api/rencontre/${encodeURIComponent(r.id)}/inviter`, {});
+        jouer.disabled = false;
+        if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+        allerA(String(d.salon));
+      })();
+    });
+    const ecrire = el("button", "", t("Proposer un créneau")) as HTMLButtonElement;
+    ecrire.type = "button";
+    ecrire.addEventListener("click", () => demanderUnCreneau(x, b, r, autre));
+    gestes.append(jouer, ecrire);
+    if (maintenant > r.butoir) {
+      carte.appendChild(el("div", "rn-tard", t("La date butoir est passée : l'organisateur tranchera.")));
+    }
+    const fil = el("button", "lien", r.messages.length > 0
+      ? t2("Messages ({n})", { n: r.messages.length }) : t("Messages")) as HTMLButtonElement;
+    fil.type = "button";
+    fil.addEventListener("click", () => ouvrirLaRencontre(x, b, r));
+    gestes.appendChild(fil);
+    carte.append(gestes, erreur);
+    boite.appendChild(carte);
+  }
+  return boite;
+}
+
+/** Une demande de créneau : le message part en notification à l'adversaire. */
+function demanderUnCreneau(x: TournoiVue, b: BattleVue, r: RencontreVue, autre: string): void {
+  const corps = el("div", "");
+  corps.appendChild(el("p", "sub",
+    t2("{nom} recevra une notification avec votre message.", { nom: nomDuCamp(b, autre) })));
+  const texte = document.createElement("textarea");
+  texte.rows = 3;
+  texte.className = "to-dispos";
+  texte.placeholder = t("Mardi ou jeudi après 20 h ?");
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const envoyer = el("button", "valider", t("Envoyer")) as HTMLButtonElement;
+  envoyer.type = "button";
+  envoyer.addEventListener("click", () => {
+    void (async () => {
+      envoyer.disabled = true;
+      const { ok, d } = await envoyerAuServeur(
+        `/api/rencontre/${encodeURIComponent(r.id)}/message`, { texte: texte.value });
+      envoyer.disabled = false;
+      if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+      fermerLaFenetre();
+      ouvrirLeTournoi(x.id, false);
+    })();
+  });
+  corps.append(texte, erreur, envoyer);
+  ouvrirUneFenetre(t("Proposer un créneau"), corps);
+}
+
+/** Les rencontres qui se jouent en ce moment, et le bouton pour les regarder. */
+function rencontresEnCours(x: TournoiVue, b: BattleVue): HTMLElement | null {
+  const vivantes = b.rencontres
+    .filter((r) => r.manches.some((m) => m.ouverte))
+    .map((r) => ({ r, m: r.manches.find((m) => m.ouverte)! }));
+  if (vivantes.length === 0) return null;
+  const boite = el("section", "to-b-bloc");
+  boite.appendChild(el("h1", "", t("Rencontres en cours")));
+  for (const { r, m } of vivantes) {
+    const ligne = el("div", "rn-carte");
+    const tete = el("div", "rn-carte-tete");
+    tete.append(campCliquable(b, r.camps[0]), el("span", "rn-contre", t("contre")),
+      campCliquable(b, r.camps[1]), el("span", "sub", t2("manche {n}", { n: m.n })));
+    const regarder = el("button", "", t("Regarder")) as HTMLButtonElement;
+    regarder.type = "button";
+    regarder.addEventListener("click", () => allerA(m.salon));
+    ligne.append(tete, regarder);
+    boite.appendChild(ligne);
+  }
+  return boite;
+}
+
+/**
+ * L'EDITEUR DE POULES (SPEC.md §29).
+ *
+ * On tire, on retouche à la main, on retire, et l'on valide. Rien n'est acquis
+ * avant la validation : c'est elle qui ferme les inscriptions pour de bon.
+ */
+function editeurDesPoules(x: TournoiVue, b: BattleVue): HTMLElement {
+  const bat = x.battle!;
+  const boite = el("section", "to-b-bloc");
+  boite.appendChild(el("h1", "", t("Composer les poules")));
+  let joueursParPoule = bat.joueursParPoule;
+  let manchesParPoule = bat.manchesParPoule;
+  let qualifies = bat.qualifies;
+  let tableauHaut = bat.tableauHaut;
+  const limite = champDate(bat.limitePoules);
+
+  const grille = el("div", "pl-edit");
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+
+  const peindre = (): void => {
+    grille.replaceChildren();
+    const les = poulesEnCours ?? [];
+    if (les.length === 0) {
+      grille.appendChild(el("p", "none", t("Tirez les poules pour commencer.")));
+      return;
+    }
+    les.forEach((poule, i) => {
+      const colonne = el("div", "pl-colonne");
+      colonne.appendChild(el("h2", "pl-titre", t2("Poule {n}", { n: i + 1 })));
+      for (const camp of poule) {
+        const ligne = el("div", "pl-chip");
+        ligne.appendChild(el("span", "pl-chip-nom", nomDuCamp(b, camp)));
+        // ON DEPLACE PAR UNE LISTE, PAS PAR GLISSER-DEPOSER : le geste est le
+        // meme au doigt et a la souris, et rien ne se perd en route.
+        const ou = document.createElement("select");
+        les.forEach((_, j) => {
+          const o = document.createElement("option");
+          o.value = String(j);
+          o.textContent = t2("Poule {n}", { n: j + 1 });
+          o.selected = j === i;
+          ou.appendChild(o);
+        });
+        ou.addEventListener("change", () => {
+          const vers = Number(ou.value);
+          if (vers === i || poulesEnCours === null) return;
+          poulesEnCours[i] = poulesEnCours[i]!.filter((c) => c !== camp);
+          poulesEnCours[vers]!.push(camp);
+          peindre();
+        });
+        ligne.appendChild(ou);
+        colonne.appendChild(ligne);
+      }
+      colonne.appendChild(el("div", "pl-compte",
+        t2(poule.length > 1 ? "{n} joueurs" : "{n} joueur", { n: poule.length })));
+      grille.appendChild(colonne);
+    });
+  };
+
+  const tirer = el("button", "", t("Tirer les poules")) as HTMLButtonElement;
+  tirer.type = "button";
+  tirer.addEventListener("click", () => {
+    void (async () => {
+      tirer.disabled = true;
+      const { ok, d } = await envoyerAuServeur(
+        `/api/tournoi/${encodeURIComponent(x.id)}/poules/tirer`, { joueursParPoule });
+      tirer.disabled = false;
+      if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+      poulesEnCours = d.poules as string[][];
+      // Le bouton dit ce qu'il fera la prochaine fois : le premier tirage
+      // compose, les suivants recommencent.
+      tirer.textContent = t("Retirer au sort");
+      peindre();
+    })();
+  });
+
+  const valider = el("button", "valider", t("Valider et lancer la phase de poules")) as HTMLButtonElement;
+  valider.type = "button";
+  valider.addEventListener("click", () => {
+    if (poulesEnCours === null) { direLErreur(erreur, t("Tirez les poules d'abord")); return; }
+    confirmer(t("Lancer la phase de poules ? Les inscriptions seront closes."), () => {
+      void (async () => {
+        valider.disabled = true;
+        const { ok, d } = await envoyerAuServeur(`/api/tournoi/${encodeURIComponent(x.id)}/poules`, {
+          poules: poulesEnCours, joueursParPoule, manchesParPoule, qualifies, tableauHaut,
+          limitePoules: limite.value,
+        });
+        valider.disabled = false;
+        if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+        poulesEnCours = null;
+        ouvrirLeTournoi(x.id, false);
+      })();
+    });
+  });
+
+  const reglages = el("div", "pl-reglages");
+  reglages.append(
+    champ(t("Joueurs par poule"), compteur(2, 32, joueursParPoule, (n) => { joueursParPoule = n; })),
+    champ(t("Manches par rencontre"), compteurImpair(manchesParPoule, (n) => { manchesParPoule = n; })),
+    champ(t("Qualifiés"), compteurOuTous(2, 256, qualifies, t("Tous"), (n) => { qualifies = n; })),
+    champ(t("Dont au tableau haut"), compteurOuTous(1, 256, tableauHaut, t("La moitié"), (n) => { tableauHaut = n; })),
+    champ(t("Date limite des poules"), limite),
+  );
+  const gestes = el("div", "ad-ligne");
+  gestes.append(tirer, valider);
+  peindre();
+  boite.append(reglages, gestes, grille, erreur);
+  return boite;
+}
+
+/** Un compteur qui ne passe que par les nombres impairs. */
+function compteurImpair(valeur: number, surChange: (n: number) => void): HTMLElement {
+  const boite = el("div", "ad-ligne");
+  boite.style.margin = "0";
+  let n = valeur % 2 === 0 ? valeur + 1 : valeur;
+  const moins = el("button", "", "−") as HTMLButtonElement;
+  const plus = el("button", "", "+") as HTMLButtonElement;
+  const vu = el("b", "", String(n));
+  const poser = (x: number): void => {
+    n = Math.max(1, Math.min(9, x));
+    vu.textContent = String(n);
+    moins.disabled = n <= 1;
+    plus.disabled = n >= 9;
+    surChange(n);
+  };
+  moins.type = "button";
+  plus.type = "button";
+  moins.addEventListener("click", () => poser(n - 2));
+  plus.addEventListener("click", () => poser(n + 2));
+  boite.append(moins, vu, plus);
+  poser(n);
+  return boite;
+}
+
+/** Un compteur qu'une case ramène à « tout le monde ». */
+function compteurOuTous(
+  min: number, max: number, valeur: number | null, tous: string,
+  surChange: (n: number | null) => void,
+): HTMLElement {
+  const boite = el("div", "ad-ligne");
+  boite.style.margin = "0";
+  let n = valeur;
+  const dedans = el("div", "");
+  const case1 = document.createElement("label");
+  case1.className = "case";
+  const coche = document.createElement("input");
+  coche.type = "checkbox";
+  coche.checked = n === null;
+  case1.append(coche, document.createTextNode(` ${tous}`));
+  const refaire = (): void => {
+    dedans.replaceChildren();
+    if (n !== null) dedans.appendChild(compteur(min, max, n, (v) => { n = v; surChange(v); }));
+    surChange(n);
+  };
+  coche.addEventListener("change", () => {
+    n = coche.checked ? null : Math.max(min, valeur ?? min);
+    refaire();
+  });
+  refaire();
+  boite.append(case1, dedans);
+  return boite;
+}
+
+/** L'en-tête libre de la page, écrit par le créateur ou l'administration. */
+function peindreLEnteteDuTournoi(x: TournoiVue, b: BattleVue, peutEcrire: boolean): void {
+  const boite = $("to-entete");
+  boite.replaceChildren();
+  boite.hidden = b.entete.trim() === "" && !peutEcrire;
+  if (b.entete.trim() !== "") boite.appendChild(el("p", "to-entete-texte", b.entete));
+  if (!peutEcrire) return;
+  const modifier = el("button", "lien", b.entete.trim() === ""
+    ? t("Écrire un en-tête") : t("Modifier l'en-tête")) as HTMLButtonElement;
+  modifier.type = "button";
+  modifier.addEventListener("click", () => {
+    const corps = el("div", "");
+    const texte = document.createElement("textarea");
+    texte.rows = 6;
+    texte.className = "to-dispos";
+    texte.value = b.entete;
+    texte.placeholder = t("Ce que les joueurs doivent savoir et que le format ne dit pas");
+    const erreur = el("div", "join-error");
+    erreur.hidden = true;
+    const valider = el("button", "valider", t("Enregistrer")) as HTMLButtonElement;
+    valider.type = "button";
+    valider.addEventListener("click", () => {
+      void (async () => {
+        const { ok, d } = await envoyerAuServeur(
+          `/api/tournoi/${encodeURIComponent(x.id)}/entete`, { texte: texte.value });
+        if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+        fermerLaFenetre();
+        ouvrirLeTournoi(x.id, false);
+      })();
+    });
+    corps.append(texte, erreur, valider);
+    ouvrirUneFenetre(t("En-tête du tournoi"), corps);
+  });
+  boite.appendChild(modifier);
+}
+
+/** Tout ce qu'un tournoi de battle ajoute à sa page. */
+function peindreLeBattle(x: TournoiVue, b: BattleVue, maintenant: number, regle: boolean): void {
+  peindreLEnteteDuTournoi(x, b, regle);
+  const boite = $("to-battle");
+  boite.hidden = false;
+  const blocs: HTMLElement[] = [];
+  if (regle && b.phase === "inscriptions") blocs.push(editeurDesPoules(x, b));
+  const miennes = mesRencontres(x, b, maintenant);
+  if (miennes !== null && b.phase !== "inscriptions") blocs.push(miennes);
+  const vivantes = rencontresEnCours(x, b);
+  if (vivantes !== null) blocs.push(vivantes);
+  if (b.poules.length > 0) {
+    const section = el("section", "to-b-bloc");
+    section.appendChild(el("h1", "", t("Poules")));
+    const tables = el("div", "pl-tables");
+    for (const p of b.poules) tables.appendChild(tableDeLaPoule(x, b, p));
+    section.appendChild(tables);
+    section.appendChild(el("p", "sub", t(
+      "Les bandes de couleur disent la qualification ; elles restent indicatives tant que le tableau n'est pas validé.")));
+    blocs.push(section);
+  }
+  // LE FORFAIT : à l'organisateur, et il touche toutes les rencontres restantes.
+  if (regle && b.phase !== "inscriptions") {
+    const section = el("section", "to-b-bloc");
+    section.appendChild(el("h1", "", t("Déclarer un forfait")));
+    const erreur = el("div", "join-error");
+    erreur.hidden = true;
+    const choix = document.createElement("select");
+    for (const c of b.camps) {
+      const o = document.createElement("option");
+      o.value = c.camp;
+      o.textContent = c.nom;
+      choix.appendChild(o);
+    }
+    const bt = el("button", "", t("Déclarer forfait")) as HTMLButtonElement;
+    bt.type = "button";
+    bt.addEventListener("click", () => {
+      confirmer(t2("Toutes les rencontres restantes de {nom} seront perdues. Continuer ?",
+        { nom: choix.value }), () => {
+        void (async () => {
+          const { ok, d } = await envoyerAuServeur(
+            `/api/tournoi/${encodeURIComponent(x.id)}/forfait`, { camp: choix.value });
+          if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+          ouvrirLeTournoi(x.id, false);
+        })();
+      });
+    });
+    const ligne = el("div", "ad-ligne");
+    ligne.append(choix, bt);
+    section.append(ligne, erreur);
+    blocs.push(section);
+  }
+  boite.replaceChildren(...blocs);
 }
