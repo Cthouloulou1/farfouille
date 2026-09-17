@@ -810,6 +810,17 @@ export const EN: Readonly<Record<string, string>> = {
   "Les primes de cette partie ne sont pas standards.": "This game's bonuses are not standard.",
   "Les primes sont standards.": "The bonuses are standard.",
   "Rang": "Rank",
+  "Chuchoter aux spectateurs…": "Whisper to the spectators…",
+  "Regardent": "Watching",
+  "Votre message partira à la fin de la partie.":
+    "Your message will go out at the end of the game.",
+  "Vous chuchotez : seuls les autres spectateurs vous lisent.":
+    "You are whispering: only the other spectators read you.",
+  "vous regardez cette partie": "you are watching this game",
+  "Vous regardez cette partie.": "You are watching this game.",
+  "Vous regardez. Votre message arrivera aux joueurs à la fin de la partie.":
+    "You are watching. Your message will reach the players at the end of the game.",
+  "Chuchoter": "Whisper",
   "Cette phase se joue le {d}": "This stage is played on {d}",
   "Changer": "Change",
   "Heures des phases": "Stage times",

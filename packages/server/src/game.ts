@@ -2749,8 +2749,15 @@ export class Game {
   }
 
   /** Ajoute un message au chat et le persiste. */
-  say(who: string, text: string, cell?: { x: number; y: number }): ChatMessage {
-    const msg: ChatMessage = { at: Date.now(), who, text: text.slice(0, 400), ...(cell ? { cell } : {}) };
+  /**
+   * `at` sert au chat RETENU d'un spectateur (SPEC.md §29) : il arrive a la fin
+   * de la partie, mais avec l'heure a laquelle il a ete ecrit -- sinon la
+   * conversation n'aurait plus de sens.
+   */
+  say(who: string, text: string, cell?: { x: number; y: number }, at?: number): ChatMessage {
+    const msg: ChatMessage = {
+      at: at ?? Date.now(), who, text: text.slice(0, 400), ...(cell ? { cell } : {}),
+    };
     this.chat.push(msg);
     this.append({ t: "chat", msg });
     this.save();

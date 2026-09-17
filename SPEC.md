@@ -6776,13 +6776,34 @@ Toutes mènent à la page du tournoi.
 rencontre de tournoi, et c'est utile partout ailleurs : le salon star se regarde
 sans compte, alors que jouer la grille infinie en demande un.
 
+**On le devient sans rien demander**, dans deux cas et deux seulement :
+
+- **Le salon d'une rencontre de tournoi** est ouvert à tous, alors que seuls ses
+  deux camps y jouent. Un match se suit, c'est tout l'intérêt d'un tournoi : qui
+  n'est d'aucun camp y entre en spectateur, et le caractère privé du salon ne
+  vaut plus que pour le jeu.
+- **Le salon star**, celui que personne ne possède, se regarde **sans compte**.
+  Jouer la grille infinie en demande un. Les autres grilles permanentes, celles
+  qui ont un propriétaire, restent des salons ordinaires où chacun joue.
+
+Ce qui s'ensuit :
+
 - Le spectateur **ne figure pas au classement** et ne compte dans aucun total.
-- Il **ne peut pas envoyer de coup**.
+  La liste des présents le nomme à part, sous *Regardent*.
+- Il **ne peut ni jouer, ni régler, ni lancer** : le serveur refuse de lui tous
+  les gestes qui touchent la partie ou le salon.
 - **Son chat attend la fin de la partie.** Ce qu'il écrit pendant qu'une partie
   tourne n'arrive aux joueurs qu'une fois la partie finie, et il arrive avec
-  l'heure à laquelle il l'a écrit, pas celle de sa livraison.
-- **Le chuchotement** part tout de suite, mais ne va qu'aux autres spectateurs.
-  Les joueurs ne le voient jamais.
+  l'heure à laquelle il l'a écrit, pas celle de sa livraison. L'écran le lui dit
+  au moment où il écrit.
+- **Sur une grille sans fin, la retenue se lâche au coup suivant.** Elle ne finit
+  jamais : attendre une fin qui ne vient pas reviendrait à lui interdire le chat
+  pour toujours, et la fin d'un coup ferme la même fenêtre.
+- **Le chuchotement** part tout de suite, mais ne va qu'aux autres spectateurs
+  présents. Les joueurs ne le voient jamais. Il ne s'archive pas : il ne figure
+  pas au chat du salon, et disparaît quand on recharge la page.
+- **Un salon ne s'endort ni ne se referme sous les yeux de qui le regarde** : un
+  spectateur compte comme un présent pour cela, et pour cela seulement.
 
 **Ce que cela ouvre, et qu'on accepte.** Le spectateur voit le tirage en direct,
 et rien ne l'empêche de souffler le top à un joueur par un autre canal. Le chat
@@ -6896,11 +6917,13 @@ tableau bas, la grande finale, l'aperçu avant validation, les notifications de
 qualification, le classement final et ses trois médailles -- et le
 **« Je suis prêt »** qui lance une manche.
 
-**Puis les heures imposées par phase**, qui ferment le module du battle.
+**Puis les heures imposées par phase**, qui ferment le module du battle, et les
+**spectateurs** : le salon star sans compte, les rencontres de tournoi ouvertes
+à tous, le chat retenu et le chuchotement.
 
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
 par joueur dans un salon qui n'en tient qu'une), le tournoi de duplicate, les
-spectateurs, les équipes du site.
+équipes du site.
 
 ```bash
 node packages/server/test/check_figees.ts        # figer, servir, la pause
@@ -6921,7 +6944,7 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 5. ~~Les tournois de topping, et ceux de la semaine.~~
 6. ~~Les tournois de battle : les poules, le double tableau, les heures
    imposées par phase.~~
-7. Les spectateurs.
+7. ~~Les spectateurs.~~
 8. Les équipes du site.
 9. Les tournois de duplicate.
 

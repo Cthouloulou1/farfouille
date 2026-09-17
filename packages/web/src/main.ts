@@ -2460,6 +2460,7 @@ function paintSide() {
   peindreLaMontante();
   peindreLEpreuve();
   peindreLaRencontreDuSalon();
+  peindreLeSpectateur();
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
@@ -2486,7 +2487,9 @@ function paintSide() {
   // coeur de la partie ; la liste des connectes ne dit rien de plus que lui, et
   // le journal des coups peut attendre qu'on le deroule.
   const battle = enGroupe && cfg.toppingCollaboratif !== true;
-  $("online-bloc").hidden = battle;
+  // EN BATTLE, LA LISTE DES CONNECTES NE DIT RIEN QUE LE CLASSEMENT NE DISE --
+  // sauf quand on est regarde : ceux-la n'ont pas de ligne au classement.
+  $("online-bloc").hidden = battle && ceuxQuiRegardent.length === 0;
   if (battle && !journalReplie) {
     journalReplie = true;
     $("journal").hidden = true;
@@ -2769,6 +2772,11 @@ function paintSide() {
     }
     boiteEnLigne.appendChild(e);
     if (i < online.length - 1) boiteEnLigne.appendChild(document.createTextNode(", "));
+  }
+  // CEUX QUI REGARDENT, a part (SPEC.md §29) : ils ne comptent dans aucun
+  // total, et les confondre avec les joueurs ferait croire a une table pleine.
+  if (ceuxQuiRegardent.length > 0) {
+    boiteEnLigne.appendChild(el("div", "sub", `${t("Regardent")} : ${ceuxQuiRegardent.join(", ")}`));
   }
   majDesPoignees();
   $("reveal-wrap").hidden = !canReveal;
@@ -4130,7 +4138,19 @@ function paintChat(msgs: Chat[]) {
 }
 
 /** Ajoute un seul message, en gardant le defilement s'il etait en bas. */
-function ajouterAuChat(m: Chat): void {
+function ajouterAuChat(m: Chat, chuchotement = false): void {
+  // UN CHUCHOTEMENT NE S'ARCHIVE PAS : il ne vient pas du chat du salon, et
+  // n'entre donc pas dans son historique. Il se pose au bas de la liste, en
+  // italique, et disparait quand on recharge.
+  if (chuchotement) {
+    const log0 = $("chat-log");
+    const enBas0 = log0.scrollHeight - log0.scrollTop - log0.clientHeight < 40;
+    const ligne = ligneDeChat(m);
+    ligne.classList.add("chuchote");
+    log0.appendChild(ligne);
+    if (enBas0) log0.scrollTop = log0.scrollHeight;
+    return;
+  }
   // Un message qui ouvre un jour nouveau fait apparaitre TOUTES les dates, y
   // compris celle du premier jour, tout en haut : on repeint plutot que de
   // recoudre l'historique par le bas. Cela n'arrive qu'une fois par jour.
@@ -4187,7 +4207,7 @@ function sendChat(withCell: boolean) {
   const text = input.value.trim();
   const cell = withCell && cursor !== null ? { x: cursor.x, y: cursor.y } : undefined;
   if (!text && !cell) return;
-  envoyer({ t: "say", text, cell });
+  envoyer({ t: "say", text, cell, ...(jeRegarde && chuchote ? { chuchote: true } : {}) });
   input.value = "";
 }
 $("chat-send").addEventListener("click", () => sendChat(false));
@@ -4970,6 +4990,9 @@ function redessiner(): void {
 
 function submit() {
   if (cursor === null || typed.length === 0) return;
+  // QUI REGARDE NE POSE RIEN (SPEC.md §29). Le serveur le refuserait de toute
+  // facon ; le dire ici evite d'avoir tape un mot pour rien.
+  if (jeRegarde) { flash(t("vous regardez cette partie"), "bad"); return; }
   if (finie) { flash("la partie est terminée", "bad"); return; }
   if (solving) { flash("le coup n'est pas encore prêt", "bad"); return; }
   const c = coupCanonique();
@@ -5525,6 +5548,7 @@ function applyState(s: {
   meilleureCollective?:
     { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null;
   montante?: MontanteVue | null;
+  spectateurs?: string[];
   epreuve?: EpreuveVue | null; enPause?: boolean; ecoulePause?: number;
   rencontre?: RencontreDuSalonVue | null;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
@@ -5655,6 +5679,7 @@ function applyState(s: {
   }
   finie = s.finie === true;
   online = s.online ?? [];
+  ceuxQuiRegardent = s.spectateurs ?? [];
   verifies = new Set(s.verifies ?? []);
   nomsPublics = s.noms ?? {};
   // LES LIGNES DE CHAT SONT PEINTES AVANT QUE L'ETAT N'ARRIVE, et rien ne les
@@ -5736,6 +5761,8 @@ function connect() {
     const m = JSON.parse(ev.data as string);
 
     if (m.t === "hello") {
+      jeRegarde = m.spectateur === true;
+      chuchote = false;
       setLayout(m.layout as LayoutName);
       canReveal = m.reveal === true;
       tiles = m.tiles;
@@ -5860,7 +5887,20 @@ function connect() {
     // Une ligne de plus, pas tout le journal : en duplicate le moteur poste un
     // message PAR COUP, et repeindre les 2 568 precedents a chaque fois coutait
     // 135 ms -- pour ajouter une ligne.
-    if (m.t === "said") { chat.push(m.msg); ajouterAuChat(m.msg); return; }
+    if (m.t === "said") {
+      // UN CHUCHOTEMENT NE S'ARCHIVE PAS : il ne va qu'aux spectateurs presents,
+      // et ne figure pas au chat du salon.
+      if (m.chuchote === true) { ajouterAuChat(m.msg as Chat, true); return; }
+      chat.push(m.msg);
+      ajouterAuChat(m.msg);
+      return;
+    }
+
+    // Le serveur a mis mon message de cote : il partira a la fin de la partie.
+    if (m.t === "retenu") {
+      ajouterAuChat({ at: Number(m.at), who: "", text: t("Votre message partira à la fin de la partie.") });
+      return;
+    }
 
     if (m.t === "placed") {
       const mv = m.move as MoveInfo;
@@ -11237,6 +11277,41 @@ interface RencontreDuSalonVue {
 }
 
 let rencontreSalon: RencontreDuSalonVue | null = null;
+
+/**
+ * JE REGARDE, JE NE JOUE PAS (SPEC.md §29).
+ *
+ * Le serveur le dit a l'entree : dans le salon d'une rencontre dont je ne suis
+ * ni d'un camp ni de l'autre, ou sur la grille permanente quand je n'ai pas de
+ * compte. La grille se ferme, le chat attend la fin de la partie, et le
+ * chuchotement s'ouvre.
+ */
+let jeRegarde = false;
+/** Ceux qui regardent, tels que le salon les annonce. */
+let ceuxQuiRegardent: string[] = [];
+let chuchote = false;
+
+function peindreLeSpectateur(): void {
+  const note = $("spectateur-note");
+  const bouton = $("chat-chuchoter") as HTMLButtonElement;
+  bouton.hidden = !jeRegarde;
+  note.hidden = !jeRegarde;
+  if (!jeRegarde) return;
+  note.textContent = chuchote
+    ? t("Vous chuchotez : seuls les autres spectateurs vous lisent.")
+    : (demarree && !finie
+      ? t("Vous regardez. Votre message arrivera aux joueurs à la fin de la partie.")
+      : t("Vous regardez cette partie."));
+  bouton.setAttribute("aria-pressed", String(chuchote));
+  ($("chat-text") as HTMLInputElement).placeholder = chuchote
+    ? t("Chuchoter aux spectateurs…") : t("Message…");
+}
+
+$("chat-chuchoter").addEventListener("click", () => {
+  chuchote = !chuchote;
+  peindreLeSpectateur();
+  ($("chat-text") as HTMLInputElement).focus();
+});
 
 /**
  * LE BLOC DE LA RENCONTRE, dans le panneau du salon (SPEC.md §29).

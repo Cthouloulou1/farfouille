@@ -325,6 +325,14 @@ interface Client {
   nom: string;
   salon: string;
   /**
+   * IL REGARDE, IL NE JOUE PAS (SPEC.md §29).
+   *
+   * Deux cas : le salon d'une rencontre de tournoi, ou l'on n'est ni d'un camp
+   * ni de l'autre ; et la grille permanente, qu'un visiteur sans compte suit
+   * sans pouvoir y poser un mot.
+   */
+  spectateur: boolean;
+  /**
    * Le compte lu dans le cookie a l'ouverture de la liaison, s'il y en a un.
    *
    * C'est LUI qui nomme le joueur, pas le message `join` : un client peut
@@ -370,9 +378,75 @@ const broadcast = (salonId: string, msg: unknown): void => {
   }
 };
 
+/** Ceux qui JOUENT dans ce salon. Les spectateurs n'y sont pas. */
 const occupants = (salonId: string): string[] =>
+  [...new Set([...clients.values()]
+    .filter((c) => c.salon === salonId && !c.spectateur).map((c) => c.nom))]
+    .filter((n) => n !== "");
+
+/** Ceux qui REGARDENT sans jouer. */
+const spectateurs = (salonId: string): string[] =>
+  [...new Set([...clients.values()]
+    .filter((c) => c.salon === salonId && c.spectateur).map((c) => c.nom))]
+    .filter((n) => n !== "");
+
+/**
+ * Tout le monde : joueurs et spectateurs.
+ *
+ * C'est ce compte-la qui dit si un salon est VIDE. Un salon qui s'endort ou se
+ * referme sous les yeux de ceux qui le regardent serait absurde.
+ */
+const toutLeMonde = (salonId: string): string[] =>
   [...new Set([...clients.values()].filter((c) => c.salon === salonId).map((c) => c.nom))]
     .filter((n) => n !== "");
+
+/**
+ * QUI REGARDE SANS JOUER, dans ce salon (SPEC.md §29).
+ *
+ * Le salon d'une rencontre de tournoi est ouvert a tous -- c'est ce qui permet
+ * de suivre un match -- mais seuls ses deux camps y jouent. La grille
+ * permanente, elle, se regarde sans compte et ne se joue qu'avec un.
+ */
+function estSpectateur(s: Salon, nom: string, compteDuClient: string | null): boolean {
+  const rc = rencontreDuSalon(s.id);
+  if (rc !== undefined) {
+    const t = tournoi(rc.rencontre.tournoi);
+    if (t !== undefined) return campDuCompte(t, rc.rencontre, nom) < 0;
+  }
+  // LE SALON STAR, et lui seul : celui que personne ne possede. « top-leger »
+  // et les autres grilles d'etude sont permanentes elles aussi, mais ce sont
+  // des salons ordinaires ou chacun joue.
+  if (s.proprietaire === null) return compteDuClient === null;
+  return false;
+}
+
+/**
+ * LES MESSAGES RETENUS d'un salon : `salon` -> ce que des spectateurs ont ecrit
+ * pendant qu'une partie tournait.
+ *
+ * Ils partent a la fin de la partie, AVEC L'HEURE A LAQUELLE ILS ONT ETE
+ * ECRITS. Sans cette retenue, un spectateur pourrait souffler une solution dans
+ * le chat des joueurs.
+ */
+const chatsRetenus = new Map<string, { at: number; who: string; text: string; cell?: { x: number; y: number } }[]>();
+
+/** Livre ce qui attendait, dans l'ordre ou c'etait ecrit. */
+function livrerLesChatsRetenus(s: Salon): void {
+  const les = chatsRetenus.get(s.id);
+  if (les === undefined || les.length === 0) return;
+  chatsRetenus.delete(s.id);
+  for (const m of les) s.partie.say(m.who, m.text, m.cell, m.at);
+}
+
+/** Le chuchotement : tout de suite, mais aux seuls spectateurs. */
+function chuchoter(s: Salon, qui: string, texte: string): void {
+  const msg = { at: Date.now(), who: qui, text: texte.slice(0, 400) };
+  for (const [ws, c] of clients) {
+    if (c.salon === s.id && c.spectateur && ws.readyState === ws.OPEN) {
+      send(ws, { t: "said", msg, chuchote: true });
+    }
+  }
+}
 
 /**
  * Qui est connecte, TOUS SALONS CONFONDUS (SPEC.md §26) : la liste que la
@@ -480,6 +554,8 @@ function publicState(s: Salon) {
     likes: Object.fromEntries(Object.keys(g.players).map((p) => [p, g.likesOf(p)])),
     last: g.moves.length > 0 ? publicMove(g.moves[g.moves.length - 1]!) : null,
     online: occupants(s.id),
+    // CEUX QUI REGARDENT (SPEC.md §29) : ils ne comptent dans aucun total.
+    spectateurs: spectateurs(s.id),
     verifies: verifiesPresents(s.id),
     noms: nomsPublics(s.id),
     // Un invite n'a pas de fiche : le client ne rend cliquables que ceux-la.
@@ -551,6 +627,11 @@ function surveiller(s: Salon): void {
   // ET L'HISTORIQUE DU JOUEUR (SPEC.md §30), qui n'a pas les memes conditions
   // que les records : une grille sans fin et un duplicate y entrent aussi.
   s.partie.onFin((raison) => ecrireLHistoriqueDuSalon(s, raison));
+  // CE QUE LES SPECTATEURS ONT ECRIT PENDANT LA PARTIE arrive maintenant
+  // (SPEC.md §29). Sur une grille sans fin, qui ne finit jamais, la retenue se
+  // lache au coup suivant.
+  s.partie.onFin(() => livrerLesChatsRetenus(s));
+  if (s.proprietaire === null) s.partie.onMove(() => livrerLesChatsRetenus(s));
   // ET LA MANCHE D'UNE RENCONTRE DE TOURNOI (SPEC.md §29), quand ce salon en
   // sert une. Il reste un salon ordinaire par ailleurs : ses parties entrent
   // aux records et a l'historique comme les autres.
@@ -1263,7 +1344,7 @@ function lireUnTournoiDeBattle(c: any, neuf = true): {
     const n = entierEntre(x, 1, 9);
     return n !== null && n % 2 === 1 ? n : null;
   };
-  const joueursParPoule = entierEntre(c.joueursParPoule ?? 4, 3, 12);
+  const joueursParPoule = entierEntre(c.joueursParPoule ?? 4, 2, 32);
   const manchesParPoule = impair(c.manchesParPoule ?? 3);
   const rencontresParPoule = c.rencontresParPoule === null || c.rencontresParPoule === undefined
     ? null : entierEntre(c.rencontresParPoule, 1, 11);
@@ -1273,7 +1354,7 @@ function lireUnTournoiDeBattle(c: any, neuf = true): {
   const meilleurDeDemi = impair(c.meilleurDeDemi ?? c.meilleurDe ?? 3);
   const meilleurDeFinale = impair(c.meilleurDeFinale ?? c.meilleurDe ?? 3);
   const joursParTour = entierEntre(c.joursParTour ?? 3, 1, 30);
-  if (joueursParPoule === null) return "Une poule compte de 3 à 12 joueurs";
+  if (joueursParPoule === null) return "Une poule compte de 2 à 32 joueurs";
   if (manchesParPoule === null) {
     return "Une rencontre de poule se joue en un nombre impair de manches, de 1 à 9";
   }
@@ -1316,7 +1397,7 @@ async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]
   // La partie neuve nait endormie ET ignorante de qui est la : on lui rend les
   // deux, sinon le duplicate ne compterait personne sur son premier coup.
   for (const nom of occupants(s.id)) s.partie.presents.add(nom);
-  if (occupants(s.id).length > 0) await s.partie.reveiller();
+  if (toutLeMonde(s.id).length > 0) await s.partie.reveiller();
   await s.partie.demarrer();
   for (const [c, v] of clients) {
     if (v.salon !== s.id) continue;
@@ -2780,7 +2861,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       pret,
       salons: tousLesSalons()
         .filter((s) => !s.prive)
-        .map((s) => resume(s, occupants(s.id).length, estPermanent(s))),
+        .map((s) => resume(s, toutLeMonde(s.id).length, estPermanent(s))),
       max: MAX_SALONS,
     });
     return;
@@ -2790,7 +2871,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url.startsWith("/api/salon/") && req.method === "GET") {
     const s = salon(decodeURIComponent(url.slice("/api/salon/".length)));
     if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
-    json(res, 200, resume(s, occupants(s.id).length, estPermanent(s)));
+    json(res, 200, resume(s, toutLeMonde(s.id).length, estPermanent(s)));
     return;
   }
 
@@ -3115,12 +3196,19 @@ http.on("error", surErreurReseau);
 const wss = new WebSocketServer({ server: http });
 wss.on("error", surErreurReseau);
 
+/** Ce qu'un spectateur ne fait pas : tout ce qui touche la partie ou le salon. */
+const GESTES_DE_JOUEUR = new Set([
+  "try", "abandonnerCoup", "abandonnerPartie", "relancer", "lancer", "reveal",
+  "epreuve-lancer", "pause", "reprendre", "pret", "salonPrive", "inviter",
+  "montante-suivante", "montante-reprendre", "montante-terminer", "montante-pause",
+]);
+
 wss.on("connection", (ws, req) => {
   // LE COOKIE VOYAGE AVEC LA POIGNEE DE MAIN : meme origine, meme navigateur.
   // On lit l'identite ICI, une fois, plutot que de la redemander a chaque
   // message.
   const identifie = compteDuJeton(jetonDesEntetes(req.headers.cookie));
-  clients.set(ws, { nom: "", salon: "", compte: identifie?.pseudo ?? null });
+  clients.set(ws, { nom: "", salon: "", compte: identifie?.pseudo ?? null, spectateur: false });
   debits.set(ws, {
     mots: new Seau(SOUMISSIONS_PAR_SECONDE),
     tout: new Seau(MESSAGES_PAR_SECONDE),
@@ -3154,6 +3242,13 @@ wss.on("connection", (ws, req) => {
 
     const s = salon(moi.salon);
 
+    // UN SPECTATEUR REGARDE (SPEC.md §29). Il ne joue pas, ne regle pas, ne
+    // lance rien : il lui reste ses yeux, le chat et le chuchotement.
+    if (moi.spectateur && GESTES_DE_JOUEUR.has(String(msg.t))) {
+      send(ws, { t: "result", ok: false, message: "vous regardez cette partie" });
+      return;
+    }
+
     if (msg.t === "join") {
       const inscrit = clients.get(ws)?.compte ?? null;
       // Un compte s'impose au nom annonce : c'est tout l'interet d'en avoir un.
@@ -3181,9 +3276,14 @@ wss.on("connection", (ws, req) => {
         });
         return;
       }
+      // UNE RENCONTRE DE TOURNOI SE REGARDE (SPEC.md §29) : son salon est prive
+      // pour ce qui est d'y jouer, mais un match se suit, et c'est tout
+      // l'interet d'un tournoi. Qui n'est d'aucun camp y entre en spectateur.
+      const enRencontre = rencontreDuSalon(cible.id) !== undefined;
       // SALON PRIVE (SPEC.md §26) : le lien ne suffit plus, il faut figurer
       // sur la liste d'invites -- ou etre le proprietaire, ou l'administration.
-      if (!peutEntrerDans(cible, nom, compte(clients.get(ws)?.compte ?? "")?.admin === true)) {
+      if (!enRencontre
+        && !peutEntrerDans(cible, nom, compte(clients.get(ws)?.compte ?? "")?.admin === true)) {
         send(ws, { t: "refus", quoi: "salon", message: "Ce salon est privé" });
         return;
       }
@@ -3228,10 +3328,12 @@ wss.on("connection", (ws, req) => {
         });
         c.close();
       }
-      clients.set(ws, { nom, salon: cible.id, compte: inscrit });
+      const regarde = estSpectateur(cible, nom, inscrit);
+      clients.set(ws, { nom, salon: cible.id, compte: inscrit, spectateur: regarde });
       // Le moteur n'a pas de WebSocket : c'est le transport qui lui dit qui est
       // la. Le duplicate en a besoin pour savoir qui compter sur un coup.
-      cible.partie.presents.add(nom);
+      // UN SPECTATEUR N'Y ENTRE PAS : il ne compte dans aucun total.
+      if (!regarde) cible.partie.presents.add(nom);
       majDuGerant(cible);
       void cible.partie.reveiller();
       // Un depart a pu retirer un « pret » : la barre de la rencontre le dit.
@@ -3241,6 +3343,8 @@ wss.on("connection", (ws, req) => {
       send(ws, {
         t: "hello",
         you: nom,
+        // IL REGARDE : l'ecran lui ferme la grille et lui ouvre le chuchotement.
+        spectateur: regarde,
         epreuve: epreuvePublique(cible),
         gameId: cible.partie.gameId,
         salon: cible.id,
@@ -3325,6 +3429,25 @@ wss.on("connection", (ws, req) => {
         ? { x: Math.round(msg.cell.x), y: Math.round(msg.cell.y) }
         : undefined;
       if (text.length === 0 && cell === undefined) return;
+      if (moi.spectateur) {
+        // LE CHUCHOTEMENT part tout de suite, et ne va qu'aux spectateurs. Les
+        // joueurs ne le voient jamais.
+        if (msg.chuchote === true) { chuchoter(s, moi.nom, text); return; }
+        // SON CHAT ATTEND LA FIN DE LA PARTIE : ce qu'il ecrit pendant qu'une
+        // partie tourne arriverait sinon comme un conseil. Il part avec l'heure
+        // a laquelle il a ete ecrit.
+        //
+        // UNE GRILLE SANS FIN NE FINIT JAMAIS : sur elle, la retenue se lache
+        // au coup suivant. Attendre une fin qui ne vient pas reviendrait a
+        // interdire le chat pour toujours.
+        if (s.partie.demarree && !s.partie.finie) {
+          const les = chatsRetenus.get(s.id) ?? [];
+          les.push({ at: Date.now(), who: moi.nom, text: text.slice(0, 400), ...(cell ? { cell } : {}) });
+          chatsRetenus.set(s.id, les);
+          send(ws, { t: "retenu", at: Date.now() });
+          return;
+        }
+      }
       // La diffusion passe par onChat : inutile de la refaire ici.
       s.partie.say(moi.nom, text, cell);
       return;
@@ -3819,7 +3942,7 @@ wss.on("connection", (ws, req) => {
     debits.delete(ws);
     const s = moi ? salon(moi.salon) : undefined;
     if (s === undefined) return;
-    if (moi !== undefined && !occupants(s.id).includes(moi.nom)) {
+    if (moi !== undefined && !toutLeMonde(s.id).includes(moi.nom)) {
       s.partie.presents.delete(moi.nom);
     }
     majDuGerant(s);
@@ -3834,7 +3957,7 @@ wss.on("connection", (ws, req) => {
     //
     // Elle n'a pas de chrono : ne pas l'endormir ne devore donc aucun coup. Un
     // salon ordinaire s'endort, lui, pour cette raison exacte.
-    if (occupants(s.id).length === 0) {
+    if (toutLeMonde(s.id).length === 0) {
       if (s.proprietaire !== null) {
         s.partie.endormir();
         console.log(`[salon] "${s.nom}" s'endort, plus personne`);
@@ -3869,7 +3992,7 @@ function rangerPlusTard(id: string): void {
     rangements.delete(id);
     const s = salon(id);
     if (s === undefined || s.proprietaire === null) return;
-    if (occupants(id).length > 0) return;   // quelqu'un est revenu
+    if (toutLeMonde(id).length > 0) return;   // quelqu'un est revenu
     if (s.partie.cfg.bornes === null) return;
     void fermerSalon(id);
   }, DELAI_DE_RANGEMENT));

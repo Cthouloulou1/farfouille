@@ -1817,6 +1817,15 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 .hp-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 5px 0; border-top: 1px solid var(--rule); }
 .hp-nom { flex: 0 0 240px; font-size: 12.5px; color: var(--ink); }
 
+/* LE SPECTATEUR (SPEC.md §29) : ce qu'il peut faire, et ce que son message
+   deviendra. La note tient sous le chat, la ou il va ecrire. */
+.spectateur-note { padding: 6px 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-soft); }
+#chat-chuchoter[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+/* Un chuchotement ne ressemble pas a un message ordinaire : personne ne doit
+   croire que les joueurs le lisent. */
+.msg.chuchote { font-style: italic; color: var(--ink-soft); }
+.msg.chuchote .who::after { content: " · chuchote"; font-style: normal; font-size: 10px; color: var(--ink-faint); }
+
 /* LE CLASSEMENT FINAL : trois medailles, puis les places. */
 .pd-table { border-collapse: collapse; font-size: 13px; }
 .pd-table td { padding: 4px 10px 4px 0; }
@@ -2807,8 +2816,13 @@ button.primes-libres:hover { background: none; color: var(--accent); }
           <button type="button" id="solveur-jeu" class="solveur-declencheur" title="Anagrammeur" aria-label="Anagrammeur" hidden>A</button>
         </div>
       </div>
+      <!-- CE QUE VOIT CELUI QUI REGARDE (SPEC.md §29) : ce qu'il peut faire,
+           et quand son message arrivera. -->
+      <div class="spectateur-note" id="spectateur-note" hidden></div>
       <div class="chat-in">
         <input id="chat-text" maxlength="400" placeholder="Message…" autocomplete="off">
+        <button type="button" id="chat-chuchoter" aria-pressed="false" hidden
+                title="Aux autres spectateurs seulement">Chuchoter</button>
         <button id="chat-cell" title="Partager la case du curseur">Case</button>
         <button id="chat-send">Envoyer</button>
       </div>
