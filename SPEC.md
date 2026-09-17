@@ -6540,6 +6540,14 @@ Deux joueurs, un salon, en même temps. Le premier qui trouve le top marque
 des deux fait donc toujours le nombre de coups. Qui a le plus de points gagne la
 manche ; à égalité, la manche est **nulle**.
 
+**Elle part sur deux « Je suis prêt ».** Un salon de rencontre n'a pas de
+réglages à valider : ils sont ceux du tournoi. Mais il ne part pas non plus à
+l'arrivée du second joueur, parce qu'on charge une page, qu'on s'installe et
+qu'on relit le score. Chacun dit quand il est prêt, et le décompte s'ouvre
+quand les deux l'ont dit. **Le décompte est imposé** : sans lui, celui qui a
+cliqué le premier verrait le tirage pendant que l'autre clique encore. Le salon
+montre contre qui l'on joue, quelle manche, et où en est le score.
+
 **À plusieurs par équipe, tout le monde est dans le même salon.** Chaque joueur
 a sa couleur, et le point d'un coup va à l'équipe du premier qui l'a trouvé. Le
 score d'une équipe est la somme des points de ses joueurs, et le salon montre
@@ -6617,10 +6625,22 @@ que la poule soit finie : chacun voit à quoi il joue.
 mieux classés entrent dans le **tableau haut** ; les suivants entrent
 **directement dans le tableau bas**. Combien vont dans chacun est un réglage.
 
-**Le placement suit le classement de poule, en serpentin** : le premier de la
-meilleure poule et le dernier qualifié se retrouvent aux deux bouts du tableau,
-et deux joueurs d'une même poule ne se croisent pas au premier tour tant que
-c'est évitable.
+**Le placement suit le classement de poule** : tous les premiers, puis tous les
+deuxièmes, et ainsi de suite ; à rang égal, les points, les manches gagnées,
+puis les points de manche. Chaque tour oppose alors le premier au dernier, le
+deuxième à l'avant-dernier.
+
+**Le tableau existe avant d'être joué.** Toutes ses rencontres naissent à la
+validation, et chacune sait d'où viendront ses deux camps : le vainqueur de
+telle rencontre, le perdant de telle autre. Les places se remplissent au fil des
+résultats, et la page montre « À désigner » tant qu'elles sont vides. Une place
+que personne ne remplira jamais -- la rencontre qui devait la désigner s'est
+close sans vainqueur -- rend son adversaire **exempt** du tour.
+
+**Le tableau bas se remplit par vagues.** Avant chaque vague de perdants venue
+d'en haut, ses rescapés se rencontrent entre eux jusqu'à être aussi nombreux
+qu'elle ; puis chacun d'eux affronte l'un des nouveaux venus. Huit qualifiés
+dont quatre en haut donnent ainsi dix rencontres.
 
 **On préfère des effectifs qui tombent juste.** L'aperçu propose des nombres de
 qualifiés qui remplissent le tableau sans exempt, et prévient quand le réglage
@@ -6815,6 +6835,7 @@ Et pour un tournoi de battle, dans le même journal :
 { "t": "message", "rencontre": "…", "de": "a", "texte": "…", "at": … }
 { "t": "arbitrage", "rencontre": "…", "quoi": "victoire", "qui": "a", "par": "…", "at": … }
 { "t": "tableau", "tournoi": "…", "haut": ["…"], "bas": ["…"], "par": "…", "at": … }
+{ "t": "camp-rencontre", "rencontre": "…", "cote": 0, "camp": "…", "at": … }
 ```
 
 `jeu` vaut `seul`, `compte` (à plusieurs sur un compte, avec le texte),
@@ -6854,14 +6875,21 @@ rencontre — qui ne part que lorsque les deux camps sont là —, les
 disponibilités, l'en-tête libre, la désinscription, les rappels, l'arbitrage et
 le forfait.
 
+**Le 17 septembre 2026, ensuite :** le **double tableau** -- les qualifiés posés
+d'après leur classement de poule, le tableau haut qui verse ses perdants au
+tableau bas, la grande finale, l'aperçu avant validation, les notifications de
+qualification, le classement final et ses trois médailles -- et le
+**« Je suis prêt »** qui lance une manche.
+
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
-par joueur dans un salon qui n'en tient qu'une), le tournoi de duplicate, les
-spectateurs, les équipes du site.
+par joueur dans un salon qui n'en tient qu'une), les dates imposées par phase,
+le tournoi de duplicate, les spectateurs, les équipes du site.
 
 ```bash
 node packages/server/test/check_figees.ts        # figer, servir, la pause
 node packages/server/test/check_competitif.ts    # manches, bilans, classements
 node packages/server/test/check_battle.ts        # poules, rencontres, arbitrage
+node packages/server/test/check_tableau.ts       # le double tableau et ses places
 node packages/server/test/check_notifications.ts # la boite d'un compte
 node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 ```
@@ -6874,9 +6902,8 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 3. ~~Les graphiques.~~
 4. ~~Les notifications, et les défis.~~
 5. ~~Les tournois de topping, et ceux de la semaine.~~
-6. ~~Les tournois de battle : les poules.~~ Reste **le tableau** : aperçu,
-   validation, notifications de qualification, dates imposées, classement final
-   et médailles.
+6. ~~Les tournois de battle : les poules, puis le double tableau.~~ Restent les
+   **dates imposées** par phase, pour une finale retransmise.
 7. Les spectateurs.
 8. Les équipes du site.
 9. Les tournois de duplicate.
