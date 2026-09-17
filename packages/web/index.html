@@ -1788,6 +1788,34 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 .rn-msg { padding: 3px 0; font-size: 12.5px; color: var(--ink-soft); }
 .rn-arbitrage { margin-top: 10px; border-top: 1px solid var(--rule); }
 .camp-joueurs { display: flex; flex-wrap: wrap; gap: 8px; }
+/* LE SCORE DE LA RENCONTRE DANS LE SALON : gros, parce que c'est la premiere
+   chose qu'on cherche en arrivant sur une manche 2. */
+.rn-salon-score { margin: 6px 0 2px; font-family: var(--mono); font-size: 22px; color: var(--ink); }
+#rn-pret[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* LE DOUBLE TABLEAU (SPEC.md §29) : une colonne par tour, le tableau haut
+   au-dessus du tableau bas, et chaque rencontre dans sa carte. */
+.tb-tableau { display: flex; flex-direction: column; gap: 18px; }
+.tb-bande-titre { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); }
+.tb-colonnes { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; }
+.tb-colonne { flex: 0 0 210px; display: flex; flex-direction: column; gap: 10px; }
+.tb-colonne-titre { margin: 0 0 2px; font-size: 11px; font-weight: 500; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-match { border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); overflow: hidden; }
+.tb-cliquable { cursor: pointer; }
+.tb-cliquable:hover { border-color: var(--accent); }
+.tb-cote { display: flex; align-items: center; gap: 8px; padding: 5px 8px; font-size: 12.5px; }
+.tb-cote + .tb-cote { border-top: 1px solid var(--rule); }
+.tb-cote-nom { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.tb-cote-score { flex: 0 0 auto; font-family: var(--mono); color: var(--ink-soft); }
+.tb-gagnant { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tb-gagnant .tb-cote-nom, .tb-gagnant .tb-cote-score { font-weight: 600; color: var(--ink); }
+.tb-attente .tb-cote-nom { color: var(--ink-faint); font-style: italic; }
+.tb-apercu { margin-top: 12px; }
+
+/* LE CLASSEMENT FINAL : trois medailles, puis les places. */
+.pd-table { border-collapse: collapse; font-size: 13px; }
+.pd-table td { padding: 4px 10px 4px 0; }
+.pd-place { width: 34px; text-align: center; font-family: var(--mono); color: var(--ink-soft); }
 #voile-boite .pseudo { max-width: 560px; text-align: left; }
 
 /* LE BLOC D'UNE PARTIE D'EPREUVE, dans le panneau du salon. */
@@ -2583,6 +2611,19 @@ button.primes-libres:hover { background: none; color: var(--accent); }
         <button id="lancer">Lancer la partie</button>
       </div>
       <div class="block fin" id="fin" hidden>Partie terminée</div>
+      <!-- LA RENCONTRE DE TOURNOI (SPEC.md §29) : contre qui l'on joue, ou en
+           est le score, et le bouton qui lance la manche. -->
+      <div class="block" id="rencontre-wrap" hidden>
+        <div class="head"><h2 id="rn-titre">Rencontre</h2></div>
+        <div class="sub" id="rn-detail"></div>
+        <div class="rn-salon-score" id="rn-score"></div>
+        <div class="ep-gestes">
+          <button type="button" class="ep-principal" id="rn-pret" hidden>Je suis prêt</button>
+          <button type="button" id="rn-page">Page du tournoi</button>
+        </div>
+        <div class="sub" id="rn-attente" hidden></div>
+      </div>
+
       <!-- LA PARTIE D'EPREUVE (SPEC.md §29) : comment on la joue avant de la
            lancer, la pause pendant, les resultats apres. -->
       <div class="block" id="epreuve-wrap" hidden>

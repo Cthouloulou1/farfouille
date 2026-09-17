@@ -2454,9 +2454,12 @@ function paintSide() {
     || epreuve !== null;
   // DEFIER SUR CETTE PARTIE (SPEC.md §29) : a tous les joueurs, pas au seul
   // hote, et jamais sur une epreuve ni sur la grille permanente.
-  $("defier-wrap").hidden = !finie || permanent || epreuve !== null || history.length === 0;
+  // UNE MANCHE DE TOURNOI NE SE DEFIE PAS : elle appartient a sa rencontre.
+  $("defier-wrap").hidden = !finie || permanent || epreuve !== null
+    || rencontreSalon !== null || history.length === 0;
   peindreLaMontante();
   peindreLEpreuve();
+  peindreLaRencontreDuSalon();
 
   // Rejouer n'a de sens qu'une fois la partie close : avant, ce serait donner
   // les reponses d'une partie en cours.
@@ -5523,9 +5526,11 @@ function applyState(s: {
     { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null;
   montante?: MontanteVue | null;
   epreuve?: EpreuveVue | null; enPause?: boolean; ecoulePause?: number;
+  rencontre?: RencontreDuSalonVue | null;
   createdAt: number; now: number; servedAt: number; demarreA?: number;
 }) {
   epreuve = s.epreuve ?? null;
+  rencontreSalon = s.rencontre ?? null;
   enPause = s.enPause === true;
   ecoulePause = s.ecoulePause ?? 0;
   rack = s.rack ?? "";
@@ -5575,7 +5580,8 @@ function applyState(s: {
   // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
   // Les reglages d'une partie d'epreuve sont ceux de sa partie figee.
-  $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null;
+  $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null
+    || rencontreSalon !== null;
   // ABANDONNER UN COUP / LA PARTIE (SPEC.md §24-25). L'administration voit
   // toujours les deux boutons ; pour tout le monde, ils exigent le topping sur
   // une grille finie -- le duplicate et la grille sans fin n'ont pas la meme
@@ -5747,13 +5753,20 @@ function connect() {
       salonPermanent = m.proprietaire === null;
       permanent = m.permanent === true;
       epreuve = m.epreuve ?? null;
-      $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null;
+      // LA RENCONTRE AVANT LES REGLAGES : c'est elle qui decide si ce salon se
+      // regle, et `applyState` ne passera qu'apres.
+      rencontreSalon = m.state?.rencontre ?? null;
+      $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null
+    || rencontreSalon !== null;
       $("conn").textContent = `${me} · ${m.nomSalon}`;
       // Une partie qui n'a pas commence s'ouvre sur ses reglages : c'est la
       // qu'on choisit la variante avant de lancer quoi que ce soit.
       // Une grille permanente ne s'ouvre pas non plus sur ses reglages : elle
       // n'est pas la pour etre reglee, meme le jour ou on la cree.
-      if (m.state?.demarree === false && m.gerant === me && !permanent && epreuve === null) {
+      // UNE MANCHE DE TOURNOI NE SE REGLE PAS : ses reglages sont ceux du
+      // tournoi, et son panneau s'ouvrait par-dessus le bouton « Je suis pret ».
+      if (m.state?.demarree === false && m.gerant === me && !permanent && epreuve === null
+        && rencontreSalon === null) {
         setTimeout(ouvrirReglages, 60);
       }
       board.place(tiles.map((t: Tile): Placement => ({ x: t.x, y: t.y, letter: t.l, blank: t.b === 1 })));
@@ -11209,6 +11222,66 @@ $("rs-atemps").addEventListener("click", () => { rsATemps = !rsATemps; peindreLe
 
 // ------------------------------------------------------ LE SALON D'UNE EPREUVE
 
+/** Ce que le salon d'une rencontre de tournoi sait d'elle (SPEC.md §29). */
+interface RencontreDuSalonVue {
+  tournoi: string;
+  nomDuTournoi: string;
+  rencontre: string;
+  manche: number;
+  bo: number;
+  camps: [string, string];
+  noms: [string, string];
+  joueurs: [string[], string[]];
+  score: [number, number];
+  prets: string[];
+}
+
+let rencontreSalon: RencontreDuSalonVue | null = null;
+
+/**
+ * LE BLOC DE LA RENCONTRE, dans le panneau du salon (SPEC.md §29).
+ *
+ * Contre qui l'on joue, quelle manche, ou en est le score -- et, tant que la
+ * partie n'est pas partie, le bouton qui la lance. ELLE ATTEND LES DEUX CAMPS :
+ * on charge une page, on s'installe, on relit le score, et c'est le joueur qui
+ * dit quand il est pret.
+ */
+function peindreLaRencontreDuSalon(): void {
+  const r = rencontreSalon;
+  $("rencontre-wrap").hidden = r === null;
+  if (r === null) return;
+  $("rn-titre").textContent = t2("{a} contre {b}", { a: r.noms[0], b: r.noms[1] });
+  $("rn-detail").textContent = [
+    r.nomDuTournoi,
+    t2("manche {n}", { n: r.manche }),
+    t2("au meilleur de {n}", { n: r.bo }),
+  ].join(" · ");
+  $("rn-score").textContent = `${r.score[0]} – ${r.score[1]}`;
+
+  const avant = !demarree && !finie;
+  const monCamp = r.joueurs.findIndex((l) => l.includes(me));
+  const jeSuisPret = r.prets.includes(me);
+  const bouton = $("rn-pret") as HTMLButtonElement;
+  bouton.hidden = !avant || monCamp < 0;
+  bouton.textContent = jeSuisPret ? t("Je ne suis plus prêt") : t("Je suis prêt");
+  bouton.setAttribute("aria-pressed", String(jeSuisPret));
+
+  $("rn-attente").hidden = !avant;
+  if (!avant) return;
+  const pret = (i: number): boolean => r.joueurs[i]!.some((n) => r.prets.includes(n));
+  const autre = monCamp === 0 ? 1 : 0;
+  $("rn-attente").textContent = monCamp < 0
+    ? t("La manche part quand les deux joueurs se disent prêts.")
+    : pret(autre)
+      ? t2("{nom} est prêt.", { nom: r.noms[autre] })
+      : t2("{nom} n'est pas encore prêt.", { nom: r.noms[autre] });
+}
+
+$("rn-pret").addEventListener("click", () => envoyer({ t: "pret" }));
+$("rn-page").addEventListener("click", () => {
+  if (rencontreSalon !== null) ouvrirLeTournoi(rencontreSalon.tournoi);
+});
+
 /** La partie d'epreuve attend-elle qu'on la lance, et est-ce a nous de le faire ? */
 function epreuveALancer(): boolean {
   return epreuve !== null && !epreuve.lancee && epreuve.compte === me && $("join").hidden === true;
@@ -14195,6 +14268,14 @@ interface BattleVue {
   camps: { camp: string; nom: string; joueurs: string[] }[];
   poules: { n: number; camps: string[]; classement: LigneDePouleVue[]; tours: number }[];
   rencontres: RencontreVue[];
+  /** Toutes les rencontres de poule sont-elles tranchées ? */
+  poulesFinies: boolean;
+  /** Qui est entré par le haut et par le bas, `null` tant que rien n'est posé. */
+  tableau: { haut: string[]; bas: string[] } | null;
+  /** La grande finale, quand le tableau est lancé. */
+  finale: string | null;
+  /** Le classement final, une fois la grande finale jouée. */
+  classement: { camp: string; place: number }[];
   moi: { camp: string | null; dispos: string; arbitre: boolean } | null;
   dispos: Record<string, string>;
 }
@@ -14745,6 +14826,18 @@ function peindreLeBattle(x: TournoiVue, b: BattleVue, maintenant: number, regle:
   if (miennes !== null && b.phase !== "inscriptions") blocs.push(miennes);
   const vivantes = rencontresEnCours(x, b);
   if (vivantes !== null) blocs.push(vivantes);
+  // LE CLASSEMENT FINAL D'ABORD : quand un tournoi est fini, c'est ce qu'on
+  // vient lire, et non le chemin qui y a mene.
+  const podium = classementFinalDuBattle(b);
+  if (podium !== null) blocs.push(podium);
+  if (regle && b.phase === "poules") blocs.push(editeurDuTableau(x, b));
+  const dessin = tableauDuBattle(x, b);
+  if (dessin !== null) {
+    const section = el("section", "to-b-bloc");
+    section.appendChild(el("h1", "", t("Double tableau")));
+    section.appendChild(dessin);
+    blocs.push(section);
+  }
   if (b.poules.length > 0) {
     const section = el("section", "to-b-bloc");
     section.appendChild(el("h1", "", t("Poules")));
@@ -14787,4 +14880,258 @@ function peindreLeBattle(x: TournoiVue, b: BattleVue, maintenant: number, regle:
     blocs.push(section);
   }
   boite.replaceChildren(...blocs);
+}
+
+// -------------------------------------------------- LE DOUBLE TABLEAU
+
+/** Un côté d'une rencontre, tel que le tableau le dessine. */
+interface CoteDeTableau {
+  /** Le nom du camp, ou ce qui l'y amènera : « Vainqueur du tour 1 ». */
+  nom: string;
+  camp: string | null;
+  score: number | null;
+  gagnant: boolean;
+}
+
+/** Le nom d'un tour, tel qu'il se lit en tête de colonne. */
+function nomDuTour(phase: string, tour: number, dernierHaut: number, dernierBas: number): string {
+  if (phase === "finale") return t("Grande finale");
+  if (phase.startsWith("haut:")) {
+    if (tour === dernierHaut) return t("Finale du tableau haut");
+    if (tour === dernierHaut - 1) return t("Demi-finales du tableau haut");
+    return t2("Tableau haut, tour {n}", { n: tour });
+  }
+  if (tour === dernierBas) return t("Finale du tableau bas");
+  return t2("Tableau bas, tour {n}", { n: tour });
+}
+
+/** Une carte de rencontre dans le tableau : deux noms, deux scores. */
+function carteDeTableau(
+  cotes: [CoteDeTableau, CoteDeTableau], ouvrir: (() => void) | null,
+): HTMLElement {
+  const carte = el("div", "tb-match");
+  if (ouvrir !== null) {
+    carte.classList.add("tb-cliquable");
+    carte.addEventListener("click", ouvrir);
+  }
+  for (const c of cotes) {
+    const ligne = el("div", "tb-cote");
+    if (c.gagnant) ligne.classList.add("tb-gagnant");
+    if (c.camp === null) ligne.classList.add("tb-attente");
+    ligne.append(
+      el("span", "tb-cote-nom", c.nom),
+      el("span", "tb-cote-score", c.score === null ? "" : String(c.score)),
+    );
+    carte.appendChild(ligne);
+  }
+  return carte;
+}
+
+/**
+ * LE DOUBLE TABLEAU (SPEC.md §29).
+ *
+ * Une colonne par tour, le tableau haut puis le tableau bas, et la grande
+ * finale au bout du haut. Chaque rencontre s'ouvre au clic sur ses manches.
+ */
+function tableauDuBattle(x: TournoiVue, b: BattleVue): HTMLElement | null {
+  const duTableau = b.rencontres.filter((r) => !r.phase.startsWith("poule:"));
+  if (duTableau.length === 0) return null;
+  const derniere = (prefixe: string): number =>
+    duTableau.reduce((a, r) => (r.phase.startsWith(prefixe) ? Math.max(a, r.tour) : a), 0);
+  const dernierHaut = derniere("haut:");
+  const dernierBas = derniere("bas:");
+
+  const colonnes: { phase: string; tour: number; les: RencontreVue[] }[] = [];
+  const ajouter = (prefixe: string, dernier: number): void => {
+    for (let tour = 1; tour <= dernier; tour++) {
+      const les = duTableau.filter((r) => r.phase === `${prefixe}${tour}`);
+      if (les.length > 0) colonnes.push({ phase: `${prefixe}${tour}`, tour, les });
+    }
+  };
+  const boite = el("div", "tb-tableau");
+
+  const bande = (titre: string, colonnes: { phase: string; tour: number; les: RencontreVue[] }[]): void => {
+    if (colonnes.length === 0) return;
+    const rangee = el("div", "tb-bande");
+    rangee.appendChild(el("h3", "tb-bande-titre", titre));
+    const cols = el("div", "tb-colonnes");
+    for (const c of colonnes) {
+      const colonne = el("div", "tb-colonne");
+      colonne.appendChild(el("h4", "tb-colonne-titre",
+        nomDuTour(c.phase, c.tour, dernierHaut, dernierBas)));
+      for (const r of c.les) {
+        const score = scoreDeLaRencontre(r);
+        const joue = r.manches.some((m) => m.points !== null);
+        const cotes = [0, 1].map((i): CoteDeTableau => ({
+          nom: r.camps[i] === "" ? t("À désigner") : nomDuCamp(b, r.camps[i]!),
+          camp: r.camps[i] === "" ? null : r.camps[i]!,
+          score: joue ? score[i]! : null,
+          gagnant: r.fin !== null && r.fin.gagnant === r.camps[i] && r.camps[i] !== "",
+        })) as [CoteDeTableau, CoteDeTableau];
+        colonne.appendChild(carteDeTableau(cotes, () => ouvrirLaRencontre(x, b, r)));
+      }
+      cols.appendChild(colonne);
+    }
+    rangee.appendChild(cols);
+    boite.appendChild(rangee);
+  };
+
+  ajouter("haut:", dernierHaut);
+  const finale = duTableau.filter((r) => r.phase === "finale");
+  if (finale.length > 0) colonnes.push({ phase: "finale", tour: 1, les: finale });
+  bande(t("Tableau haut"), colonnes);
+  const basses: { phase: string; tour: number; les: RencontreVue[] }[] = [];
+  for (let tour = 1; tour <= dernierBas; tour++) {
+    const les = duTableau.filter((r) => r.phase === `bas:${tour}`);
+    if (les.length > 0) basses.push({ phase: `bas:${tour}`, tour, les });
+  }
+  bande(t("Tableau bas"), basses);
+  return boite;
+}
+
+/** Le classement final, avec ses trois médailles. */
+function classementFinalDuBattle(b: BattleVue): HTMLElement | null {
+  if (b.classement.length === 0) return null;
+  const section = el("section", "to-b-bloc");
+  section.appendChild(el("h1", "", t("Classement final")));
+  const table = el("table", "pd-table");
+  const corps = el("tbody");
+  const MEDAILLES = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+  for (const l of b.classement) {
+    const tr = el("tr");
+    tr.append(el("td", "pd-place", MEDAILLES[l.place - 1] ?? String(l.place)));
+    const nom = el("td", "pd-nom");
+    nom.appendChild(campCliquable(b, l.camp));
+    tr.appendChild(nom);
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  section.appendChild(table);
+  return section;
+}
+
+/**
+ * L'APERÇU ET LA VALIDATION DU DOUBLE TABLEAU (SPEC.md §29).
+ *
+ * Les qualifiés s'y posent d'après leur classement de poule. L'organisateur
+ * regarde, corrige ses réglages, et valide.
+ */
+function editeurDuTableau(x: TournoiVue, b: BattleVue): HTMLElement {
+  const bat = x.battle!;
+  const boite = el("section", "to-b-bloc");
+  boite.appendChild(el("h1", "", t("Composer le tableau")));
+  if (!b.poulesFinies) {
+    boite.appendChild(el("p", "sub",
+      t("Les poules ne sont pas toutes jouées : ce qui n'a pas été joué compte pour zéro.")));
+  }
+  let qualifies = bat.qualifies;
+  let tableauHaut = bat.tableauHaut;
+  let meilleurDe = bat.meilleurDe;
+  let meilleurDeDemi = bat.meilleurDeDemi;
+  let meilleurDeFinale = bat.meilleurDeFinale;
+  let joursParTour = bat.joursParTour;
+
+  const vue = el("div", "tb-apercu");
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+
+  const corps = (): Record<string, unknown> => ({
+    qualifies, tableauHaut, meilleurDe, meilleurDeDemi, meilleurDeFinale, joursParTour,
+  });
+
+  const voir = async (): Promise<void> => {
+    const { ok, d } = await envoyerAuServeur(
+      `/api/tournoi/${encodeURIComponent(x.id)}/tableau/apercu`, corps());
+    if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+    vue.replaceChildren(apercuDuPlan(b, d as {
+      plan: { i: number; phase: string; tour: number; bo: number;
+        sources: ({ t: "camp"; camp: string } | { t: "gagnant" | "perdant"; i: number })[] }[];
+      haut: string[]; bas: string[];
+    }));
+  };
+
+  const bouton = el("button", "", t("Voir l'aperçu")) as HTMLButtonElement;
+  bouton.type = "button";
+  bouton.addEventListener("click", () => { void voir(); });
+
+  const valider = el("button", "valider", t("Valider et lancer le tableau")) as HTMLButtonElement;
+  valider.type = "button";
+  valider.addEventListener("click", () => {
+    confirmer(t("Lancer le double tableau ? Les places y sont posées pour de bon."), () => {
+      void (async () => {
+        valider.disabled = true;
+        const { ok, d } = await envoyerAuServeur(
+          `/api/tournoi/${encodeURIComponent(x.id)}/tableau`, corps());
+        valider.disabled = false;
+        if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+        ouvrirLeTournoi(x.id, false);
+      })();
+    });
+  });
+
+  const reglages = el("div", "pl-reglages");
+  reglages.append(
+    champ(t("Qualifiés"), compteurOuTous(2, 256, qualifies, t("Tous"), (n) => { qualifies = n; })),
+    champ(t("Dont au tableau haut"), compteurOuTous(1, 256, tableauHaut, t("La moitié"), (n) => { tableauHaut = n; })),
+    champ(t("Meilleur de, en tableau"), compteurImpair(meilleurDe, (n) => { meilleurDe = n; })),
+    champ(t("En demi-finale"), compteurImpair(meilleurDeDemi, (n) => { meilleurDeDemi = n; })),
+    champ(t("En finale"), compteurImpair(meilleurDeFinale, (n) => { meilleurDeFinale = n; })),
+    champ(t("Jours par tour"), compteur(1, 30, joursParTour, (n) => { joursParTour = n; })),
+  );
+  const gestes = el("div", "ad-ligne");
+  gestes.append(bouton, valider);
+  boite.append(reglages, gestes, vue, erreur);
+  void voir();
+  return boite;
+}
+
+/** Le plan d'un tableau, dessiné comme le tableau lui-même. */
+function apercuDuPlan(b: BattleVue, d: {
+  plan: { i: number; phase: string; tour: number; bo: number;
+    sources: ({ t: "camp"; camp: string } | { t: "gagnant" | "perdant"; i: number })[] }[];
+  haut: string[]; bas: string[];
+}): HTMLElement {
+  const boite = el("div", "tb-tableau");
+  const dernier = (prefixe: string): number =>
+    d.plan.reduce((a, p) => (p.phase.startsWith(prefixe) ? Math.max(a, p.tour) : a), 0);
+  const dernierHaut = dernier("haut:");
+  const dernierBas = dernier("bas:");
+  const etiquette = (s: { t: string; camp?: string; i?: number }): string => {
+    if (s.t === "camp") return nomDuCamp(b, s.camp ?? "");
+    const p = d.plan[s.i ?? 0];
+    const ou = p === undefined ? "" : nomDuTour(p.phase, p.tour, dernierHaut, dernierBas);
+    return s.t === "gagnant"
+      ? t2("Vainqueur · {ou}", { ou }) : t2("Perdant · {ou}", { ou });
+  };
+  const bande = (titre: string, phases: string[]): void => {
+    const cols = el("div", "tb-colonnes");
+    let vide = true;
+    for (const phase of phases) {
+      const les = d.plan.filter((p) => p.phase === phase);
+      if (les.length === 0) continue;
+      vide = false;
+      const colonne = el("div", "tb-colonne");
+      colonne.appendChild(el("h4", "tb-colonne-titre",
+        `${nomDuTour(phase, les[0]!.tour, dernierHaut, dernierBas)} · ${t2("au meilleur de {n}", { n: les[0]!.bo })}`));
+      for (const p of les) {
+        colonne.appendChild(carteDeTableau([
+          { nom: etiquette(p.sources[0]!), camp: p.sources[0]!.t === "camp" ? "x" : null, score: null, gagnant: false },
+          { nom: etiquette(p.sources[1]!), camp: p.sources[1]!.t === "camp" ? "x" : null, score: null, gagnant: false },
+        ], null));
+      }
+      cols.appendChild(colonne);
+    }
+    if (vide) return;
+    const rangee = el("div", "tb-bande");
+    rangee.append(el("h3", "tb-bande-titre", titre), cols);
+    boite.appendChild(rangee);
+  };
+  const hauts = [];
+  for (let i = 1; i <= dernierHaut; i++) hauts.push(`haut:${i}`);
+  hauts.push("finale");
+  bande(t("Tableau haut"), hauts);
+  const basses = [];
+  for (let i = 1; i <= dernierBas; i++) basses.push(`bas:${i}`);
+  bande(t("Tableau bas"), basses);
+  return boite;
 }

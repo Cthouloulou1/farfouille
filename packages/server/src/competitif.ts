@@ -200,6 +200,8 @@ const messages = new Map<string, MessageDeRencontre[]>();
 const dispos = new Map<string, string>();
 /** L'en-tete libre de la page d'un tournoi. */
 const entetes = new Map<string, string>();
+/** Qui est entre par le haut et par le bas, a la validation du tableau. */
+const tableaux = new Map<string, { haut: string[]; bas: string[] }>();
 /**
  * QUI A REGARDE QUELLE PARTIE FIGEE AVANT DE LA JOUER : `figee|compte`.
  *
@@ -274,6 +276,7 @@ export function ouvrirLeCompetitif(): void {
   messages.clear();
   dispos.clear();
   entetes.clear();
+  tableaux.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
   for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
@@ -349,7 +352,13 @@ function appliquer(e: Record<string, any>): void {
       id: e["id"], tournoi: e["tournoi"], phase: e["phase"], tour: Number(e["tour"] ?? 1),
       camps: [e["camps"][0], e["camps"][1]], bo: Number(e["bo"]),
       limite: Number(e["limite"]), butoir: Number(e["butoir"]), manches: [], fin: null,
+      ...(e["sources"] === undefined ? {} : { sources: e["sources"] }),
     });
+  } else if (e["t"] === "camp-rencontre") {
+    const r = rencontres.get(e["rencontre"]);
+    if (r !== undefined) r.camps[Number(e["cote"]) === 0 ? 0 : 1] = e["camp"];
+  } else if (e["t"] === "tableau") {
+    tableaux.set(e["tournoi"], { haut: e["haut"] ?? [], bas: e["bas"] ?? [] });
   } else if (e["t"] === "manche-rencontre") {
     const r = rencontres.get(e["rencontre"]);
     if (r !== undefined && !r.manches.some((m) => m.n === e["n"])) {
@@ -789,6 +798,17 @@ export function classementDesMedailles(
         if (rang > 3) return;
         for (const nom of m.equipe) donner(nom, rang);
       });
+    }
+  }
+  // LES TOURNOIS DE BATTLE (SPEC.md §29) : or au vainqueur de la grande finale,
+  // argent a son perdant, bronze au perdant de la finale du tableau bas. Il n'y
+  // a pas de petite finale.
+  for (const t of tournois.values()) {
+    if (t.type !== "battle") continue;
+    if (o.lexique !== undefined && t.lexique !== o.lexique) continue;
+    for (const l of classementFinalDuBattle(t)) {
+      if (l.place > 3) break;
+      for (const nom of joueursDuCamp(t, l.camp)) donner(nom, l.place);
     }
   }
   return [...par.values()].sort((a, b) => b.or - a.or || b.argent - a.argent || b.bronze - a.bronze
@@ -1447,8 +1467,15 @@ export interface Rencontre {
   phase: string;
   /** Le tour de la poule, ou du tableau. Il numérote les colonnes du classement. */
   tour: number;
-  /** Les deux camps, par compte porteur de l'inscription. */
+  /**
+   * Les deux camps, par compte porteur de l'inscription.
+   *
+   * UNE PLACE DE TABLEAU PEUT ETRE VIDE (`""`) : la rencontre existe des la
+   * validation, et attend le resultat qui la remplira.
+   */
   camps: [string, string];
+  /** D'ou viennent ses camps, en tableau. Absentes en poule. */
+  sources?: [SourceDeCamp, SourceDeCamp];
   /** Meilleur de X en tableau ; le nombre de manches à jouer en poule. */
   bo: number;
   /** La fin normale du tour. */
@@ -1460,7 +1487,7 @@ export interface Rencontre {
    * Comment elle s'est terminée. `gagnant: null` veut dire nulle quand elle
    * vient du jeu, et « personne ne passe » quand elle vient de l'arbitrage.
    */
-  fin: { gagnant: string | null; par: "jeu" | "arbitrage"; at: number } | null;
+  fin: { gagnant: string | null; par: "jeu" | "arbitrage" | "exempt"; at: number } | null;
 }
 
 export interface MessageDeRencontre {
@@ -1493,7 +1520,10 @@ export type PhaseDeBattle = "inscriptions" | "poules" | "tableau" | "fini";
 
 export function phaseDuBattle(t: Tournoi): PhaseDeBattle {
   if (t.type !== "battle") return "fini";
-  return poulesDuTournoi(t.id) === undefined ? "inscriptions" : "poules";
+  if (poulesDuTournoi(t.id) === undefined) return "inscriptions";
+  const finale = finaleDuTournoi(t);
+  if (finale === undefined) return "poules";
+  return finale.fin === null ? "tableau" : "fini";
 }
 
 /**
@@ -1555,6 +1585,8 @@ export function rondesDeLaPoule(camps: string[]): [string, string][][] {
 export const poulesDuTournoi = (id: string): string[][] | undefined => poules.get(id);
 export const rencontreParId = (id: string): Rencontre | undefined => rencontres.get(id);
 export const enteteDuTournoi = (id: string): string => entetes.get(id) ?? "";
+export const tableauDuTournoi = (id: string): { haut: string[]; bas: string[] } | undefined =>
+  tableaux.get(id);
 export const disposDe = (tournoi: string, compte: string): string =>
   dispos.get(`${tournoi}|${compte}`) ?? "";
 export const messagesDeLaRencontre = (id: string): MessageDeRencontre[] =>
@@ -1698,6 +1730,10 @@ function conclureLaRencontre(r: Rencontre): void {
   const ev = { t: "rencontre-finie", rencontre: r.id, gagnant, par: "jeu", at: Date.now() };
   inscrire(ev);
   appliquer(ev);
+  // EN TABLEAU, UN RESULTAT EN DECIDE D'AUTRES : le vainqueur monte d'un tour,
+  // le perdant tombe au tableau bas, et leurs places les attendaient deja.
+  const t = tournois.get(r.tournoi);
+  if (t !== undefined) resoudreLeTableau(t);
 }
 
 /**
@@ -1731,6 +1767,8 @@ export function arbitrerLaRencontre(r: Rencontre, o: {
   };
   inscrire(ev);
   appliquer(ev);
+  const t = tournois.get(r.tournoi);
+  if (t !== undefined) resoudreLeTableau(t);
   return null;
 }
 
@@ -1743,6 +1781,8 @@ export function declarerUnForfait(t: Tournoi, camp: string, par: string): number
   for (const r of rencontresDuTournoi(t.id)) {
     if (r.fin !== null || !r.camps.includes(camp)) continue;
     const autre = r.camps[0] === camp ? r.camps[1]! : r.camps[0]!;
+    // Une place encore vide en face : on ne donne pas la victoire au vide.
+    if (autre === "") continue;
     const ev = {
       t: "rencontre-finie", rencontre: r.id, gagnant: autre, par: "arbitrage",
       forfait: camp, at: Date.now(),
@@ -1751,6 +1791,7 @@ export function declarerUnForfait(t: Tournoi, camp: string, par: string): number
     appliquer(ev);
     faites++;
   }
+  resoudreLeTableau(t);
   console.log(`[competitif] forfait de ${camp} sur "${t.nom}" par ${par} : ${faites} rencontre(s)`);
   return faites;
 }
@@ -1855,4 +1896,350 @@ export function classementDeLaPoule(t: Tournoi, i: number): LigneDePoule[] {
     || a.camp.localeCompare(b.camp));
   lignes.forEach((l, n) => { l.rang = n + 1; });
   return lignes;
+}
+
+// ------------------------------------------------------ le double tableau
+
+/**
+ * D'OU VIENT LE CAMP D'UNE RENCONTRE DE TABLEAU.
+ *
+ * Un tableau se construit AVANT d'être joué : ses rencontres existent toutes
+ * dès la validation, et se remplissent au fil des résultats. Une place y est
+ * donc décrite, et non occupée : le vainqueur de telle rencontre, le perdant de
+ * telle autre.
+ */
+export type SourceDeCamp =
+  | { t: "camp"; camp: string }
+  | { t: "gagnant"; rencontre: string }
+  | { t: "perdant"; rencontre: string };
+
+/** Une rencontre du plan, avant qu'elle ait un identifiant. */
+export interface PlanDeRencontre {
+  /** Son rang dans le plan : les sources s'y réfèrent. */
+  i: number;
+  phase: string;
+  tour: number;
+  bo: number;
+  /** La profondeur dans le graphe : elle donne la date limite. */
+  ordre: number;
+  sources: [PlanSource, PlanSource];
+}
+
+export type PlanSource =
+  | { t: "camp"; camp: string }
+  | { t: "gagnant"; i: number }
+  | { t: "perdant"; i: number };
+
+/**
+ * LE CLASSEMENT GENERAL DES POULES (SPEC.md §29).
+ *
+ * Tous les premiers, puis tous les deuxièmes, et ainsi de suite : c'est ainsi
+ * qu'on prend les qualifiés sur plusieurs poules. À rang égal, les points, les
+ * manches gagnées, puis les points de manche.
+ */
+export function classementGeneralDesPoules(t: Tournoi): (LigneDePoule & { poule: number })[] {
+  const toutes: (LigneDePoule & { poule: number })[] = [];
+  (poulesDuTournoi(t.id) ?? []).forEach((_, i) => {
+    for (const l of classementDeLaPoule(t, i)) toutes.push({ ...l, poule: i });
+  });
+  return toutes.sort((a, b) =>
+    a.rang - b.rang
+    || b.points - a.points
+    || b.manchesGagnees - a.manchesGagnees
+    || b.pointsDeManche - a.pointsDeManche
+    || a.camp.localeCompare(b.camp));
+}
+
+/** Les poules sont-elles finies ? Toutes leurs rencontres sont tranchées. */
+export function poulesFinies(t: Tournoi): boolean {
+  const les = rencontresDuTournoi(t.id).filter((r) => r.phase.startsWith("poule:"));
+  return les.length > 0 && les.every((r) => r.fin !== null);
+}
+
+/**
+ * PLANIFIE LE DOUBLE TABLEAU, sans rien écrire (SPEC.md §29).
+ *
+ * L'organisateur le regarde avant de le valider : c'est le même calcul qui
+ * donne l'aperçu et le tableau réel, et rien ne peut donc différer entre les
+ * deux.
+ */
+export function planifierLeTableau(t: Tournoi): { plan: PlanDeRencontre[]; haut: string[]; bas: string[] } | string {
+  const b = t.battle;
+  if (b === null) return "Ce tournoi n'est pas un tournoi de battle";
+  const general = classementGeneralDesPoules(t);
+  if (general.length < 2) return "Il n'y a pas assez de joueurs classés";
+  const combien = b.qualifies === null ? general.length : Math.min(b.qualifies, general.length);
+  if (combien < 2) return "Il faut au moins deux qualifiés";
+  const tetes = general.slice(0, combien).map((l) => l.camp);
+  const nHaut = b.tableauHaut === null
+    ? Math.ceil(combien / 2) : Math.max(1, Math.min(b.tableauHaut, combien));
+  const haut = tetes.slice(0, nHaut);
+  const bas = tetes.slice(nHaut);
+
+  const plan: PlanDeRencontre[] = [];
+  const profondeur = (s: PlanSource): number =>
+    s.t === "camp" ? 0 : (plan[s.i]?.ordre ?? 0);
+  const creer = (phase: string, tour: number, bo: number, a: PlanSource, c: PlanSource): number => {
+    const i = plan.length;
+    plan.push({
+      i, phase, tour, bo,
+      ordre: Math.max(profondeur(a), profondeur(c)) + 1,
+      sources: [a, c],
+    });
+    return i;
+  };
+
+  /**
+   * UN TOUR DE TABLEAU : le premier contre le dernier, le deuxième contre
+   * l'avant-dernier. Un effectif impair laisse LE MIEUX CLASSE exempt -- c'est
+   * la règle partout, et c'est aussi ce qui récompense la phase de poules.
+   */
+  const unTour = (
+    sources: PlanSource[], phase: string, tour: number, bo: number,
+  ): { sortie: PlanSource[]; perdants: PlanSource[] } => {
+    const l = [...sources];
+    const sortie: PlanSource[] = [];
+    const perdants: PlanSource[] = [];
+    if (l.length % 2 === 1) sortie.push(l.shift()!);
+    for (let i = 0; i < l.length / 2; i++) {
+      const m = creer(phase, tour, bo, l[i]!, l[l.length - 1 - i]!);
+      sortie.push({ t: "gagnant", i: m });
+      perdants.push({ t: "perdant", i: m });
+    }
+    return { sortie, perdants };
+  };
+
+  /** Un tour mineur du tableau bas : les rescapés contre la vague qui tombe. */
+  const unMineur = (
+    rescapes: PlanSource[], vague: PlanSource[], phase: string, tour: number, bo: number,
+  ): PlanSource[] => {
+    const sortie: PlanSource[] = [];
+    const n = Math.min(rescapes.length, vague.length);
+    // CE QUI DEPASSE PASSE SANS JOUER : les effectifs ne tombent pas toujours
+    // juste, et un exempt vaut mieux qu'une rencontre a un seul camp.
+    for (let i = n; i < rescapes.length; i++) sortie.push(rescapes[i]!);
+    for (let i = n; i < vague.length; i++) sortie.push(vague[i]!);
+    for (let i = 0; i < n; i++) {
+      const m = creer(phase, tour, bo, rescapes[i]!, vague[vague.length - 1 - i]!);
+      sortie.push({ t: "gagnant", i: m });
+    }
+    return sortie;
+  };
+
+  // LE TABLEAU HAUT : une élimination simple ordinaire, dont chaque tour verse
+  // ses perdants au tableau bas.
+  let enHaut: PlanSource[] = haut.map((camp) => ({ t: "camp", camp }));
+  const vagues: PlanSource[][] = [];
+  let tourHaut = 1;
+  while (enHaut.length > 1) {
+    const x = unTour(enHaut, `haut:${tourHaut}`, tourHaut, b.meilleurDe);
+    vagues.push(x.perdants);
+    enHaut = x.sortie;
+    tourHaut++;
+  }
+
+  // LE TABLEAU BAS. Avant chaque vague, on ramène les rescapés à sa taille par
+  // des tours « majeurs » où ils se rencontrent entre eux ; puis le tour
+  // « mineur » les oppose à ceux qui viennent de tomber d'en haut.
+  let enBas: PlanSource[] = bas.map((camp) => ({ t: "camp", camp }));
+  let tourBas = 1;
+  for (const vague of vagues) {
+    if (vague.length === 0) continue;
+    while (enBas.length > vague.length) {
+      enBas = unTour(enBas, `bas:${tourBas}`, tourBas, b.meilleurDe).sortie;
+      tourBas++;
+    }
+    if (enBas.length === 0) {
+      enBas = unTour(vague, `bas:${tourBas}`, tourBas, b.meilleurDe).sortie;
+    } else {
+      enBas = unMineur(enBas, vague, `bas:${tourBas}`, tourBas, b.meilleurDe);
+    }
+    tourBas++;
+  }
+  while (enBas.length > 1) {
+    enBas = unTour(enBas, `bas:${tourBas}`, tourBas, b.meilleurDe).sortie;
+    tourBas++;
+  }
+
+  // LA GRANDE FINALE : le vainqueur d'en haut contre celui d'en bas. Une seule
+  // rencontre : celui qui sort du tableau bas a joué un tour de plus pour
+  // arriver là, et c'est cela qui équilibre sa défaite (SPEC.md §29).
+  if (enHaut.length === 1 && enBas.length === 1) {
+    creer("finale", 1, b.meilleurDeFinale, enHaut[0]!, enBas[0]!);
+  } else if (enHaut.length === 1 && enBas.length === 0) {
+    // Personne au tableau bas : le tableau haut suffit, il n'y a pas de finale
+    // à ajouter -- sa dernière rencontre EST la finale.
+  }
+
+  // LE MEILLEUR DE X DES DEMI-FINALES : la dernière rencontre de chaque
+  // tableau. Ce sont elles qui désignent les finalistes.
+  const dernierHaut = tourHaut - 1;
+  const dernierBas = tourBas - 1;
+  for (const p of plan) {
+    if (p.phase === `haut:${dernierHaut}` || p.phase === `bas:${dernierBas}`) {
+      p.bo = b.meilleurDeDemi;
+    }
+  }
+  return { plan, haut, bas };
+}
+
+/**
+ * ECRIT LE DOUBLE TABLEAU (SPEC.md §29).
+ *
+ * Chaque rencontre naît avec ses deux sources ; celles qui partent d'un camp
+ * connu sont remplies tout de suite, les autres attendent leur résultat.
+ */
+export function lancerLeTableau(t: Tournoi, par: string): string | null {
+  const b = t.battle;
+  if (b === null) return "Ce tournoi n'est pas un tournoi de battle";
+  if (rencontresDuTournoi(t.id).some((r) => !r.phase.startsWith("poule:"))) {
+    return "Le tableau est déjà lancé";
+  }
+  const vu = planifierLeTableau(t);
+  if (typeof vu === "string") return vu;
+  const ev = {
+    t: "tableau", tournoi: t.id, haut: vu.haut, bas: vu.bas, par, at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+
+  const ids: string[] = [];
+  const vraie = (s: PlanSource): SourceDeCamp =>
+    s.t === "camp" ? { t: "camp", camp: s.camp } : { t: s.t, rencontre: ids[s.i]! };
+  // LES DEUX DATES D'UN TOUR : sa profondeur dans le graphe donne son rang, et
+  // chaque rang coûte `joursParTour`. La butoir suit d'autant.
+  const base = b.limitePoules;
+  for (const p of vu.plan) {
+    const limite = base + p.ordre * b.joursParTour * 86_400_000;
+    const id = randomUUID();
+    ids.push(id);
+    const sources = [vraie(p.sources[0]), vraie(p.sources[1])];
+    inscrire({
+      t: "rencontre", id, tournoi: t.id, phase: p.phase, tour: p.tour,
+      camps: [sources[0]!.t === "camp" ? (sources[0] as { camp: string }).camp : "",
+        sources[1]!.t === "camp" ? (sources[1] as { camp: string }).camp : ""],
+      bo: p.bo, limite, butoir: limite + b.joursParTour * 86_400_000,
+      sources, at: Date.now(),
+    });
+    appliquer({
+      t: "rencontre", id, tournoi: t.id, phase: p.phase, tour: p.tour,
+      camps: [sources[0]!.t === "camp" ? (sources[0] as { camp: string }).camp : "",
+        sources[1]!.t === "camp" ? (sources[1] as { camp: string }).camp : ""],
+      bo: p.bo, limite, butoir: limite + b.joursParTour * 86_400_000,
+      sources, at: Date.now(),
+    });
+  }
+  resoudreLeTableau(t);
+  console.log(`[competitif] tableau de "${t.nom}" lance : ${vu.plan.length} rencontre(s)`);
+  return null;
+}
+
+/** Le camp que donne une source, ou `null` tant qu'on ne le sait pas. */
+function campDeLaSource(s: SourceDeCamp): string | null {
+  if (s.t === "camp") return s.camp === "" ? null : s.camp;
+  const r = rencontres.get(s.rencontre);
+  if (r === undefined || r.fin === null || r.fin.gagnant === null) return null;
+  if (s.t === "gagnant") return r.fin.gagnant;
+  return r.camps[0] === r.fin.gagnant ? r.camps[1]! : r.camps[0]!;
+}
+
+/**
+ * CETTE SOURCE NE DONNERA JAMAIS PERSONNE.
+ *
+ * Une rencontre que personne n'a gagnée n'a ni vainqueur ni perdant : la place
+ * qu'elle devait remplir restera vide, et l'autre camp est exempt du tour.
+ */
+function sourceMorte(s: SourceDeCamp): boolean {
+  if (s.t === "camp") return s.camp === "";
+  const r = rencontres.get(s.rencontre);
+  if (r === undefined) return true;
+  if (r.fin === null) return false;
+  return r.fin.gagnant === null;
+}
+
+/**
+ * REMPLIT LES PLACES DU TABLEAU que les résultats viennent de décider.
+ *
+ * On boucle tant que quelque chose bouge : un exempt fait avancer son camp
+ * d'un tour, ce qui peut en décider un autre.
+ */
+export function resoudreLeTableau(t: Tournoi): void {
+  for (let passe = 0; passe < 64; passe++) {
+    let bouge = false;
+    for (const r of rencontresDuTournoi(t.id)) {
+      if (r.sources === undefined || r.fin !== null) continue;
+      for (let i = 0; i < 2; i++) {
+        if (r.camps[i] !== "") continue;
+        const camp = campDeLaSource(r.sources[i]!);
+        if (camp === null) continue;
+        const ev = { t: "camp-rencontre", rencontre: r.id, cote: i, camp, at: Date.now() };
+        inscrire(ev);
+        appliquer(ev);
+        bouge = true;
+      }
+      // UN CAMP SEUL PASSE. Son adversaire ne viendra jamais : la rencontre
+      // qui devait le désigner s'est close sans vainqueur.
+      const vide = r.camps.findIndex((c) => c === "");
+      if (vide >= 0 && r.camps[vide === 0 ? 1 : 0] !== "" && sourceMorte(r.sources[vide]!)) {
+        const ev = {
+          t: "rencontre-finie", rencontre: r.id, gagnant: r.camps[vide === 0 ? 1 : 0],
+          par: "exempt", at: Date.now(),
+        };
+        inscrire(ev);
+        appliquer(ev);
+        bouge = true;
+      }
+    }
+    if (!bouge) return;
+  }
+}
+
+/** La grande finale d'un tournoi, si le tableau est lancé. */
+export function finaleDuTournoi(t: Tournoi): Rencontre | undefined {
+  const les = rencontresDuTournoi(t.id);
+  const f = les.find((r) => r.phase === "finale");
+  if (f !== undefined) return f;
+  // Sans tableau bas, la dernière rencontre du tableau haut EST la finale.
+  const hauts = les.filter((r) => r.phase.startsWith("haut:"));
+  if (hauts.length === 0) return undefined;
+  const dernier = Math.max(...hauts.map((r) => r.tour));
+  return hauts.find((r) => r.tour === dernier);
+}
+
+/**
+ * LE CLASSEMENT FINAL D'UN TOURNOI DE BATTLE (SPEC.md §29).
+ *
+ * Or au vainqueur de la grande finale, argent à son perdant, BRONZE AU PERDANT
+ * DE LA FINALE DU TABLEAU BAS : il n'y a pas de petite finale, le perdant d'une
+ * demi-finale du tableau haut tombe en finale du tableau bas, et c'est cette
+ * rencontre-là qui désigne le troisième.
+ *
+ * Ensuite, la profondeur atteinte dans le tableau, puis le classement de poule.
+ */
+export function classementFinalDuBattle(t: Tournoi): { camp: string; place: number }[] {
+  const finale = finaleDuTournoi(t);
+  if (finale === undefined || finale.fin === null) return [];
+  const places: string[] = [];
+  const poser = (camp: string | null | undefined): void => {
+    if (camp !== null && camp !== undefined && camp !== "" && !places.includes(camp)) {
+      places.push(camp);
+    }
+  };
+  poser(finale.fin.gagnant);
+  poser(finale.camps[0] === finale.fin.gagnant ? finale.camps[1] : finale.camps[0]);
+
+  const les = rencontresDuTournoi(t.id);
+  const bas = les.filter((r) => r.phase.startsWith("bas:"));
+  if (bas.length > 0) {
+    const dernier = Math.max(...bas.map((r) => r.tour));
+    // Du dernier tour au premier : plus on est tombé tard, mieux on est classé.
+    for (let tour = dernier; tour >= 1; tour--) {
+      const perdants = bas.filter((r) => r.tour === tour && r.fin !== null && r.fin.gagnant !== null)
+        .map((r) => (r.camps[0] === r.fin!.gagnant ? r.camps[1]! : r.camps[0]!));
+      for (const c of perdants) poser(c);
+    }
+  }
+  // Ceux qui n'ont pas joué le tableau bas : leur rang de poule les départage.
+  for (const l of classementGeneralDesPoules(t)) poser(l.camp);
+  return places.map((camp, i) => ({ camp, place: i + 1 }));
 }

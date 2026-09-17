@@ -50,6 +50,8 @@ import {
   classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
   partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
   annulerLaMancheDeRencontre, arbitrerLaRencontre, campDuCompte, classementDeLaPoule,
+  classementFinalDuBattle, finaleDuTournoi, lancerLeTableau, planifierLeTableau,
+  poulesFinies, tableauDuTournoi,
   declarerUnForfait, desinscrireDuTournoi, disposDe, ecrireUnMessageDeRencontre,
   enteteDuTournoi, finirUneMancheDeRencontre, joueursDuCamp, lancerLesPoules,
   messagesDeLaRencontre, ouvrirUneMancheDeRencontre, phaseDuBattle, poulesDuTournoi,
@@ -435,6 +437,9 @@ function publicState(s: Salon) {
     permanent: estPermanent(s),
     // LA PARTIE D'EPREUVE QUE CE SALON SERT (SPEC.md §29), ou `null`.
     epreuve: epreuvePublique(s),
+    // LA RENCONTRE DE TOURNOI QUE CE SALON SERT (SPEC.md §29), ou `null` :
+    // contre qui, quelle manche, ou en est le score, et qui s'est dit pret.
+    rencontre: rencontrePublique(s),
     // Une manche en pause montre le temps que son coup avait deja dure.
     enPause: g.enPause,
     ecoulePause: g.ecoulePause,
@@ -655,6 +660,14 @@ async function ouvrirLeSalonDEpreuve(o: {
   return s;
 }
 
+/**
+ * QUI S'EST DECLARE PRET dans le salon d'une rencontre : `salon` -> pseudos.
+ *
+ * Elle ne survit pas a un redemarrage, et c'est bien : une manche qui n'avait
+ * pas commence recommence sa mise en place, et deux clics ne coutent rien.
+ */
+const pretsDeRencontre = new Map<string, Set<string>>();
+
 /** Le nom d'un camp : celui de l'equipe s'il y en a un, le pseudo sinon. */
 function nomDuCamp(t: Tournoi, camp: string): string {
   const i = t.inscrits.find((x) => x.compte === camp);
@@ -716,26 +729,58 @@ async function poserLeSalon(
 }
 
 /**
- * UNE RENCONTRE DEMARRE QUAND LES DEUX CAMPS SONT LA (SPEC.md §29).
+ * CE QUE LE SALON D'UNE RENCONTRE DIT DE SA RENCONTRE, ou `null`.
  *
- * Elle n'a pas de bouton « Lancer » : ses reglages sont ceux du tournoi, et
- * personne n'a a les valider. Mais elle ne part pas non plus a l'arrivee du
- * premier venu -- les deux camps jouent la MEME partie, en meme temps, et un
- * tirage servi avant que l'autre arrive serait un coup joue seul.
- *
- * LE DECOMPTE EST IMPOSE : sans lui, celui qui est deja la verrait le tirage
- * pendant que l'autre charge encore sa page.
+ * On y lit contre qui l'on joue, ou en est le score, et qui s'est declare pret.
+ * Un joueur doit savoir ce qu'il joue pendant qu'il le joue (SPEC.md §29).
  */
-function lancerLaRencontreSiLesDeuxSontLa(s: Salon): void {
+function rencontrePublique(s: Salon): Record<string, unknown> | null {
+  const rc = rencontreDuSalon(s.id);
+  if (rc === undefined) return null;
+  const t = tournoi(rc.rencontre.tournoi);
+  if (t === undefined) return null;
+  const r = rc.rencontre;
+  const faites = r.manches.filter((m) => m.points !== null);
+  const ici = new Set(occupants(s.id));
+  const prets = pretsDeRencontre.get(s.id) ?? new Set<string>();
+  return {
+    tournoi: t.id, nomDuTournoi: t.nom, rencontre: r.id, manche: rc.n, bo: r.bo,
+    camps: r.camps,
+    noms: [nomDuCamp(t, r.camps[0]), nomDuCamp(t, r.camps[1])],
+    // QUI JOUE POUR CHAQUE CAMP : l'ecran ne peut pas savoir autrement s'il
+    // regarde ou s'il joue -- l'etat part le meme a tout le monde.
+    joueurs: [joueursDuCamp(t, r.camps[0]), joueursDuCamp(t, r.camps[1])],
+    score: [0, 1].map((i) => faites.filter((m) => m.gagnant === r.camps[i]).length),
+    // PRET ET PRESENT : partir apres avoir clique ne compte plus. Sinon la
+    // partie s'ouvrirait sur un siege vide.
+    prets: [...prets].filter((n) => ici.has(n)),
+  };
+}
+
+/**
+ * UNE RENCONTRE PART QUAND LES DEUX CAMPS SE DISENT PRETS (SPEC.md §29).
+ *
+ * Elle n'a pas de bouton « Lancer » -- ses reglages sont ceux du tournoi, et
+ * personne n'a a les valider -- mais elle ne part pas non plus a l'arrivee du
+ * second : on charge une page, on s'installe, on relit le score. C'est le
+ * joueur qui dit quand il est pret, et la partie attend les deux.
+ *
+ * LE DECOMPTE EST IMPOSE : sans lui, celui qui a clique le premier verrait le
+ * tirage pendant que l'autre clique encore.
+ */
+function lancerLaRencontreSiLesDeuxSontPrets(s: Salon): void {
   const rc = rencontreDuSalon(s.id);
   if (rc === undefined || s.partie.demarree || s.partie.finie) return;
   const t = tournoi(rc.rencontre.tournoi);
   if (t === undefined) return;
   const ici = new Set(occupants(s.id));
-  const present = (camp: string): boolean => joueursDuCamp(t, camp).some((n) => ici.has(n));
-  if (!rc.rencontre.camps.every(present)) return;
+  const prets = pretsDeRencontre.get(s.id) ?? new Set<string>();
+  const pret = (camp: string): boolean =>
+    joueursDuCamp(t, camp).some((n) => ici.has(n) && prets.has(n));
+  if (!rc.rencontre.camps.every(pret)) return;
+  pretsDeRencontre.delete(s.id);
   s.partie.decompteImpose = true;
-  console.log(`[competitif] rencontre "${s.nom}" lancee : les deux camps sont la`);
+  console.log(`[competitif] rencontre "${s.nom}" lancee : les deux camps sont prets`);
   void s.partie.demarrer();
 }
 
@@ -1096,6 +1141,52 @@ function lireLesReglagesDePoule(c: any, t: Tournoi): Partial<ReglagesBattle> | s
 }
 
 /**
+ * QUI VALIDE LE TABLEAU : son createur ou l'administration, une fois les poules
+ * lancees et tant que le tableau ne l'est pas (SPEC.md §29).
+ */
+function tableauReglable(t: Tournoi, moi: Compte): string | null {
+  if (t.type !== "battle") return "Ce tournoi n'est pas un tournoi de battle";
+  if (t.par !== moi.pseudo && !moi.admin) return "Seul son créateur règle ce tournoi";
+  const phase = phaseDuBattle(t);
+  if (phase === "inscriptions") return "Les poules ne sont pas encore tirées";
+  if (phase !== "poules") return "Le tableau est déjà lancé";
+  return null;
+}
+
+/**
+ * LES SEULS REGLAGES QUE LA VALIDATION DU TABLEAU CONSOMME.
+ *
+ * Les poules sont derriere nous ; ce qui reste ouvert, c'est le meilleur de X
+ * par phase et la duree d'un tour.
+ */
+function lireLesReglagesDeTableau(c: any, t: Tournoi): Partial<ReglagesBattle> | string {
+  const b = t.battle;
+  if (b === null) return "Ce tournoi n'est pas un tournoi de battle";
+  const impair = (x: unknown): number | null => {
+    const n = entierEntre(x, 1, 9);
+    return n !== null && n % 2 === 1 ? n : null;
+  };
+  const meilleurDe = impair(c.meilleurDe ?? b.meilleurDe);
+  const meilleurDeDemi = impair(c.meilleurDeDemi ?? b.meilleurDeDemi);
+  const meilleurDeFinale = impair(c.meilleurDeFinale ?? b.meilleurDeFinale);
+  if (meilleurDe === null || meilleurDeDemi === null || meilleurDeFinale === null) {
+    return "Une rencontre de tableau se joue au meilleur d'un nombre impair de manches";
+  }
+  const qualifies = c.qualifies === null || c.qualifies === undefined
+    ? b.qualifies : entierEntre(c.qualifies, 2, 256);
+  if (c.qualifies != null && qualifies === null) return "Il faut au moins 2 qualifiés";
+  const tableauHaut = c.tableauHaut === null || c.tableauHaut === undefined
+    ? b.tableauHaut : entierEntre(c.tableauHaut, 1, 256);
+  if (c.tableauHaut != null && tableauHaut === null) return "Le tableau haut compte au moins un joueur";
+  if (tableauHaut !== null && qualifies !== null && tableauHaut > qualifies) {
+    return "Le tableau haut ne compte pas plus de joueurs que les qualifiés";
+  }
+  const joursParTour = entierEntre(c.joursParTour ?? b.joursParTour, 1, 30);
+  if (joursParTour === null) return "Un tour de tableau dure de 1 à 30 jours";
+  return { meilleurDe, meilleurDeDemi, meilleurDeFinale, qualifies, tableauHaut, joursParTour };
+}
+
+/**
  * CE QUE LA PAGE D'UN TOURNOI DE BATTLE MONTRE (SPEC.md §29).
  *
  * Elle est publique : les poules, leurs classements et les rencontres se lisent
@@ -1132,6 +1223,10 @@ function vueDuBattle(t: Tournoi, moi: Compte | undefined): Record<string, unknow
       messages: arbitre || mienne(r) ? messagesDeLaRencontre(r.id) : [],
       moi: mienne(r),
     })),
+    poulesFinies: poulesFinies(t),
+    tableau: tableauDuTournoi(t.id) ?? null,
+    finale: finaleDuTournoi(t)?.id ?? null,
+    classement: classementFinalDuBattle(t),
     moi: moi === undefined ? null : {
       camp: inscriptionDe(t, moi.pseudo)?.compte ?? null,
       dispos: disposDe(t.id, moi.pseudo),
@@ -2417,6 +2512,61 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // L'APERCU DU DOUBLE TABLEAU : le meme calcul que la validation, pour qu'il
+  // ne puisse rien y avoir de different entre ce qu'on voit et ce qu'on lance.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/tableau/apercu") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/tableau/apercu".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const refus = tableauReglable(t, moi);
+    if (refus !== null) { json(res, 403, { erreur: refus }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const regles = lireLesReglagesDeTableau(corps, t);
+    if (typeof regles === "string") { json(res, 400, { erreur: regles }); return; }
+    // ON N'ECRIT RIEN : le plan se calcule sur un tournoi de papier.
+    const vu = planifierLeTableau({ ...t, battle: { ...t.battle!, ...regles } });
+    if (typeof vu === "string") { json(res, 400, { erreur: vu }); return; }
+    json(res, 200, { ...vu, poulesFinies: poulesFinies(t) });
+    return;
+  }
+
+  // VALIDER ET LANCER LE TABLEAU : les qualifiés y sont posés d'après leur
+  // classement de poule, et chacun reçoit sa notification.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/tableau") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/tableau".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const refus = tableauReglable(t, moi);
+    if (refus !== null) { json(res, 403, { erreur: refus }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const regles = lireLesReglagesDeTableau(corps, t);
+    if (typeof regles === "string") { json(res, 400, { erreur: regles }); return; }
+    const avec = modifierUnTournoiDeBattle(t, {
+      nom: t.nom, lexique: t.lexique, debut: t.debut, equipe: t.equipe,
+      battle: { ...t.battle!, ...regles },
+    });
+    const vu = planifierLeTableau(avec);
+    if (typeof vu === "string") { json(res, 400, { erreur: vu }); return; }
+    const erreur = lancerLeTableau(avec, moi.pseudo);
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    // QUALIFIE OU NON : les deux se disent, et les deux mènent à la page.
+    const dedans = new Set([...vu.haut, ...vu.bas]);
+    for (const i of avec.inscrits) {
+      const genre = dedans.has(i.compte) ? "tournoi-qualifie" : "tournoi-elimine";
+      for (const qui of [i.compte, ...i.partenaires]) {
+        notifier(qui, genre, { tournoi: avec.id, nom: avec.nom }, `tableau:${avec.id}`);
+      }
+    }
+    json(res, 200, { ok: true });
+    return;
+  }
+
   // ---------------------------------------------------- UNE RENCONTRE
 
   // OUVRIR LE SALON D'UNE RENCONTRE. Le même geste des deux côtés : le premier
@@ -3041,8 +3191,10 @@ wss.on("connection", (ws, req) => {
       cible.partie.presents.add(nom);
       majDuGerant(cible);
       void cible.partie.reveiller();
-      // UNE RENCONTRE DE TOURNOI PART QUAND LES DEUX CAMPS SONT LA (SPEC.md §29).
-      lancerLaRencontreSiLesDeuxSontLa(cible);
+      // Un depart a pu retirer un « pret » : la barre de la rencontre le dit.
+      if (rencontreDuSalon(cible.id) !== undefined) {
+        broadcast(cible.id, { t: "state", state: publicState(cible) });
+      }
       send(ws, {
         t: "hello",
         you: nom,
@@ -3462,6 +3614,24 @@ wss.on("connection", (ws, req) => {
     // Reserves au topping sur grille finie (SPEC.md §24-25) : au duplicate, ou
     // sur une grille sans fin, le bouton ne s'affiche pas -- mais un message
     // force reste possible, donc on revalide ici, pas seulement cote client.
+    // « JE SUIS PRET » (SPEC.md §29) : la rencontre attend les deux camps.
+    if (msg.t === "pret") {
+      const rc = rencontreDuSalon(s.id);
+      if (rc === undefined || s.partie.demarree || s.partie.finie) return;
+      const t = tournoi(rc.rencontre.tournoi);
+      if (t === undefined) return;
+      if (campDuCompte(t, rc.rencontre, moi.nom) < 0) {
+        send(ws, { t: "result", ok: false, message: "cette rencontre se joue sans vous" });
+        return;
+      }
+      const prets = pretsDeRencontre.get(s.id) ?? new Set<string>();
+      if (prets.has(moi.nom)) prets.delete(moi.nom); else prets.add(moi.nom);
+      pretsDeRencontre.set(s.id, prets);
+      lancerLaRencontreSiLesDeuxSontPrets(s);
+      broadcast(s.id, { t: "state", state: publicState(s) });
+      return;
+    }
+
     if (msg.t === "abandonnerCoup" || msg.t === "abandonnerPartie") {
       // JAMAIS SUR UN SALON PERMANENT (la grille mondiale) : c'est LA partie
       // du site, et ce veto passe avant tout le reste, administration
