@@ -505,6 +505,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .cellref { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 3px; background: var(--mark); color: #fff; font-family: "IBM Plex Mono", monospace; font-size: 11px; border: 0; cursor: pointer; line-height: 1.5; }
 .cellref:hover { border-color: transparent; color: #fff; filter: brightness(1.1); }
 .chat-in { display: flex; gap: 6px; padding: 8px 12px 12px; border-top: 1px solid var(--rule); }
+/* `display: flex` bat la regle generale de `[hidden]`, qui n'est qu'un
+   selecteur d'attribut : sans cette ligne, cacher la barre du chat ne la
+   cachait pas. */
+.chat-in[hidden] { display: none; }
 .chat-in input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink); }
 .chat-in input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chat-in button { flex: none; padding: 5px 9px; }
@@ -1819,7 +1823,8 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 
 /* LE SPECTATEUR (SPEC.md §29) : ce qu'il peut faire, et ce que son message
    deviendra. La note tient sous le chat, la ou il va ecrire. */
-.spectateur-note { padding: 6px 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-soft); }
+.spectateur-note { padding: 8px 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-soft); }
+.spectateur-note button { margin-left: 8px; }
 #chat-chuchoter[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 /* Un chuchotement ne ressemble pas a un message ordinaire : personne ne doit
    croire que les joueurs le lisent. */
@@ -2819,7 +2824,7 @@ button.primes-libres:hover { background: none; color: var(--accent); }
       <!-- CE QUE VOIT CELUI QUI REGARDE (SPEC.md §29) : ce qu'il peut faire,
            et quand son message arrivera. -->
       <div class="spectateur-note" id="spectateur-note" hidden></div>
-      <div class="chat-in">
+      <div class="chat-in" id="chat-in">
         <input id="chat-text" maxlength="400" placeholder="Message…" autocomplete="off">
         <button type="button" id="chat-chuchoter" aria-pressed="false" hidden
                 title="Aux autres spectateurs seulement">Chuchoter</button>

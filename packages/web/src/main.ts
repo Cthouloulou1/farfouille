@@ -4992,7 +4992,12 @@ function submit() {
   if (cursor === null || typed.length === 0) return;
   // QUI REGARDE NE POSE RIEN (SPEC.md §29). Le serveur le refuserait de toute
   // facon ; le dire ici evite d'avoir tape un mot pour rien.
-  if (jeRegarde) { flash(t("vous regardez cette partie"), "bad"); return; }
+  if (jeRegarde) {
+    flash(salonPermanent
+      ? t("Pour pouvoir participer à la grille infinie il faut s'inscrire, ça ne prend qu'une minute.")
+      : t("vous regardez cette partie"), "bad");
+    return;
+  }
   if (finie) { flash("la partie est terminée", "bad"); return; }
   if (solving) { flash("le coup n'est pas encore prêt", "bad"); return; }
   const c = coupCanonique();
@@ -11294,9 +11299,26 @@ let chuchote = false;
 function peindreLeSpectateur(): void {
   const note = $("spectateur-note");
   const bouton = $("chat-chuchoter") as HTMLButtonElement;
+  note.replaceChildren();
   bouton.hidden = !jeRegarde;
   note.hidden = !jeRegarde;
+  $("chat-in").hidden = false;
   if (!jeRegarde) return;
+
+  // SUR LE SALON STAR, IL N'A PAS DE COMPTE, donc pas de chat : c'est un compte
+  // qu'on lui propose, a la place meme ou il allait ecrire.
+  if (salonPermanent) {
+    bouton.hidden = true;
+    $("chat-in").hidden = true;
+    note.appendChild(document.createTextNode(
+      t("Pour pouvoir participer à la grille infinie il faut s'inscrire, ça ne prend qu'une minute.")));
+    const sInscrire = el("button", "lien", t("S'inscrire")) as HTMLButtonElement;
+    sInscrire.type = "button";
+    sInscrire.addEventListener("click", () => ouvrirLeCompte("inscription"));
+    note.appendChild(sInscrire);
+    return;
+  }
+
   note.textContent = chuchote
     ? t("Vous chuchotez : seuls les autres spectateurs vous lisent.")
     : (demarree && !finie

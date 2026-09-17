@@ -6796,9 +6796,11 @@ Ce qui s'ensuit :
   tourne n'arrive aux joueurs qu'une fois la partie finie, et il arrive avec
   l'heure à laquelle il l'a écrit, pas celle de sa livraison. L'écran le lui dit
   au moment où il écrit.
-- **Sur une grille sans fin, la retenue se lâche au coup suivant.** Elle ne finit
-  jamais : attendre une fin qui ne vient pas reviendrait à lui interdire le chat
-  pour toujours, et la fin d'un coup ferme la même fenêtre.
+- **Sur le salon star, il n'a pas de chat du tout.** Sa grille ne finit jamais,
+  et une retenue « jusqu'à la fin de la partie » n'y arriverait jamais. À la
+  place du chat, l'écran lui dit ce qui lui manque : *Pour pouvoir participer à
+  la grille infinie il faut s'inscrire, ça ne prend qu'une minute*, et un bouton
+  ouvre l'inscription. C'est aussi ce qu'il lit s'il essaie de poser un mot.
 - **Le chuchotement** part tout de suite, mais ne va qu'aux autres spectateurs
   présents. Les joueurs ne le voient jamais. Il ne s'archive pas : il ne figure
   pas au chat du salon, et disparaît quand on recharge la page.

@@ -631,7 +631,6 @@ function surveiller(s: Salon): void {
   // (SPEC.md §29). Sur une grille sans fin, qui ne finit jamais, la retenue se
   // lache au coup suivant.
   s.partie.onFin(() => livrerLesChatsRetenus(s));
-  if (s.proprietaire === null) s.partie.onMove(() => livrerLesChatsRetenus(s));
   // ET LA MANCHE D'UNE RENCONTRE DE TOURNOI (SPEC.md §29), quand ce salon en
   // sert une. Il reste un salon ordinaire par ailleurs : ses parties entrent
   // aux records et a l'historique comme les autres.
@@ -3430,16 +3429,22 @@ wss.on("connection", (ws, req) => {
         : undefined;
       if (text.length === 0 && cell === undefined) return;
       if (moi.spectateur) {
+        // SUR LE SALON STAR, LE SPECTATEUR N'A PAS DE CHAT DU TOUT.
+        //
+        // Sa grille ne finit jamais : une retenue « jusqu'a la fin de la
+        // partie » n'y arriverait jamais, et la lacher coup par coup demandait
+        // une regle de plus pour un seul lieu. Il n'a pas de compte -- c'est un
+        // compte qu'on lui propose, et l'ecran le lui dit a la place du chat.
+        if (s.proprietaire === null) {
+          send(ws, { t: "result", ok: false, message: "inscrivez-vous pour parler ici" });
+          return;
+        }
         // LE CHUCHOTEMENT part tout de suite, et ne va qu'aux spectateurs. Les
         // joueurs ne le voient jamais.
         if (msg.chuchote === true) { chuchoter(s, moi.nom, text); return; }
         // SON CHAT ATTEND LA FIN DE LA PARTIE : ce qu'il ecrit pendant qu'une
         // partie tourne arriverait sinon comme un conseil. Il part avec l'heure
         // a laquelle il a ete ecrit.
-        //
-        // UNE GRILLE SANS FIN NE FINIT JAMAIS : sur elle, la retenue se lache
-        // au coup suivant. Attendre une fin qui ne vient pas reviendrait a
-        // interdire le chat pour toujours.
         if (s.partie.demarree && !s.partie.finie) {
           const les = chatsRetenus.get(s.id) ?? [];
           les.push({ at: Date.now(), who: moi.nom, text: text.slice(0, 400), ...(cell ? { cell } : {}) });
