@@ -808,7 +808,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    `.roadmap`) : la fenetre d'invitation s'ouvre depuis son bouton, la
    confirmation depuis les boutons d'abandon -- les deux doivent rester
    au-dessus de tout ce qui etait deja ouvert, reglages compris. */
-#voile-inviter, #voile-confirmer { z-index: 41; }
+#voile-confirmer { z-index: 41; }
 .voile[hidden] { display: none; }
 .pseudo { width: min(460px, 94vw); padding: 30px 32px 26px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 30px var(--shadow); font-size: 14.5px; }
 .pseudo h2 { font-family: "Baloo 2", Archivo, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -.005em; text-transform: none; color: var(--ink); }
@@ -1310,10 +1310,6 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .tablee-liste .qui { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .tablee-liste i { font-style: normal; font-size: .84em; color: var(--ink-faint); font-weight: 400; }
 .tablee-liste .tops { flex: none; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.inviter-liste { display: flex; flex-direction: column; gap: 1px; max-height: 52vh; overflow-y: auto; margin: 14px 0 18px; }
-.inviter-liste .ligne { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 4px; }
-.inviter-liste .ligne:hover { background: var(--hover); }
-.inviter-liste .nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--ink); }
 .inviter-liste .invite { flex: none; font-size: 12.5px; color: var(--ink-faint); }
 .inviter-liste button { flex: none; padding: 5px 11px; font-size: 12.5px; background: none; border: 1px solid var(--rule); border-radius: 4px; color: var(--ink-soft); }
 .inviter-liste button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
@@ -1829,6 +1825,29 @@ button.primes-libres:hover { background: none; color: var(--accent); }
    deviendra. La note tient sous le chat, la ou il va ecrire. */
 .spectateur-note { padding: 8px 10px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--ink-soft); }
 .spectateur-note button { margin-left: 8px; }
+/* Le mot qu'on a joue, ici et sur la grille : la meme couleur. */
+.pr-sien { color: var(--mark); }
+
+/* LE NOMBRE DE JOUEURS D'UNE SOLUTION S'OUVRE SUR LEURS NOMS. */
+.chiffre-ouvrable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.chiffre-ouvrable:hover, .chiffre-ouvrable.ouvert { color: var(--accent); }
+.trouves-noms { display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 2px 0 6px 12px; }
+
+/* LA LISTE DES COUPS DU REJEU : sous la grille, et l'on y saute d'un clic. */
+.pr-liste { max-height: 230px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--rule); border-radius: 6px; }
+.pr-liste table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pr-liste thead th { position: sticky; top: 0; z-index: 1; background: var(--panel); padding: 4px 8px; text-align: left; font-weight: 500; color: var(--ink-faint); border-bottom: 1px solid var(--rule); }
+.pr-liste td { padding: 3px 8px; border-bottom: 1px solid var(--rule); }
+.pr-liste tbody tr { cursor: pointer; }
+.pr-liste tbody tr:hover td { background: var(--hover); }
+.pr-liste .pl-n { width: 34px; font-family: var(--mono); color: var(--ink-faint); }
+.pr-liste .pl-mot { font-weight: 500; color: var(--ink); }
+.pr-liste .pl-ref { width: 68px; font-family: var(--mono); color: var(--ink-soft); }
+.pr-liste .pl-pts { width: 48px; text-align: right; font-family: var(--mono); color: var(--ink); }
+.pr-liste .pl-trouve .pl-n { box-shadow: inset 3px 0 0 var(--accent); }
+.pr-liste .pl-rate .pl-n { box-shadow: inset 3px 0 0 var(--mct); }
+.pr-liste .pl-vu td { background: var(--accent-bg); }
+.pr-liste .pl-vu .pl-mot { font-weight: 600; }
 #chat-chuchoter[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 /* Un chuchotement ne ressemble pas a un message ordinaire : personne ne doit
    croire que les joueurs le lisent. */
@@ -2068,6 +2087,9 @@ button.primes-libres:hover { background: none; color: var(--accent); }
           <button type="button" id="pr-fin" title="Dernier coup">⏭</button>
         </div>
         <div class="pr-coup" id="pr-coup"></div>
+        <!-- LA LISTE DES COUPS : on saute a celui qu'on cherche, au lieu de
+             pousser le curseur de proche en proche. -->
+        <div class="pr-liste" id="pr-liste"></div>
       </div>
 
       <!-- LES SOLUTIONS DU COUP, dans le rejeu et lui seul. Elles reprennent
@@ -2499,14 +2521,6 @@ button.primes-libres:hover { background: none; color: var(--accent); }
     <h2>Notifications</h2>
     <div class="notifs-liste" id="notifs-liste"></div>
     <button class="lien renoncer" id="notifs-close" type="button">Fermer</button>
-  </div>
-</div>
-
-<div class="voile" id="voile-inviter" hidden>
-  <div class="pseudo">
-    <h2>Inviter</h2>
-    <div class="inviter-liste" id="inviter-liste"></div>
-    <button class="lien renoncer" id="inviter-close" type="button">Fermer</button>
   </div>
 </div>
 

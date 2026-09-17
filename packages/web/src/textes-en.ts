@@ -810,6 +810,15 @@ export const EN: Readonly<Record<string, string>> = {
   "Les primes de cette partie ne sont pas standards.": "This game's bonuses are not standard.",
   "Les primes sont standards.": "The bonuses are standard.",
   "Rang": "Rank",
+  "Aïe": "Ouch",
+  "Ça va": "Not bad",
+  "Chacun reçoit une notification qui le mène ici, connecté ou non.":
+    "Each of them gets a notification that leads here, online or not.",
+  "Inviter dans ce salon": "Invite to this room",
+  "L'invitation n'est plus valable.": "That invitation is no longer valid.",
+  "Moins rapide": "Slower",
+  "Rapide": "Fast",
+  "Voir qui": "See who",
   "Pour pouvoir participer à la grille infinie il faut s'inscrire, ça ne prend qu'une minute.":
     "To take part in the endless board you need an account; it only takes a minute.",
   "Chuchoter aux spectateurs…": "Whisper to the spectators…",

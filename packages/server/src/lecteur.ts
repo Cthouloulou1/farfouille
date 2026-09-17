@@ -203,6 +203,14 @@ export interface CoupRelu {
   playerY?: number;
   /** DUPLICATE : ceux qui ont trouve le top. */
   trouveurs?: string[];
+  /**
+   * CE QUE CHACUN A PROPOSE sur ce coup, celui qui l'a gagne compris.
+   *
+   * Le rejeu d'une manche s'en sert pour poser sur la grille le mot de celui
+   * qu'on examine : sans elles, une partie relue ne montre que le top, et l'on
+   * ne voit jamais ce qu'on avait joue a sa place.
+   */
+  propositions?: Record<string, { word: string; dir: Dir; x: number; y: number; score: number }>;
 }
 
 /** Une partie archivee, entiere. */
@@ -341,6 +349,8 @@ export function relire(fichier: string): PartieRelue | null {
       ...(typeof m["playerX"] === "number" ? { playerX: m["playerX"] } : {}),
       ...(typeof m["playerY"] === "number" ? { playerY: m["playerY"] } : {}),
       ...(Array.isArray(m["trouveurs"]) ? { trouveurs: m["trouveurs"] as string[] } : {}),
+      ...(m["propositions"] !== null && typeof m["propositions"] === "object"
+        ? { propositions: m["propositions"] as CoupRelu["propositions"] } : {}),
     });
   }
 

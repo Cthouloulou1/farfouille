@@ -41,6 +41,7 @@ import {
 import { configDeLEtape, etapeMontante, montantePossible } from "../../engine/src/montante.ts";
 import {
   journalDeLaPartie, journalDuSalon, paliersDuCoup, relire, relireEtGarder,
+  type CoupRelu,
 } from "./lecteur.ts";
 import {
   apercuDeDemain, apercusDe, assurerLesPartiesDuJour, assurerLesTournoisDeLaSemaine,
@@ -447,15 +448,6 @@ function chuchoter(s: Salon, qui: string, texte: string): void {
     }
   }
 }
-
-/**
- * Qui est connecte, TOUS SALONS CONFONDUS (SPEC.md §26) : la liste que la
- * fenetre d'invitation propose. Un onglet non encore nomme (`nom === ""`) n'y
- * figure pas -- inviter quelqu'un qui n'a pas encore choisi de pseudo n'aurait
- * pas de destinataire.
- */
-const tousLesConnectes = (): string[] =>
-  [...new Set([...clients.values()].map((c) => c.nom))].filter((n) => n !== "");
 
 /** Les sockets d'un pseudo, quel que soit son salon -- pour le prevenir directement. */
 const socketsDe = (nom: string): WebSocket[] =>
@@ -893,6 +885,9 @@ function apresOuvertureDEpreuve(s: Salon): void {
   const e = s.epreuve!;
   const m = e.manche === null ? undefined : mancheParId(e.manche);
   if (m !== undefined) for (const n of m.equipe) s.invites.add(n);
+  // Une manche d'equipe retrouve son topping collaboratif apres un redemarrage :
+  // le reglage n'est pas dans la partie figee, il vient de l'equipe.
+  if (m !== undefined && m.jeu === "equipe") s.partie.cfg.toppingCollaboratif = true;
   surveiller(s);
   if (m !== undefined && m.fin === null && s.partie.finie && s.partie.raisonDeLaFin !== "abandon") {
     finirLaManche(m.id, s.partie.moves, s.partie.cfg.jouables);
@@ -919,6 +914,15 @@ function messageDeRefus(raison: string): string {
  * est la meme, avec sa grille et ses solutions. Ce qui change, c'est d'ou vient
  * le journal, et qui a le droit de le lire.
  */
+/**
+ * LES PROPOSITIONS NE SORTENT PAS DU SERVEUR telles quelles : elles nommeraient
+ * ce que CHACUN a joue sur chaque coup. Le lecteur les garde pour que le rejeu
+ * d'une manche y trouve le mot de celui qu'on examine ; partout ailleurs, on
+ * les retire.
+ */
+const sansLesPropositions = (coups: CoupRelu[]): Omit<CoupRelu, "propositions">[] =>
+  coups.map(({ propositions, ...reste }) => reste);
+
 function mancheRelue(id: string, moi: Compte | undefined): Record<string, unknown> | string {
   const m = mancheParId(id);
   if (m === undefined || m.fin === null) return "inconnue";
@@ -930,9 +934,30 @@ function mancheRelue(id: string, moi: Compte | undefined): Record<string, unknow
   const jour = lireLEpreuve(m.epreuve);
   const tops: Record<string, number> = {};
   for (const c of p.coups) if (c.player !== null) tops[c.player] = (tops[c.player] ?? 0) + 1;
+  /**
+   * CE QUE CETTE MANCHE A JOUE, coup par coup.
+   *
+   * `playerWord` portait le mot du VAINQUEUR du coup -- son isotop, quand il
+   * differe du top canonique. Pour un rejeu, ce qu'on vient voir est le mot de
+   * CELUI QU'ON EXAMINE, top ou non : on y met donc sa meilleure proposition
+   * des qu'il n'a pas gagne le coup. Les propositions elles-memes ne sortent
+   * pas d'ici : elles nommeraient tout le monde.
+   */
+  const coups = p.coups.map((c) => {
+    const { propositions, ...reste } = c;
+    if (c.player !== null && m.equipe.includes(c.player)) return reste;
+    let sien: { word: string; dir: Dir; x: number; y: number; score: number } | undefined;
+    for (const nom of m.equipe) {
+      const q = propositions?.[nom];
+      if (q !== undefined && (sien === undefined || q.score > sien.score)) sien = q;
+    }
+    return sien === undefined ? reste : {
+      ...reste, playerWord: sien.word, playerDir: sien.dir, playerX: sien.x, playerY: sien.y,
+    };
+  });
   return {
     partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
-    fin: p.fin, coups: p.coups,
+    fin: p.fin, coups,
     // Le titre de la page : la partie d'epreuve, et d'ou elle vient.
     titre: `P${m.partie} · ${nomDeLaPartie(p.config)}`,
     dou: t !== undefined ? t.nom : jour?.jour ?? "",
@@ -1041,7 +1066,7 @@ function partieRelueDeLHistorique(id: string): Record<string, unknown> | string 
   if (p === null) return "Cette partie n'est plus sur le disque";
   return {
     partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
-    fin: p.fin, coups: p.coups,
+    fin: p.fin, coups: sansLesPropositions(p.coups),
     titre: h.nomSalon,
     dou: nomDeLaPartie(p.config),
     manche: {
@@ -1810,7 +1835,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // La graine ne sort pas : elle dirait comment refaire les tirages.
     json(res, 200, {
       partie: p.partie, layout: p.layout, createdAt: p.createdAt, config: p.config,
-      fin: p.fin, coups: p.coups,
+      fin: p.fin, coups: sansLesPropositions(p.coups),
       manche: {
         // LA REFERENCE SORT, LA GRAINE NON. La premiere designe la manche dans
         // une adresse ; la seconde dirait comment refaire ses tirages.
@@ -3484,6 +3509,12 @@ wss.on("connection", (ws, req) => {
         }
       }
       const jeu: Jeu = equipe.length > 1 ? "equipe" : msg.jeu === "compte" ? "compte" : "seul";
+      // UNE PARTIE DU JOUR JOUEE A PLUSIEURS COMPTES EST UN TOPPING
+      // COLLABORATIF (SPEC.md §29). Ils jouent la MEME feuille : un classement
+      // qui les opposerait n'aurait pas de sens, et la meilleure solution de la
+      // table doit leur parvenir en direct. Le salon a ete ouvert pour un
+      // joueur seul ; c'est ici, quand l'equipe se forme, qu'on le sait.
+      if (jeu === "equipe") s.partie.cfg.toppingCollaboratif = true;
       const m = ouvrirUneManche({
         epreuve: e.epreuve, partie: e.partie, salon: s.id, compte: moi.nom, jeu,
         noms: jeu === "compte" ? String(msg.noms ?? "").trim() : "", equipe,
@@ -3746,13 +3777,6 @@ wss.on("connection", (ws, req) => {
       }
       s.prive = msg.prive === true;
       broadcast(s.id, { t: "state", state: publicState(s) });
-      return;
-    }
-
-    if (msg.t === "connectes") {
-      // TOUS LES SALONS CONFONDUS : c'est la liste que la fenetre d'invitation
-      // propose, pas seulement qui est deja ici.
-      send(ws, { t: "connectes", noms: tousLesConnectes() });
       return;
     }
 

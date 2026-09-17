@@ -5442,6 +5442,23 @@ présents mais non invités restent jusqu'à la fin de la partie en cours ; s'il
 partent (ou se déconnectent), ils ne peuvent plus revenir sans invitation. Rien
 ne se passe pour ceux qui étaient déjà invités.
 
+### On invite n'importe qui, connecté ou non
+
+La fenêtre d'invitation ne proposait que les **connectés**, et c'était le
+mauvais choix : on prépare une partie du jour à deux, et l'autre n'est justement
+pas encore là. Elle proposait aussi de n'inviter quelqu'un qu'une fois soi-même
+installé dans le salon, si bien que l'invité recevait son invitation au moment
+où il s'apprêtait à jouer, sans pouvoir l'accepter.
+
+**Elle propose maintenant tous les comptes du site.** Chaque invité reçoit une
+notification qui le mène au salon, qu'il soit en ligne ou non, et la liste
+d'invités s'ouvre pour lui comme avant.
+
+**Une invitation vieillit.** Celui qui l'a envoyée a pu partir, et son salon se
+refermer derrière lui. Le clic sur la notification vérifie d'abord que le salon
+existe, et dit *L'invitation n'est plus valable* plutôt que de laisser croire à
+une panne.
+
 ### La liste d'invités est permanente, et vit à côté de la case
 
 Un bouton, à côté de la case, ouvre une fenêtre listant les joueurs
@@ -6100,6 +6117,21 @@ tout s'ouvre à tout le monde.
 soi-même fini la partie.
 
 ### Revoir une partie d'épreuve
+
+**On y voit ce que la manche a joué, et pas seulement le top.** La grille pose
+en ocre le mot de celui qu'on examine dès qu'il n'a pas gagné le coup, et la
+ligne sous la grille l'écrit de la même couleur, entre parenthèses. Sans cela,
+une partie relue ne montrait que les tops, et l'on ne voyait jamais ce qu'on
+avait joué à leur place.
+
+**Une liste des coups tient sous la grille** : numéro, mot, référence, points.
+On y saute d'un clic, au lieu de pousser le curseur de proche en proche. Le
+coup regardé s'y souligne, une bande verte marque les tops pris, une rouge les
+coups manqués.
+
+**Les autres solutions disent qui les a jouées.** Dans la fenêtre d'un coup, le
+nombre de joueurs d'une solution s'ouvre sur leurs noms : « 1 » ne dit pas qui,
+et c'est justement ce qu'on vient chercher.
 
 **Une manche se rejoue comme une partie archivée** (§23) : la même page, sa
 grille à gauche, ses solutions à droite, et les flèches pour avancer coup par
@@ -6896,6 +6928,12 @@ topping jusqu'à ses résultats, Général en tête.
 **Une équipe inscrite joue une feuille.** Quand un de ses membres lance une
 partie, la manche porte toute l'équipe de l'inscription, présente ou non : la
 tentative de chacun part, et la ligne du classement nomme l'équipe entière.
+
+**Une manche d'équipe se joue en TOPPING COLLABORATIF.** Ils jouent la même
+feuille : un classement qui les opposerait n'aurait pas de sens, et la meilleure
+solution de la table doit leur parvenir en direct. Le salon est ouvert pour un
+joueur seul ; c'est au lancement, quand l'équipe se forme, qu'on le sait, et le
+réglage se pose alors. Il se repose tout seul si le serveur redémarre.
 
 **Le 16 septembre 2026 :** le rejeu d'une manche et le palmarès (médailles et
 solos), les tournois modifiables et supprimables ; puis **l'éditeur de

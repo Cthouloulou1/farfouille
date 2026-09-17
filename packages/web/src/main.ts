@@ -175,6 +175,17 @@ interface EpreuveVue {
 }
 /** La partie d'epreuve que sert ce salon, ou `null` pour un salon ordinaire. */
 let epreuve: EpreuveVue | null = null;
+
+/**
+ * JOUE-T-ON DU MEME COTE ? (SPEC.md §29)
+ *
+ * Le reglage du salon le dit -- et UNE MANCHE D'EQUIPE aussi : une partie du
+ * jour jouee a plusieurs comptes est un topping collaboratif, meme si le salon
+ * a ete ouvert pour un joueur seul. On le lit ici plutot que d'attendre que le
+ * serveur renvoie sa configuration.
+ */
+const enCollaboratif = (): boolean =>
+  cfg.toppingCollaboratif === true || (epreuve !== null && epreuve.jeu === "equipe");
 /** La manche est en pause, et son coup avait deja dure `ecoulePause`. */
 let enPause = false;
 let ecoulePause = 0;
@@ -2236,7 +2247,7 @@ function paintCurrent() {
 
   // LA MEILLEURE SOLUTION DU MOMENT : celle de la table en topping
   // collaboratif (SPEC.md §28), la sienne autrement.
-  const collective = cfg.toppingCollaboratif && !duplicate && meilleureCollective !== null
+  const collective = enCollaboratif() && !duplicate && meilleureCollective !== null
     ? meilleureCollective : null;
   const meilleur = collective ?? best;
   const dit = collective !== null ? "meilleure solution du groupe" : "votre meilleure solution";
@@ -2486,7 +2497,7 @@ function paintSide() {
   // LA BATTLE : du topping a plusieurs, chacun pour soi. Le classement y est le
   // coeur de la partie ; la liste des connectes ne dit rien de plus que lui, et
   // le journal des coups peut attendre qu'on le deroule.
-  const battle = enGroupe && cfg.toppingCollaboratif !== true;
+  const battle = enGroupe && !enCollaboratif();
   // EN BATTLE, LA LISTE DES CONNECTES NE DIT RIEN QUE LE CLASSEMENT NE DISE --
   // sauf quand on est regarde : ceux-la n'ont pas de ligne au classement.
   $("online-bloc").hidden = battle && ceuxQuiRegardent.length === 0;
@@ -2522,7 +2533,7 @@ function paintSide() {
   // EN TOPPING COLLABORATIF, LE NEGATIF REVIENT, et c'est celui de la FEUILLE :
   // la table n'en tient qu'une, ce qu'elle a laisse au top la mesure entiere, et
   // c'est ce chiffre-la que le classement d'une epreuve retiendra (SPEC.md §29).
-  const collectif = cfg.toppingCollaboratif === true && !duplicate;
+  const collectif = enCollaboratif() && !duplicate;
   const negatifMontre = collectif ? negatifCollectif : monNegatif;
   $("rb-neg-wrap").hidden = rejeu !== null || montante !== null
     || (!collectif && enGroupe)
@@ -2645,7 +2656,7 @@ function paintSide() {
       // ecrit -- la feuille de route le porte toujours -- mais ne s'affiche
       // plus a table, pour un topping moins competitif (SPEC.md §16).
       : `<span class="likes"></span>` +
-        `<span class="num">${cfg.toppingCollaboratif ? "" : Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
+        `<span class="num">${enCollaboratif() ? "" : Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     const vrai = nomsPublics[name];
     const infobulle = vrai === undefined ? "" : ` title="${vrai.replace(/"/g, "&quot;")}"`;
@@ -6003,9 +6014,7 @@ function connect() {
       if (restait) draw();
       return;
     }
-    // La reponse a "connectes" (SPEC.md §26) : la fenetre d'invitation est
     // deja ouverte, avec son "Chargement…" a remplacer.
-    if (m.t === "connectes") { peuplerInviter(m.noms ?? []); return; }
     // ON VIENT DE M'INVITER DANS UN SALON PRIVE, ou que je sois sur le site en
     // ce moment. Un simple message suffit : je vais l'y rejoindre quand je le
     // veux, rien ne m'y pousse.
@@ -8403,41 +8412,28 @@ $("r-prive").addEventListener("change", () => {
   envoyer({ t: "salonPrive", prive: ($("r-prive") as HTMLInputElement).checked });
 });
 
-$("r-inviter").addEventListener("click", () => {
-  $("inviter-liste").replaceChildren(el("p", "", t("Chargement…")));
-  $("voile-inviter").hidden = false;
-  envoyer({ t: "connectes" });
-});
-$("inviter-close").addEventListener("click", () => { $("voile-inviter").hidden = true; });
-$("voile-inviter").addEventListener("click", (e) => {
-  if (e.target === $("voile-inviter")) $("voile-inviter").hidden = true;
-});
+$("r-inviter").addEventListener("click", () => { void inviterDansLeSalon(); });
 
-/** Peuple la fenetre d'invitation depuis la liste des connectes (SPEC.md §26). */
-function peuplerInviter(noms: string[]): void {
-  const autres = noms.filter((n) => n !== me);
-  if (autres.length === 0) {
-    $("inviter-liste").replaceChildren(el("p", "", t("Personne d'autre n'est connecté.")));
-    return;
-  }
-  $("inviter-liste").replaceChildren(...autres.map((n) => {
-    const ligne = el("div", "ligne");
-    ligne.appendChild(el("span", "nom", n));
-    const bouton = el("button", "", t("Inviter")) as HTMLButtonElement;
-    bouton.type = "button";
-    bouton.addEventListener("click", () => {
-      envoyer({ t: "inviter", pseudo: n });
-      // OPTIMISTE : la liste des invites n'a pas de raison de revenir en
-      // arriere ici, et attendre le serveur pour un simple accuse ajouterait
-      // un aller-retour a un geste qui n'en demande pas.
-      bouton.disabled = true;
-      bouton.textContent = t("Invité");
-    });
-    ligne.appendChild(bouton);
-    return ligne;
-  }));
+/**
+ * INVITER DANS CE SALON, N'IMPORTE QUI (SPEC.md §26).
+ *
+ * La liste ne se limitait qu'aux CONNECTES, et c'etait le mauvais choix pour
+ * une partie du jour : on la prepare a deux, et l'autre n'est justement pas
+ * encore la. Chacun recoit une notification qui le mene au salon, qu'il soit
+ * en ligne ou non.
+ */
+async function inviterDansLeSalon(): Promise<void> {
+  await choisirDesJoueurs({
+    titre: t("Inviter dans ce salon"),
+    quoi: t("Chacun reçoit une notification qui le mène ici, connecté ou non."),
+    valider: t("Inviter"),
+    sauf: [me],
+    faire: async (pseudos) => {
+      for (const p of pseudos) envoyer({ t: "inviter", pseudo: p });
+      return null;
+    },
+  });
 }
-
 $("r-appliquer").addEventListener("click", () => {
   envoyer({
     t: "relancer", tirage: cTirage, jouables: cJouables, pioche: cPioche,
@@ -9932,7 +9928,7 @@ function prDessiner(): void {
     field: css("--field"), line: css("--field-line"),
     face: css("--tile-face"), edge: css("--tile-edge"), ink: css("--tile-ink"),
     jface: css("--joker-face"), jedge: css("--joker-edge"),
-    accent: css("--accent"),
+    accent: css("--accent"), mark: css("--mark"),
     T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
     Q: css("--mcq"), q: css("--lcq"),
   };
@@ -10034,11 +10030,10 @@ function prDessiner(): void {
   // salon : une liste de mots sans la voir tombe ne dit pas ou elle se pose, et
   // c'est justement ce qu'on vient chercher. Les caramels deja la gardent leur
   // encre ; seuls ceux que la solution AJOUTE se peignent en fantome.
-  const vue = prLignes[prChoisie];
-  if (vue !== undefined) {
-    const { dx, dy } = step(vue.dir);
-    for (let k = 0; k < vue.mot.length; k++) {
-      const x = vue.x + dx * k, y = vue.y + dy * k;
+  const fantome = (mot: string, dir: Dir, x0: number, y0: number, couleur: string): void => {
+    const { dx, dy } = step(dir);
+    for (let k = 0; k < mot.length; k++) {
+      const x = x0 + dx * k, y = y0 + dy * k;
       if (poses.has(`${x},${y}`)) continue;
       const i = x + bornes, j = y + bornes;
       if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
@@ -10050,16 +10045,28 @@ function prDessiner(): void {
       g.fillStyle = C.face;
       g.fillRect(px, py, w, h);
       g.globalAlpha = 1;
-      g.strokeStyle = C.accent;
+      g.strokeStyle = couleur;
       g.lineWidth = 1.5;
       g.strokeRect(px + 0.75, py + 0.75, w - 1.5, h - 1.5);
-      g.fillStyle = C.accent;
+      g.fillStyle = couleur;
       g.font = `600 ${Math.round(c * 0.5)}px Archivo, system-ui, sans-serif`;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(vue.mot[k]!, px + w / 2, py + h / 2 - h * 0.02);
+      g.fillText(mot[k]!, px + w / 2, py + h / 2 - h * 0.02);
     }
+  };
+
+  // LE MOT DU JOUEUR QU'ON EXAMINE, quand il n'a pas trouve le top : c'est
+  // justement ce qu'on vient voir -- ou il s'est pose, et ce qu'il a laisse.
+  // En ocre, pour ne pas le confondre avec une solution qu'on a cliquee.
+  const sien = prVu === 0 ? undefined : prPartie.coups[prVu - 1];
+  if (sien !== undefined && sien.playerWord !== undefined && sien.playerWord !== sien.word
+    && sien.playerDir !== undefined && sien.playerX !== undefined && sien.playerY !== undefined) {
+    fantome(sien.playerWord, sien.playerDir, sien.playerX, sien.playerY, C.mark);
   }
+
+  const vue = prLignes[prChoisie];
+  if (vue !== undefined) fantome(vue.mot, vue.dir, vue.x, vue.y, C.accent);
 }
 
 
@@ -10087,6 +10094,56 @@ function prMarquerLaChoisie(): void {
   }
 }
 
+/**
+ * LA LISTE DES COUPS, sous la grille.
+ *
+ * Le curseur va de proche en proche ; une partie de vingt coups se parcourt
+ * plus vite en cliquant celui qu'on cherche. Le coup regarde s'y souligne, et
+ * la liste le suit.
+ */
+function prPeindreLaListe(): void {
+  const boite = $("pr-liste");
+  boite.replaceChildren();
+  const d = prPartie;
+  if (d === null || d.coups.length === 0) return;
+  const bornes = d.config.bornes ?? null;
+  const miens = new Set(d.manche.joueurs.map((j) => j.nom));
+  const table = el("table");
+  const tete = el("tr");
+  tete.append(el("th", "pl-n", "#"), el("th", "pl-mot", t("Mot")),
+    el("th", "pl-ref", t("Référence")), el("th", "pl-pts", t("Points")));
+  const thead = el("thead");
+  thead.appendChild(tete);
+  table.appendChild(thead);
+  const corps = el("tbody");
+  for (const m of d.coups) {
+    const l = el("tr");
+    l.dataset["n"] = String(m.n);
+    if (m.n === prVu) l.classList.add("pl-vu");
+    // TROUVE OU NON, comme la feuille de route : le top pris par quelqu'un de
+    // cette manche, ou le mot qu'on a joue a sa place.
+    if (m.player !== null && miens.has(m.player)) l.classList.add("pl-trouve");
+    else if (m.playerWord !== undefined && m.playerWord !== m.word) l.classList.add("pl-rate");
+    l.append(
+      el("td", "pl-n", String(m.n)),
+      el("td", "pl-mot", m.word),
+      el("td", "pl-ref", noteCoup(m.dir, m.x, m.y, bornes)),
+      el("td", "pl-pts", String(m.score)),
+    );
+    corps.appendChild(l);
+  }
+  table.appendChild(corps);
+  boite.appendChild(table);
+  const vu = corps.querySelector(".pl-vu");
+  if (vu !== null) (vu as HTMLElement).scrollIntoView({ block: "nearest" });
+}
+
+$("pr-liste").addEventListener("click", (e) => {
+  const l = (e.target as HTMLElement).closest("tr[data-n]") as HTMLElement | null;
+  if (l === null) return;
+  prAller(Number(l.dataset["n"]));
+});
+
 /** Le coup regarde, en une ligne sous la grille. */
 function prPeindreLeCoup(): void {
   const boite = $("pr-coup");
@@ -10107,6 +10164,8 @@ function prPeindreLeCoup(): void {
   mot.style.color = m.player === null ? "" : couleurDuJoueur(m.player);
   ligne.appendChild(mot);
   if (m.playerWord !== undefined && m.playerWord !== m.word) {
+    // LA MEME COULEUR QUE SUR LA GRILLE : le mot ecrit ici et le mot pose
+    // la-bas sont le meme, et rien ne le disait.
     ligne.appendChild(el("i", "pr-sien", ` (${m.playerWord})`));
   }
   ligne.appendChild(el("span", "pr-pts", ` ${m.score}`));
@@ -10299,6 +10358,7 @@ function prAller(n: number): void {
   ($("pr-fin") as HTMLButtonElement).disabled = prVu >= prPartie.coups.length;
   prDessiner();
   prPeindreLeCoup();
+  prPeindreLaListe();
   void prChercherLesPaliers(prVu);
 }
 
@@ -11271,25 +11331,60 @@ function ouvrirLesTrouveurs(
   liste.appendChild(el("h3", "", t2("Trouvé par {n}", { n: trouves.length })));
   for (const x of trouves) liste.appendChild(ligne(nomDeLaLigne(x.l), tempsCentiemes(x.c.ms)));
 
-  const autres = new Map<string, { mot: string; pos: string; score: number; noms: string[] }>();
-  let sansRien = 0;
+  const autres = new Map<string, { mot: string; pos: string; score: number; qui: LigneVue[] }>();
+  const sansRien: LigneVue[] = [];
   for (const x of leurs.filter((y) => !y.c.trouve)) {
     const p = x.c.prop;
-    if (p === null) { sansRien++; continue; }
+    if (p === null) { sansRien.push(x.l); continue; }
     const pos = noteCoup(p.dir, p.x, p.y, bornes);
     const cle = `${p.mot}|${pos}|${p.score}`;
-    const g = autres.get(cle) ?? { mot: p.mot, pos, score: p.score, noms: [] };
-    g.noms.push(nomDeLaLigne(x.l));
+    const g = autres.get(cle) ?? { mot: p.mot, pos, score: p.score, qui: [] };
+    g.qui.push(x.l);
     autres.set(cle, g);
   }
-  if (autres.size > 0 || sansRien > 0) {
-    liste.appendChild(el("h3", "", t("Les autres solutions")));
-    for (const g of [...autres.values()].sort((a, b) => b.score - a.score || b.noms.length - a.noms.length)) {
-      const x = ligne(`${g.mot} ${g.pos} · ${g.score}`, String(g.noms.length));
-      x.title = g.noms.join("\n");
-      liste.appendChild(x);
+  /**
+   * LE NOMBRE S'OUVRE SUR SES NOMS.
+   *
+   * « 1 » ne dit pas qui, et c'est justement ce qu'on veut savoir en regardant
+   * les autres solutions. Le clic deroule la liste sous la ligne plutot que
+   * d'ouvrir une fenetre de plus par-dessus celle-ci.
+   */
+  const ligneOuvrable = (texte: string, qui: LigneVue[]): HTMLElement => {
+    const boite = el("div", "");
+    const x = ligne(texte, String(qui.length));
+    const compte = x.querySelector(".chiffre") as HTMLElement;
+    compte.classList.add("chiffre-ouvrable");
+    compte.setAttribute("role", "button");
+    compte.setAttribute("tabindex", "0");
+    compte.title = t("Voir qui");
+    const noms = el("div", "trouves-noms");
+    noms.hidden = true;
+    for (const l of qui) {
+      const n = el("span", "rc-joueur");
+      if (l.jeu === "equipe") n.textContent = nomDeLaLigne(l);
+      else n.appendChild(pseudoCliquable(l.compte));
+      noms.appendChild(n);
     }
-    if (sansRien > 0) liste.appendChild(ligne(t("Sans solution"), String(sansRien)));
+    const basculer = (): void => {
+      noms.hidden = !noms.hidden;
+      compte.classList.toggle("ouvert", !noms.hidden);
+    };
+    compte.addEventListener("click", basculer);
+    compte.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
+        e.preventDefault();
+        basculer();
+      }
+    });
+    boite.append(x, noms);
+    return boite;
+  };
+  if (autres.size > 0 || sansRien.length > 0) {
+    liste.appendChild(el("h3", "", t("Les autres solutions")));
+    for (const g of [...autres.values()].sort((a, b) => b.score - a.score || b.qui.length - a.qui.length)) {
+      liste.appendChild(ligneOuvrable(`${g.mot} ${g.pos} · ${g.score}`, g.qui));
+    }
+    if (sansRien.length > 0) liste.appendChild(ligneOuvrable(t("Sans solution"), sansRien));
   }
   $("voile-trouves").hidden = false;
 }
@@ -11466,11 +11561,7 @@ $("ep-lancer-compte").addEventListener("click", () => {
   envoyer({ t: "epreuve-lancer", jeu: "compte", noms: ($("ep-noms") as HTMLInputElement).value });
 });
 $("ep-equipe").addEventListener("click", () => { envoyer({ t: "epreuve-lancer", jeu: "equipe" }); });
-$("ep-inviter").addEventListener("click", () => {
-  $("inviter-liste").replaceChildren(el("p", "", t("Chargement…")));
-  $("voile-inviter").hidden = false;
-  envoyer({ t: "connectes" });
-});
+$("ep-inviter").addEventListener("click", () => { void inviterDansLeSalon(); });
 $("ep-pause").addEventListener("click", () => { envoyer({ t: "pause" }); });
 $("ep-reprendre").addEventListener("click", () => { envoyer({ t: "reprendre" }); });
 $("ep-resultats").addEventListener("click", () => {
@@ -11702,7 +11793,7 @@ function tableauDesCoupsRates(
           mediane: medianes.get(c.n) ?? sien.ms, chronoMs,
         }));
         td.title = perdu > 0
-          ? `${nomDeLaLigne(l)} · ${t2("{n} de moins", { n: perdu })}`
+          ? `${nomDeLaLigne(l)} · −${perdu}`
           : `${nomDeLaLigne(l)} · ${tempsCentiemes(sien.ms)}`;
       }
       ligne.appendChild(td);
@@ -11761,10 +11852,10 @@ function peindreLesGraphes(
     // LA LEGENDE DIT LE DEGRADE, sans quoi une case verte pale ne se distingue
     // pas d'une case vide : les deux veulent dire des choses opposees.
     legende([
-      { classe: "g-cle-carre", texte: t("trouvé vite"), style: "background: color-mix(in srgb, var(--accent) 78%, transparent)" },
-      { classe: "g-cle-carre", texte: t("trouvé tard"), style: "background: color-mix(in srgb, var(--accent) 15%, transparent)" },
-      { classe: "g-cle-carre", texte: t("raté de peu"), style: "background: color-mix(in srgb, var(--mct) 20%, transparent)" },
-      { classe: "g-cle-carre", texte: t("raté en entier"), style: "background: color-mix(in srgb, var(--mct) 75%, transparent)" },
+      { classe: "g-cle-carre", texte: t("Rapide"), style: "background: color-mix(in srgb, var(--accent) 78%, transparent)" },
+      { classe: "g-cle-carre", texte: t("Moins rapide"), style: "background: color-mix(in srgb, var(--accent) 15%, transparent)" },
+      { classe: "g-cle-carre", texte: t("Ça va"), style: "background: color-mix(in srgb, var(--mct) 20%, transparent)" },
+      { classe: "g-cle-carre", texte: t("Aïe"), style: "background: color-mix(in srgb, var(--mct) 75%, transparent)" },
     ]);
     boite.replaceChildren(tableauDesCoupsRates(avec, vue, details, chronoMs));
     return;
@@ -12947,7 +13038,10 @@ function phraseDeLaNotification(n: NotificationVue): { quoi: string; aller: (() 
   if (n.genre === "salon") {
     return {
       quoi: t2("{de} vous invite dans « {nom} »", { de: p["de"] ?? "", nom: p["nom"] ?? "" }),
-      aller: p["salon"] === undefined ? null : () => allerA(p["salon"]!),
+      // UNE INVITATION VIEILLIT : celui qui l'a envoyee a pu partir, et son
+      // salon se refermer derriere lui. On le dit plutot que de laisser croire
+      // a une panne.
+      aller: p["salon"] === undefined ? null : () => { void rejoindreUneInvitation(p["salon"]!); },
     };
   }
   if (n.genre === "equipe") {
@@ -13004,6 +13098,22 @@ function phraseDeLaNotification(n: NotificationVue): { quoi: string; aller: (() 
     return { quoi: t2("La date limite de votre rencontre de « {nom} » approche", { nom: p["nom"] ?? "" }), aller: versLeTournoi };
   }
   return { quoi: n.genre, aller: null };
+}
+
+/** Suit une invitation, ou dit qu'elle a vieilli. */
+async function rejoindreUneInvitation(salon: string): Promise<void> {
+  try {
+    const r = await fetch(`/api/salon/${encodeURIComponent(salon)}`);
+    if (!r.ok) {
+      $("voile-notifs").hidden = true;
+      flash(t("L'invitation n'est plus valable."), "bad");
+      return;
+    }
+  } catch {
+    flash("serveur injoignable", "bad");
+    return;
+  }
+  allerA(salon);
 }
 
 async function chargerLesNotifications(): Promise<void> {
