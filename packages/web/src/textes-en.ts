@@ -807,8 +807,8 @@ export const EN: Readonly<Record<string, string>> = {
   "grille infinie": "endless board",
   "Voir les primes de cette partie": "See this game's bonuses",
   "Ce que cette partie a de particulier": "What is special about this game",
-  "Cette partie ne récompense pas comme d'habitude.": "This game does not reward as usual.",
-  "Ces primes ne sont pas standards.": "These bonuses are not standard.",
+  "Les primes de cette partie ne sont pas standards.": "This game's bonuses are not standard.",
+  "Les primes sont standards.": "The bonuses are standard.",
   "Rang": "Rank",
   "Inviter des joueurs": "Invite players",
   "On ne défie que sur une partie terminée et gardée":

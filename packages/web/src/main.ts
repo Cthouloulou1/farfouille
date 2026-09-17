@@ -12213,8 +12213,8 @@ function ouvrirLesPrimes(c: ConfigSerialisee | ConfigPartie): void {
   const custom = primesCustom(c);
   $("primes-titre").textContent = t("Primes de farfouilles");
   $("primes-quoi").textContent = custom
-    ? t("Cette partie ne récompense pas comme d'habitude.")
-    : t("Ces primes ne sont pas standards.");
+    ? t("Les primes de cette partie ne sont pas standards.")
+    : t("Les primes sont standards.");
   const usage = primesDUsage(c.jouables);
   const table = el("table");
   table.appendChild(tete([
