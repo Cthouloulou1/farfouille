@@ -34,7 +34,11 @@ export function definirDossierDesNotifications(dir: string): void {
  * n'affiche rien, et la phrase se traduit chez le client.
  */
 export type Genre =
-  | "salon" | "equipe" | "tournoi-debut" | "tournoi-invite" | "defi" | "defi-joue";
+  | "salon" | "equipe" | "tournoi-debut" | "tournoi-invite" | "defi" | "defi-joue"
+  // LE BATTLE (SPEC.md §29) : les trois temps du tournoi, et ce qui se passe
+  // entre deux joueurs qui cherchent une date.
+  | "tournoi-poules" | "tournoi-qualifie" | "tournoi-elimine"
+  | "tournoi-creneau" | "tournoi-rappel";
 
 export interface Notification {
   id: string;

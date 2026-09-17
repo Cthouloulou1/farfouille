@@ -49,6 +49,13 @@ import {
   creerUnTournoiDeBattle, creerUnTournoiDeTopping, cumulDeLEpreuve, epreuveDuJour,
   classementDesMedailles, listeDesSolos, modifierUnTournoiDeBattle, modifierUnTournoiDeTopping,
   partiesFiniesDe, supprimerUnTournoi, tournoiModifiable, JOUEURS_POUR_UN_SOLO,
+  annulerLaMancheDeRencontre, arbitrerLaRencontre, campDuCompte, classementDeLaPoule,
+  declarerUnForfait, desinscrireDuTournoi, disposDe, ecrireUnMessageDeRencontre,
+  enteteDuTournoi, finirUneMancheDeRencontre, joueursDuCamp, lancerLesPoules,
+  messagesDeLaRencontre, ouvrirUneMancheDeRencontre, phaseDuBattle, poulesDuTournoi,
+  reglerLEntete, reglerLesDispos, rencontreDuSalon, rencontreParId, rencontresDuTournoi,
+  tirerDesPoules,
+  type Rencontre,
   epreuveDuTournoi, finirLaManche, finisseursDuTournoi, inscriptionDe, inscrireAuTournoi,
   joursConnus, bilanDeLaManche, ceuxQuiOntFini, creerUnDefi, defi, defiDeLaPartie,
   defiDeLEpreuve, epreuveDuDefi, manchesDe,
@@ -66,7 +73,7 @@ import {
   ecrireUnePartie, lignesDesJoueurs, ouvrirLHistorique, partieDeLHistorique, partiesDe,
 } from "./historique.ts";
 import {
-  LEXIQUES_DU_JOUR, consigneRecevable, decalerLeJour, instantDeParis, jourDe, jourValide,
+  LEXIQUES_DU_JOUR, configDuModele, consigneRecevable, decalerLeJour, instantDeParis, jourDe, jourValide,
   tirerUneConsigne, type ConsigneDePartie,
   nomDeLaPartie, type ModeleDePartie,
 } from "../../engine/src/epreuves.ts";
@@ -537,6 +544,14 @@ function surveiller(s: Salon): void {
   // ET L'HISTORIQUE DU JOUEUR (SPEC.md §30), qui n'a pas les memes conditions
   // que les records : une grille sans fin et un duplicate y entrent aussi.
   s.partie.onFin((raison) => ecrireLHistoriqueDuSalon(s, raison));
+  // ET LA MANCHE D'UNE RENCONTRE DE TOURNOI (SPEC.md §29), quand ce salon en
+  // sert une. Il reste un salon ordinaire par ailleurs : ses parties entrent
+  // aux records et a l'historique comme les autres.
+  if (rencontreDuSalon(s.id) !== undefined) {
+    s.partie.onFin(() => cloreLaMancheDeRencontre(s));
+    // Le serveur a pu s'arreter entre la fin de la partie et son ecriture.
+    if (s.partie.finie) cloreLaMancheDeRencontre(s);
+  }
 }
 
 /**
@@ -638,6 +653,72 @@ async function ouvrirLeSalonDEpreuve(o: {
   });
   apresOuvertureDEpreuve(s);
   return s;
+}
+
+/** Le nom d'un camp : celui de l'equipe s'il y en a un, le pseudo sinon. */
+function nomDuCamp(t: Tournoi, camp: string): string {
+  const i = t.inscrits.find((x) => x.compte === camp);
+  return i === undefined ? camp : (i.noms.trim() !== "" ? i.noms.trim() : i.compte);
+}
+
+/** Les deux camps d'une rencontre entrent dans son salon prive. */
+function inviterLesCamps(t: Tournoi, r: Rencontre, s: Salon): void {
+  for (const camp of r.camps) for (const qui of joueursDuCamp(t, camp)) s.invites.add(qui);
+}
+
+/**
+ * LE SALON D'UNE RENCONTRE DE TOURNOI (SPEC.md §29).
+ *
+ * Le meme geste des deux cotes : le premier arrive l'ouvre, le second l'y
+ * rejoint. Une manche entamee se reprend -- une rencontre garde son score entre
+ * deux seances, et une coupure de reseau ne doit pas annuler une demi-heure de
+ * jeu. Une manche ABANDONNEE, elle, ne se reprend pas : sa partie est close, on
+ * en ouvre une neuve, et la rencontre garde ce qu'elle avait.
+ */
+async function ouvrirLeSalonDeRencontre(t: Tournoi, r: Rencontre): Promise<Salon> {
+  const b = t.battle;
+  if (b === null) throw new Error("ce tournoi n'est pas un battle");
+  const encours = r.manches.find((m) => m.fin === null);
+  const vieux = encours === undefined ? undefined : salon(encours.salon);
+  if (encours !== undefined && vieux !== undefined && !vieux.partie.finie) {
+    inviterLesCamps(t, r, vieux);
+    return vieux;
+  }
+  if (encours !== undefined) annulerLaMancheDeRencontre(r, encours.n);
+  const n = r.manches.length + 1;
+  const id = `bat-${r.id.slice(0, 8)}-${n}`;
+  const deja = salon(id);
+  if (deja !== undefined) { inviterLesCamps(t, r, deja); return deja; }
+  const s = await ouvrirSalon({
+    id, nom: `${nomDuCamp(t, r.camps[0])} · ${nomDuCamp(t, r.camps[1])} · manche ${n}`,
+    proprietaire: r.camps[0], prive: true, layout: LAYOUT,
+    cfg: configDuModele(b.partie, t.lexique), nouveau: true,
+  });
+  // LA MANCHE S'OUVRE AVANT LA SURVEILLANCE : c'est sa ligne de journal qui
+  // rattache le salon a la rencontre, et `surveiller` la lit.
+  ouvrirUneMancheDeRencontre(r, id);
+  inviterLesCamps(t, r, s);
+  surveiller(s);
+  rangerPlusTard(s.id);
+  return s;
+}
+
+/**
+ * Ecrit le score d'une manche de rencontre a la fin de sa partie.
+ *
+ * UNE PARTIE ABANDONNEE NE COMPTE PAS : la manche s'annule et se rejouera.
+ * Sans cela, partir en cours de route vaudrait un resultat.
+ */
+function cloreLaMancheDeRencontre(s: Salon): void {
+  const rc = rencontreDuSalon(s.id);
+  if (rc === undefined) return;
+  const t = tournoi(rc.rencontre.tournoi);
+  if (t === undefined) return;
+  if (s.partie.raisonDeLaFin === "abandon") {
+    annulerLaMancheDeRencontre(rc.rencontre, rc.n);
+    return;
+  }
+  finirUneMancheDeRencontre(t, rc.rencontre, rc.n, s.partie.moves);
 }
 
 /**
@@ -868,14 +949,144 @@ function lireUnTournoiDeTopping(c: any): {
 }
 
 /** Le formulaire du tournoi de battle, verifie champ par champ. */
-function lireUnTournoiDeBattle(c: any): {
+/**
+ * QUI REGLE UN BATTLE, ET JUSQU'A QUAND : son createur ou l'administration,
+ * tant que les poules ne sont pas tirees (SPEC.md §29).
+ */
+function battleReglable(t: Tournoi, moi: Compte): string | null {
+  if (t.type !== "battle") return "Ce tournoi n'est pas un tournoi de battle";
+  if (t.par !== moi.pseudo && !moi.admin) return "Seul son créateur règle ce tournoi";
+  if (phaseDuBattle(t) !== "inscriptions") return "Les poules sont déjà tirées";
+  return null;
+}
+
+/**
+ * LIT UNE COMPOSITION DE POULES venue du client.
+ *
+ * Tout le monde doit y figurer une fois et une seule : une main qui deplace les
+ * joueurs d'une poule a l'autre peut en oublier un, et le tournoi partirait
+ * alors sans lui.
+ */
+function lireDesPoules(brut: unknown, t: Tournoi): string[][] | string {
+  if (!Array.isArray(brut) || brut.length === 0) return "Il faut au moins une poule";
+  const vus = new Set<string>();
+  const lues: string[][] = [];
+  for (const p of brut) {
+    if (!Array.isArray(p)) return "poule illisible";
+    const camps: string[] = [];
+    for (const c of p) {
+      const camp = String(c);
+      if (!t.inscrits.some((i) => i.compte === camp)) return `${camp} n'est pas inscrit`;
+      if (vus.has(camp)) return `${camp} figure dans deux poules`;
+      vus.add(camp);
+      camps.push(camp);
+    }
+    if (camps.length < 2) return "Une poule compte au moins deux joueurs";
+    lues.push(camps);
+  }
+  if (vus.size !== t.inscrits.length) return "Tous les inscrits ne sont pas placés";
+  return lues;
+}
+
+/**
+ * LES SEULS REGLAGES QUE LA VALIDATION DES POULES CONSOMME.
+ *
+ * Ceux du tableau (meilleur de X, demi, finale) restent ouverts jusqu'au geste
+ * suivant, et la partie d'une manche ne bouge plus du tout.
+ */
+function lireLesReglagesDePoule(c: any, t: Tournoi): Partial<ReglagesBattle> | string {
+  const b = t.battle;
+  if (b === null) return "Ce tournoi n'est pas un tournoi de battle";
+  const impair = (x: unknown): number | null => {
+    const n = entierEntre(x, 1, 9);
+    return n !== null && n % 2 === 1 ? n : null;
+  };
+  const joueursParPoule = entierEntre(c.joueursParPoule ?? b.joueursParPoule, 2, 32);
+  if (joueursParPoule === null) return "Une poule compte de 2 à 32 joueurs";
+  const manchesParPoule = impair(c.manchesParPoule ?? b.manchesParPoule);
+  if (manchesParPoule === null) {
+    return "Une rencontre de poule se joue en un nombre impair de manches, de 1 à 9";
+  }
+  const rencontresParPoule = c.rencontresParPoule === null || c.rencontresParPoule === undefined
+    ? null : entierEntre(c.rencontresParPoule, 1, 31);
+  if (c.rencontresParPoule != null && rencontresParPoule === null) {
+    return "Rencontres par poule : de 1 à 31";
+  }
+  const qualifies = c.qualifies === null || c.qualifies === undefined
+    ? null : entierEntre(c.qualifies, 2, 256);
+  if (c.qualifies != null && qualifies === null) return "Il faut au moins 2 qualifiés";
+  const tableauHaut = c.tableauHaut === null || c.tableauHaut === undefined
+    ? null : entierEntre(c.tableauHaut, 1, 256);
+  if (c.tableauHaut != null && (tableauHaut === null || (qualifies !== null && tableauHaut > qualifies))) {
+    return "Le tableau haut ne compte pas plus de joueurs que les qualifiés";
+  }
+  const limite = instantDeParis(c.limitePoules) ?? b.limitePoules;
+  if (limite <= Date.now()) return "La date limite des poules est déjà passée";
+  const joursParTour = entierEntre(c.joursParTour ?? b.joursParTour, 1, 30);
+  if (joursParTour === null) return "Un tour de tableau dure de 1 à 30 jours";
+  return {
+    joueursParPoule, manchesParPoule, rencontresParPoule, qualifies, tableauHaut,
+    limitePoules: limite, joursParTour,
+  };
+}
+
+/**
+ * CE QUE LA PAGE D'UN TOURNOI DE BATTLE MONTRE (SPEC.md §29).
+ *
+ * Elle est publique : les poules, leurs classements et les rencontres se lisent
+ * sans compte. Ce qui ne l'est pas, ce sont LES MESSAGES : ils n'appartiennent
+ * qu'aux deux camps d'une rencontre, et a l'arbitre.
+ */
+function vueDuBattle(t: Tournoi, moi: Compte | undefined): Record<string, unknown> | null {
+  if (t.type !== "battle") return null;
+  const lesPoules = poulesDuTournoi(t.id) ?? [];
+  const toutes = rencontresDuTournoi(t.id);
+  const arbitre = moi !== undefined && (t.par === moi.pseudo || moi.admin);
+  const mienne = (r: Rencontre): boolean =>
+    moi !== undefined && campDuCompte(t, r, moi.pseudo) >= 0;
+  return {
+    phase: phaseDuBattle(t),
+    entete: enteteDuTournoi(t.id),
+    camps: t.inscrits.map((i) => ({
+      camp: i.compte, nom: i.noms.trim() !== "" ? i.noms.trim() : i.compte,
+      joueurs: [i.compte, ...i.partenaires],
+    })),
+    poules: lesPoules.map((p, i) => ({
+      n: i + 1, camps: p, classement: classementDeLaPoule(t, i),
+      tours: toutes.reduce((a, r) => r.phase === `poule:${i}` ? Math.max(a, r.tour) : a, 0),
+    })),
+    rencontres: toutes.map((r) => ({
+      id: r.id, phase: r.phase, tour: r.tour, camps: r.camps, bo: r.bo,
+      limite: r.limite, butoir: r.butoir, fin: r.fin,
+      manches: r.manches.map((m) => ({
+        n: m.n, salon: m.salon, points: m.points, gagnant: m.gagnant, fin: m.fin,
+        // UNE MANCHE EN COURS SE REGARDE : la page la montre comme telle, et
+        // seul un salon vivant peut s'ouvrir.
+        ouverte: m.fin === null && salon(m.salon) !== undefined,
+      })),
+      messages: arbitre || mienne(r) ? messagesDeLaRencontre(r.id) : [],
+      moi: mienne(r),
+    })),
+    moi: moi === undefined ? null : {
+      camp: inscriptionDe(t, moi.pseudo)?.compte ?? null,
+      dispos: disposDe(t.id, moi.pseudo),
+      arbitre,
+    },
+    dispos: Object.fromEntries(t.inscrits.map((i) => [i.compte, disposDe(t.id, i.compte)])),
+  };
+}
+
+function lireUnTournoiDeBattle(c: any, neuf = true): {
   nom: string; lexique: string; debut: number; equipe: number; battle: ReglagesBattle;
 } | string {
   const entete = lireLEnteteDuTournoi(c);
   if (typeof entete === "string") return entete;
   const debut = instantDeParis(c.debut);
   if (debut === null) return "Donnez la date de début des rencontres";
-  if (debut <= Date.now()) return "Le début des rencontres est déjà passé";
+  // UN BATTLE DEJA COMMENCE SE MODIFIE ENCORE (SPEC.md §29) : ce sont les
+  // poules qui ferment ses reglages. Sa date de debut est alors derriere nous,
+  // et la refuser rendrait le formulaire inutilisable.
+  if (neuf && debut <= Date.now()) return "Le début des rencontres est déjà passé";
   const limite = instantDeParis(c.limitePoules);
   if (limite === null || limite <= debut) return "La date limite des poules vient après le début";
   const impair = (x: unknown): number | null => {
@@ -883,7 +1094,7 @@ function lireUnTournoiDeBattle(c: any): {
     return n !== null && n % 2 === 1 ? n : null;
   };
   const joueursParPoule = entierEntre(c.joueursParPoule ?? 4, 3, 12);
-  const manchesParPoule = entierEntre(c.manchesParPoule ?? 2, 1, 9);
+  const manchesParPoule = impair(c.manchesParPoule ?? 3);
   const rencontresParPoule = c.rencontresParPoule === null || c.rencontresParPoule === undefined
     ? null : entierEntre(c.rencontresParPoule, 1, 11);
   const qualifies = c.qualifies === null || c.qualifies === undefined ? null : entierEntre(c.qualifies, 2, 256);
@@ -893,7 +1104,9 @@ function lireUnTournoiDeBattle(c: any): {
   const meilleurDeFinale = impair(c.meilleurDeFinale ?? c.meilleurDe ?? 3);
   const joursParTour = entierEntre(c.joursParTour ?? 3, 1, 30);
   if (joueursParPoule === null) return "Une poule compte de 3 à 12 joueurs";
-  if (manchesParPoule === null) return "Une rencontre de poule se joue en 1 à 9 manches";
+  if (manchesParPoule === null) {
+    return "Une rencontre de poule se joue en un nombre impair de manches, de 1 à 9";
+  }
   if (c.rencontresParPoule != null && rencontresParPoule === null) return "Rencontres par poule : de 1 à 11";
   if (c.qualifies != null && qualifies === null) return "Il faut au moins 2 qualifiés";
   if (c.tableauHaut != null && (tableauHaut === null || (qualifies !== null && tableauHaut > qualifies))) {
@@ -1972,7 +2185,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       json(res, 200, { tournoi: tournoiPublic(await modifierUnTournoiDeTopping(t, o, LAYOUT)) });
       return;
     }
-    const o = lireUnTournoiDeBattle(corps);
+    const o = lireUnTournoiDeBattle(corps, false);
     if (typeof o === "string") { json(res, 400, { erreur: o }); return; }
     json(res, 200, { tournoi: tournoiPublic(modifierUnTournoiDeBattle(t, o)) });
     return;
@@ -2016,6 +2229,235 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // ---------------------------------------------- LES TOURNOIS DE BATTLE
+
+  // TIRER DES POULES, SANS RIEN ECRIRE. L'organisateur les retouche à la main
+  // et peut retirer autant qu'il veut : rien n'est acquis avant la validation.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/poules/tirer") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/poules/tirer".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const refus = battleReglable(t, moi);
+    if (refus !== null) { json(res, 403, { erreur: refus }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const parPoule = Math.max(2, Math.min(64, Math.round(Number(corps.joueursParPoule) || 4)));
+    json(res, 200, { poules: tirerDesPoules(t.inscrits.map((i) => i.compte), parPoule) });
+    return;
+  }
+
+  // VALIDER ET LANCER LA PHASE DE POULES : le geste qui ferme les inscriptions
+  // pour de bon, crée toutes les rencontres et prévient les inscrits.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/poules") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/poules".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const refus = battleReglable(t, moi);
+    if (refus !== null) { json(res, 403, { erreur: refus }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const lues = lireDesPoules(corps.poules, t);
+    if (typeof lues === "string") { json(res, 400, { erreur: lues }); return; }
+    // ON NE RELIT PAS TOUT LE FORMULAIRE ICI : la partie d'une manche se
+    // retirerait au sort, et le tournoi changerait de type sous les inscrits.
+    // Seuls les reglages que ce geste consomme sont lus.
+    const regles = lireLesReglagesDePoule(corps, t);
+    if (typeof regles === "string") { json(res, 400, { erreur: regles }); return; }
+    const avec = modifierUnTournoiDeBattle(t, {
+      nom: t.nom, lexique: t.lexique, debut: t.debut, equipe: t.equipe,
+      battle: { ...t.battle!, ...regles },
+    });
+    lancerLesPoules(avec, lues, moi.pseudo);
+    for (const i of avec.inscrits) {
+      for (const qui of [i.compte, ...i.partenaires]) {
+        notifier(qui, "tournoi-poules", { tournoi: avec.id, nom: avec.nom }, `poules:${avec.id}`);
+      }
+    }
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // SE DESINSCRIRE : tant que le tournoi n'est pas engagé (SPEC.md §29).
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/desinscription") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/desinscription".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const erreur = desinscrireDuTournoi(t, moi.pseudo);
+    if (erreur !== null) { json(res, 403, { erreur }); return; }
+    console.log(`[competitif] ${moi.pseudo} se retire de "${t.nom}"`);
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // L'EN-TETE DE LA PAGE : au créateur et à l'administration, toujours.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/entete") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/entete".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (t.par !== moi.pseudo && !moi.admin) {
+      json(res, 403, { erreur: "Seul son créateur écrit l'en-tête" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    reglerLEntete(t.id, String(corps.texte ?? ""), moi.pseudo);
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // MES DISPONIBILITES : écrites une fois pour tout le tournoi.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/dispos") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/dispos".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (inscriptionDe(t, moi.pseudo) === undefined) {
+      json(res, 403, { erreur: "Vous ne jouez pas ce tournoi" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    reglerLesDispos(t.id, moi.pseudo, String(corps.texte ?? ""));
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // DECLARER UN FORFAIT : toutes les rencontres restantes d'un camp, d'un coup.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/forfait") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/forfait".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (t.par !== moi.pseudo && !moi.admin) {
+      json(res, 403, { erreur: "Seul son créateur arbitre ce tournoi" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const camp = String(corps.camp ?? "");
+    if (!t.inscrits.some((i) => i.compte === camp)) {
+      json(res, 400, { erreur: "Ce camp ne joue pas ce tournoi" });
+      return;
+    }
+    json(res, 200, { rencontres: declarerUnForfait(t, camp, moi.pseudo) });
+    return;
+  }
+
+  // ---------------------------------------------------- UNE RENCONTRE
+
+  // OUVRIR LE SALON D'UNE RENCONTRE. Le même geste des deux côtés : le premier
+  // arrivé l'ouvre, le second l'y rejoint. La manche en cours se reprend.
+  if (url.startsWith("/api/rencontre/") && url.endsWith("/salon") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const r = rencontreParId(decodeURIComponent(url.slice("/api/rencontre/".length, -"/salon".length)));
+    if (r === undefined) { json(res, 404, { erreur: "Cette rencontre n'existe pas" }); return; }
+    const t = tournoi(r.tournoi);
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (r.fin !== null) { json(res, 403, { erreur: "Cette rencontre est terminée" }); return; }
+    if (campDuCompte(t, r, moi.pseudo) < 0 && !moi.admin) {
+      json(res, 403, { erreur: "Cette rencontre se joue sans vous" });
+      return;
+    }
+    try {
+      const s = await ouvrirLeSalonDeRencontre(t, r);
+      json(res, 200, { salon: s.id });
+    } catch (e) {
+      json(res, 503, { erreur: (e as Error).message });
+    }
+    return;
+  }
+
+  // INVITER SON ADVERSAIRE : le salon s'ouvre, et il reçoit la notification qui
+  // l'y mène. S'il est connecté ailleurs sur le site, il la voit tout de suite.
+  if (url.startsWith("/api/rencontre/") && url.endsWith("/inviter") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const r = rencontreParId(decodeURIComponent(url.slice("/api/rencontre/".length, -"/inviter".length)));
+    if (r === undefined) { json(res, 404, { erreur: "Cette rencontre n'existe pas" }); return; }
+    const t = tournoi(r.tournoi);
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (r.fin !== null) { json(res, 403, { erreur: "Cette rencontre est terminée" }); return; }
+    const mien = campDuCompte(t, r, moi.pseudo);
+    if (mien < 0) { json(res, 403, { erreur: "Cette rencontre se joue sans vous" }); return; }
+    try {
+      const s = await ouvrirLeSalonDeRencontre(t, r);
+      const autre = r.camps[mien === 0 ? 1 : 0]!;
+      for (const qui of joueursDuCamp(t, autre)) {
+        notifier(qui, "salon", { salon: s.id, nom: s.nom, de: moi.pseudo });
+      }
+      json(res, 200, { salon: s.id });
+    } catch (e) {
+      json(res, 503, { erreur: (e as Error).message });
+    }
+    return;
+  }
+
+  // UNE DEMANDE DE CRENEAU : le message reste sur la rencontre, lisible des
+  // deux côtés et de l'arbitre (SPEC.md §29).
+  if (url.startsWith("/api/rencontre/") && url.endsWith("/message") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const r = rencontreParId(decodeURIComponent(url.slice("/api/rencontre/".length, -"/message".length)));
+    if (r === undefined) { json(res, 404, { erreur: "Cette rencontre n'existe pas" }); return; }
+    const t = tournoi(r.tournoi);
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    const mien = campDuCompte(t, r, moi.pseudo);
+    if (mien < 0) { json(res, 403, { erreur: "Cette rencontre se joue sans vous" }); return; }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const texte = String(corps.texte ?? "").trim();
+    if (texte === "") { json(res, 400, { erreur: "Le message est vide" }); return; }
+    ecrireUnMessageDeRencontre(r, moi.pseudo, texte);
+    const autre = r.camps[mien === 0 ? 1 : 0]!;
+    for (const qui of joueursDuCamp(t, autre)) {
+      notifier(qui, "tournoi-creneau", {
+        tournoi: t.id, nom: t.nom, de: moi.pseudo, texte: texte.slice(0, 200),
+      });
+    }
+    json(res, 200, { ok: true });
+    return;
+  }
+
+  // L'ARBITRAGE d'une rencontre non jouée.
+  if (url.startsWith("/api/rencontre/") && url.endsWith("/arbitrer") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const r = rencontreParId(decodeURIComponent(url.slice("/api/rencontre/".length, -"/arbitrer".length)));
+    if (r === undefined) { json(res, 404, { erreur: "Cette rencontre n'existe pas" }); return; }
+    const t = tournoi(r.tournoi);
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (t.par !== moi.pseudo && !moi.admin) {
+      json(res, 403, { erreur: "Seul son créateur arbitre ce tournoi" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const quoi = corps.quoi === "victoire" || corps.quoi === "personne" || corps.quoi === "delai"
+      ? corps.quoi : null;
+    if (quoi === null) { json(res, 400, { erreur: "arbitrage inconnu" }); return; }
+    const erreur = arbitrerLaRencontre(r, {
+      quoi, qui: corps.qui === undefined ? undefined : String(corps.qui),
+      butoir: corps.butoir === undefined ? undefined : Number(corps.butoir),
+      par: moi.pseudo,
+    });
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    console.log(`[competitif] arbitrage ${quoi} sur "${t.nom}" par ${moi.pseudo}`);
+    json(res, 200, { ok: true });
+    return;
+  }
+
   if (url.startsWith("/api/tournoi/") && req.method === "GET") {
     const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length)));
     if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
@@ -2026,6 +2468,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       maintenant: Date.now(),
       tournoi: tournoiPublic(t),
       resultats: finisseursDuTournoi(t),
+      battle: vueDuBattle(t, moi),
       moi: moi === undefined ? null : {
         inscrit: inscription !== undefined,
         // Modifier et supprimer sont a son createur (SPEC.md §29).

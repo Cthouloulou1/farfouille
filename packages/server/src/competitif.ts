@@ -16,7 +16,7 @@
  * en memoire en est une vue, refaite au demarrage.
  */
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PlayedMove } from "./game.ts";
@@ -189,6 +189,17 @@ const defiParPartie = new Map<string, string>();
  * tournoi -- sinon il renaitrait au passage suivant.
  */
 const hebdosFaits = new Set<string>();
+/** Les poules d'un tournoi de battle : une liste de camps par poule. */
+const poules = new Map<string, string[][]>();
+const rencontres = new Map<string, Rencontre>();
+/** Le salon d'une manche de rencontre vers elle : `salon` -> rencontre et n. */
+const rencontreParSalon = new Map<string, { rencontre: string; n: number }>();
+/** Les messages de creneau, par rencontre. */
+const messages = new Map<string, MessageDeRencontre[]>();
+/** Les disponibilites d'un compte dans un tournoi : `tournoi|compte`. */
+const dispos = new Map<string, string>();
+/** L'en-tete libre de la page d'un tournoi. */
+const entetes = new Map<string, string>();
 /**
  * QUI A REGARDE QUELLE PARTIE FIGEE AVANT DE LA JOUER : `figee|compte`.
  *
@@ -255,6 +266,14 @@ export function ouvrirLeCompetitif(): void {
   hebdosFaits.clear();
   defis.clear();
   defiParPartie.clear();
+  tournois.clear();
+  apercus.clear();
+  poules.clear();
+  rencontres.clear();
+  rencontreParSalon.clear();
+  messages.clear();
+  dispos.clear();
+  entetes.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
   for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
@@ -320,6 +339,52 @@ function appliquer(e: Record<string, any>): void {
     if (m !== undefined && m.fin === null) {
       m.fin = { at: e["at"], temps: e["temps"], negatif: e["negatif"], score: e["score"], coups: e["coups"] };
     }
+  } else if (e["t"] === "desinscription") {
+    const t = tournois.get(e["tournoi"]);
+    if (t !== undefined) t.inscrits = t.inscrits.filter((i) => i.compte !== e["compte"]);
+  } else if (e["t"] === "poules") {
+    poules.set(e["tournoi"], (e["poules"] ?? []).map((p: string[]) => [...p]));
+  } else if (e["t"] === "rencontre") {
+    rencontres.set(e["id"], {
+      id: e["id"], tournoi: e["tournoi"], phase: e["phase"], tour: Number(e["tour"] ?? 1),
+      camps: [e["camps"][0], e["camps"][1]], bo: Number(e["bo"]),
+      limite: Number(e["limite"]), butoir: Number(e["butoir"]), manches: [], fin: null,
+    });
+  } else if (e["t"] === "manche-rencontre") {
+    const r = rencontres.get(e["rencontre"]);
+    if (r !== undefined && !r.manches.some((m) => m.n === e["n"])) {
+      r.manches.push({
+        n: Number(e["n"]), salon: e["salon"], points: null, gagnant: null,
+        at: e["at"], fin: null,
+      });
+      rencontreParSalon.set(e["salon"], { rencontre: r.id, n: Number(e["n"]) });
+    }
+  } else if (e["t"] === "manche-annulee") {
+    const m = rencontres.get(e["rencontre"])?.manches.find((x) => x.n === e["n"]);
+    if (m !== undefined && m.fin === null) m.fin = e["at"];
+  } else if (e["t"] === "fin-rencontre") {
+    const m = rencontres.get(e["rencontre"])?.manches.find((x) => x.n === e["n"]);
+    if (m !== undefined && m.fin === null) {
+      m.points = [Number(e["points"][0]), Number(e["points"][1])];
+      m.gagnant = e["gagnant"] ?? null;
+      m.fin = e["at"];
+    }
+  } else if (e["t"] === "rencontre-finie") {
+    const r = rencontres.get(e["rencontre"]);
+    if (r !== undefined && r.fin === null) {
+      r.fin = { gagnant: e["gagnant"] ?? null, par: e["par"] ?? "jeu", at: e["at"] };
+    }
+  } else if (e["t"] === "rencontre-butoir") {
+    const r = rencontres.get(e["rencontre"]);
+    if (r !== undefined) r.butoir = Number(e["butoir"]);
+  } else if (e["t"] === "message") {
+    const l = messages.get(e["rencontre"]) ?? [];
+    l.push({ de: e["de"], texte: e["texte"], at: e["at"] });
+    messages.set(e["rencontre"], l);
+  } else if (e["t"] === "dispo") {
+    dispos.set(`${e["tournoi"]}|${e["compte"]}`, e["texte"] ?? "");
+  } else if (e["t"] === "entete") {
+    entetes.set(e["tournoi"], e["texte"] ?? "");
   }
 }
 
@@ -1211,6 +1276,12 @@ export function creerUnTournoiDeTopping(o: {
  */
 export function tournoiModifiable(t: Tournoi, compte: string, admin: boolean, maintenant = Date.now()): string | null {
   if (t.par !== compte && !admin) return "Seul son créateur modifie ce tournoi";
+  // UN BATTLE RESTE OUVERT APRES SON DEBUT (SPEC.md §29). L'organisateur ne
+  // sait combien de poules faire qu'une fois qu'il sait qui est venu : ce sont
+  // les poules tirees qui ferment ses reglages, et non l'horloge.
+  if (t.type === "battle") {
+    return poules.has(t.id) ? "Les poules sont tirées : ces réglages ne changent plus" : null;
+  }
   if (maintenant >= t.debut) return "Le tournoi a commencé : ses réglages ne changent plus";
   return null;
 }
@@ -1340,3 +1411,448 @@ export function inscrireAuTournoi(
 
 /** La configuration d'une partie d'epreuve, prete pour un salon. */
 export const configDeLaPartie = (p: PartieDEpreuve) => deserialiser(p.config);
+
+// ------------------------------------------------------ les tournois de battle
+
+/**
+ * UNE MANCHE DE RENCONTRE : une partie de battle entre deux camps.
+ *
+ * Elle naît quand le salon s'ouvre, et se clôt quand la partie finit. Entre les
+ * deux, `points` vaut `null` : la manche est en cours, et la page du tournoi la
+ * montre comme telle.
+ */
+export interface MancheDeRencontre {
+  n: number;
+  salon: string;
+  /** Les points de chaque camp, dans l'ordre de `camps`. Des demis y figurent. */
+  points: [number, number] | null;
+  /** Le camp qui l'emporte, `null` pour une manche nulle ou en cours. */
+  gagnant: string | null;
+  at: number;
+  fin: number | null;
+}
+
+/**
+ * UNE RENCONTRE EST UN OBJET, PAS UNE SEANCE (SPEC.md §29).
+ *
+ * Elle garde son score entre deux séances : deux joueurs qui se quittent à 1-0
+ * sur un meilleur de 3 rouvrent plus tard pour la manche 2, et la rencontre
+ * reprend là où elle était. Sans cela, une coupure de réseau annulerait une
+ * demi-heure de jeu, et personne ne rejouerait.
+ */
+export interface Rencontre {
+  id: string;
+  tournoi: string;
+  /** `poule:0` pour la première poule, `haut:0`, `bas:0`, `finale`. */
+  phase: string;
+  /** Le tour de la poule, ou du tableau. Il numérote les colonnes du classement. */
+  tour: number;
+  /** Les deux camps, par compte porteur de l'inscription. */
+  camps: [string, string];
+  /** Meilleur de X en tableau ; le nombre de manches à jouer en poule. */
+  bo: number;
+  /** La fin normale du tour. */
+  limite: number;
+  /** Le dernier délai, passé lequel l'arbitrage s'ouvre. */
+  butoir: number;
+  manches: MancheDeRencontre[];
+  /**
+   * Comment elle s'est terminée. `gagnant: null` veut dire nulle quand elle
+   * vient du jeu, et « personne ne passe » quand elle vient de l'arbitrage.
+   */
+  fin: { gagnant: string | null; par: "jeu" | "arbitrage"; at: number } | null;
+}
+
+export interface MessageDeRencontre {
+  de: string;
+  texte: string;
+  at: number;
+}
+
+/** Une ligne du classement d'une poule. */
+export interface LigneDePoule {
+  camp: string;
+  rang: number;
+  points: number;
+  gagnees: number;
+  nulles: number;
+  perdues: number;
+  manchesGagnees: number;
+  manchesPerdues: number;
+  /** Le cumul des 1 et des ½ pris coup par coup, sur toutes ses manches. */
+  pointsDeManche: number;
+  /** Les rencontres jouées, à temps ou non. */
+  jouees: number;
+}
+
+/** Combien de points rapporte une rencontre de poule (SPEC.md §29). */
+export const POINTS_DE_POULE = { victoire: 3, nul: 2, defaite: 1, absent: 0 } as const;
+
+/** Où en est un tournoi de battle. */
+export type PhaseDeBattle = "inscriptions" | "poules" | "tableau" | "fini";
+
+export function phaseDuBattle(t: Tournoi): PhaseDeBattle {
+  if (t.type !== "battle") return "fini";
+  return poulesDuTournoi(t.id) === undefined ? "inscriptions" : "poules";
+}
+
+/**
+ * MELANGE UNE LISTE, sans biais.
+ *
+ * `randomInt` plutôt que `Math.random` : le tirage des poules décide d'un
+ * tournoi, et le générateur du moteur JavaScript n'est pas fait pour ça.
+ */
+function melanger<T>(l: T[]): T[] {
+  const m = [...l];
+  for (let i = m.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [m[i], m[j]] = [m[j]!, m[i]!];
+  }
+  return m;
+}
+
+/**
+ * TIRE DES POULES AUSSI EGALES QUE POSSIBLE.
+ *
+ * Onze inscrits par poules de quatre donnent 4, 4 et 3, et non 4, 4, 3 dans cet
+ * ordre-là seulement : on distribue en serpentin, chaque poule prenant à son
+ * tour. L'administrateur les retouche ensuite à la main (SPEC.md §29).
+ */
+export function tirerDesPoules(camps: string[], parPoule: number): string[][] {
+  if (camps.length === 0) return [];
+  const combien = Math.max(1, Math.ceil(camps.length / Math.max(1, parPoule)));
+  const poules: string[][] = Array.from({ length: combien }, () => []);
+  melanger(camps).forEach((c, i) => { poules[i % combien]!.push(c); });
+  return poules;
+}
+
+/**
+ * LES RONDES D'UN TOUS-CONTRE-TOUS, par la méthode du cercle.
+ *
+ * Un camp fictif complète un effectif impair : celui qui se retrouve en face de
+ * lui est exempt de cette ronde, et ne joue simplement pas.
+ */
+export function rondesDeLaPoule(camps: string[]): [string, string][][] {
+  const l = [...camps];
+  if (l.length < 2) return [];
+  if (l.length % 2 === 1) l.push("");
+  const n = l.length;
+  const rondes: [string, string][][] = [];
+  for (let r = 0; r < n - 1; r++) {
+    const ronde: [string, string][] = [];
+    for (let i = 0; i < n / 2; i++) {
+      const a = l[i]!, b = l[n - 1 - i]!;
+      // On alterne qui reçoit d'une ronde à l'autre : sans cela, le premier de
+      // la liste serait toujours le camp de gauche.
+      if (a !== "" && b !== "") ronde.push(r % 2 === 0 ? [a, b] : [b, a]);
+    }
+    rondes.push(ronde);
+    l.splice(1, 0, l.pop()!);
+  }
+  return rondes;
+}
+
+export const poulesDuTournoi = (id: string): string[][] | undefined => poules.get(id);
+export const rencontreParId = (id: string): Rencontre | undefined => rencontres.get(id);
+export const enteteDuTournoi = (id: string): string => entetes.get(id) ?? "";
+export const disposDe = (tournoi: string, compte: string): string =>
+  dispos.get(`${tournoi}|${compte}`) ?? "";
+export const messagesDeLaRencontre = (id: string): MessageDeRencontre[] =>
+  messages.get(id) ?? [];
+
+/** Toutes les rencontres d'un tournoi, dans l'ordre où elles ont été écrites. */
+export function rencontresDuTournoi(id: string): Rencontre[] {
+  return [...rencontres.values()].filter((r) => r.tournoi === id);
+}
+
+/** La rencontre et la manche que sert ce salon, s'il en sert une. */
+export function rencontreDuSalon(salon: string): { rencontre: Rencontre; n: number } | undefined {
+  const cle = rencontreParSalon.get(salon);
+  if (cle === undefined) return undefined;
+  const r = rencontres.get(cle.rencontre);
+  return r === undefined ? undefined : { rencontre: r, n: cle.n };
+}
+
+/** Le camp d'un compte dans une rencontre : 0, 1, ou -1 s'il n'y joue pas. */
+export function campDuCompte(t: Tournoi, r: Rencontre, compte: string): number {
+  for (let i = 0; i < 2; i++) {
+    const porteur = r.camps[i]!;
+    const ins = t.inscrits.find((x) => x.compte === porteur);
+    if (ins === undefined) continue;
+    if (ins.compte === compte || ins.partenaires.includes(compte)) return i;
+  }
+  return -1;
+}
+
+/** Tous les pseudos d'un camp : le porteur de l'inscription et ses partenaires. */
+export function joueursDuCamp(t: Tournoi, camp: string): string[] {
+  const ins = t.inscrits.find((x) => x.compte === camp);
+  return ins === undefined ? [camp] : [ins.compte, ...ins.partenaires];
+}
+
+/**
+ * ECRIT LES POULES ET TOUTES LEURS RENCONTRES (SPEC.md §29).
+ *
+ * C'est le geste qui ferme les inscriptions pour de bon : après lui, on ne se
+ * désinscrit plus, et les réglages de poule ne changent plus.
+ */
+export function lancerLesPoules(
+  t: Tournoi, lesPoules: string[][], par: string,
+): Rencontre[] {
+  const b = t.battle;
+  if (b === null) throw new Error("ce tournoi n'est pas un battle");
+  const ev = {
+    t: "poules", tournoi: t.id, poules: lesPoules.map((p) => [...p]), par, at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+
+  const nees: Rencontre[] = [];
+  // LES DEUX DATES D'UNE RENCONTRE DE POULE sont celles de la poule entière :
+  // rien n'oblige à jouer les rondes dans l'ordre, et les imposer ferait
+  // attendre deux joueurs disponibles tout de suite.
+  const limite = b.limitePoules;
+  const butoir = limite + b.joursParTour * 86_400_000;
+  lesPoules.forEach((poule, i) => {
+    const rondes = rondesDeLaPoule(poule);
+    const combien = b.rencontresParPoule === null
+      ? rondes.length : Math.min(rondes.length, b.rencontresParPoule);
+    for (let tour = 0; tour < combien; tour++) {
+      for (const [a, c] of rondes[tour]!) {
+        const r = {
+          t: "rencontre", id: randomUUID(), tournoi: t.id, phase: `poule:${i}`,
+          tour: tour + 1, camps: [a, c], bo: b.manchesParPoule, limite, butoir,
+          at: Date.now(),
+        };
+        inscrire(r);
+        appliquer(r);
+        nees.push(rencontres.get(r.id)!);
+      }
+    }
+  });
+  console.log(`[competitif] ${lesPoules.length} poule(s) et ${nees.length} rencontre(s) pour "${t.nom}"`);
+  return nees;
+}
+
+/** Ouvre une manche de rencontre : le salon est noté avant qu'on y joue. */
+export function ouvrirUneMancheDeRencontre(r: Rencontre, salon: string): MancheDeRencontre {
+  const n = r.manches.length + 1;
+  const ev = { t: "manche-rencontre", rencontre: r.id, n, salon, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+  return r.manches[r.manches.length - 1]!;
+}
+
+/**
+ * CLOT UNE MANCHE DE RENCONTRE et, si le compte y est, la rencontre.
+ *
+ * Le premier qui trouve le top prend 1 point ; un top que personne ne trouve en
+ * donne ½ à chacun. Le total des deux fait donc toujours le nombre de coups.
+ */
+export function finirUneMancheDeRencontre(
+  t: Tournoi, r: Rencontre, n: number, coups: PlayedMove[],
+): void {
+  const m = r.manches.find((x) => x.n === n);
+  if (m === undefined || m.fin !== null) return;
+  const points: [number, number] = [0, 0];
+  for (const c of coups) {
+    if (c.player === null) { points[0] += 0.5; points[1] += 0.5; continue; }
+    const camp = campDuCompte(t, r, c.player);
+    if (camp >= 0) points[camp]! += 1;
+  }
+  const gagnant = points[0] === points[1] ? null : (points[0] > points[1] ? r.camps[0] : r.camps[1]);
+  const ev = {
+    t: "fin-rencontre", rencontre: r.id, n, points, gagnant, at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+  conclureLaRencontre(r);
+}
+
+/**
+ * LA RENCONTRE EST-ELLE FINIE ? On la clôt dès qu'un camp ne peut plus être
+ * rejoint, et non à la dernière manche : un 2-0 sur un meilleur de 3 ne se
+ * prolonge pas.
+ */
+function conclureLaRencontre(r: Rencontre): void {
+  if (r.fin !== null) return;
+  const faites = r.manches.filter((m) => m.fin !== null && m.points !== null);
+  const gagnees = (camp: string) => faites.filter((m) => m.gagnant === camp).length;
+  const [a, b] = r.camps;
+  const enPoule = r.phase.startsWith("poule:");
+  const reste = r.bo - faites.length;
+  let gagnant: string | null | undefined;
+  if (enPoule) {
+    // EN POULE, ON JOUE TOUTES LES MANCHES : elles comptent au départage, et
+    // une rencontre peut finir nulle.
+    if (reste > 0) return;
+    gagnant = gagnees(a) === gagnees(b) ? null : (gagnees(a) > gagnees(b) ? a : b);
+  } else {
+    // EN TABLEAU, UNE MANCHE NULLE NE COMPTE PAS : elle se rejoue, et il faut
+    // toujours la majorité des manches décisives.
+    const seuil = Math.floor(r.bo / 2) + 1;
+    if (gagnees(a) >= seuil) gagnant = a;
+    else if (gagnees(b) >= seuil) gagnant = b;
+    else return;
+  }
+  const ev = { t: "rencontre-finie", rencontre: r.id, gagnant, par: "jeu", at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/**
+ * UNE MANCHE ABANDONNEE NE SE REPREND PAS : sa partie est close, et l'on en
+ * ouvre une neuve. La rencontre, elle, garde le score qu'elle avait.
+ */
+export function annulerLaMancheDeRencontre(r: Rencontre, n: number): void {
+  const m = r.manches.find((x) => x.n === n);
+  if (m === undefined || m.fin !== null) return;
+  const ev = { t: "manche-annulee", rencontre: r.id, n, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/** L'arbitrage d'une rencontre non jouée (SPEC.md §29). */
+export function arbitrerLaRencontre(r: Rencontre, o: {
+  quoi: "victoire" | "personne" | "delai"; qui?: string; butoir?: number; par: string;
+}): string | null {
+  if (o.quoi === "delai") {
+    if (o.butoir === undefined || !Number.isFinite(o.butoir)) return "Il faut une date";
+    const ev = { t: "rencontre-butoir", rencontre: r.id, butoir: o.butoir, par: o.par, at: Date.now() };
+    inscrire(ev);
+    appliquer(ev);
+    return null;
+  }
+  if (r.fin !== null) return "Cette rencontre est déjà tranchée";
+  const gagnant = o.quoi === "personne" ? null : (o.qui ?? "");
+  if (o.quoi === "victoire" && !r.camps.includes(gagnant!)) return "Ce camp ne joue pas cette rencontre";
+  const ev = {
+    t: "rencontre-finie", rencontre: r.id, gagnant, par: "arbitrage", at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+  return null;
+}
+
+/**
+ * DECLARE UN FORFAIT : le camp quitte le tournoi, et toutes ses rencontres
+ * restantes sont perdues d'un coup.
+ */
+export function declarerUnForfait(t: Tournoi, camp: string, par: string): number {
+  let faites = 0;
+  for (const r of rencontresDuTournoi(t.id)) {
+    if (r.fin !== null || !r.camps.includes(camp)) continue;
+    const autre = r.camps[0] === camp ? r.camps[1]! : r.camps[0]!;
+    const ev = {
+      t: "rencontre-finie", rencontre: r.id, gagnant: autre, par: "arbitrage",
+      forfait: camp, at: Date.now(),
+    };
+    inscrire(ev);
+    appliquer(ev);
+    faites++;
+  }
+  console.log(`[competitif] forfait de ${camp} sur "${t.nom}" par ${par} : ${faites} rencontre(s)`);
+  return faites;
+}
+
+/** Un message de créneau, gardé pour l'adversaire et pour l'arbitrage. */
+export function ecrireUnMessageDeRencontre(r: Rencontre, de: string, texte: string): void {
+  const ev = {
+    t: "message", rencontre: r.id, de, texte: texte.trim().slice(0, 600), at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/** Les disponibilités d'un joueur, écrites une fois pour tout le tournoi. */
+export function reglerLesDispos(tournoi: string, compte: string, texte: string): void {
+  const ev = {
+    t: "dispo", tournoi, compte, texte: texte.trim().slice(0, 400), at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/** L'en-tête libre de la page d'un tournoi. */
+export function reglerLEntete(tournoi: string, texte: string, par: string): void {
+  const ev = {
+    t: "entete", tournoi, texte: texte.trim().slice(0, 4000), par, at: Date.now(),
+  };
+  inscrire(ev);
+  appliquer(ev);
+}
+
+/**
+ * RETIRE UNE INSCRIPTION (SPEC.md §29).
+ *
+ * Tant que le tournoi n'est pas engagé : d'un topping tant qu'on n'a lancé
+ * aucune partie, d'un battle tant que les poules ne sont pas tirées.
+ */
+export function desinscrireDuTournoi(t: Tournoi, compte: string): string | null {
+  const ins = inscriptionDe(t, compte);
+  if (ins === undefined) return "Vous n'êtes pas inscrit";
+  if (t.type === "battle" && poules.has(t.id)) {
+    return "Les poules sont tirées : seul l'organisateur peut vous retirer";
+  }
+  if (t.type === "topping" && manchesDe(epreuveDuTournoi(t.id)).some((m) => m.equipe.includes(compte))) {
+    return "Vous avez déjà joué une partie de ce tournoi";
+  }
+  const ev = { t: "desinscription", tournoi: t.id, compte: ins.compte, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+  return null;
+}
+
+/**
+ * LE CLASSEMENT D'UNE POULE (SPEC.md §29).
+ *
+ * Les points, puis les manches gagnées, puis les POINTS DE MANCHE : le cumul
+ * des 1 et des ½ pris coup par coup. Ils viennent avant la rencontre directe
+ * parce qu'ils existent toujours, même quand la rencontre n'a pas été jouée.
+ */
+export function classementDeLaPoule(t: Tournoi, i: number): LigneDePoule[] {
+  const poule = poulesDuTournoi(t.id)?.[i] ?? [];
+  const par = new Map<string, LigneDePoule>();
+  for (const camp of poule) {
+    par.set(camp, {
+      camp, rang: 0, points: 0, gagnees: 0, nulles: 0, perdues: 0,
+      manchesGagnees: 0, manchesPerdues: 0, pointsDeManche: 0, jouees: 0,
+    });
+  }
+  for (const r of rencontresDuTournoi(t.id)) {
+    if (r.phase !== `poule:${i}`) continue;
+    for (let c = 0; c < 2; c++) {
+      const l = par.get(r.camps[c]!);
+      if (l === undefined) continue;
+      for (const m of r.manches) {
+        if (m.fin === null || m.points === null) continue;
+        l.pointsDeManche += m.points[c]!;
+        if (m.gagnant === null) continue;
+        if (m.gagnant === r.camps[c]) l.manchesGagnees++; else l.manchesPerdues++;
+      }
+      if (r.fin === null) continue;
+      l.jouees++;
+      if (r.fin.gagnant === null && r.fin.par === "arbitrage") {
+        // PERSONNE N'A JOUE : 0 point aux deux. Une défaite rapporte plus,
+        // parce que venir jouer compte.
+        l.points += POINTS_DE_POULE.absent;
+      } else if (r.fin.gagnant === null) {
+        l.nulles++;
+        l.points += POINTS_DE_POULE.nul;
+      } else if (r.fin.gagnant === r.camps[c]) {
+        l.gagnees++;
+        l.points += POINTS_DE_POULE.victoire;
+      } else {
+        l.perdues++;
+        l.points += POINTS_DE_POULE.defaite;
+      }
+    }
+  }
+  const lignes = [...par.values()].sort((a, b) =>
+    b.points - a.points
+    || b.manchesGagnees - a.manchesGagnees
+    || b.pointsDeManche - a.pointsDeManche
+    || a.camp.localeCompare(b.camp));
+  lignes.forEach((l, n) => { l.rang = n + 1; });
+  return lignes;
+}
