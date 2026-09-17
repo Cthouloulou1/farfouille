@@ -40,6 +40,7 @@ import { chercherLeMot } from "../../engine/src/chercher.ts";
 import {
   JOURS_DE_LA_SEMAINE, LEXIQUES_DU_JOUR, chronoDuNom, consigneExacte, heureDeParis,
   modeleDeLaConfig, nomDeLaConsigne, nomDeLaPartie, primesDUsage, primesLibres,
+  tirerUneConsigne,
   type ConsigneDePartie, type ModeleDePartie,
 } from "../../engine/src/epreuves.ts";
 
@@ -9928,7 +9929,7 @@ function prDessiner(): void {
     field: css("--field"), line: css("--field-line"),
     face: css("--tile-face"), edge: css("--tile-edge"), ink: css("--tile-ink"),
     jface: css("--joker-face"), jedge: css("--joker-edge"),
-    accent: css("--accent"), mark: css("--mark"),
+    accent: css("--accent"),
     T: css("--mct"), D: css("--mcd"), t: css("--lct"), d: css("--lcd"),
     Q: css("--mcq"), q: css("--lcq"),
   };
@@ -10056,15 +10057,9 @@ function prDessiner(): void {
     }
   };
 
-  // LE MOT DU JOUEUR QU'ON EXAMINE, quand il n'a pas trouve le top : c'est
-  // justement ce qu'on vient voir -- ou il s'est pose, et ce qu'il a laisse.
-  // En ocre, pour ne pas le confondre avec une solution qu'on a cliquee.
-  const sien = prVu === 0 ? undefined : prPartie.coups[prVu - 1];
-  if (sien !== undefined && sien.playerWord !== undefined && sien.playerWord !== sien.word
-    && sien.playerDir !== undefined && sien.playerX !== undefined && sien.playerY !== undefined) {
-    fantome(sien.playerWord, sien.playerDir, sien.playerX, sien.playerY, C.mark);
-  }
-
+  // DEUX MOTS SUR LA GRILLE EN MEME TEMPS NE SE LISENT PAS : le mot joue se
+  // marque DANS LA LISTE des solutions, comme dans le rejeu d'un salon, et la
+  // grille ne porte que le top -- plus ce qu'on a soi-meme clique.
   const vue = prLignes[prChoisie];
   if (vue !== undefined) fantome(vue.mot, vue.dir, vue.x, vue.y, C.accent);
 }
@@ -10295,6 +10290,7 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
   }
 
   const H = 26;
+  let sienne = -1;
   piste.style.height = `${lignes.length * H}px`;
   piste.replaceChildren();
   // LA GRILLE OUBLIE CE QU'ON REGARDAIT quand on change de coup : la solution
@@ -10313,6 +10309,14 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
       b.setAttribute("aria-current", "true");
       if (joue.player !== null) b.title = t2("trouvé par {qui}", { qui: joue.player });
     }
+    // CE QUE LA MANCHE A RENDU SUR CE COUP se teinte, comme dans le rejeu d'un
+    // salon : on ouvre la liste pour le retrouver -- « j'avais mis quoi ? » --
+    // et le chercher a l'oeil dans cent solutions ne sert personne.
+    if (joue?.playerWord === s.mot && joue.playerDir === s.dir
+        && joue.playerX === s.x && joue.playerY === s.y) {
+      b.classList.add("mienne");
+      sienne = i;
+    }
     b.appendChild(el("span", "w", s.mot));
     b.appendChild(el("span", "p", noteCoup(s.dir, s.x, s.y, bornes)));
     b.appendChild(el("span", "s", String(s.score)));
@@ -10322,7 +10326,10 @@ function prPeindreLesPaliers(n: number, paliers: PalierRelu[] | null): void {
   });
   compte.textContent = t2(lignes.length > 1 ? "{n} solutions" : "{n} solution",
     { n: lignes.length });
-  $("pr-sols").scrollTop = 0;
+  // ELLE S'OUVRE SUR CE QU'ON A JOUE quand ce n'est pas le top : c'est la ligne
+  // qu'on vient chercher, et elle peut etre cinquantieme.
+  $("pr-sols").scrollTop = sienne <= 0 ? 0
+    : Math.max(0, sienne * H - $("pr-sols").clientHeight / 2 + H / 2);
 }
 
 /** Va chercher les solutions du coup, si on ne les a pas deja. */
@@ -12210,6 +12217,22 @@ function bascule(
   return { el: b, poser: (x) => { v = x; peindre(); }, valeur: () => v };
 }
 
+/**
+ * UN DE, au bout d'une rangee de l'editeur.
+ *
+ * Il ne met rien « au hasard » : il TIRE tout de suite, et pose ce qu'il a
+ * tire. Recliquer retire. Ce qui s'enregistre est donc toujours une partie
+ * exacte, et son nom ne dit jamais « au hasard » -- il n'y a rien a expliquer
+ * aux joueurs (SPEC.md §29).
+ */
+function de(surClic: () => void, titre: string): HTMLButtonElement {
+  const b = el("button", "ed-de", `🎲 ${t("Aléatoire")}`) as HTMLButtonElement;
+  b.type = "button";
+  b.title = titre;
+  b.addEventListener("click", surClic);
+  return b;
+}
+
 /** Le nombre de caramels lu dans un champ, borne. */
 function nombreLu(champ: HTMLInputElement, defaut: number): number {
   const n = Math.round(Number(champ.value));
@@ -12256,13 +12279,8 @@ function editeurDePartie(
     c.bornes = bornes;
     changer();
   });
-  const grilleAlea = bascule(t("Aléatoire"), c.bornes === "alea", (on) => {
-    c.bornes = on ? "alea" : bornes;
-    grille.rang.classList.toggle("ed-mort", on);
-    changer();
-  }, t("Normale ou super grille, à pile ou face"));
-  grille.rang.classList.toggle("ed-mort", c.bornes === "alea");
-  grille.rang.appendChild(grilleAlea.el);
+  grille.rang.appendChild(de(() => tirer("bornes"),
+    t("Tire une grille : normale ou super grille, à pile ou face")));
 
   // -------------------------------------------------------------- le format
   const posables = champNombre(2, 15, exact.jouables, t("Lettres posables"));
@@ -12291,15 +12309,14 @@ function editeurDePartie(
   let choix = choixDuFormat();
 
   const poserLeFormat = (): void => {
-    c.format = formatAlea.valeur() ? { t: "alea" }
-      : quelFormat === "plage" ? { t: "plage", ...plage }
-        : { t: "exact", tirage: exact.tirage, jouables: exact.jouables };
+    // LA CONSIGNE ENREGISTREE EST TOUJOURS EXACTE. La plage n'est plus un
+    // reglage de la partie, mais les BORNES DU DE : on y tire un X sur Y, et
+    // c'est ce X sur Y qui s'enregistre.
+    c.format = { t: "exact", tirage: exact.tirage, jouables: exact.jouables };
   };
   const montrerLeFormat = (): void => {
-    const alea = formatAlea.valeur();
-    format.rang.classList.toggle("ed-mort", alea);
-    autreFormat.hidden = alea || choix !== "autre";
-    plageFormat.hidden = alea || choix !== "plage";
+    autreFormat.hidden = choix !== "autre";
+    plageFormat.hidden = choix !== "plage";
     autreTirage.hidden = c.egal;
     plageTirage.hidden = c.egal;
   };
@@ -12328,11 +12345,8 @@ function editeurDePartie(
     poserLeFormat();
     changer();
   });
-  const formatAlea = bascule(t("Aléatoire"), c.format.t === "alea", () => {
-    montrerLeFormat();
-    poserLeFormat();
-    changer();
-  }, t("Le tirage de 2 à 15 lettres, les posables de 2 au tirage"));
+  const formatAlea = de(() => tirer("format"),
+    t("Tire un X sur Y : dans la plage quand elle est choisie, de 2 à 15 lettres sinon"));
   const egal = bascule(t("Égal"), c.egal, (on) => {
     c.egal = on;
     if (on) { exact.tirage = exact.jouables; remplirLeFormat(); }
@@ -12340,7 +12354,7 @@ function editeurDePartie(
     poserLeFormat();
     changer();
   }, t("Le tirage et les posables sont le même nombre : 2 sur 2, 3 sur 3…"));
-  format.rang.append(autreFormat, plageFormat, formatAlea.el, egal.el);
+  format.rang.append(autreFormat, plageFormat, formatAlea, egal.el);
 
   const surLesNombres = (): void => {
     exact.jouables = nombreLu(posables, exact.jouables);
@@ -12364,13 +12378,7 @@ function editeurDePartie(
     c.joker = joker;
     changer();
   });
-  const jokerAlea = bascule(t("Aléatoire"), c.joker === "alea", (on) => {
-    c.joker = on ? "alea" : joker;
-    jokerRang.rang.classList.toggle("ed-mort", on);
-    changer();
-  }, t("Sans, un ou deux jokers"));
-  jokerRang.rang.classList.toggle("ed-mort", c.joker === "alea");
-  jokerRang.rang.appendChild(jokerAlea.el);
+  jokerRang.rang.appendChild(de(() => tirer("joker"), t("Tire : sans, un ou deux jokers")));
 
   // -------------------------------------------------------- le temps par coup
   const CHRONOS = [15, 30, 60, 90, 120, 180];
@@ -12381,21 +12389,15 @@ function editeurDePartie(
   const chronoRang = rangeeDeChoix(t("Temps par coup"), [
     ...CHRONOS.map((x) => ({ v: String(x), texte: chronoDuNom(x) })), { v: "autre", texte: t("Autre") },
   ], CHRONOS.includes(chrono) ? String(chrono) : "autre", (v) => {
-    autreChrono.hidden = v !== "autre" || chronoAlea.valeur();
+    autreChrono.hidden = v !== "autre";
     if (v !== "autre") chrono = Number(v);
     secondes.value = String(chrono);
     c.chrono = chrono;
     changer();
   });
-  const chronoAlea = bascule(t("Aléatoire"), c.chrono === "alea", (on) => {
-    c.chrono = on ? "alea" : chrono;
-    chronoRang.rang.classList.toggle("ed-mort", on);
-    autreChrono.hidden = on || CHRONOS.includes(chrono);
-    changer();
-  }, t("De 15 secondes à 3 minutes"));
-  chronoRang.rang.classList.toggle("ed-mort", c.chrono === "alea");
-  chronoRang.rang.append(autreChrono, chronoAlea.el);
-  autreChrono.hidden = c.chrono === "alea" || CHRONOS.includes(chrono);
+  chronoRang.rang.append(autreChrono,
+    de(() => tirer("chrono"), t("Tire un temps par coup, de 15 secondes à 3 minutes")));
+  autreChrono.hidden = CHRONOS.includes(chrono);
   secondes.addEventListener("input", () => {
     const s = Math.round(Number(secondes.value));
     if (Number.isFinite(s) && s >= 5 && s <= 3600) chrono = s;
@@ -12451,27 +12453,61 @@ function editeurDePartie(
     grillePrimes.hidden = v !== "libres";
     changer();
   });
-  const primesAlea = bascule(t("Aléatoire"), c.primes === "alea", (on) => {
-    c.primes = on ? "alea" : primes;
-    primesRang.rang.classList.toggle("ed-mort", on);
-    grillePrimes.hidden = on || primes === null;
-    changer();
-  }, t("Un seuil et une progression tirés au sort"));
-  primesRang.rang.classList.toggle("ed-mort", c.primes === "alea");
-  primesRang.rang.appendChild(primesAlea.el);
-  grillePrimes.hidden = c.primes === "alea" || primes === null;
+  // LE DE DES PRIMES LES MONTRE : on les tire pour les voir, et l'on retire
+  // jusqu'a ce qu'elles plaisent.
+  primesRang.rang.appendChild(de(() => tirer("primes"),
+    t("Tire un seuil et une progression, et les affiche")));
+  grillePrimes.hidden = primes === null;
 
-  boite.append(grille.rang, format.rang, jokerRang.rang, chronoRang.rang,
+  // TOUT D'UN COUP. Le meme de, sur les cinq lignes a la fois.
+  const nigel = el("button", "ed-nigel",
+    `🎲 ${t("Laissez Nigel prendre la roue")}`) as HTMLButtonElement;
+  nigel.type = "button";
+  nigel.title = t("Tire la grille, le format, le joker, le temps et les primes");
+  nigel.addEventListener("click", () => tirer("tout"));
+  const tete = el("div", "ed-tete");
+  tete.appendChild(nigel);
+
+  boite.append(tete, grille.rang, format.rang, jokerRang.rang, chronoRang.rang,
     primesRang.rang, grillePrimes, nom);
   montrerLeFormat();
   changer();
 
+  /**
+   * LE DE. Il tire UNE ligne -- ou toutes -- et pose ce qu'il a tire.
+   *
+   * C'est `tirerUneConsigne` qui tire, avec la loi qui servait deja au tirage
+   * des parties du jour : on lui donne la consigne du moment dont seule cette
+   * ligne est au hasard, et l'on relit ce qu'elle a decide. RIEN N'EST LAISSE
+   * AU SORT DANS CE QU'ON ENREGISTRE.
+   */
+  function tirer(quoi: "bornes" | "format" | "joker" | "chrono" | "primes" | "tout"): void {
+    const base = clonerLaConsigne(c);
+    // La plage, quand elle est choisie, borne le de ; sinon il tire large.
+    const auFormat: ConsigneVue["format"] = quelFormat === "plage"
+      ? { t: "plage", ...plage } : { t: "alea" };
+    if (quoi === "tout" || quoi === "bornes") base.bornes = "alea";
+    if (quoi === "tout" || quoi === "format") base.format = auFormat;
+    if (quoi === "tout" || quoi === "joker") base.joker = "alea";
+    if (quoi === "tout" || quoi === "chrono") base.chrono = "alea";
+    if (quoi === "tout" || quoi === "primes") base.primes = "alea";
+    const tire = consigneExacte(tirerUneConsigne(base));
+    // L'EGAL SURVIT AU DE : c'est une contrainte qu'on a posee, pas un reglage
+    // tire, et `consigneExacte` ne la connait pas.
+    tire.egal = c.egal;
+    poser(tire);
+  }
+
   const poser = (x: ConsigneVue): void => {
-    c = clonerLaConsigne(x);
+    // UNE VIEILLE CONSIGNE LAISSEE AU SORT SE MATERIALISE A L'OUVERTURE. Plus
+    // rien ne s'enregistre au hasard ; l'ecran doit donc montrer ce qui sera
+    // joue, et non une ligne grise qui ne dit rien.
+    const auSort = x.bornes === "alea" || x.format.t === "alea" || x.format.t === "plage"
+      || x.joker === "alea" || x.chrono === "alea" || x.primes === "alea";
+    c = clonerLaConsigne(auSort
+      ? { ...consigneExacte(tirerUneConsigne(x)), egal: x.egal } : x);
     if (c.bornes !== "alea") bornes = c.bornes;
     grille.presser(String(bornes));
-    grilleAlea.poser(c.bornes === "alea");
-    grille.rang.classList.toggle("ed-mort", c.bornes === "alea");
 
     if (c.format.t === "exact") {
       quelFormat = "exact";
@@ -12483,28 +12519,21 @@ function editeurDePartie(
     }
     choix = choixDuFormat();
     format.presser(choix);
-    formatAlea.poser(c.format.t === "alea");
     egal.poser(c.egal);
     remplirLeFormat();
     montrerLeFormat();
 
     if (c.joker !== "alea") joker = c.joker;
     jokerRang.presser(String(joker));
-    jokerAlea.poser(c.joker === "alea");
-    jokerRang.rang.classList.toggle("ed-mort", c.joker === "alea");
 
     if (c.chrono !== "alea") chrono = c.chrono;
     chronoRang.presser(CHRONOS.includes(chrono) ? String(chrono) : "autre");
-    chronoAlea.poser(c.chrono === "alea");
-    chronoRang.rang.classList.toggle("ed-mort", c.chrono === "alea");
-    autreChrono.hidden = c.chrono === "alea" || CHRONOS.includes(chrono);
+    autreChrono.hidden = CHRONOS.includes(chrono);
     secondes.value = String(chrono);
 
     primes = c.primes === "alea" || c.primes === null ? primes : { ...c.primes };
     primesRang.presser(c.primes === null ? "usage" : "libres");
-    primesAlea.poser(c.primes === "alea");
-    primesRang.rang.classList.toggle("ed-mort", c.primes === "alea");
-    grillePrimes.hidden = c.primes === "alea" || c.primes === null;
+    grillePrimes.hidden = c.primes === null;
     primesAffichees = -1;
 
     changer();

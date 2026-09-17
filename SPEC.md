@@ -5861,6 +5861,23 @@ compte d'administration, et le serveur refuse tout le reste. Quatre onglets :
 
 ### L'éditeur de partie
 
+**Les dés ne laissent rien au sort : ils tirent tout de suite.** Chaque ligne a
+son **🎲 Aléatoire**, qui tire une valeur et la pose. Recliquer retire. Le dé des
+primes les affiche, et l'on retire jusqu'à ce qu'elles plaisent. Un
+**Laissez Nigel prendre la roue**, en haut à droite, tire les cinq lignes d'un
+coup.
+
+**Ce qui s'enregistre est donc toujours une partie exacte**, et son nom ne dit
+jamais « au hasard » : il n'y a rien à expliquer aux joueurs. Le tirage lui-même
+est celui qui servait déjà aux parties du jour, à la même loi.
+
+**La plage n'est plus un réglage, c'est la borne du dé.** *De 5 à 9 sur 10 à 15*
+ne s'enregistre pas ; elle dit seulement entre quelles valeurs le dé du format
+doit tirer son X sur Y. Avec **Égal**, il tire un X sur X.
+
+Une consigne d'avant, laissée au sort, **se matérialise à l'ouverture** :
+l'écran montre ce qui sera joué, et non une ligne grise qui ne dit rien.
+
 Le panneau des réglages d'un salon (§16) porte une douzaine de réglages qui
 n'ont rien à faire ici — pioche, terme, mode, décompte, topping collaboratif,
 montante — et il est câblé pour relancer un salon. **Une partie d'épreuve ne
@@ -6118,11 +6135,14 @@ soi-même fini la partie.
 
 ### Revoir une partie d'épreuve
 
-**On y voit ce que la manche a joué, et pas seulement le top.** La grille pose
-en ocre le mot de celui qu'on examine dès qu'il n'a pas gagné le coup, et la
-ligne sous la grille l'écrit de la même couleur, entre parenthèses. Sans cela,
-une partie relue ne montrait que les tops, et l'on ne voyait jamais ce qu'on
-avait joué à leur place.
+**On y voit ce que la manche a joué, et pas seulement le top.** Sa ligne se
+teinte dans **Solutions du coup**, comme dans le rejeu d'un salon, et la liste
+s'ouvre dessus : « j'avais mis quoi, moi ? » se répond d'un coup d'œil, même
+quand la solution est cinquantième.
+
+**La grille, elle, ne porte que le top.** Deux mots posés en même temps ne se
+lisent pas : on ne devine plus lequel a été joué et lequel était à trouver. Ce
+qu'on clique dans la liste s'y pose, et rien d'autre.
 
 **Une liste des coups tient sous la grille** : numéro, mot, référence, points.
 On y saute d'un clic, au lieu de pousser le curseur de proche en proche. Le

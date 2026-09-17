@@ -810,6 +810,18 @@ export const EN: Readonly<Record<string, string>> = {
   "Les primes de cette partie ne sont pas standards.": "This game's bonuses are not standard.",
   "Les primes sont standards.": "The bonuses are standard.",
   "Rang": "Rank",
+  "Laissez Nigel prendre la roue": "Let Nigel take the wheel",
+  "Tire : sans, un ou deux jokers": "Rolls: no blank, one or two",
+  "Tire la grille, le format, le joker, le temps et les primes":
+    "Rolls the board, the format, the blank, the clock and the bonuses",
+  "Tire un seuil et une progression, et les affiche":
+    "Rolls a threshold and a progression, and shows them",
+  "Tire un temps par coup, de 15 secondes à 3 minutes":
+    "Rolls a time per move, from 15 seconds to 3 minutes",
+  "Tire un X sur Y : dans la plage quand elle est choisie, de 2 à 15 lettres sinon":
+    "Rolls an X of Y: within the range when one is chosen, from 2 to 15 letters otherwise",
+  "Tire une grille : normale ou super grille, à pile ou face":
+    "Rolls a board: normal or super, on a coin toss",
   "Aïe": "Ouch",
   "Ça va": "Not bad",
   "Chacun reçoit une notification qui le mène ici, connecté ou non.":
