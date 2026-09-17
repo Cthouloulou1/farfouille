@@ -11399,7 +11399,10 @@ function tableauDesCoupsRates(
   const colonne = (classe: string, texte: string, tri: "temps" | "negatif"): HTMLElement => {
     const th = el("th", classe, texte);
     th.classList.add("triable");
-    if (rsTri === tri) { th.classList.add("tri"); th.appendChild(el("span", "rc-tri", "▾")); }
+    // LA FLECHE EST TOUJOURS LA, creuse quand la colonne ne trie pas : elle
+    // elargissait sinon sa colonne au clic, et tout le tableau se decalait.
+    if (rsTri === tri) th.classList.add("tri");
+    th.appendChild(el("span", `rc-tri${rsTri === tri ? "" : " creux"}`, "▾"));
     th.addEventListener("click", () => { rsTri = tri; peindreLesResultats(); });
     return th;
   };

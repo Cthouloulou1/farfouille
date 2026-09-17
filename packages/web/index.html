@@ -1500,31 +1500,39 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* LES DEUX FACONS DE REPARTIR, cote a cote et centrees sur leur ligne. */
 .rejouer-bloc { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .rejouer-bloc button { flex: 0 1 auto; }
-.r-inviter-ligne { display: flex; justify-content: center; }
-.r-inviter-ligne button { min-width: 220px; text-align: center; }
+/* Le dictionnaire a gauche, les avances a droite, Inviter au milieu. */
+.rg-corps .ligne-tete #r-inviter { margin-left: auto; margin-right: auto; }
 /* LE TABLEAU DES COUPS RATES (SPEC.md §29) : une ligne par joueur, une colonne
    par coup, et dans la case ce qu'il a laisse au top. */
 /* IL PREND TOUTE LA LARGEUR QU'ON LUI DONNE, comme les graphiques : serre dans
    un coin, on n'y lisait rien. Les colonnes de coups se partagent ce qui reste
    apres le rang, le nom et le negatif. */
 .g-tableur { overflow: auto; max-height: 460px; }
-.g-tableur table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+/* LES COLONNES NE BOUGENT PAS D'UN CLIC : sans largeur imposee, la fleche de
+   tri elargissait sa colonne et tout le tableau se decalait sous la souris. */
+.g-tableur table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .g-tableur .triable { cursor: pointer; }
 .g-tableur .triable:hover { color: var(--ink); }
 .g-tableur .tri { color: var(--ink); }
+/* La fleche occupe sa place meme quand elle ne sert pas : sans cela, trier
+   changeait la largeur de la colonne. */
 .g-tableur .rc-tri { margin-left: 3px; font-size: 9px; }
+.g-tableur .rc-tri.creux { visibility: hidden; }
 .g-tableur th, .g-tableur td { border: 1px solid var(--rule); padding: 2px 4px; text-align: center; }
 .g-tableur thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); vertical-align: bottom; font-weight: 500; color: var(--ink-faint); }
-.g-tableur .tb-coup { width: auto; min-width: 26px; padding: 4px 3px; }
-.g-tableur .tb-n { display: block; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+/* LE NUMERO DU COUP TIENT LE HAUT DE LA CASE, pendant que le mot et ses points
+   restent poses en bas : les numeros s'alignent alors entre eux, quelle que
+   soit la longueur des mots. */
+.g-tableur .tb-coup { position: relative; padding: 22px 3px 4px; }
+.g-tableur .tb-n { position: absolute; top: 4px; left: 0; right: 0; display: block; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
 .g-tableur .tb-mot { display: block; margin: 3px 0; font-family: var(--mono); font-size: 11px; line-height: 1.15; letter-spacing: 0; color: var(--ink); }
 .g-tableur .tb-mot span { display: block; }
 .g-tableur .tb-pts { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--accent); }
-.g-tableur .tb-rang { width: 34px; font-family: var(--mono); color: var(--ink-faint); }
-.g-tableur .tb-nom { min-width: 130px; text-align: left; white-space: nowrap; color: var(--ink); }
+.g-tableur .tb-rang { width: 58px; font-family: var(--mono); color: var(--ink-faint); }
+.g-tableur .tb-nom { width: 152px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
 .g-tableur thead .tb-nom, .g-tableur thead .tb-rang, .g-tableur thead .tb-neg { text-align: left; }
-.g-tableur .tb-neg { width: 44px; font-family: var(--mono); color: var(--ink); }
-.g-tableur .tb-case { width: auto; min-width: 26px; padding: 5px 3px; font-family: var(--mono); color: var(--ink-soft); }
+.g-tableur .tb-neg { width: 54px; font-family: var(--mono); color: var(--ink); }
+.g-tableur .tb-case { padding: 5px 3px; font-family: var(--mono); color: var(--ink-soft); }
 .g-tableur .tb-rate { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); }
 /* Rien de propose du tout : le coup n'a meme pas ete cherche. */
 .g-tableur .tb-rien { background: color-mix(in srgb, var(--warn) 26%, transparent); }
@@ -2689,19 +2697,16 @@ button.primes-libres:hover { background: none; color: var(--accent); }
            doit pouvoir le voir et le corriger sans passer par les avances. -->
       <div class="reglage">
         <label>Dictionnaire</label>
-        <div class="ligne">
+        <!-- INVITER EST LE GESTE QU'ON VIENT CHERCHER ICI, plus souvent que
+             n'importe quel reglage : il tient le milieu de la ligne de tete,
+             entre le dictionnaire a gauche et les avances a droite. -->
+        <div class="ligne ligne-tete">
           <select id="r-dico"></select>
+          <button type="button" class="interrupteur" id="r-inviter">Inviter des joueurs</button>
           <button type="button" class="interrupteur" id="r-avance" aria-pressed="false">
             Réglages avancés
           </button>
         </div>
-      </div>
-
-      <!-- INVITER EST LE GESTE QU'ON VIENT CHERCHER ICI, plus souvent que
-           n'importe quel reglage : il tient sa propre ligne, au milieu et a la
-           taille des autres boutons de tete. -->
-      <div class="reglage r-inviter-ligne">
-        <button type="button" class="interrupteur" id="r-inviter">Inviter des joueurs</button>
       </div>
 
       <!-- LA SUPER GRILLE EST UN REGLAGE AVANCE. C'est un plateau que personne
