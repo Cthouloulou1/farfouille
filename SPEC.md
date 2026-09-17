@@ -6685,9 +6685,21 @@ est la fin normale de son tour, et une **date butoir**, qui est le dernier
 délai. Entre les deux, les joueurs s'arrangent entre eux. Aucune heure n'est
 imposée.
 
-**Le régime imposé.** L'administrateur pose une date et une heure sur une phase.
-La rencontre ne s'ouvre qu'à cette heure-là. C'est ce qu'il faut pour une finale
+**Le régime imposé.** L'administrateur pose une date et une heure **sur une
+phase** du tableau : un tour du tableau haut, un tour du tableau bas, la grande
+finale. Toutes les rencontres de cette phase se jouent alors à cette heure-là,
+et **leur salon ne s'ouvre pas avant**. C'est ce qu'il faut pour une finale
 retransmise.
+
+**L'heure vit sur la phase, pas sur la rencontre.** Le tableau se remplit au fil
+des résultats ; une rencontre dont les deux camps ne sont pas encore connus
+reçoit l'heure de sa phase sans qu'on ait à y penser. Une heure imposée remplace
+la date limite de son tour, et la date butoir la suit du délai d'un tour :
+l'arbitrage garde sa fenêtre.
+
+**Les deux régimes cohabitent.** Une phase sans heure garde la sienne, calculée
+par les jours par tour ; on n'en cloue que ce qu'on veut clouer, et l'on peut
+libérer une phase d'un geste.
 
 **Rien ne se déclenche tout seul quand quelqu'un manque.** Un joueur absent à
 l'heure imposée ne perd pas par une horloge : la rencontre retombe simplement
@@ -6732,6 +6744,8 @@ porte :
 
 - un **en-tête de texte libre**, écrit par le créateur ou un administrateur, où
   se donnent les informations que le format ne dit pas ;
+- **Heures des phases**, pour l'organisateur : une ligne par tour du tableau,
+  avec ce qu'il faut pour lui imposer une heure ou la lui rendre ;
 - **Mes rencontres**, pour qui y joue ;
 - les **poules** et leurs classements ;
 - le **double tableau** ;
@@ -6836,6 +6850,7 @@ Et pour un tournoi de battle, dans le même journal :
 { "t": "arbitrage", "rencontre": "…", "quoi": "victoire", "qui": "a", "par": "…", "at": … }
 { "t": "tableau", "tournoi": "…", "haut": ["…"], "bas": ["…"], "par": "…", "at": … }
 { "t": "camp-rencontre", "rencontre": "…", "cote": 0, "camp": "…", "at": … }
+{ "t": "date-phase", "tournoi": "…", "phase": "finale", "quand": …, "par": "…", "at": … }
 ```
 
 `jeu` vaut `seul`, `compte` (à plusieurs sur un compte, avec le texte),
@@ -6881,9 +6896,11 @@ tableau bas, la grande finale, l'aperçu avant validation, les notifications de
 qualification, le classement final et ses trois médailles -- et le
 **« Je suis prêt »** qui lance une manche.
 
+**Puis les heures imposées par phase**, qui ferment le module du battle.
+
 **Pas encore :** « chacun pour soi » dans un même salon (il demande une partie
-par joueur dans un salon qui n'en tient qu'une), les dates imposées par phase,
-le tournoi de duplicate, les spectateurs, les équipes du site.
+par joueur dans un salon qui n'en tient qu'une), le tournoi de duplicate, les
+spectateurs, les équipes du site.
 
 ```bash
 node packages/server/test/check_figees.ts        # figer, servir, la pause
@@ -6902,8 +6919,8 @@ node packages/engine/test/check_epreuves.ts      # les consignes et la semaine
 3. ~~Les graphiques.~~
 4. ~~Les notifications, et les défis.~~
 5. ~~Les tournois de topping, et ceux de la semaine.~~
-6. ~~Les tournois de battle : les poules, puis le double tableau.~~ Restent les
-   **dates imposées** par phase, pour une finale retransmise.
+6. ~~Les tournois de battle : les poules, le double tableau, les heures
+   imposées par phase.~~
 7. Les spectateurs.
 8. Les équipes du site.
 9. Les tournois de duplicate.

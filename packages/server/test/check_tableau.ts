@@ -14,6 +14,8 @@ import {
   creerUnTournoiDeBattle, definirDossierDuCompetitif, finaleDuTournoi, inscrireAuTournoi,
   lancerLeTableau, lancerLesPoules, ouvrirLeCompetitif, phaseDuBattle, planifierLeTableau,
   poulesFinies, rencontreParId, rencontresDuTournoi, tableauDuTournoi, tournoi,
+  butoirDeLaRencontre, dateImposeeDe, datesImposeesDe, limiteDeLaRencontre,
+  reglerLaDateDeLaPhase, rencontreOuvrable,
   type Rencontre, type Tournoi,
 } from "../src/competitif.ts";
 import { configParDefaut } from "../../engine/src/config.ts";
@@ -188,6 +190,41 @@ const haut2 = rencontreParId(t6Tableau().find((r) => r.phase === "haut:2")!.id)!
 verifie("le camp d'en face passe sans jouer",
   haut2.fin?.par === "exempt" && haut2.fin.gagnant === premiers[1]!.camps[0],
   JSON.stringify({ camps: haut2.camps, fin: haut2.fin }));
+
+// ------------------------------------------ les heures imposees par phase
+
+const finale6 = rencontreParId(finaleDuTournoi(tournoi(t6.id)!)!.id)!;
+const libreLimite = finale6.limite;
+const QUAND = Date.now() + 3 * 86_400_000;
+verifie("une phase se cloue a une heure",
+  reglerLaDateDeLaPhase(tournoi(t6.id)!, "finale", QUAND, "zulu") === null
+  && dateImposeeDe(t6.id, "finale") === QUAND);
+verifie("une phase qui n'existe pas se refuse",
+  reglerLaDateDeLaPhase(tournoi(t6.id)!, "haut:9", QUAND, "zulu") !== null);
+verifie("l'heure imposee remplace la limite du tour",
+  limiteDeLaRencontre(rencontreParId(finale6.id)!) === QUAND
+  && libreLimite !== QUAND);
+// LE DELAI D'UN TOUR RESTE APRES L'HEURE : rien ne se declenche tout seul
+// quand quelqu'un manque, et l'arbitrage a besoin d'une fenetre.
+verifie("la butoir suit l'heure imposee d'un tour",
+  butoirDeLaRencontre(rencontreParId(finale6.id)!) === QUAND + 2 * 86_400_000);
+verifie("on n'ouvre pas la rencontre avant l'heure",
+  rencontreOuvrable(rencontreParId(finale6.id)!, QUAND - 60_000) !== null);
+verifie("on l'ouvre a l'heure",
+  rencontreOuvrable(rencontreParId(finale6.id)!, QUAND + 1) === null);
+verifie("les autres phases restent libres", dateImposeeDe(t6.id, "haut:1") === undefined);
+verifie("la liste des heures ne porte que celle-la",
+  JSON.stringify(datesImposeesDe(t6.id)) === JSON.stringify({ finale: QUAND }));
+
+ouvrirLeCompetitif();
+verifie("l'heure imposee se relit au journal", dateImposeeDe(t6.id, "finale") === QUAND);
+
+verifie("on libere une phase",
+  reglerLaDateDeLaPhase(tournoi(t6.id)!, "finale", null, "zulu") === null
+  && dateImposeeDe(t6.id, "finale") === undefined);
+verifie("la rencontre retrouve ses dates",
+  limiteDeLaRencontre(rencontreParId(finale6.id)!) === libreLimite
+  && rencontreOuvrable(rencontreParId(finale6.id)!, Date.now()) === null);
 
 rmSync(dossier, { recursive: true, force: true });
 console.log(echecs === 0 ? "\n  tout est bon\n" : `\n  ${echecs} echec(s)\n`);

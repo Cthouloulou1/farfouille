@@ -1811,6 +1811,11 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 .tb-gagnant .tb-cote-nom, .tb-gagnant .tb-cote-score { font-weight: 600; color: var(--ink); }
 .tb-attente .tb-cote-nom { color: var(--ink-faint); font-style: italic; }
 .tb-apercu { margin-top: 12px; }
+.tb-colonne-heure { margin: -2px 0 2px; font-size: 10.5px; font-family: var(--mono); color: var(--accent); }
+
+/* LES HEURES IMPOSEES : une ligne par phase du tableau. */
+.hp-ligne { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 5px 0; border-top: 1px solid var(--rule); }
+.hp-nom { flex: 0 0 240px; font-size: 12.5px; color: var(--ink); }
 
 /* LE CLASSEMENT FINAL : trois medailles, puis les places. */
 .pd-table { border-collapse: collapse; font-size: 13px; }

@@ -52,6 +52,8 @@ import {
   annulerLaMancheDeRencontre, arbitrerLaRencontre, campDuCompte, classementDeLaPoule,
   classementFinalDuBattle, finaleDuTournoi, lancerLeTableau, planifierLeTableau,
   poulesFinies, tableauDuTournoi,
+  butoirDeLaRencontre, dateImposeeDe, datesImposeesDe, limiteDeLaRencontre, reglerLaDateDeLaPhase,
+  rencontreOuvrable,
   declarerUnForfait, desinscrireDuTournoi, disposDe, ecrireUnMessageDeRencontre,
   enteteDuTournoi, finirUneMancheDeRencontre, joueursDuCamp, lancerLesPoules,
   messagesDeLaRencontre, ouvrirUneMancheDeRencontre, phaseDuBattle, poulesDuTournoi,
@@ -901,7 +903,10 @@ function rappelerLesRencontres(maintenant = Date.now()): void {
     if (t.type !== "battle") continue;
     for (const r of rencontresDuTournoi(t.id)) {
       if (r.fin !== null) continue;
-      for (const [quoi, quand] of [["limite", r.limite], ["butoir", r.butoir]] as const) {
+      const dates = [
+        ["limite", limiteDeLaRencontre(r)], ["butoir", butoirDeLaRencontre(r)],
+      ] as const;
+      for (const [quoi, quand] of dates) {
         if (maintenant < quand - VEILLE || maintenant >= quand) continue;
         for (const camp of r.camps) {
           for (const qui of joueursDuCamp(t, camp)) {
@@ -1213,7 +1218,10 @@ function vueDuBattle(t: Tournoi, moi: Compte | undefined): Record<string, unknow
     })),
     rencontres: toutes.map((r) => ({
       id: r.id, phase: r.phase, tour: r.tour, camps: r.camps, bo: r.bo,
-      limite: r.limite, butoir: r.butoir, fin: r.fin,
+      // LES DATES EFFECTIVES : une heure imposée remplace celle de son tour.
+      limite: limiteDeLaRencontre(r), butoir: butoirDeLaRencontre(r),
+      imposee: dateImposeeDe(r.tournoi, r.phase) ?? null,
+      fin: r.fin,
       manches: r.manches.map((m) => ({
         n: m.n, salon: m.salon, points: m.points, gagnant: m.gagnant, fin: m.fin,
         // UNE MANCHE EN COURS SE REGARDE : la page la montre comme telle, et
@@ -1225,6 +1233,8 @@ function vueDuBattle(t: Tournoi, moi: Compte | undefined): Record<string, unknow
     })),
     poulesFinies: poulesFinies(t),
     tableau: tableauDuTournoi(t.id) ?? null,
+    // LES HEURES IMPOSEES, par phase. Vide tant qu'aucune ne l'est.
+    dates: datesImposeesDe(t.id),
     finale: finaleDuTournoi(t)?.id ?? null,
     classement: classementFinalDuBattle(t),
     moi: moi === undefined ? null : {
@@ -2567,6 +2577,34 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     return;
   }
 
+  // IMPOSER UNE HEURE A UNE PHASE, ou la libérer (SPEC.md §29). C'est ce qu'il
+  // faut pour une finale retransmise ; le reste du tableau garde ses fenêtres.
+  if (url.startsWith("/api/tournoi/") && url.endsWith("/date-phase") && req.method === "POST") {
+    const moi = quiParle(req);
+    if (moi === undefined) { json(res, 401, { erreur: "Connectez-vous d'abord" }); return; }
+    const t = tournoi(decodeURIComponent(url.slice("/api/tournoi/".length, -"/date-phase".length)));
+    if (t === undefined) { json(res, 404, { erreur: "Ce tournoi n'existe pas" }); return; }
+    if (t.par !== moi.pseudo && !moi.admin) {
+      json(res, 403, { erreur: "Seul son créateur fixe les heures" });
+      return;
+    }
+    let corps: any;
+    try { corps = await corpsJson(req); }
+    catch { json(res, 400, { erreur: "requête illisible" }); return; }
+    const phase = String(corps.phase ?? "");
+    const quand = corps.quand === null || corps.quand === undefined || corps.quand === ""
+      ? null : instantDeParis(corps.quand);
+    if (corps.quand != null && corps.quand !== "" && quand === null) {
+      json(res, 400, { erreur: "Donnez une date et une heure" });
+      return;
+    }
+    const erreur = reglerLaDateDeLaPhase(t, phase, quand, moi.pseudo);
+    if (erreur !== null) { json(res, 400, { erreur }); return; }
+    console.log(`[competitif] "${t.nom}" · ${phase} : ${quand === null ? "heure libre" : new Date(quand).toISOString()}`);
+    json(res, 200, { ok: true });
+    return;
+  }
+
   // ---------------------------------------------------- UNE RENCONTRE
 
   // OUVRIR LE SALON D'UNE RENCONTRE. Le même geste des deux côtés : le premier
@@ -2583,6 +2621,9 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       json(res, 403, { erreur: "Cette rencontre se joue sans vous" });
       return;
     }
+    // UNE PHASE A HEURE FIXEE NE S'OUVRE PAS AVANT (SPEC.md §29).
+    const pasEncore = rencontreOuvrable(r);
+    if (pasEncore !== null && !moi.admin) { json(res, 403, { erreur: pasEncore }); return; }
     try {
       const s = await ouvrirLeSalonDeRencontre(t, r);
       json(res, 200, { salon: s.id });
@@ -2604,6 +2645,8 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     if (r.fin !== null) { json(res, 403, { erreur: "Cette rencontre est terminée" }); return; }
     const mien = campDuCompte(t, r, moi.pseudo);
     if (mien < 0) { json(res, 403, { erreur: "Cette rencontre se joue sans vous" }); return; }
+    const pasEncore = rencontreOuvrable(r);
+    if (pasEncore !== null) { json(res, 403, { erreur: pasEncore }); return; }
     try {
       const s = await ouvrirLeSalonDeRencontre(t, r);
       const autre = r.camps[mien === 0 ? 1 : 0]!;

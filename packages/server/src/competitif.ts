@@ -203,6 +203,14 @@ const entetes = new Map<string, string>();
 /** Qui est entre par le haut et par le bas, a la validation du tableau. */
 const tableaux = new Map<string, { haut: string[]; bas: string[] }>();
 /**
+ * LES DATES IMPOSEES, par `tournoi|phase`.
+ *
+ * Le regime ordinaire ne force aucune heure : les joueurs s'arrangent entre la
+ * date limite et la date butoir. L'organisateur peut cependant clouer une phase
+ * a une heure precise -- c'est ce qu'il faut pour une finale retransmise.
+ */
+const datesDePhase = new Map<string, number>();
+/**
  * QUI A REGARDE QUELLE PARTIE FIGEE AVANT DE LA JOUER : `figee|compte`.
  *
  * La cle est la partie figee, et non le numero de la partie : une nouvelle
@@ -277,6 +285,7 @@ export function ouvrirLeCompetitif(): void {
   dispos.clear();
   entetes.clear();
   tableaux.clear();
+  datesDePhase.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
   for (const ligne of readFileSync(journal(), "utf8").split("\n")) {
@@ -394,6 +403,10 @@ function appliquer(e: Record<string, any>): void {
     dispos.set(`${e["tournoi"]}|${e["compte"]}`, e["texte"] ?? "");
   } else if (e["t"] === "entete") {
     entetes.set(e["tournoi"], e["texte"] ?? "");
+  } else if (e["t"] === "date-phase") {
+    const cle = `${e["tournoi"]}|${e["phase"]}`;
+    if (e["quand"] === null || e["quand"] === undefined) datesDePhase.delete(cle);
+    else datesDePhase.set(cle, Number(e["quand"]));
   }
 }
 
@@ -1587,6 +1600,73 @@ export const rencontreParId = (id: string): Rencontre | undefined => rencontres.
 export const enteteDuTournoi = (id: string): string => entetes.get(id) ?? "";
 export const tableauDuTournoi = (id: string): { haut: string[]; bas: string[] } | undefined =>
   tableaux.get(id);
+
+/** L'heure imposée à une phase, ou `undefined` si elle est libre. */
+export const dateImposeeDe = (tournoi: string, phase: string): number | undefined =>
+  datesDePhase.get(`${tournoi}|${phase}`);
+
+/** Toutes les heures imposées d'un tournoi, par phase. */
+export function datesImposeesDe(tournoi: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [cle, quand] of datesDePhase) {
+    if (cle.startsWith(`${tournoi}|`)) out[cle.slice(tournoi.length + 1)] = quand;
+  }
+  return out;
+}
+
+/**
+ * LA DATE LIMITE EFFECTIVE D'UNE RENCONTRE.
+ *
+ * Une heure imposée remplace la limite de son tour : c'est à cette heure-là que
+ * la rencontre se joue, et pas dans la fenêtre qu'on lui avait laissée.
+ */
+export function limiteDeLaRencontre(r: Rencontre): number {
+  return dateImposeeDe(r.tournoi, r.phase) ?? r.limite;
+}
+
+/**
+ * LA DATE BUTOIR EFFECTIVE.
+ *
+ * Passé une heure imposée, il reste le délai d'un tour avant que l'arbitrage
+ * s'ouvre : RIEN NE SE DECLENCHE TOUT SEUL quand quelqu'un manque, et une panne
+ * de réseau de dix minutes ne doit pas décider d'un tournoi.
+ */
+export function butoirDeLaRencontre(r: Rencontre): number {
+  const impose = dateImposeeDe(r.tournoi, r.phase);
+  if (impose === undefined) return r.butoir;
+  const jours = tournois.get(r.tournoi)?.battle?.joursParTour ?? 1;
+  return impose + jours * 86_400_000;
+}
+
+/**
+ * IMPOSE UNE HEURE A UNE PHASE, ou la libère avec `null`.
+ *
+ * On ne touche pas aux rencontres : la date vit sur la PHASE, et une rencontre
+ * qui y naîtrait plus tard -- le tableau se remplit au fil des résultats -- la
+ * reçoit sans qu'on ait à y penser.
+ */
+export function reglerLaDateDeLaPhase(
+  t: Tournoi, phase: string, quand: number | null, par: string,
+): string | null {
+  if (t.battle === null) return "Ce tournoi n'est pas un tournoi de battle";
+  if (!rencontresDuTournoi(t.id).some((r) => r.phase === phase)) {
+    return "Ce tournoi n'a pas cette phase";
+  }
+  if (quand !== null && !Number.isFinite(quand)) return "Il faut une date";
+  const ev = { t: "date-phase", tournoi: t.id, phase, quand, par, at: Date.now() };
+  inscrire(ev);
+  appliquer(ev);
+  return null;
+}
+
+/** Cette rencontre peut-elle s'ouvrir maintenant ? Le message dit pourquoi non. */
+export function rencontreOuvrable(r: Rencontre, maintenant = Date.now()): string | null {
+  const impose = dateImposeeDe(r.tournoi, r.phase);
+  if (impose !== undefined && maintenant < impose) {
+    return "Cette phase se joue à une heure fixée : elle n'est pas encore ouverte";
+  }
+  return null;
+}
 export const disposDe = (tournoi: string, compte: string): string =>
   dispos.get(`${tournoi}|${compte}`) ?? "";
 export const messagesDeLaRencontre = (id: string): MessageDeRencontre[] =>

@@ -14256,6 +14256,8 @@ interface RencontreVue {
   bo: number;
   limite: number;
   butoir: number;
+  /** L'heure imposée à sa phase, ou `null` si elle est libre. */
+  imposee: number | null;
   fin: { gagnant: string | null; par: string; at: number } | null;
   manches: MancheDeRencontreVue[];
   messages: { de: string; texte: string; at: number }[];
@@ -14276,6 +14278,8 @@ interface BattleVue {
   finale: string | null;
   /** Le classement final, une fois la grande finale jouée. */
   classement: { camp: string; place: number }[];
+  /** Les heures imposées, par phase. Vide tant qu'aucune ne l'est. */
+  dates: Record<string, number>;
   moi: { camp: string | null; dispos: string; arbitre: boolean } | null;
   dispos: Record<string, string>;
 }
@@ -14523,10 +14527,14 @@ function mesRencontres(x: TournoiVue, b: BattleVue, maintenant: number): HTMLEle
         `${score[mien]} - ${score[mien === 0 ? 1 : 0]}`));
     }
     carte.appendChild(tete);
+    // UNE PHASE A HEURE FIXEE NE SE NEGOCIE PAS : on dit l'heure, et rien
+    // d'autre. Les fenêtres n'ont plus de sens quand le rendez-vous est pris.
     carte.appendChild(el("div", "sub", [
       t2("Au meilleur de {n} manches", { n: r.bo }),
-      t2("limite le {d}", { d: dateDeTournoi(r.limite) }),
-      t2("butoir le {d}", { d: dateDeTournoi(r.butoir) }),
+      ...(r.imposee !== null
+        ? [t2("le {d}", { d: dateDeTournoi(r.imposee) })]
+        : [t2("limite le {d}", { d: dateDeTournoi(r.limite) }),
+          t2("butoir le {d}", { d: dateDeTournoi(r.butoir) })]),
     ].join(" · ")));
     const sien = b.dispos[autre] ?? "";
     if (sien.trim() !== "") {
@@ -14538,6 +14546,10 @@ function mesRencontres(x: TournoiVue, b: BattleVue, maintenant: number): HTMLEle
     const gestes = el("div", "ad-ligne");
     const jouer = el("button", "vert", t("Inviter et jouer")) as HTMLButtonElement;
     jouer.type = "button";
+    if (r.imposee !== null && maintenant < r.imposee) {
+      jouer.disabled = true;
+      jouer.title = t2("Cette phase se joue le {d}", { d: dateDeTournoi(r.imposee) });
+    }
     jouer.addEventListener("click", () => {
       void (async () => {
         jouer.disabled = true;
@@ -14831,6 +14843,10 @@ function peindreLeBattle(x: TournoiVue, b: BattleVue, maintenant: number, regle:
   const podium = classementFinalDuBattle(b);
   if (podium !== null) blocs.push(podium);
   if (regle && b.phase === "poules") blocs.push(editeurDuTableau(x, b));
+  if (regle) {
+    const heures = heuresDesPhases(x, b);
+    if (heures !== null) blocs.push(heures);
+  }
   const dessin = tableauDuBattle(x, b);
   if (dessin !== null) {
     const section = el("section", "to-b-bloc");
@@ -14957,8 +14973,12 @@ function tableauDuBattle(x: TournoiVue, b: BattleVue): HTMLElement | null {
     const cols = el("div", "tb-colonnes");
     for (const c of colonnes) {
       const colonne = el("div", "tb-colonne");
+      const impose = b.dates[c.phase];
       colonne.appendChild(el("h4", "tb-colonne-titre",
         nomDuTour(c.phase, c.tour, dernierHaut, dernierBas)));
+      if (impose !== undefined) {
+        colonne.appendChild(el("div", "tb-colonne-heure", dateDeTournoi(impose)));
+      }
       for (const r of c.les) {
         const score = scoreDeLaRencontre(r);
         const joue = r.manches.some((m) => m.points !== null);
@@ -15083,6 +15103,59 @@ function editeurDuTableau(x: TournoiVue, b: BattleVue): HTMLElement {
   boite.append(reglages, gestes, vue, erreur);
   void voir();
   return boite;
+}
+
+/**
+ * LES HEURES IMPOSEES, phase par phase (SPEC.md §29).
+ *
+ * Le régime ordinaire ne force rien : les joueurs s'arrangent entre la date
+ * limite et la date butoir. L'organisateur peut clouer une phase à une heure
+ * précise, et c'est ce qu'il faut pour une finale retransmise.
+ */
+function heuresDesPhases(x: TournoiVue, b: BattleVue): HTMLElement | null {
+  const duTableau = b.rencontres.filter((r) => !r.phase.startsWith("poule:"));
+  if (duTableau.length === 0) return null;
+  const derniere = (prefixe: string): number =>
+    duTableau.reduce((a, r) => (r.phase.startsWith(prefixe) ? Math.max(a, r.tour) : a), 0);
+  const dernierHaut = derniere("haut:");
+  const dernierBas = derniere("bas:");
+  const phases: { phase: string; tour: number }[] = [];
+  for (let n = 1; n <= dernierHaut; n++) phases.push({ phase: `haut:${n}`, tour: n });
+  for (let n = 1; n <= dernierBas; n++) phases.push({ phase: `bas:${n}`, tour: n });
+  if (duTableau.some((r) => r.phase === "finale")) phases.push({ phase: "finale", tour: 1 });
+
+  const section = el("section", "to-b-bloc");
+  section.appendChild(el("h1", "", t("Heures des phases")));
+  section.appendChild(el("p", "sub", t(
+    "Sans heure imposée, chaque tour garde sa fenêtre : les joueurs s'arrangent entre la date limite et la date butoir.")));
+  const erreur = el("div", "join-error");
+  erreur.hidden = true;
+  const envoyer = async (phase: string, quand: string | null): Promise<void> => {
+    const { ok, d } = await envoyerAuServeur(
+      `/api/tournoi/${encodeURIComponent(x.id)}/date-phase`, { phase, quand });
+    if (!ok) { direLErreur(erreur, String(d.erreur ?? "serveur injoignable")); return; }
+    ouvrirLeTournoi(x.id, false);
+  };
+  for (const { phase, tour } of phases) {
+    const impose = b.dates[phase];
+    const ligne = el("div", "hp-ligne");
+    ligne.appendChild(el("span", "hp-nom", nomDuTour(phase, tour, dernierHaut, dernierBas)));
+    const date = champDate(impose ?? (duTableau.find((r) => r.phase === phase)?.limite ?? Date.now()));
+    ligne.appendChild(date);
+    const poser = el("button", "", impose === undefined ? t("Imposer") : t("Changer")) as HTMLButtonElement;
+    poser.type = "button";
+    poser.addEventListener("click", () => { void envoyer(phase, date.value); });
+    ligne.appendChild(poser);
+    if (impose !== undefined) {
+      const libre = el("button", "lien", t("Laisser libre")) as HTMLButtonElement;
+      libre.type = "button";
+      libre.addEventListener("click", () => { void envoyer(phase, null); });
+      ligne.appendChild(libre);
+    }
+    section.appendChild(ligne);
+  }
+  section.appendChild(erreur);
+  return section;
 }
 
 /** Le plan d'un tableau, dessiné comme le tableau lui-même. */
