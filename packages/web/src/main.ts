@@ -3544,8 +3544,19 @@ function paintRoadmap() {
   // Le cumul se compte dans l'ordre de la partie, quel que soit celui de
   // l'affichage : c'est le temps ecoule depuis le premier coup.
   cumulRoute.clear();
+  cumulNegMot.clear();
   let somme = 0;
-  for (const m of history) { somme += Math.max(0, m.ms); cumulRoute.set(m.n, somme); }
+  let sommeNeg = 0;
+  for (const m of history) {
+    somme += Math.max(0, m.ms);
+    cumulRoute.set(m.n, somme);
+    if (duplicate) {
+      const p = m.propositions?.[me];
+      const negMot = p === undefined ? 0 : p.score - m.score;
+      sommeNeg += negMot;
+      cumulNegMot.set(m.n, sommeNeg);
+    }
+  }
 
   body.innerHTML = `<div class="rm-piste" id="rm-piste"></div>`;
   filtrerLaRoute();
@@ -3708,6 +3719,9 @@ $("rm-body").addEventListener("click", (e) => {
 /** Temps ecoule au terme de chaque coup, pour la colonne de cumul. */
 const cumulRoute = new Map<number, number>();
 
+/** Cumul du négatif du mot joué en duplicate (différence avec le top). */
+const cumulNegMot = new Map<number, number>();
+
 /**
  * Ajoute le coup qui vient d'etre joue a la feuille de route DEJA OUVERTE.
  *
@@ -3720,6 +3734,11 @@ function ajouterALaRoute(m: MoveInfo): void {
   $("rm-tete").innerHTML = enTeteDeLaRoute();
   if (history.length === 1) { paintRoadmap(); return; }
   cumulRoute.set(m.n, (cumulRoute.get(m.n - 1) ?? 0) + Math.max(0, m.ms));
+  if (duplicate) {
+    const p = m.propositions?.[me];
+    const negMot = p === undefined ? 0 : p.score - m.score;
+    cumulNegMot.set(m.n, (cumulNegMot.get(m.n - 1) ?? 0) + negMot);
+  }
   const piste = document.getElementById("rm-piste");
   if (piste === null) { paintRoadmap(); return; }
   const body = $("rm-body");
@@ -3777,6 +3796,7 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
   // les deux cas ou elle apprend quelque chose -- un coup manque, et un isotop
   // joue a une autre place que celle que le logiciel a retenue.
   let sien = "";
+  let motInfo = "";
   if (duplicate) {
     const p = m.propositions?.[me];
     const pareil = p !== undefined && p.word === m.word && p.dir === m.dir
@@ -3786,6 +3806,11 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
       : `<span class="mw">${echapper(p.word)}</span>` +
         `<span class="mp">${noteCoup(p.dir, p.x, p.y, cfg.bornes)}</span>` +
         `<span class="ms">${p.score}</span>`;
+
+    const negMot = p === undefined ? 0 : p.score - m.score;
+    const cumulNeg = cumulNegMot.get(m.n) ?? 0;
+    motInfo = `<span class="md-mot${negMot === 0 ? " top" : ""}">${negMot === 0 ? "top" : negMot}</span>` +
+              `<span class="cumul-mot">${cumulNeg}</span>`;
   }
 
   let queue: string;
@@ -3842,7 +3867,7 @@ function ligneDeRoute(m: MoveInfo, haut: number): string {
     image + rejouer +
     `<span class="w">${echapper(m.word)}</span>` +
     `<span class="p">${noteCoup(m.dir, m.x, m.y, cfg.bornes)}</span>` +
-    `<span class="s">${m.score}</span>` + sien +
+    `<span class="s">${m.score}</span>` + sien + motInfo +
     `<span class="who">${echapper(quiLaTrouve(m))}</span>` + queue + like + `</div>`;
 }
 const ICONE_ENREGISTRER =
@@ -3879,25 +3904,34 @@ function enregistrerLaRoute(): void {
   const titre = `${salonNom} — feuille de route`;
 
   const colonnes = duplicate
-    ? ["N°", "Tirage", "Mot", "Place", "Points", "Qui", "Écart", "Trouvé"]
+    ? ["N°", "Tirage", "Top", "Pos.", "Pts", "Joué", "Pos.", "Pts", "−Mot", "−Cum", "Qui", "−Top", "Trouvé"]
     : ["N°", "Tirage", "Mot", "Place", "Points", "Qui", "Temps", "Cumul"];
 
   const lignes = routeVues.map((m) => {
     const trouve = duplicate ? trouveursDuCoup(m).length > 0 : m.player !== null;
     let fin: string[];
     if (duplicate) {
+      const p = m.propositions?.[me];
       const mien = m.scores?.[me];
       const ecart = mien === undefined ? null : mien - m.score;
+      const negMot = p === undefined ? 0 : p.score - m.score;
+      const cumulNeg = cumulNegMot.get(m.n) ?? 0;
       const trouveurs = trouveursDuCoup(m).length;
       const presents = Object.keys(m.scores ?? {}).length;
-      fin = [ecart === null ? "—" : ecart === 0 ? "top" : String(ecart),
+      const motJoue = p === undefined ? "" : p.word;
+      const placeJoue = p === undefined ? "" : noteCoup(p.dir, p.x, p.y, cfg.bornes);
+      const scoreJoue = p === undefined ? "" : String(p.score);
+      fin = [motJoue, placeJoue, scoreJoue,
+             String(negMot === 0 ? "top" : negMot),
+             String(cumulNeg),
+             quiLaTrouve(m, true),
+             ecart === null ? "—" : ecart === 0 ? "top" : String(ecart),
              presents === 0 ? "" : `${trouveurs}/${presents}`];
     } else {
       fin = [trouve ? fmtTime(m.ms) : "×", fmtTime(cumulRoute.get(m.n) ?? 0)];
     }
     const cases = [String(m.n), m.notation, m.word,
-                   noteCoup(m.dir, m.x, m.y, cfg.bornes), String(m.score),
-                   quiLaTrouve(m, true), ...fin];
+                   noteCoup(m.dir, m.x, m.y, cfg.bornes), String(m.score), ...fin];
     return "<tr>" + cases.map((c, i) =>
       `<td class="${i === 2 ? "mot" : i === 4 ? "pts" : i >= 6 || i === 0 ? "num" : ""}">${echapper(c)}</td>`,
     ).join("") + "</tr>";

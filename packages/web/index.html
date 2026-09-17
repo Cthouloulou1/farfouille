@@ -599,10 +599,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 /* En duplicate, trois colonnes de plus : LE MOT QUE VOUS AVEZ JOUE, sa place et
    ses points -- comme sur une feuille de tournoi, ou l'on note son coup a cote
    du tirage. Elles restent vides quand votre coup EST le top affiche. */
-#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) calc(112px * var(--zr, 1)) 22px 24px calc(116px * var(--zr, 1)) calc(104px * var(--zr, 1)) calc(42px * var(--zr, 1)) calc(100px * var(--zr, 1)) calc(96px * var(--zr, 1)) calc(36px * var(--zr, 1)) minmax(0, 1fr) calc(46px * var(--zr, 1)) calc(44px * var(--zr, 1)) auto; }
+#rm-body.duplicate .rmrow { grid-template-columns: var(--w-rn, 38px) calc(112px * var(--zr, 1)) 22px 24px calc(116px * var(--zr, 1)) calc(104px * var(--zr, 1)) calc(42px * var(--zr, 1)) calc(90px * var(--zr, 1)) calc(80px * var(--zr, 1)) calc(32px * var(--zr, 1)) calc(36px * var(--zr, 1)) minmax(80px, 1fr) calc(38px * var(--zr, 1)) calc(40px * var(--zr, 1)) calc(46px * var(--zr, 1)) auto; }
 .rmrow .mw { color: var(--ink-soft); font-weight: 500; letter-spacing: .04em; }
 .rmrow .mp { color: var(--ink-faint); }
 .rmrow .ms { text-align: right; color: var(--ink-soft); }
+.rmrow .md-mot { text-align: right; color: var(--ink-faint); }
+.rmrow .md-mot.top { color: var(--accent); }
+.rmrow .cumul-mot { text-align: right; color: var(--ink-faint); white-space: nowrap; }
 .rmrow .cum { text-align: right; color: var(--ink-faint); white-space: nowrap; }
 .rmrow .d { text-align: right; color: var(--ink-faint); }
 .rmrow .d.top { color: var(--accent); }
@@ -826,7 +829,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .bug-merci { margin: 14px 0 0; font-size: 14px; color: var(--accent); }
 #bug-champs[hidden], .bug-merci[hidden] { display: none; }
 .pseudo .valider { width: 100%; margin-top: 16px; padding: 13px; border: 0; border-radius: 5px; background: var(--accent); color: #FFFFFF; font-size: 15px; font-weight: 500; }
-.pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; filter: brightness(1.12); }
+.pseudo .valider:hover:not(:disabled) { color: #FFFFFF; border-color: transparent; background: color-mix(in srgb, var(--accent) 85%, #000000); }
 .pseudo .renoncer { display: block; margin: 14px auto 0; font-size: 13px; padding: 5px 11px; }
 /* CONFIRMATION OUI/NON (SPEC.md §24-25) : le titre EST la question, centre
    comme elle se lirait a voix haute ; les deux reponses pesent pareil --
