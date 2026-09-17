@@ -299,7 +299,11 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-act
 .poignee-cote { position: absolute; left: -4px; top: 0; bottom: 0; width: 9px; z-index: 4; cursor: col-resize; }
 .poignee-cote::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; transition: background .12s; }
 .poignee-cote:hover::after, .poignee-cote.tire::after { background: var(--accent); }
-.panel { flex: none; overflow-y: auto; max-height: 62%; }
+/* LE PANNEAU REND DE LA PLACE AU CHAT. Sur un ecran court, le panneau prenait
+   ses 62 %, le journal sa hauteur, et il ne restait rien pour le chat -- dont on
+   ne voyait ni les deux boutons ni la ligne de saisie. Il se retrecit donc
+   plutot que de les chasser ; son contenu defile, il etait deja fait pour. */
+.panel { flex: 0 1 auto; overflow-y: auto; max-height: 62%; }
 /* LES SEPARATIONS DU PANNEAU S'ATTRAPENT. Chacun ne suit pas la partie de la
    meme facon : l'un veut voir tous les coups joues, l'autre le chat, un
    troisieme rien que le classement. Plutot que de choisir a leur place, on
@@ -346,8 +350,13 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    table entiere regarde en meme temps, coup apres coup. */
 /* LA MEILLEURE SOLUTION DU MOMENT SE LIT COMME LE TOP : c'est la meme mesure,
    celle qu'on compare d'un coup d'oeil a l'autre. */
-#last-word, #cur-word { font-size: calc(26px * var(--z, 1)); }
-#last-word .pts, #cur-word .pts { font-size: calc(30px * var(--z, 1)); }
+/* LE COUP EN COURS PASSE DEVANT LE PRECEDENT. Les deux mots se suivaient a la
+   meme taille, et l'on lisait l'un pour l'autre : celui du coup qu'on joue est
+   le plus gros des deux, et la question ne se pose plus. */
+#last-word { font-size: calc(24px * var(--z, 1)); }
+#cur-word { font-size: calc(32px * var(--z, 1)); }
+#last-word .pts { font-size: calc(27px * var(--z, 1)); }
+#cur-word .pts { font-size: calc(36px * var(--z, 1)); }
 #last-word.none, #cur-word.none { font-size: calc(16px * var(--z, 1)); }
 .sub { font-size: calc(12.5px * var(--z, 1)); color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
 .bad { margin-top: 5px; font-size: calc(12.5px * var(--z, 1)); color: var(--warn); font-family: "IBM Plex Mono", monospace; }
@@ -450,6 +459,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .sol { display: grid; grid-template-columns: 1fr 74px 44px; gap: 8px; align-items: baseline; width: 100%; text-align: left; padding: 3px 15px; background: transparent; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); border-left: 2px solid transparent; border-radius: 0; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-soft); cursor: pointer; }
 .sol:hover { background: var(--hover); border-color: transparent; border-bottom-color: color-mix(in srgb, var(--rule) 55%, transparent); color: var(--ink-soft); }
 .sol[aria-current="true"] { border-left-color: var(--mark); background: color-mix(in srgb, var(--mark) 12%, transparent); color: var(--ink); }
+/* CE QU'ON A RENDU SOI-MEME sur ce coup : on ouvre la liste pour le retrouver,
+   et le chercher a l'oeil dans cent solutions n'a aucun interet. */
+.sol.mienne { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sol.mienne .w { color: var(--accent); font-weight: 600; }
 /* LA SOLUTION QU'ON REGARDE dans le rejeu d'une partie archivee : elle est
    posee sur la grille a cote (SPEC.md §23). */
 .sol.choisie { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ink); }
@@ -462,8 +475,8 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .inspect-head b { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 500; }
 .inspect-head .g { flex: 1; font-size: 11.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
 
-.chat { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
-.side.rejeu .chat { flex: none; height: 108px; }
+.chat { flex: 1 1 auto; min-height: 176px; display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+.side.rejeu .chat { flex: none; height: 108px; min-height: 0; }
 .side.rejeu .chat > h2 { padding: 5px 15px 2px; font-size: 10px; }
 .side.rejeu .chat #chat-log { font-size: 11px; }
 .side.rejeu .chat-in { padding: 4px 12px 7px; }
@@ -1472,6 +1485,31 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 .ad-partie > button:disabled { opacity: .45; cursor: default; }
 .ad-partie .editeur { flex-basis: 100%; }
 .ad-occupe { font-size: 13px; color: var(--ink-faint); }
+/* LES DEUX FACONS DE REPARTIR, cote a cote et centrees sur leur ligne. */
+.rejouer-bloc { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.rejouer-bloc button { flex: 0 1 auto; }
+/* LE TABLEAU DES COUPS RATES (SPEC.md §29) : une ligne par joueur, une colonne
+   par coup, et dans la case ce qu'il a laisse au top. */
+.g-tableur { overflow: auto; max-height: 420px; }
+.g-tableur table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.g-tableur th, .g-tableur td { border: 1px solid var(--rule); padding: 2px 4px; text-align: center; }
+.g-tableur thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); vertical-align: bottom; font-weight: 500; color: var(--ink-faint); }
+.g-tableur .tb-coup { min-width: 22px; padding: 3px 2px; }
+.g-tableur .tb-n { display: block; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+.g-tableur .tb-mot { display: block; margin: 3px 0; font-family: var(--mono); font-size: 11px; line-height: 1.15; letter-spacing: 0; color: var(--ink); }
+.g-tableur .tb-mot span { display: block; }
+.g-tableur .tb-pts { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--accent); }
+.g-tableur .tb-rang { width: 34px; font-family: var(--mono); color: var(--ink-faint); }
+.g-tableur .tb-nom { min-width: 130px; text-align: left; white-space: nowrap; color: var(--ink); }
+.g-tableur thead .tb-nom, .g-tableur thead .tb-rang, .g-tableur thead .tb-neg { text-align: left; }
+.g-tableur .tb-neg { width: 44px; font-family: var(--mono); color: var(--ink); }
+.g-tableur .tb-case { width: 22px; font-family: var(--mono); color: var(--ink-soft); }
+.g-tableur .tb-rate { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); }
+/* Rien de propose du tout : le coup n'a meme pas ete cherche. */
+.g-tableur .tb-rien { background: color-mix(in srgb, var(--warn) 26%, transparent); }
+.g-tableur tbody tr:hover td { background: var(--hover); }
+.g-tableur .tb-vue td { box-shadow: inset 0 -1px 0 var(--accent), inset 0 1px 0 var(--accent); }
+.g-tableur .tb-vue .tb-nom { font-weight: 600; }
 
 /* L'EDITEUR DE CONSIGNE : les bascules « Aléatoire » et « Égal », et la ligne
    morte d'un réglage laissé au sort. */
@@ -1526,8 +1564,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
   .pe-ligne .pe-quand { grid-column: 1 / -1; }
 }
 /* LE BOUTON QUI DEFIE, en vert : c'est ce qu'on veut voir a la fin d'une partie. */
-#defier-wrap button { width: 100%; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-#defier-wrap button:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+/* NOMME AVEC SON ELEMENT : `.block button` a la meme specificite et rendait le
+   bouton blanc sur blanc au survol. */
+#defier-wrap button.defier { width: 100%; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+#defier-wrap button.defier:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; filter: brightness(1.1); }
 /* LE TYPE DE PARTIE, dans la barre du salon : on joue mieux en sachant ce
    qu'on joue, et les primes s'ouvrent d'un clic quand elles sortent de
    l'usage (SPEC.md §29). */
@@ -2450,13 +2490,14 @@ button.primes-libres:hover { background: none; color: var(--accent); }
       <div class="block" id="rejeu-wrap" hidden>
         <button id="rejeu-open" class="rejeu-declencheur">Revoir la partie <i>(Ctrl+E)</i></button>
       </div>
-      <div class="block" id="rejouer-wrap" hidden>
+      <div class="block rejouer-bloc" id="rejouer-wrap" hidden>
         <button id="rejouer">Rejouer</button>
+        <button id="rejouer-reglages" type="button">Rejouer en changeant les réglages</button>
       </div>
       <!-- DEFIER SUR CETTE PARTIE (SPEC.md §29) : la partie qu'on vient de
            jouer se refige et se fait circuler. -->
       <div class="block" id="defier-wrap" hidden>
-        <button id="defier" type="button">Défier sur cette partie</button>
+        <button class="defier" id="defier" type="button">Défier sur cette partie</button>
       </div>
       <!-- LA MONTANTE : trois gestes, et tous les trois sont a l'hote. Lancer
            l'etape suivante, recommencer une etape ratee, terminer la suite.

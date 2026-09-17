@@ -118,6 +118,8 @@ let endormi = false;
 let duplicate = false;
 let points: Record<string, number> = {};
 let negatif: Record<string, number> = {};
+/** Le negatif de la feuille, en topping collaboratif. */
+let negatifCollectif = 0;
 /** Combien de tops chacun a trouves, dans les deux modes. */
 let tops: Record<string, number> = {};
 /** Coups que personne n'a trouves. */
@@ -2469,8 +2471,14 @@ function paintSide() {
   // mesure de ce qu'on a manque. A plusieurs en topping, la grille n'avance que
   // parce que quelqu'un a trouve le top : le travail est commun, et un ecart
   // personnel n'y mesure rien.
-  $("rb-neg-wrap").hidden = rejeu !== null || enGroupe || montante !== null
-    || (monScore === 0 && monNegatif === 0);
+  // EN TOPPING COLLABORATIF, LE NEGATIF REVIENT, et c'est celui de la FEUILLE :
+  // la table n'en tient qu'une, ce qu'elle a laisse au top la mesure entiere, et
+  // c'est ce chiffre-la que le classement d'une epreuve retiendra (SPEC.md §29).
+  const collectif = cfg.toppingCollaboratif === true && !duplicate;
+  const negatifMontre = collectif ? negatifCollectif : monNegatif;
+  $("rb-neg-wrap").hidden = rejeu !== null || montante !== null
+    || (!collectif && enGroupe)
+    || (monScore === 0 && negatifMontre === 0);
   // LE SOLVEUR NE S'UTILISE PAS PENDANT UNE PARTIE A PLUSIEURS : ce serait
   // presque tenter les joueurs a tricher. « Seul » se compte sur la partie
   // entiere (voir le commentaire de `monde` ci-dessus), pas seulement sur cet
@@ -2485,7 +2493,7 @@ function paintSide() {
     && (epreuve !== null ? (finie || !demarree) : (monde.size <= 1 || finie || !demarree));
   $("solveur-jeu").hidden = !soloEtHorsStar;
   if (!soloEtHorsStar) fermerLeSolveurMini();
-  $("rb-neg").textContent = monNegatif === 0 ? "Top" : `−${monNegatif}`;
+  $("rb-neg").textContent = negatifMontre === 0 ? "Top" : `−${negatifMontre}`;
   paintCurrent();
 
   const lw = $("last-word"), lm = $("last-meta"), ll = $("last-like");
@@ -3279,12 +3287,21 @@ function peindreLaFenetre(): void {
   const debut = Math.max(0, Math.floor(box.scrollTop / H_SOL) - MARGE_SOL);
   const fin = Math.min(solutionsVues.length,
     Math.ceil((box.scrollTop + box.clientHeight) / H_SOL) + MARGE_SOL);
+  // CE QU'ON A RENDU SOI-MEME SUR CE COUP se teinte : on ouvre la liste pour le
+  // retrouver -- « j'avais mis quoi, moi ? » -- et le chercher a l'oeil dans
+  // cent solutions ne sert personne.
+  const ici = rejeu;
+  const joue = ici === null ? undefined : history.find((h) => h.n === ici.n);
+  const mien = joue?.propositions?.[me];
 
   let html = "";
   for (let i = debut; i < fin; i++) {
     const s = solutionsVues[i]!;
+    const mienne = mien !== undefined && s.word === mien.word && s.dir === mien.dir
+      && s.x === mien.x && s.y === mien.y;
     html +=
-      `<button type="button" class="sol${s.ecart === 0 ? " best" : ""}${s.hors ? " hors" : ""}"` +
+      `<button type="button" class="sol${s.ecart === 0 ? " best" : ""}${s.hors ? " hors" : ""}` +
+      `${mienne ? " mienne" : ""}"` +
       `${i === choisie ? ' aria-current="true"' : ""} data-i="${i}" style="top:${i * H_SOL}px"` +
       `${s.noms.length > 0 ? ` title="joué par ${echapper(s.noms.join(", "))}"` : ""}>` +
       `<span class="w">${echapper(s.word)}</span>` +
@@ -5442,7 +5459,7 @@ function applyState(s: {
   tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
-  points?: Record<string, number>; negatif?: Record<string, number>;
+  points?: Record<string, number>; negatif?: Record<string, number>; negatifCollectif?: number;
   tops?: Record<string, number>;
   meilleureCollective?:
     { joueur: string; word: string; score: number; dir: Dir; x: number; y: number } | null;
@@ -5555,6 +5572,7 @@ function applyState(s: {
   rejeuOuvert = s.rejeuOuvert === true;
   points = s.points ?? {};
   negatif = s.negatif ?? {};
+  negatifCollectif = s.negatifCollectif ?? 0;
   tops = s.tops ?? {};
   meilleureCollective = s.meilleureCollective ?? null;
   // Le serveur a-t-il ete relance depuis la derniere compilation du client ?
@@ -7300,7 +7318,8 @@ function peindreFiltres(): void {
     });
     barre.appendChild(b);
   }
-  if (pseudo() === "") return;
+  // CREER UN SALON NE DEMANDE PAS DE COMPTE, ni meme d'etre deja nomme : le
+  // pseudo se demande au clic, et la creation reprend toute seule ensuite.
   const creer = el("button", "creer-bar", t("Créer un salon")) as HTMLButtonElement;
   creer.type = "button";
   creer.addEventListener("click", () => { void creerSalon(); });
@@ -8217,6 +8236,9 @@ function ouvrirReglages(): void {
 }
 
 $("reglages-open").addEventListener("click", ouvrirReglages);
+// REJOUER EN CHANGEANT LES REGLAGES : le meme panneau que la roue, ouvert la ou
+// l'on est -- c'est lui qui relance, une fois qu'on a choisi.
+$("rejouer-reglages").addEventListener("click", ouvrirReglages);
 $("rg-close").addEventListener("click", () => { $("reglages").hidden = true; });
 
 // ------------------------------------------------ salon prive, et invitations
@@ -8463,7 +8485,11 @@ $("renoncer").addEventListener("click", () => {
  */
 async function creerSalon(): Promise<void> {
   const moi = pseudo();
-  if (moi === "") { demanderLePseudo(null); return; }
+  if (moi === "") {
+    reprendreApresLePseudo = () => { void creerSalon(); };
+    demanderLePseudo(null);
+    return;
+  }
   $("c-error").hidden = true;
   const r = await fetch("/api/salons", {
     method: "POST",
@@ -9779,13 +9805,18 @@ function prDessiner(): void {
   const valeurs = prPartie.config.valeurs ?? {};
   const dernier = prVu > 0 ? prPartie.coups[prVu - 1] : undefined;
   const neufs = new Set((dernier?.placements ?? []).map((p) => `${p.x},${p.y}`));
+  // UNE SOLUTION REGARDEE REMPLACE LE COUP JOUE, elle ne s'y ajoute pas : les
+  // deux mots poses ensemble sur la meme grille ne se lisent pas. Recliquer la
+  // ligne rend le top a sa place.
+  const remplace = prLignes[prChoisie] !== undefined;
   // Ce qui est pose, pour que deux caramels colles ne tracent pas deux traits
   // le long de leur bord commun. Voir `cheminDuCaramel`.
   const poses = new Set<string>();
-  for (let k = 0; k < prVu; k++) {
+  const jusqua = remplace ? prVu - 1 : prVu;
+  for (let k = 0; k < jusqua; k++) {
     for (const p of prPartie.coups[k]?.placements ?? []) poses.add(`${p.x},${p.y}`);
   }
-  for (let k = 0; k < prVu; k++) {
+  for (let k = 0; k < jusqua; k++) {
     for (const p of prPartie.coups[k]?.placements ?? []) {
       const i = p.x + bornes, j = p.y + bornes;
       if (i < 0 || j < 0 || i >= cotes || j >= cotes) continue;
@@ -11181,7 +11212,7 @@ $("ep-resultats").addEventListener("click", () => {
 // Les couleurs sont celles du theme : l'encre pour la table, l'accent pour vous,
 // l'avertissement pour un coup rate -- c'est deja ce que dit la feuille de route.
 
-type Graphe = "temps" | "course" | "difficulte" | "rang" | "repartition";
+type Graphe = "temps" | "course" | "difficulte" | "rang" | "repartition" | "rates";
 
 const GRAPHES: { v: Graphe; nom: string }[] = [
   { v: "temps", nom: "Temps par coup" },
@@ -11189,6 +11220,7 @@ const GRAPHES: { v: Graphe; nom: string }[] = [
   { v: "repartition", nom: "Répartition des temps" },
   { v: "course", nom: "Écart au cumul médian" },
   { v: "difficulte", nom: "Difficulté des coups" },
+  { v: "rates", nom: "Coups ratés" },
 ];
 
 let rsGraphe: Graphe = "temps";
@@ -11278,6 +11310,73 @@ function trace(points: [number, number][], classe: string, style = ""): SVGEleme
   });
 }
 
+/**
+ * 6. LES COUPS RATES : un tableau, et non un graphique.
+ *
+ * UNE LIGNE PAR JOUEUR, UNE COLONNE PAR COUP, et dans la case ce qu'il a laisse
+ * au top. Une case vide veut dire qu'il l'a trouve. C'est la lecture des
+ * tableaux de duplicate : on voit d'un coup d'oeil quel coup a coute cher a
+ * tout le monde, et qui l'a pris.
+ *
+ * L'en-tete d'une colonne porte le numero du coup, le mot retenu ECRIT EN
+ * COLONNE -- vingt-cinq mots a l'horizontale ne tiennent sur aucun ecran -- et
+ * ce qu'il valait.
+ */
+function tableauDesCoupsRates(
+  lignes: LigneVue[], vue: LigneVue, details: Record<string, CoupVue[]>,
+): HTMLElement {
+  const modele = details[vue.manche] ?? [];
+  const boite = el("div", "g-tableur");
+  if (modele.length === 0) {
+    boite.appendChild(tableauVide(t("Aucun coup à montrer.")));
+    return boite;
+  }
+  const table = el("table");
+
+  const tete = el("thead");
+  const tr = el("tr");
+  tr.append(el("th", "tb-rang", t("Tab")), el("th", "tb-nom", t("Joueur")),
+    el("th", "tb-neg", t("Nég")));
+  for (const c of modele) {
+    const th = el("th", "tb-coup");
+    th.title = `${t("Coup")} ${c.n} · ${c.mot} · ${c.score} ${t("points")}`;
+    th.appendChild(el("span", "tb-n", String(c.n)));
+    const mot = el("span", "tb-mot");
+    for (const lettre of c.mot) mot.appendChild(el("span", "", lettre));
+    th.appendChild(mot);
+    th.appendChild(el("span", "tb-pts", String(c.score)));
+    tr.appendChild(th);
+  }
+  tete.appendChild(tr);
+  table.appendChild(tete);
+
+  const corps = el("tbody");
+  for (const { l, rang } of classer(lignes)) {
+    const ligne = el("tr");
+    if (l.manche === vue.manche) ligne.classList.add("tb-vue");
+    ligne.appendChild(el("td", "tb-rang", String(rang)));
+    const nom = celluleDuJoueur(l);
+    nom.className = "tb-nom";
+    ligne.appendChild(nom);
+    ligne.appendChild(el("td", "tb-neg", l.negatif === 0 ? "" : String(l.negatif)));
+    const siens = details[l.manche];
+    for (const c of modele) {
+      const sien = siens?.find((x) => x.n === c.n);
+      // LA CASE VIDE VEUT DIRE « TROUVE » : c'est ce qui fait qu'un tableau
+      // rempli de blancs se lit, et qu'un coup rate par tous saute aux yeux.
+      const perdu = sien === undefined ? null : c.score - (sien.prop?.score ?? 0);
+      const td = el("td", "tb-case", perdu === null || perdu <= 0 ? "" : String(perdu));
+      if (perdu !== null && perdu > 0) td.classList.add("tb-rate");
+      if (sien !== undefined && sien.prop === null) td.classList.add("tb-rien");
+      ligne.appendChild(td);
+    }
+    corps.appendChild(ligne);
+  }
+  table.appendChild(corps);
+  boite.appendChild(table);
+  return boite;
+}
+
 /** La legende sous le graphique : une pastille, un mot. */
 function legende(elements: { classe: string; texte: string; style?: string }[]): void {
   const p = $("rs-graphe-legende");
@@ -11319,6 +11418,13 @@ function peindreLesGraphes(
   const avec = lignes.filter((l) => details[l.manche] !== undefined);
   if (!avec.some((l) => l.manche === vue.manche)) avec.push(vue);
   const boite = $("rs-graphe");
+  // LES COUPS RATES SONT UN TABLEAU, pas un dessin : ce qu'on y cherche est un
+  // nombre par joueur et par coup, et un nuage de points ne le donnerait pas.
+  if (rsGraphe === "rates") {
+    legende([]);
+    boite.replaceChildren(tableauDesCoupsRates(avec, vue, details));
+    return;
+  }
   let c: Cadre;
   if (rsGraphe === "temps") c = grapheDesTemps(avec, vue, details, nCoups, chronoMs);
   else if (rsGraphe === "course") c = grapheDeLaCourse(avec, vue, details, nCoups);
@@ -12093,16 +12199,20 @@ function montrerLaPage(id: string): void {
 
 let choixSelection = new Set<string>();
 let choixTous: string[] = [];
+/** Ceux qu'on n'a pas a proposer : ils sont deja la. */
+let choixSauf = new Set<string>();
 let choixFaire: ((pseudos: string[]) => Promise<string | null>) | null = null;
 
 async function choisirDesJoueurs(o: {
-  titre: string; quoi: string; valider: string; lien?: string;
+  titre: string; quoi: string; valider: string; lien?: string; sauf?: string[];
   faire: (pseudos: string[]) => Promise<string | null>;
 }): Promise<void> {
   choixSelection = new Set();
   choixFaire = o.faire;
+  choixSauf = new Set(o.sauf ?? []);
   $("choix-titre").textContent = o.titre;
   $("choix-quoi").textContent = o.quoi;
+  $("choix-quoi").hidden = o.quoi === "";
   ($("choix-valider") as HTMLButtonElement).textContent = o.valider;
   ($("choix-filtre") as HTMLInputElement).value = "";
   direLErreur($("choix-error"), null);
@@ -12125,7 +12235,8 @@ async function choisirDesJoueurs(o: {
 function peindreLeChoix(): void {
   const q = ($("choix-filtre") as HTMLInputElement).value.trim().toLowerCase();
   const moi = moiCompte?.pseudo ?? "";
-  const vus = choixTous.filter((n) => n !== moi && (q === "" || n.toLowerCase().includes(q)));
+  const vus = choixTous.filter((n) =>
+    n !== moi && !choixSauf.has(n) && (q === "" || n.toLowerCase().includes(q)));
   if (vus.length === 0) {
     $("choix-liste").replaceChildren(el("div", "none", t("Aucun compte à ce nom.")));
     return;
@@ -12198,9 +12309,12 @@ async function defierSurCettePartie(): Promise<void> {
   const id = String(d.defi.id);
   void choisirDesJoueurs({
     titre: t("Défier sur cette partie"),
-    quoi: t("Chacun reçoit une notification, connecté ou non."),
+    quoi: "",
     valider: t("Défier"),
     lien: lienDuDefi(id),
+    // ON NE DEFIE PAS QUELQU'UN QUI EST DEJA LA : il a joue la partie, et il a
+    // deja sa ligne au classement du defi.
+    sauf: [...online, ...history.flatMap((m) => Object.keys(m.propositions ?? {}))],
     faire: async (pseudos) => {
       const r = await envoyerAuServeur(`/api/defi/${encodeURIComponent(id)}/inviter`,
         { pseudos, pseudo: me });
@@ -12276,7 +12390,7 @@ async function chargerLeDefi(): Promise<void> {
   defier.addEventListener("click", () => {
     void choisirDesJoueurs({
       titre: t("Défier sur cette partie"),
-      quoi: t("Chacun reçoit une notification, connecté ou non."),
+      quoi: "",
       valider: t("Défier"),
       lien: lienDuDefi(x.id),
       faire: async (pseudos) => {

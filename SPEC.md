@@ -5906,6 +5906,15 @@ du jour, celle d'un tournoi — et **pendant la partie**.
 
 ### Ce qu'on joue se lit pendant qu'on le joue
 
+**Le mot du coup en cours est plus gros que le top du coup précédent**, juste
+en dessous. Ils avaient la même taille et l'on lisait l'un pour l'autre.
+
+**En topping collaboratif, le négatif revient**, à gauche du chrono du coup. Ce
+n'est pas celui d'un joueur mais **celui de la feuille** : la table n'en tient
+qu'une, ce qu'elle a laissé au top la mesure entière, et c'est ce chiffre-là que
+le classement d'une épreuve retiendra. À plusieurs en topping ordinaire il reste
+caché, où il ne mesurerait rien.
+
 **La barre du salon porte le type de la partie** : *7/8 joker*, *Normale, super
 grille, 30s*. On joue mieux en sachant qu'on pose sept caramels sur huit, et
 rien d'autre ne le disait une fois la partie commencée — les réglages ne
@@ -6083,6 +6092,10 @@ coup. Le journal de la manche est celui du salon où elle s'est jouée ; le serv
 ne le sert qu'à qui a le droit d'en voir le détail, c'est-à-dire à qui a fini
 cette partie-là.
 
+**Une solution cliquée remplace le coup joué**, elle ne s'y ajoute pas : les
+deux mots posés ensemble sur la même grille ne se lisent pas. Recliquer la ligne
+rend le top à sa place.
+
 Trois portes y mènent :
 
 - le **temps et le négatif** qui ont remplacé le bouton *Jouer* dans la liste des
@@ -6182,6 +6195,18 @@ coûté à tout le monde.
    les dix premiers du classement final et pour vous.
 5. **Répartition des temps.** L'histogramme des temps totaux, votre place
    marquée : « plus rapide que 82 % ».
+6. **Coups ratés.** Un **tableau**, et non un dessin : une ligne par joueur, une
+   colonne par coup, et dans la case ce que ce joueur a laissé au top. **Une
+   case vide veut dire qu'il l'a trouvé** ; une case plus sombre, qu'il n'a rien
+   proposé du tout. C'est la lecture des tableaux de duplicate : on voit d'un
+   coup d'œil quel coup a coûté cher à tout le monde, et qui l'a pris.
+
+   Les trois premières colonnes sont celles du classement : le **rang**, le
+   **joueur**, son **négatif**. L'en-tête d'une colonne de coup porte son
+   **numéro**, le **mot retenu écrit en colonne** — vingt-cinq mots à
+   l'horizontale ne tiennent sur aucun écran — et **ce qu'il valait**.
+
+   Le tableau suit le tri du classement : trier au négatif réordonne ses lignes.
 
 **Écarté :** le temps selon le type de coup (farfouille ou non, nombre de
 lettres posées).

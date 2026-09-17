@@ -850,6 +850,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Créer le tournoi de la semaine": "Create the weekly tournament",
 
   "Notifications": "Notifications",
+  "Coups ratés": "Missed moves",
+  "Tab": "Tab",
+  "Nég": "Neg",
+  "Aucun coup à montrer.": "No move to show.",
+  "Rejouer en changeant les réglages": "Replay with other settings",
   "{de} vous invite au tournoi « {nom} »": "{de} invites you to the “{nom}” tournament",
   "{de} vous défie sur « {nom} »": "{de} challenges you on “{nom}”",
   "{de} vient de relever le défi « {nom} »": "{de} has just taken up the “{nom}” challenge",

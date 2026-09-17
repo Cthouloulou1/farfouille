@@ -50,6 +50,8 @@ export interface Bilan {
   points: Record<string, number>;
   negatif: Record<string, number>;
   tops: Record<string, number>;
+  /** Le negatif de la FEUILLE, pour le topping collaboratif (SPEC.md §29). */
+  negatifCollectif: number;
 }
 
 /** Un palier de score : un score, et TOUS les coups qui l'atteignent. */
@@ -1606,7 +1608,7 @@ export class Game {
 
   /** Le bilan, refait seulement quand un coup s'ajoute. */
   private bilanFait = -1;
-  private bilanGarde: Bilan = { points: {}, negatif: {}, tops: {} };
+  private bilanGarde: Bilan = { points: {}, negatif: {}, tops: {}, negatifCollectif: 0 };
 
   /**
    * POINTS, NEGATIF ET TOPS DE CHACUN, dans les deux modes.
@@ -1629,6 +1631,11 @@ export class Game {
     const points: Record<string, number> = {};
     const negatif: Record<string, number> = {};
     const tops: Record<string, number> = {};
+    // LE NEGATIF DE LA FEUILLE, pour le topping collaboratif : la table n'en
+    // tient qu'une, et ce qu'elle laisse au top est la meilleure proposition de
+    // n'importe qui. Un coup ou personne n'a rien propose coute son top entier,
+    // comme dans le bilan d'une manche d'epreuve (SPEC.md §29).
+    let negatifCollectif = 0;
     for (const m of this.moves) {
       const solutions: Record<string, number> = m.scores ?? Object.fromEntries(
         Object.entries(m.propositions ?? {}).map(([nom, p]) => [nom, p.score]),
@@ -1637,11 +1644,12 @@ export class Game {
         points[nom] = (points[nom] ?? 0) + sc;
         negatif[nom] = (negatif[nom] ?? 0) + (m.score - sc);
       }
+      negatifCollectif += Math.max(0, m.score - Math.max(0, ...Object.values(solutions)));
       const trouve = m.trouveurs ?? (m.player !== null ? [m.player] : []);
       for (const nom of trouve) tops[nom] = (tops[nom] ?? 0) + 1;
     }
     this.bilanFait = this.moves.length;
-    this.bilanGarde = { points, negatif, tops };
+    this.bilanGarde = { points, negatif, tops, negatifCollectif };
     return this.bilanGarde;
   }
 
