@@ -639,8 +639,12 @@ function surveiller(s: Salon): void {
  * LA GRILLE PERMANENTE N'EST PAS UNE PARTIE QU'ON JOUE : elle dure depuis des
  * mois et ne finit jamais. Un salon d'epreuve a deja sa manche au journal du
  * competitif.
+ *
+ * ON N'APPELLE PAS CECI AILLEURS QU'A LA FIN D'UNE PARTIE. Une partie arretee
+ * en cours de route ne s'ecrit nulle part (SPEC.md §30) ; l'historique refuse
+ * de toute facon les raisons qui ne sont pas une fin (`FINS_COMPLETES`).
  */
-function ecrireLHistoriqueDuSalon(s: Salon, raison: string): void {
+function ecrireLHistoriqueDuSalon(s: Salon, raison: RaisonDeFin): void {
   if (s.epreuve !== null || estPermanent(s)) return;
   ecrireUnePartie({
     salon: s.id, graine: s.partie.seed, nomSalon: s.nom, fin: raison,
@@ -1413,9 +1417,9 @@ function lireUnTournoiDeBattle(c: any, neuf = true): {
  * de quoi tout redessiner.
  */
 async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]> {
-  // UNE PARTIE RELANCEE EN PLEIN MILIEU NE PASSE PAS PAR `onFin` : son
-  // historique s'ecrit ici, avant qu'elle ne soit archivee.
-  ecrireLHistoriqueDuSalon(s, "relance");
+  // UNE PARTIE RELANCEE EN PLEIN MILIEU N'ENTRE NULLE PART (SPEC.md §30) :
+  // relancer par-dessus une partie qui n'a pas fini, c'est l'abandonner. Celle
+  // qui etait allee au bout a deja ecrit son historique par `onFin`.
   const archives = await relancer(s, cfg);
   surveiller(s);
   // La partie neuve nait endormie ET ignorante de qui est la : on lui rend les

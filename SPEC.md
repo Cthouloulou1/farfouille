@@ -7057,23 +7057,57 @@ de tops, son score et son négatif. Rien n'est rétroactif : les parties d'avant
 qui n'étaient éligibles à rien n'existent nulle part, et rien ne les fera
 apparaître.
 
-#### Deux garde-fous
+#### Trois garde-fous
 
 Une liste d'historique ne doit pas se remplir de parties que personne n'a
-vraiment jouées — une grille ouverte et laissée seule, une partie révélée coup
-par coup pour voir.
+vraiment jouées : une grille ouverte et laissée seule, une partie révélée coup
+par coup pour voir, une partie qu'on a coupée court.
 
-- **La partie** n'entre que si quelqu'un a proposé un mot sur **au moins trois
-  quarts** de ses coups.
+- **La partie est allée au bout.** Une partie **arrêtée en cours de route ne
+  s'enregistre nulle part**, ni à l'historique ni au tableau des records. Les
+  seules fins qui comptent sont celles qui étaient prévues : le sac épuisé, le
+  tirage injouable, le nombre de coups réglé, la durée réglée. L'abandon (§25)
+  n'en est pas une, **et la relance non plus** : relancer une partie par-dessus
+  une partie qui n'a pas fini, c'est l'abandonner.
+- **La partie** n'entre que si quelqu'un a proposé un mot, ou trouvé le top, sur
+  **au moins trois quarts** de ses coups. Autrement dit : un coup pris au hasard
+  dans la partie a au moins trois chances sur quatre d'avoir vu quelqu'un jouer.
+  C'est l'indice le plus simple qu'une partie a été jouée plutôt que regardée
+  s'écouler.
 - **Un joueur** n'y entre que s'il a proposé un mot sur **au moins un coup**.
   Être assis dans le salon ne suffit pas.
 
-Le second est plus juste qu'« avoir trouvé un top » : en topping à plusieurs, un
+Le dernier est plus juste qu'« avoir trouvé un top » : en topping à plusieurs, un
 joueur peut jouer toute la partie sans jamais gagner un coup contre plus rapide
 que lui, et cette partie est la sienne quand même.
 
+**Être présent n'est pas avoir joué.** Au duplicate, chaque coup porte un score
+pour chacun des présents au tirage, zéro compris : c'est ce qui donne son négatif
+à celui qui n'a rien trouvé (§16). Ce zéro ne dit rien de ce qu'on a joué, et ne
+compte donc jamais pour un coup joué. Seul un mot proposé, ou le top trouvé,
+compte. Sans cette précision, une grille de duplicate laissée tourner sans que
+personne n'y touche remplissait l'historique de tous ceux qui étaient assis là.
+
 **La grille permanente n'y entre pas.** Elle dure depuis des mois et ne finit
 jamais ; ce n'est pas une partie qu'on a jouée, c'est un lieu.
+
+#### Ce qui n'est pas concerné
+
+- **Les parties du jour, les tournois et les défis.** Une partie d'épreuve est
+  une tentative qui se consomme : l'effacer parce qu'elle a mal tourné
+  reviendrait à pouvoir la recommencer, et le classement ne voudrait plus rien
+  dire. L'abandon y est déjà refusé (§29).
+- **Le tableau des mots.** Une partie abandonnée y laisse les mots trouvés et
+  ratés, et c'est voulu (§25) : c'est souvent le mot raté qui fait abandonner.
+  Ce n'est pas une partie enregistrée, c'est un compteur de mots.
+
+#### Le retour depuis un rejeu
+
+Le bouton **Retour** du rejeu ramène **à la page d'où l'on vient**, et pousse son
+adresse. Il ne suivait ce chemin que pour les parties du compétitif : une partie
+de salon ouverte depuis une page personnelle rendait le tableau des records, où
+l'on n'avait jamais mis les pieds. Le tableau des records ne reparaît plus que
+faute de mieux, quand le rejeu a été ouvert depuis lui ou depuis une adresse.
 
 ### Ce qui reste ouvert
 

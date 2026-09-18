@@ -10,22 +10,32 @@
  * UNE LIGNE PAR PARTIE FINIE, avec ce que chacun y a fait. Les manches du
  * competitif ne passent pas par ici : elles ont deja leur journal (§29).
  *
- * DEUX GARDE-FOUS, pour qu'un historique ne se remplisse pas de parties que
+ * TROIS GARDE-FOUS, pour qu'un historique ne se remplisse pas de parties que
  * personne n'a vraiment jouees :
  *
+ * - **la partie est allee au bout.** Une partie arretee en cours de route ne
+ *   s'ecrit nulle part -- abandonnee par l'hote, ou relancee avant sa fin, ce
+ *   qui revient au meme. C'est deja la regle du tableau des records (§23).
  * - **la partie** n'entre que si quelqu'un a propose un mot sur au moins trois
- *   quarts de ses coups ;
+ *   quarts de ses coups. Pris au hasard, un coup sur quatre au plus est reste
+ *   sans personne : c'est ce qui distingue une partie jouee d'une grille qu'on
+ *   a laissee s'ecouler.
  * - **un joueur** n'y entre que s'il a propose un mot sur au moins un coup.
  *   Etre assis dans le salon ne suffit pas.
  *
- * Le second est plus juste que « avoir trouve un top » : en topping a
+ * Le dernier est plus juste que « avoir trouve un top » : en topping a
  * plusieurs, un joueur peut jouer toute la partie sans jamais gagner un coup
  * contre plus rapide que lui, et cette partie est la sienne quand meme.
+ *
+ * AU DUPLICATE, ETRE PRESENT N'EST PAS AVOIR JOUE. Le coup y porte un score
+ * pour chacun des presents au tirage, zero compris (§16) : c'est ce qui donne
+ * son negatif a qui n'a rien trouve, et cela ne dit rien de ce qu'il a joue.
+ * Seul `propositions` -- et le top trouve -- fait foi ici.
  */
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PlayedMove } from "./game.ts";
+import type { PlayedMove, RaisonDeFin } from "./game.ts";
 import type { ConfigPartie } from "../../engine/src/config.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -90,6 +100,14 @@ const ecrites = new Set<string>();
 /** La part des coups qui doivent avoir recu une proposition de quelqu'un. */
 export const PART_JOUEE = 0.75;
 
+/**
+ * LES FINS QUI FONT UNE PARTIE ALLEE AU BOUT.
+ *
+ * `abandon` n'y est pas, et la relance non plus : relancer par-dessus une
+ * partie qui n'a pas fini, c'est l'abandonner. Voir SPEC.md §30.
+ */
+const FINS_COMPLETES: ReadonlySet<string> = new Set(["sac", "injouable", "coups", "duree"]);
+
 const cle = (salon: string, graine: string): string => `${salon}|${graine}`;
 
 export function resumeDeLaConfig(cfg: ConfigPartie): ResumeDePartie {
@@ -146,6 +164,25 @@ export function ouvrirLHistorique(): void {
 }
 
 /**
+ * QUI A VRAIMENT JOUE CE COUP : un mot propose, ou le top trouve.
+ *
+ * `scores` n'y figure pas, et c'est tout l'objet de cette fonction : au
+ * duplicate il porte un zero pour chaque present au tirage, et le lire comme
+ * une proposition faisait entrer a l'historique des parties que personne
+ * n'avait touchees.
+ *
+ * `player` est le vainqueur du coup en topping ; au duplicate il est nul et
+ * c'est `trouveurs` qui nomme ceux qui ont trouve le top.
+ */
+function joueursDuCoup(c: PlayedMove): Set<string> {
+  const qui = new Set<string>(Object.keys(c.propositions ?? {}));
+  for (const nom of c.trouveurs ?? []) qui.add(nom);
+  if (c.player !== null) qui.add(c.player);
+  if (c.demiPoint !== undefined) qui.add(c.demiPoint.joueur);
+  return qui;
+}
+
+/**
  * CE QUE CHAQUE JOUEUR A FAIT DANS CETTE PARTIE.
  *
  * En duplicate, chacun a son score au coup et il se lit tel quel ; en topping,
@@ -170,12 +207,12 @@ export function lignesDesJoueurs(
     const scores: Record<string, number> = {};
     for (const [nom, p] of Object.entries(c.propositions ?? {})) scores[nom] = p.score;
     for (const [nom, s] of Object.entries(c.scores ?? {})) scores[nom] = Math.max(scores[nom] ?? 0, s);
-    for (const [nom, s] of Object.entries(scores)) {
-      const l = trouver(nom);
-      l.proposes++;
-      l.score += s;
-    }
+    // LE SCORE SE PREND PARTOUT, LE COUP JOUE NE SE COMPTE QUE POUR CEUX QUI
+    // ONT JOUE : au duplicate, `scores` nomme aussi les presents restes muets.
+    for (const [nom, s] of Object.entries(scores)) trouver(nom).score += s;
+    for (const nom of joueursDuCoup(c)) trouver(nom).proposes++;
     if (c.player !== null) trouver(c.player).tops++;
+    else for (const nom of c.trouveurs ?? []) trouver(nom).tops++;
   }
   // Le negatif se compte une fois tous les joueurs connus : un coup sans
   // proposition coute son top a qui a joue la partie.
@@ -193,15 +230,17 @@ export function lignesDesJoueurs(
  * est partie. Une partie deja ecrite ne s'ecrit pas deux fois.
  */
 export function ecrireUnePartie(o: {
-  salon: string; graine: string; nomSalon: string; fin: string;
+  salon: string; graine: string; nomSalon: string; fin: RaisonDeFin;
   cfg: ConfigPartie; coups: PlayedMove[]; estCompte: (nom: string) => boolean;
 }): boolean {
   if (ecrites.has(cle(o.salon, o.graine))) return false;
+  // LA PARTIE EST ALLEE AU BOUT. Une partie abandonnee, ou relancee avant sa
+  // fin, ne s'ecrit nulle part : elle n'a pas de resultat a montrer.
+  if (!FINS_COMPLETES.has(o.fin)) return false;
   if (o.coups.length === 0) return false;
   // TROIS QUARTS DES COUPS AU MOINS ONT RECU UN MOT DE QUELQU'UN : une grille
   // laissee a elle-meme, ou revelee coup par coup, n'est pas une partie jouee.
-  const joues = o.coups.filter((c) =>
-    Object.keys(c.propositions ?? {}).length > 0 || Object.keys(c.scores ?? {}).length > 0).length;
+  const joues = o.coups.filter((c) => joueursDuCoup(c).size > 0).length;
   if (joues / o.coups.length < PART_JOUEE) return false;
   const joueurs = lignesDesJoueurs(o.coups, o.estCompte);
   if (joueurs.length === 0) return false;

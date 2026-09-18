@@ -10497,7 +10497,11 @@ function fermerLaPartie(pousser = true): void {
   const duCompetitif = prSource === "competitif";
   prRetour = null;
   prSource = "records";
-  if (!duCompetitif) $("corps-records").hidden = false;
+  // LE RETOUR RAMENE D'OU L'ON VIENT, quelle que soit la source. Il n'etait
+  // suivi que pour le competitif : une partie de salon ouverte depuis une page
+  // personnelle rendait le tableau des records, ou l'on n'avait jamais mis les
+  // pieds. Le tableau des records ne reparait que faute de mieux.
+  if (retour === null && !duCompetitif) $("corps-records").hidden = false;
   // ON NE GARDE RIEN DERRIERE UNE PAGE FERMEE. Une partie relue, ce sont des
   // centaines de placements et jusqu'a cent solutions par coup : masquee, elle
   // continuerait de peser sur le document et sur la memoire.
@@ -10507,11 +10511,8 @@ function fermerLaPartie(pousser = true): void {
   $("pr-piste").replaceChildren();
   $("pr-coup").replaceChildren();
   $("pr-sols-compte").textContent = "";
-  if (duCompetitif) {
-    if (retour !== null) retour();
-    else ouvrirLeCompetitif(pousser);
-    return;
-  }
+  if (retour !== null) { retour(); return; }
+  if (duCompetitif) { ouvrirLeCompetitif(pousser); return; }
   if (pousser) window.history.pushState({ page: "records" }, "", "?page=records");
 }
 
@@ -13029,7 +13030,10 @@ function peindreLHistorique(): void {
     const revoir = el("button", "pe-revoir", t("Revoir")) as HTMLButtonElement;
     revoir.type = "button";
     revoir.addEventListener("click", () => {
-      void ouvrirLaPartie(l.id, 1, l.source, () => ouvrirLaPagePerso(peQui, false));
+      // LE RETOUR POUSSE SON ADRESSE, comme celui du competitif : sans cela on
+      // se retrouvait sur la page personnelle avec l'adresse du rejeu, et un
+      // rafraichissement rouvrait la partie qu'on venait de quitter.
+      void ouvrirLaPartie(l.id, 1, l.source, () => ouvrirLaPagePerso(peQui));
     });
     gestes.appendChild(revoir);
     ligne.appendChild(gestes);

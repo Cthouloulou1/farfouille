@@ -1593,7 +1593,10 @@ button.word:hover { color: var(--accent); border-color: transparent; }
 #choix-filtre { width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--field); color: var(--ink); font: inherit; font-size: 13.5px; }
 #corps-perso .pr-tete h1 { margin: 0; }
 #corps-perso .avatar { flex: none; width: 44px; height: 44px; }
-.pe-ligne { display: grid; grid-template-columns: 96px minmax(0, 1fr) 90px 70px 80px; gap: 10px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--rule); font-size: 13.5px; }
+/* La derniere colonne se mesure sur son contenu : une ligne de defi ou de
+   tournoi porte deux boutons, et une largeur fixe les faisait deborder sur le
+   negatif, qu'ils recouvraient. */
+.pe-ligne { display: grid; grid-template-columns: 96px minmax(0, 1fr) 90px 70px max-content; gap: 10px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--rule); font-size: 13.5px; }
 .pe-ligne .pe-quand { font-size: 12px; color: var(--ink-faint); font-family: var(--mono); }
 .pe-ligne .pe-quoi { min-width: 0; color: var(--ink); }
 .pe-ligne .pe-quoi i { display: block; font-style: normal; font-size: 12px; color: var(--ink-faint); }
