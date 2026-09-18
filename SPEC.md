@@ -1877,6 +1877,7 @@ pas un outil.
 | **Le mode arbitrage** | Un duplicate dont les tirages sont saisis et non tirés, conduit par le gérant du salon : arbitrer un tournoi, préparer une partie, ou saisir une partie jouée sur papier. Spécifié au §22, avec le **top des tops** qui l'accompagne et sert aussi en rejeu. |
 | **Le compétitif** | Une page à part : les parties du jour, les tournois de topping et de battle, et les défis sur une partie déjà jouée. Spécifié au §29. |
 | **Les salons permanents** | Quatre interrupteurs d'administration — permanent, masqué, renommé, parties enchaînées —, la règle de rangement des grilles sans bord, et un salon qui relance sa partie tout seul avec un classement qui ne se remet jamais à zéro. Spécifié au §31. |
+| **Le poids des fichiers servis** | Compression et empreinte de version, pour que la page ne pèse pas 1,17 Mo à l'arrivée et 742 Ko à chaque rechargement. Spécifié au §32. |
 | **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. Le compteur qui les départage est spécifié au §23. |
 
 ### Vu, pas expliqué
@@ -7447,8 +7448,94 @@ l'absence de compression en pèse sept cents.
 
 | Sujet | Question |
 |---|---|
-| **La compression des fichiers servis** | Quinze lignes dans le service des fichiers statiques, et `minify` à la compilation. Sans rapport avec cette section, mais c'est le seul endroit où le site est lourd. |
+| **La compression des fichiers servis** | Faite, et le §32 la décrit : 1,17 Mo à la première visite deviennent 470 Ko, et un rechargement ne transporte plus rien. La minification du client, elle, attend la mise en ligne. |
 | **Les journaux déjà écrits** | La correction des sous-tops ne vaut que pour ce qui s'écrira. Les 89 Mo de `top-leger` et les 845 Ko de la grille permanente restent tels quels : on n'y touche pas, c'est le journal qui fait foi. |
 | **Le classement cumulé d'un salon renommé** | Le cumul suit l'identifiant, pas le nom. Renommer un salon ne le remet donc pas à zéro, ce qui est voulu, mais rien ne le dit à l'écran. |
 | **Retirer une partie de la liste** | Rien ne permet d'effacer une partie ratée de la liste d'un salon qui enchaîne. C'est cohérent avec le reste du site, où l'on n'efface pas une partie jouée ; à revoir si la liste devient illisible. |
 | **Le deuxième salon qui enchaîne** | La case le permet. Rien n'est prévu pour comparer deux salons entre eux, ni pour additionner leurs classements. |
+---
+
+## 32. Le poids des fichiers servis
+
+Le site pesait **1,17 Mo à la première visite**, et — c'est le pire — **742 Ko à
+chaque rechargement de page**. Rien de tout cela ne venait des fonctionnalités :
+le serveur ne compressait pas ce qu'il envoyait, et n'avait aucun moyen de dire à
+un navigateur que le fichier qu'il redemandait n'avait pas changé.
+
+### Deux défauts, et ils se corrigent au même endroit
+
+**Rien n'était compressé.** Le serveur lisait le fichier et l'envoyait tel quel.
+Or ce sont du texte : `index.html` et `app.js` perdent les trois quarts de leur
+poids en gzip, et le DAWG lui-même en perd un tiers.
+
+**Rien ne portait d'étiquette.** Les fichiers partaient en `cache-control:
+no-cache`, ce qui ne veut pas dire « ne garde rien » mais « redemande avant de
+réutiliser ». C'est le bon réglage, et il existe pour une raison précise : sans
+lui, le navigateur gardait un ancien `app.js` et une recompilation restait sans
+effet, ce qui fait passer un correctif pour un bug persistant. Mais **le serveur
+ne fournissait pas de validateur** : le navigateur redemandait, et le serveur
+n'avait rien d'autre à répondre que le fichier entier. Chaque rechargement
+retéléchargeait 742 Ko identiques.
+
+### Ce qui se fait maintenant
+
+**Une empreinte par fichier, tirée de son contenu.** Le navigateur la renvoie à
+la requête suivante ; si elle correspond, la réponse est un `304` sans corps. Un
+rechargement ne transporte donc plus rien tant que rien n'a changé.
+
+**L'empreinte vient du CONTENU, pas de la date.** Deux compilations qui rendent
+le même fichier rendent la même étiquette, et le navigateur ne retélécharge pas
+un `app.js` recompilé à l'identique.
+
+**Le disque reste la vérité.** Le contenu servi, sa version compressée et son
+empreinte sont gardés en mémoire, sous une clé qui est l'horodatage et la taille
+du fichier. Un `npm run build` change l'horodatage, l'entrée se refait, et **un
+simple rafraîchissement du navigateur montre le changement** — la garantie que
+`no-cache` apportait déjà, et qu'il ne fallait surtout pas perdre.
+
+**La compression se fait une fois par version de fichier**, au niveau le plus
+serré : personne n'attend derrière, et quarante millisecondes une fois après
+chaque compilation ne se voient nulle part.
+
+**On ne compresse que ce qui y gagne** : du texte, et le DAWG. Une image déjà
+compressée coûterait un calcul pour rien. En dessous d'un kilo-octet, on ne
+compresse pas non plus : l'en-tête gzip pèse à lui seul une vingtaine d'octets,
+et un fichier de cette taille voyage de toute façon dans un seul paquet.
+
+**`vary: accept-encoding`** accompagne chaque réponse, pour qu'un cache partagé
+ne serve jamais la version compressée à un client qui ne l'a pas demandée.
+
+### Ce que cela donne, mesuré
+
+| Fichier | Avant | Après |
+|---|---|---|
+| `index.html` | 221 170 o | **52 337 o** |
+| `app.js` | 520 650 o | **131 866 o** |
+| `dawg.bin` | 453 204 o | **289 616 o** |
+| les trois vignettes SVG | 40 619 o | **7 806 o** |
+| **première visite** | **1 235 843 o** | **481 625 o** |
+| **rechargement** | **742 Ko** | **0 octet de corps** |
+
+Le DAWG était déjà mis en cache pour toujours : il ne part qu'une fois, et la
+ligne du rechargement ne le compte pas.
+
+### Ce qui n'est pas fait
+
+**La minification du client.** `app.js` fait 521 Ko de source compilée, dont 324
+minifiée, soit 104 Ko compressés au lieu de 132. Vingt-huit kilo-octets de mieux,
+contre un fichier construit illisible et des traces d'erreur incompréhensibles
+dans la console — ce qui se règle avec une carte des sources, mais qui ne se
+règle pas tout seul. À faire le jour de la mise en ligne, pas avant : d'ici là,
+un `app.js` lisible vaut mieux que vingt-huit kilo-octets.
+
+**La compression des réponses de l'API.** Elles sont petites pour la plupart, mais
+pas toutes : un tableau de records ou une partie relue font quelques dizaines de
+kilo-octets. Le même traitement leur irait ; il demande de passer par `json()`,
+qui sert toutes les routes, et ce n'est pas le même risque.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| **Brotli** | Gagnerait encore 15 à 20 % sur le texte par rapport à gzip, et tous les navigateurs le comprennent. Il coûte plus cher à compresser, ce qui ne compte pas ici puisqu'on ne le fait qu'une fois. Non retenu pour l'instant : une chose à la fois. |
+| **La mémoire gardée** | Chaque fichier servi tient en mémoire en double, brut et compressé. Cela fait environ deux mégaoctets pour la page, son client et les quatre lexiques. Sans conséquence aujourd'hui ; à revoir si le site se met à servir beaucoup de fichiers. |

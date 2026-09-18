@@ -12,6 +12,8 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
+import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import { dirname, join, extname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -1832,6 +1834,97 @@ const MIME: Record<string, string> = {
 };
 
 /**
+ * CE QU'ON COMPRESSE (SPEC.md §32).
+ *
+ * Du texte, et le DAWG : 453 Ko qui tombent a 285. Une image deja compressee --
+ * png, jpeg, woff2 -- ne gagnerait rien et couterait un calcul ; il n'y en a
+ * aucune ici, si bien que cette liste dit ce qu'on compresse et non ce qu'on
+ * excepte.
+ */
+const COMPRESSIBLES = new Set([".html", ".js", ".css", ".svg", ".json", ".txt", ".map", ".bin"]);
+
+/**
+ * En dessous d'un kilo-octet, la compression coute plus qu'elle ne rapporte :
+ * l'en-tete gzip pese a lui seul une vingtaine d'octets, et un fichier de cette
+ * taille voyage de toute facon dans un seul paquet.
+ */
+const PLANCHER_GZIP = 1024;
+
+/**
+ * UN FICHIER SERVI : son contenu, sa version compressee, et son empreinte.
+ *
+ * Gardes tant qu'il n'a pas bouge sur le disque, et la cle est son horodatage
+ * et sa taille. LE DISQUE RESTE DONC LA VERITE : un `npm run build` change
+ * l'horodatage, l'entree se refait, et un simple rafraichissement du navigateur
+ * montre le changement. Sans cela on croirait a un correctif qui ne prend pas,
+ * ce qui est exactement la panne que `no-cache` evitait deja.
+ */
+interface FichierServi {
+  cle: string;
+  brut: Buffer;
+  /** `null` quand le fichier ne se compresse pas, ou qu'il est trop petit. */
+  gz: Buffer | null;
+  etag: string;
+}
+
+const servis = new Map<string, FichierServi>();
+
+function fichierServi(chemin: string): FichierServi {
+  const st = statSync(chemin);
+  const cle = `${st.mtimeMs}:${st.size}`;
+  const deja = servis.get(chemin);
+  if (deja !== undefined && deja.cle === cle) return deja;
+  const brut = readFileSync(chemin);
+  // NIVEAU 9, LE PLUS SERRE : le calcul ne se fait qu'une fois par version de
+  // fichier, et personne n'attend derriere. Quarante millisecondes sur le plus
+  // gros, une fois apres chaque compilation.
+  const gz = COMPRESSIBLES.has(extname(chemin)) && brut.length >= PLANCHER_GZIP
+    ? gzipSync(brut, { level: 9 }) : null;
+  const neuf: FichierServi = {
+    cle, brut, gz,
+    // L'empreinte vient du CONTENU : deux compilations qui rendent le meme
+    // fichier rendent la meme etiquette, et le navigateur ne retelecharge rien.
+    etag: `"${createHash("sha1").update(brut).digest("base64url").slice(0, 22)}"`,
+  };
+  servis.set(chemin, neuf);
+  return neuf;
+}
+
+/**
+ * Sert un fichier : COMPRESSE si le navigateur le veut, et RIEN DU TOUT s'il a
+ * deja la bonne version (SPEC.md §32).
+ *
+ * L'ETIQUETTE FAIT ECONOMISER LE CORPS ENTIER, et c'est elle qui rapporte le
+ * plus. `no-cache` ne dit pas « ne garde rien » mais « redemande avant de
+ * reservir » : sans etiquette, le serveur n'avait aucun moyen de repondre
+ * « rien n'a change », et renvoyait les 742 Ko de la page a CHAQUE
+ * rechargement.
+ */
+function servirLeFichier(
+  req: IncomingMessage, res: ServerResponse, chemin: string,
+  entetes: Record<string, string>,
+): void {
+  const f = fichierServi(chemin);
+  const commun = { ...entetes, etag: f.etag, vary: "accept-encoding" };
+  if (String(req.headers["if-none-match"] ?? "") === f.etag) {
+    res.writeHead(304, commun);
+    res.end();
+    return;
+  }
+  const veutGzip = String(req.headers["accept-encoding"] ?? "").includes("gzip");
+  const compresse = veutGzip && f.gz !== null;
+  const corps = compresse ? f.gz! : f.brut;
+  res.writeHead(200, {
+    ...commun,
+    "content-length": String(corps.length),
+    // SANS CECI, un cache partage pourrait servir la version compressee a un
+    // client qui ne l'a pas demandee.
+    ...(compresse ? { "content-encoding": "gzip" } : {}),
+  });
+  res.end(corps);
+}
+
+/**
  * La variante de la grille permanente anglaise.
  *
  * La meme que la francaise -- grille sans bord, sac du jeu classique qui se
@@ -3370,13 +3463,10 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url === "/dawg.bin") {
     const demande = new URLSearchParams((req.url ?? "").split("?")[1] ?? "").get("d");
     const quel = dictionnaireConnu(demande) ? demande! : DICO_PAR_DEFAUT;
-    const buf = readFileSync(dawgPath(quel));
-    res.writeHead(200, {
+    servirLeFichier(req, res, dawgPath(quel), {
       "content-type": "application/octet-stream",
-      "content-length": String(buf.length),
       "cache-control": "public, max-age=31536000, immutable",
     });
-    res.end(buf);
     return;
   }
 
@@ -3391,12 +3481,12 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   // `no-cache` ne veut pas dire « ne garde rien » mais « redemande avant de
   // reservir » : sans cela le navigateur gardait un ancien app.js et une
   // recompilation restait sans effet, ce qui fait passer un correctif pour un
-  // bug persistant.
-  res.writeHead(200, {
+  // bug persistant. L'etiquette posee par `servirLeFichier` rend cette
+  // redemande gratuite quand rien n'a change.
+  servirLeFichier(req, res, file, {
     "content-type": MIME[extname(file)] ?? "application/octet-stream",
     "cache-control": "no-cache",
   });
-  res.end(readFileSync(file));
 });
 
 // ---------------------------------------------------------------- websocket
