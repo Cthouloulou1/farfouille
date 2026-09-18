@@ -213,6 +213,22 @@ export const EN: Readonly<Record<string, string>> = {
   "Passer le tour ?": "Skip this move?",
   "Abandonner la partie ?": "Abandon the game?",
 
+  // ------------------------- salons permanents, parties enchainees (SPEC.md §31)
+  "Rendre ce salon permanent": "Make this room permanent",
+  "Masquer ce salon": "Hide this room",
+  "Enchaîner les parties": "Chain the games",
+  "Nom du salon": "Room name",
+  "Renommer": "Rename",
+  "Prêt.e": "Ready",
+  "Partie numéro {n}": "Game number {n}",
+  "Voir toutes les parties de ce salon": "See every game of this room",
+  "Parties de ce salon": "Games of this room",
+  "Classement du salon": "Room standings",
+  "{n} parties topées": "{n} topped games",
+  "{n} topées": "{n} topped",
+  "Tops": "Tops",
+  "personne encore": "no one yet",
+
   // ---------------------------------------- salon prive, et invitations
   "Salon privé": "Private room",
   "Inviter": "Invite",

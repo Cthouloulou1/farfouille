@@ -56,6 +56,28 @@ export interface Salon {
   gerant: string | null;
   prive: boolean;
   /**
+   * PERMANENT PAR DECISION DE L'ADMINISTRATION, ou `null` (SPEC.md §31).
+   *
+   * `null` veut dire que la case n'a jamais ete touchee : c'est alors la liste
+   * de lancement (`--permanentes`) qui decide. Des qu'on l'a cochee ou
+   * decochee, c'est le registre. Sans cette distinction, decocher un salon
+   * nomme en ligne de commande n'aurait aucun effet, en silence.
+   */
+  permanent: boolean | null;
+  /**
+   * MASQUE : le salon ne figure plus dans la liste pour qui n'est pas de
+   * l'administration, mais son adresse continue de fonctionner (SPEC.md §31).
+   *
+   * C'est la difference avec `prive`, et elle est voulue : prive est une porte,
+   * masque est un rangement.
+   */
+  masque: boolean;
+  /**
+   * IL RELANCE SA PARTIE TOUT SEUL, deux secondes apres la fin de la
+   * precedente (SPEC.md §31).
+   */
+  enchaine: boolean;
+  /**
    * Qui entre malgre tout dans un salon prive (SPEC.md §26), en plus du
    * proprietaire et de l'administration. Cle par pseudo, pas par compte : une
    * invitation reste valable tant que l'hote ne la retire pas, y compris pour
@@ -158,6 +180,12 @@ export function salonsEnregistres(): Record<string, any>[] {
     try {
       const e = JSON.parse(ligne) as Record<string, any>;
       if (e["t"] === "ouvert") vus.set(e["id"], e);
+      // UN REGLAGE SE REPOSE SUR L'OUVERTURE. Il ne porte que les champs qui
+      // changent, et un reglage sur un salon deja ferme se perd avec lui.
+      if (e["t"] === "reglage") {
+        const deja = vus.get(e["id"]);
+        if (deja !== undefined) vus.set(e["id"], { ...deja, ...e, t: "ouvert" });
+      }
       if (e["t"] === "ferme") vus.delete(e["id"]);
     } catch { /* ligne illisible, on passe */ }
   }
@@ -166,6 +194,17 @@ export function salonsEnregistres(): Record<string, any>[] {
 
 export function salon(id: string): Salon | undefined {
   return salons.get(id);
+}
+
+/**
+ * Ecrit au registre un reglage DU LIEU : permanent, masque, enchaine, ou le nom
+ * (SPEC.md §31).
+ *
+ * En ajout seul, comme tout ce qui s'ecrit ici. L'evenement ne porte que les
+ * champs qui changent : la relecture les repose sur l'ouverture, dans l'ordre.
+ */
+export function inscrireLeReglage(id: string, champs: Record<string, unknown>): void {
+  inscrire({ t: "reglage", id, ...champs });
 }
 
 /**
@@ -196,8 +235,20 @@ export function tousLesSalons(): Salon[] {
   return [...salons.values()].sort((a, b) => a.creeLe - b.creeLe);
 }
 
+/**
+ * Ce qu'un salon qui enchaine ses parties a de plus a dire a sa vignette : ses
+ * parties topees, et les coups deja joues avant la partie en cours (SPEC.md
+ * §31). `undefined` pour tous les autres.
+ */
+export interface SuiteDuSalon {
+  parties: number;
+  coups: number;
+}
+
 /** Ce qu'un client a besoin de savoir pour choisir un salon. */
-export function resume(s: Salon, connectes: number, permanent = false) {
+export function resume(
+  s: Salon, connectes: number, permanent = false, suite?: SuiteDuSalon,
+) {
   return {
     id: s.id,
     nom: s.nom,
@@ -212,6 +263,18 @@ export function resume(s: Salon, connectes: number, permanent = false) {
      * onze mille coups joues a plusieurs ne doivent pas tenir a un clic.
      */
     permanent: s.proprietaire === null || permanent,
+    /** Range hors de la liste pour qui n'est pas de l'administration. */
+    masque: s.masque,
+    /** Il relance sa partie tout seul (SPEC.md §31). */
+    enchaine: s.enchaine,
+    /**
+     * CE QUE LA VIGNETTE D'UN SALON QUI ENCHAINE MONTRE EN PLUS : le nombre de
+     * parties topees, et le numero du coup en cours COMPTE DEPUIS L'OUVERTURE
+     * -- pas depuis le debut de la partie du moment, qui ne dit rien d'un lieu
+     * qui dure. `null` partout ailleurs.
+     */
+    parties: suite?.parties ?? null,
+    coupsTotal: suite === undefined ? null : suite.coups + s.partie.moveNumber,
     coups: s.partie.moveNumber,
     // Le total des points de la partie : la tuile du salon star l'affiche a
     // cote du numero du coup, et l'accueil n'a pas d'autre moyen de l'obtenir.
@@ -233,6 +296,7 @@ export async function ouvrirSalon(opts: {
   id: string; nom: string; proprietaire: string | null; prive: boolean;
   layout: LayoutName; cfg: ConfigPartie; nouveau: boolean; creeLe?: number;
   epreuve?: SalonDEpreuve; figee?: PartieFigee;
+  permanent?: boolean | null; masque?: boolean; enchaine?: boolean;
 }): Promise<Salon> {
   if (salons.has(opts.id)) throw new Error(`le salon "${opts.id}" existe deja`);
   if (salons.size >= MAX_SALONS) {
@@ -257,6 +321,9 @@ export async function ouvrirSalon(opts: {
     gerant: opts.proprietaire, prive: opts.prive, invites: new Set(),
     layout: opts.layout, partie, montante: null, vue: null,
     creeLe: opts.creeLe ?? Date.now(),
+    permanent: opts.permanent ?? null,
+    masque: opts.masque === true,
+    enchaine: opts.enchaine === true,
     epreuve,
   };
   salons.set(s.id, s);
@@ -264,6 +331,13 @@ export async function ouvrirSalon(opts: {
     inscrire({
       t: "ouvert", id: s.id, nom: s.nom, proprietaire: s.proprietaire,
       prive: s.prive, layout: s.layout, config: serialiser(cfg), creeLe: s.creeLe,
+      // LES REGLAGES DU LIEU NE S'ECRIVENT QUE S'ILS SONT DEMANDES : une
+      // ouverture ordinaire n'a rien a dire de plus, et une cle absente veut
+      // dire « on n'a pas touche a la case ».
+      ...(opts.permanent === undefined || opts.permanent === null
+        ? {} : { permanent: opts.permanent }),
+      ...(opts.masque === true ? { masque: true } : {}),
+      ...(opts.enchaine === true ? { enchaine: true } : {}),
       ...(epreuve === null ? {} : { epreuve }),
     });
   }

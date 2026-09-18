@@ -1287,6 +1287,27 @@ export class Game {
     this.paliersGardes = typeof entete?.["paliers"] === "number"
       ? (entete["paliers"] as number)
       : dejaCommencee ? PALIERS_D_AVANT : paliersParDefaut(this.cfg);
+    // UNE GRILLE VRAIMENT SANS FIN NE GARDE JAMAIS SES SOUS-TOPS, quoi qu'en
+    // dise son en-tete (SPEC.md §31).
+    //
+    // La regle ci-dessus refuse de changer le regime d'une partie deja
+    // commencee, et elle a raison : une grille ouverte pour etre etudiee ne
+    // doit pas cesser en cours de route d'enregistrer ce qu'on etudie. Mais la
+    // RAISON de garder les sous-tops est l'analyse d'apres-coup, et une grille
+    // sans bord NI TERME n'a pas d'apres-coup : elle ne se termine jamais. Ce
+    // qu'elle ecrit chaque coup dans son annexe -- 2 694 octets -- n'attend
+    // donc rien ni personne.
+    //
+    // SANS BORD *ET* SANS TERME : une grille limitee a mille coups ou a
+    // soixante minutes se termine, elle, et garde son annexe comme avant.
+    //
+    // Mesure : la grille permanente francaise, ouverte avant ce reglage, se
+    // remettait a ecrire son annexe des sa reprise. `top-leger`, meme cas, y a
+    // laisse 2,9 Mo. Le rejeu n'y perd rien : `paliersDuCoup` rend le palier du
+    // top tant que la partie court, et refait le reste a la demande.
+    const sansFin = this.cfg.bornes === null
+      && this.cfg.coupsMax === null && this.cfg.dureeMax === null;
+    if (sansFin) this.paliersGardes = 0;
     // Une partie deja commencee, meme migree d'un instantane sans le champ,
     // a forcement tire ses lettres avec mulberry32 : lui seul existait alors.
     this.rngAlgo = typeof entete?.["rng"] === "string"

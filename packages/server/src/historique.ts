@@ -47,6 +47,8 @@ export function definirDossierDeLHistorique(dir: string): void {
   DATA_DIR = dir;
   parties.length = 0;
   parNom.clear();
+  parSalon.clear();
+  cumuls.clear();
   ecrites.clear();
 }
 
@@ -85,6 +87,11 @@ export interface PartieDHistorique {
   nomSalon: string;
   at: number;
   coups: number;
+  /**
+   * Le total des points de la partie, ou `undefined` sur une ligne d'avant ce
+   * champ. La liste des parties d'un salon l'affiche (SPEC.md §31).
+   */
+  cumul?: number;
   /** Pourquoi elle s'est arretee : `sac`, `injouable`, `abandon`... */
   fin: string;
   resume: ResumeDePartie;
@@ -94,6 +101,15 @@ export interface PartieDHistorique {
 const parties: PartieDHistorique[] = [];
 /** Les parties d'un nom, de la plus recente a la plus ancienne. */
 const parNom = new Map<string, PartieDHistorique[]>();
+/**
+ * Les parties d'un SALON, de la plus ancienne a la plus recente.
+ *
+ * C'est ce seul index qui donne au salon qui enchaine ses parties son numero,
+ * sa liste et son classement cumule (SPEC.md §31). Aucun journal de plus n'est
+ * tenu : celui-ci ecrit deja une ligne par partie finie, avec son salon, sa
+ * graine, ses coups et ce que chacun y a fait.
+ */
+const parSalon = new Map<string, PartieDHistorique[]>();
 /** Les parties deja ecrites : `salon|graine`. Une partie ne s'ecrit qu'une fois. */
 const ecrites = new Set<string>();
 
@@ -137,6 +153,7 @@ function appliquer(e: Record<string, any>): void {
     salon: e["salon"], graine: e["graine"], nomSalon: e["nomSalon"] ?? e["salon"],
     at: e["at"], coups: e["coups"], fin: e["fin"] ?? "", resume: e["resume"],
     joueurs: e["joueurs"] ?? [],
+    ...(typeof e["cumul"] === "number" ? { cumul: e["cumul"] as number } : {}),
   };
   if (ecrites.has(cle(p.salon, p.graine))) return;
   ecrites.add(cle(p.salon, p.graine));
@@ -146,12 +163,17 @@ function appliquer(e: Record<string, any>): void {
     sienne.unshift(p);
     parNom.set(j.nom, sienne);
   }
+  const dela = parSalon.get(p.salon) ?? [];
+  dela.push(p);
+  parSalon.set(p.salon, dela);
 }
 
 /** Relit le journal. Une ligne tronquee par une coupure est ignoree. */
 export function ouvrirLHistorique(): void {
   parties.length = 0;
   parNom.clear();
+  parSalon.clear();
+  cumuls.clear();
   ecrites.clear();
   if (!existsSync(journal())) return;
   let casses = 0;
@@ -247,6 +269,7 @@ export function ecrireUnePartie(o: {
   const ev = {
     t: "partie", salon: o.salon, graine: o.graine, nomSalon: o.nomSalon,
     at: Date.now(), coups: o.coups.length, fin: o.fin,
+    cumul: o.coups.reduce((a, c) => a + c.score, 0),
     resume: resumeDeLaConfig(o.cfg), joueurs,
   };
   inscrire(ev);
@@ -262,6 +285,72 @@ export function partiesDe(nom: string, plafond = 200): PartieDHistorique[] {
 /** Une partie de l'historique, par son salon et sa graine. */
 export function partieDeLHistorique(salon: string, graine: string): PartieDHistorique | undefined {
   return parties.find((p) => p.salon === salon && p.graine === graine);
+}
+
+/**
+ * Les parties d'un salon, de la plus ancienne a la plus recente (SPEC.md §31).
+ */
+export function partiesDuSalon(salon: string): readonly PartieDHistorique[] {
+  return parSalon.get(salon) ?? [];
+}
+
+/**
+ * Cette partie a-t-elle ete topee de bout en bout ?
+ *
+ * En topping, un coup a au plus un vainqueur : la somme des tops de la ligne
+ * est donc le nombre de coups trouves. Au duplicate, plusieurs joueurs trouvent
+ * le meme top et la somme ne veut plus rien dire -- on ne repond donc que pour
+ * le topping, seul mode ou la question se pose (SPEC.md §31).
+ */
+export function partieTopee(p: PartieDHistorique): boolean {
+  if (p.resume.mode !== "topping") return false;
+  return p.joueurs.reduce((a, j) => a + j.tops, 0) >= p.coups;
+}
+
+/** Une ligne du classement cumule d'un salon (SPEC.md §31). */
+export interface LigneDeCumul {
+  nom: string;
+  tops: number;
+  parties: number;
+}
+
+/**
+ * LE CLASSEMENT QUI NE SE REMET PAS A ZERO (SPEC.md §31).
+ *
+ * Refait depuis les lignes de ce journal, et garde tant qu'aucune partie ne s'y
+ * ajoute : rien n'est tenu ailleurs, donc rien ne peut diverger, et l'etat du
+ * salon part aux clients plusieurs fois par seconde sans le recalculer.
+ *
+ * SEULS LES COMPTES CUMULENT. Un pseudo d'invite n'est adosse a rien et
+ * n'importe qui peut le reprendre demain : des milliers de tops inscrits sous
+ * un nom repris ne voudraient rien dire. C'est la meme precaution que le
+ * journal des records, qui fige `invite` au moment ou il ecrit, pour qu'ouvrir
+ * un compte demain sous le pseudo d'un invite d'hier n'en fasse pas heriter.
+ *
+ * L'INVITE QUI TROUVE UN TOP EST NOMME QUAND MEME, sur le coup, a la feuille de
+ * route et au classement de la partie en cours : il faut bien que quelqu'un
+ * l'ait trouve. Ce qu'il ne recoit pas, c'est une ligne au cumul.
+ */
+const cumuls = new Map<string, { vues: number; lignes: LigneDeCumul[] }>();
+
+export function cumulDuSalon(salon: string): LigneDeCumul[] {
+  const les = parSalon.get(salon) ?? [];
+  const garde = cumuls.get(salon);
+  if (garde !== undefined && garde.vues === les.length) return garde.lignes;
+  const par = new Map<string, LigneDeCumul>();
+  for (const p of les) {
+    for (const j of p.joueurs) {
+      if (j.invite) continue;
+      const deja = par.get(j.nom) ?? { nom: j.nom, tops: 0, parties: 0 };
+      deja.tops += j.tops;
+      deja.parties++;
+      par.set(j.nom, deja);
+    }
+  }
+  const lignes = [...par.values()]
+    .sort((a, b) => b.tops - a.tops || a.nom.localeCompare(b.nom));
+  cumuls.set(salon, { vues: les.length, lignes });
+  return lignes;
 }
 
 /** Combien de parties ce joueur a jouees en salon. */

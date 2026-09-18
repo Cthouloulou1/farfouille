@@ -325,6 +325,27 @@ let salonPermanent = false;
 let permanent = false;
 /** Le salon est-il ferme a qui n'y est pas invite (SPEC.md §26) ? */
 let salonPrive = false;
+/**
+ * Le nom du salon, tel qu'il s'affiche.
+ *
+ * Il vient de l'etat et non du seul message d'accueil : l'administration peut
+ * le changer en cours de route (SPEC.md §31), et le bandeau doit suivre.
+ */
+let nomSalon = "";
+/** Range hors de la liste pour qui n'est pas de l'administration (SPEC.md §31). */
+let salonMasque = false;
+/** Il relance sa partie tout seul, deux secondes apres la fin (SPEC.md §31). */
+let salonEnchaine = false;
+/** Le numero de la partie en cours, sur un salon qui enchaine. `null` sinon. */
+let numeroPartie: number | null = null;
+/**
+ * Le total de tops de chacun DEPUIS L'OUVERTURE DU SALON (SPEC.md §31).
+ *
+ * N'y figurent que les presents et les joueurs de la partie en cours : l'etat
+ * part a chaque changement, et le classement entier s'ouvre a part, avec la
+ * liste des parties.
+ */
+let cumulDesTops: Record<string, number> = {};
 let marks: { x: number; y: number }[] = [];
 
 /** Coup examine : la grille est rembobinee et une solution posee par-dessus. */
@@ -2610,6 +2631,16 @@ function paintSide() {
     rank.appendChild(s);
   }
 
+  // DEUX COLONNES DE NOMBRES DEMANDENT DEUX ETIQUETTES. Sans elles, rien ne
+  // disait laquelle comptait le salon et laquelle comptait la partie.
+  if (salonEnchaine && rows.length > 0) {
+    const entete = document.createElement("div");
+    entete.className = "prow entete";
+    entete.innerHTML = `<span class="tri"></span><span class="nom">${t("Joueur")}</span>`
+      + `<span class="likes">${t("Salon")}</span><span class="num">${t("Partie")}</span>`;
+    rank.appendChild(entete);
+  }
+
   // LE TOP CONCOURT, EN TETE ET HORS CLASSEMENT.
   //
   // Un score de duplicate ne dit rien tout seul : 1 240 points, est-ce bien ?
@@ -2656,7 +2687,13 @@ function paintSide() {
       // TOPPING COLLABORATIF : le nombre de coups remportes par chacun reste
       // ecrit -- la feuille de route le porte toujours -- mais ne s'affiche
       // plus a table, pour un topping moins competitif (SPEC.md §16).
-      : `<span class="likes"></span>` +
+      // UN SALON QUI ENCHAINE SES PARTIES A DEUX NOMBRES PAR JOUEUR (SPEC.md
+      // §31) : son total depuis l'ouverture du salon, et ce qu'il a trouve dans
+      // la partie du moment. La colonne des coeurs est vide en topping : elle
+      // accueille le total, en accent, et la derniere garde la partie en cours
+      // -- c'est la meme colonne que partout ailleurs, on la lit sans
+      // reapprendre.
+      : `<span class="likes">${salonEnchaine ? chiffres(cumulDesTops[name] ?? 0) : ""}</span>` +
         `<span class="num">${enCollaboratif() ? "" : Number.isInteger(n) ? n : n.toFixed(1)}</span>`;
     const marque = verifies.has(name) ? '<b class="verifie" title="joueur vérifié">✓</b>' : "";
     const vrai = nomsPublics[name];
@@ -5594,6 +5631,8 @@ function applyState(s: {
   lancementA?: number;
   gerant?: string | null; proprietaire?: string | null; prive?: boolean;
   tempsJoue?: number; rejeuOuvert?: boolean; permanent?: boolean;
+  masque?: boolean; enchaine?: boolean; numeroPartie?: number | null;
+  cumulDesTops?: Record<string, number> | null; nomSalon?: string;
   demarree?: boolean; coupsMax?: number | null;
   dureeMax?: number | null; debutDeLaPartie?: number;
   points?: Record<string, number>; negatif?: Record<string, number>; negatifCollectif?: number;
@@ -5652,13 +5691,39 @@ function applyState(s: {
   if (!$("reglages").hidden) ($("r-prive") as HTMLInputElement).checked = salonPrive;
   if (s.proprietaire !== undefined) salonPermanent = s.proprietaire === null;
   permanent = s.permanent === true;
+  // LES TROIS REGLAGES DU LIEU (SPEC.md §31). Comme la case « salon prive »,
+  // ils changent sans qu'aucune partie ne bouge : les cases suivent l'etat, si
+  // le panneau est ouvert en ce moment meme.
+  salonMasque = s.masque === true;
+  salonEnchaine = s.enchaine === true;
+  if (typeof s.nomSalon === "string" && s.nomSalon !== nomSalon) {
+    nomSalon = s.nomSalon;
+    $("conn").textContent = `${me} · ${nomSalon}`;
+  }
+  numeroPartie = s.numeroPartie ?? null;
+  cumulDesTops = s.cumulDesTops ?? {};
+  if (!$("reglages").hidden) peindreLesReglagesDAdmin();
+  peindreLeNumeroDePartie();
   // UNE GRILLE PERMANENTE NE SE REREGLE PAS. Relancer, c'est archiver la partie
   // en cours et en ouvrir une neuve : sur une grille d'etude qui porte onze
   // mille coups, c'est le geste qu'on ne veut surtout pas faire par megarde. Le
   // serveur le refuse aussi -- un bouton cache est un garde-fou, pas une regle.
   // Les reglages d'une partie d'epreuve sont ceux de sa partie figee.
-  $("reglages-open").hidden = gerant !== me || permanent || epreuve !== null
-    || rencontreSalon !== null;
+  //
+  // L'ADMINISTRATION GARDE LA PORTE, MEME SUR UN SALON PERMANENT : c'est la
+  // qu'on decoche la case qui l'a rendu permanent (SPEC.md §31). Le panneau s'y
+  // ouvre gele -- les reglages de la partie s'y lisent sans se changer -- et
+  // seule la bande de l'administration y agit. La grille mondiale, elle, ne se
+  // regle toujours pas : personne ne la possede.
+  const porteDAdmin = moiCompte?.admin === true && !salonPermanent
+    && epreuve === null && rencontreSalon === null;
+  $("reglages-open").hidden = (gerant !== me || permanent || epreuve !== null
+    || rencontreSalon !== null) && !porteDAdmin;
+  $("reglages").classList.toggle("gele", permanent);
+  // « PRET.E » (SPEC.md §31) : pour qui n'est pas l'hote, quand aucune partie
+  // ne tourne, et jamais sur un salon qui enchaine -- il n'attend personne.
+  $("pret-wrap").hidden = salonEnchaine || gerant === me || epreuve !== null
+    || rencontreSalon !== null || (s.demarree !== false && s.finie !== true);
   // ABANDONNER UN COUP / LA PARTIE (SPEC.md §24-25). L'administration voit
   // toujours les deux boutons ; pour tout le monde, ils exigent le topping sur
   // une grille finie -- le duplicate et la grille sans fin n'ont pas la meme
@@ -6037,6 +6102,13 @@ let salonChoisi = new URLSearchParams(location.search).get("salon") ?? "";
 interface ResumeSalon {
   id: string; nom: string; proprietaire: string | null; mondiale: boolean;
   permanent?: boolean;
+  /** Range hors de la liste pour qui n'est pas de l'administration (SPEC.md §31). */
+  masque?: boolean;
+  /** Il relance sa partie tout seul (SPEC.md §31). */
+  enchaine?: boolean;
+  /** Ses parties topees, et le coup en cours compte depuis l'ouverture du salon. */
+  parties?: number | null;
+  coupsTotal?: number | null;
   coups: number; finie: boolean; connectes: number;
   /** Le total des points. Absent tant que le serveur n'a pas ete relance. */
   cumul?: number;
@@ -7093,7 +7165,10 @@ async function envoyerLeCompte(): Promise<void> {
   const ou = destination;
   destination = null;
   if (ou !== null) { void rejoindre(ou); return; }
-  peindreAccueil();
+  // ON REDEMANDE LA LISTE, on ne la repeint pas : elle a ete recue sans compte,
+  // et l'administration voit des salons que les autres ne voient pas -- les
+  // masques (SPEC.md §31). Repeinte, la liste restait celle d'un visiteur.
+  void peuplerSalons();
 }
 
 $("c-sans-compte").addEventListener("click", () => {
@@ -7569,9 +7644,18 @@ function carteSalon(s: ResumeSalon): HTMLElement {
   etat.appendChild(el("span", "", s.mondiale
     ? t("permanent")
     : t2("{n} joueur{s}", { n: s.connectes, s: s.connectes > 1 ? "s" : "" })));
-  etat.appendChild(el("span", "ou", s.finie
+  // UN SALON QUI ENCHAINE SES PARTIES COMPTE DEPUIS SON OUVERTURE, et non
+  // depuis la partie du moment (SPEC.md §31) : « coup 4 » ne dit rien d'un lieu
+  // qui dure. Ses parties topees, puis le numero du coup, tous deux en total.
+  const enchaine = s.enchaine === true && typeof s.parties === "number";
+  if (enchaine) {
+    etat.appendChild(el("span", "ou",
+      t2("{n} topées", { n: chiffres(s.parties as number) })));
+  }
+  etat.appendChild(el("span", "ou", s.finie && !enchaine
     ? t("terminée")
-    : s.coups === 0 ? t("en attente") : t2("coup {n}", { n: chiffres(s.coups) })));
+    : s.coups === 0 && !enchaine ? t("en attente")
+    : t2("coup {n}", { n: chiffres(enchaine ? (s.coupsTotal ?? s.coups) : s.coups) })));
   dedans.appendChild(etat);
   c.appendChild(dedans);
 
@@ -8355,6 +8439,7 @@ function ouvrirReglages(): void {
   ($("r-decompte") as HTMLInputElement).checked = cfg.decompte === true;
   ($("r-topping-collab") as HTMLInputElement).checked = cfg.toppingCollaboratif === true;
   ($("r-prive") as HTMLInputElement).checked = salonPrive;
+  peindreLesReglagesDAdmin();
   peuplerMode();
   peuplerCoups();
   peuplerChrono();
@@ -8414,6 +8499,46 @@ $("r-prive").addEventListener("change", () => {
 });
 
 $("r-inviter").addEventListener("click", () => { void inviterDansLeSalon(); });
+
+// ------------------------------------- les interrupteurs de l'administration
+//
+// Reglages DU LIEU (SPEC.md §31), comme la case « salon prive » : ils agissent
+// sur-le-champ, sans passer par « Go », et survivent a une relance. Le serveur
+// revalide -- une case cachee est un garde-fou, pas une regle.
+
+/** Les cases de l'administration suivent l'etat du salon, pas le clic. */
+function peindreLesReglagesDAdmin(): void {
+  const admin = moiCompte?.admin === true;
+  // Jamais sur la grille mondiale : personne ne la possede, et la retirer de la
+  // liste reviendrait a fermer le site sans le dire.
+  $("r-admin").hidden = !admin || salonPermanent || epreuve !== null;
+  if ($("r-admin").hidden) return;
+  ($("r-permanent") as HTMLInputElement).checked = permanent;
+  ($("r-masque") as HTMLInputElement).checked = salonMasque;
+  ($("r-enchaine") as HTMLInputElement).checked = salonEnchaine;
+  // Le champ ne se remplit que s'il est vide ou si l'on n'y ecrit pas : on ne
+  // reprend pas la main sur ce qu'un administrateur est en train de taper.
+  const champ = $("r-nom") as HTMLInputElement;
+  if (document.activeElement !== champ) champ.value = nomSalon;
+}
+
+$("r-permanent").addEventListener("change", () => {
+  envoyer({ t: "salonPermanent", permanent: ($("r-permanent") as HTMLInputElement).checked });
+});
+$("r-masque").addEventListener("change", () => {
+  envoyer({ t: "salonMasque", masque: ($("r-masque") as HTMLInputElement).checked });
+});
+$("r-enchaine").addEventListener("change", () => {
+  envoyer({ t: "salonEnchaine", enchaine: ($("r-enchaine") as HTMLInputElement).checked });
+});
+$("r-renommer").addEventListener("click", () => {
+  const nom = ($("r-nom") as HTMLInputElement).value.trim();
+  if (nom === "") return;
+  envoyer({ t: "salonRenomme", nom });
+});
+
+// « PRET.E » (SPEC.md §31) : une phrase au chat, et rien d'autre.
+$("pret-salon").addEventListener("click", () => { envoyer({ t: "pretDuSalon" }); });
 
 /**
  * INVITER DANS CE SALON, N'IMPORTE QUI (SPEC.md §26).
@@ -12637,6 +12762,131 @@ $("voile-primes").addEventListener("click", (e) => {
  * LE TYPE DE PARTIE, DANS LA BARRE DU SALON. On joue mieux en sachant qu'on
  * joue une 7/8 joker, et c'est la seule chose qui le dise pendant la partie.
  */
+/**
+ * LE NUMERO DE LA PARTIE EN COURS, a cote du type (SPEC.md §31).
+ *
+ * Il ne parait que sur un salon qui enchaine ses parties : ailleurs, il n'y a
+ * qu'une partie et son numero ne voudrait rien dire.
+ */
+function peindreLeNumeroDePartie(): void {
+  const b = $("numero-partie") as HTMLButtonElement;
+  b.hidden = numeroPartie === null;
+  if (numeroPartie === null) return;
+  b.textContent = t2("Partie numéro {n}", { n: chiffres(numeroPartie) });
+  b.title = t("Voir toutes les parties de ce salon");
+  b.onclick = () => { void ouvrirLesPartiesDuSalon(); };
+}
+
+/**
+ * LES PARTIES DU SALON, EN FENETRE (SPEC.md §31).
+ *
+ * La liste a gauche, le classement qui ne se remet pas a zero a droite. Une
+ * ligne terminee mene a son rejeu ; la partie en cours y figure et ne s'ouvre
+ * pas, montrer ses paliers reviendrait a donner les reponses.
+ */
+interface PartieDuSalon {
+  numero: number; id: string; at: number; coups: number;
+  cumul: number | null; topee: boolean;
+  joueurs: { nom: string; tops: number; invite: boolean }[];
+}
+
+async function ouvrirLesPartiesDuSalon(): Promise<void> {
+  $("sp-titre").textContent = t("Parties de ce salon");
+  $("sp-detail").textContent = t("chargement…");
+  $("sp-liste").replaceChildren();
+  $("sp-classement").replaceChildren();
+  $("voile-parties").hidden = false;
+  let d: {
+    nom: string;
+    encours: { numero: number; coups: number; cumul: number; finie: boolean };
+    parties: PartieDuSalon[];
+    cumul: { nom: string; tops: number; parties: number }[] | null;
+  };
+  try {
+    const r = await fetch(`/api/salon/${encodeURIComponent(salonChoisi)}/parties`);
+    d = await r.json();
+    if (!r.ok) throw new Error("");
+  } catch {
+    $("sp-detail").textContent = t("serveur injoignable");
+    return;
+  }
+  // Refermee entre-temps : on ne repeint pas une fenetre qu'on a quittee.
+  if ($("voile-parties").hidden) return;
+  const topees = d.parties.filter((p) => p.topee).length;
+  $("sp-detail").textContent = [
+    d.nom,
+    t2("{n} parties topées", { n: chiffres(topees) }),
+    t2("coup {n}", { n: chiffres(d.parties.reduce((a, p) => a + p.coups, 0) + d.encours.coups) }),
+  ].join(" · ");
+
+  const table = el("table");
+  const tete = el("tr");
+  for (const [texte, classe] of [[t("Partie"), "g"], [t("Date"), "g"], [t("Coups"), ""],
+    [t("Points"), ""], [t("Tops"), "g"]] as [string, string][]) {
+    tete.appendChild(el("th", classe, texte));
+  }
+  table.appendChild(el("thead")).appendChild(tete);
+  const corps = el("tbody");
+
+  // LA PARTIE EN COURS EN TETE, et elle ne s'ouvre pas.
+  const encours = el("tr", "encours");
+  encours.appendChild(el("td", "g", `#${chiffres(d.encours.numero)}`));
+  encours.appendChild(el("td", "g", t("en cours")));
+  encours.appendChild(el("td", "", chiffres(d.encours.coups)));
+  encours.appendChild(el("td", "", chiffres(d.encours.cumul)));
+  encours.appendChild(el("td", "g", ""));
+  corps.appendChild(encours);
+
+  for (const p of d.parties) {
+    const tr = el("tr", "ouvrable");
+    tr.appendChild(el("td", "g", `#${chiffres(p.numero)}`));
+    tr.appendChild(el("td", "g", new Date(p.at).toLocaleDateString(
+      langue() === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "short" })));
+    tr.appendChild(el("td", "", chiffres(p.coups)));
+    tr.appendChild(el("td", "", p.cumul === null ? "—" : chiffres(p.cumul)));
+    const qui = el("td", "g");
+    qui.appendChild(el("span", "sp-qui", p.joueurs
+      .map((j) => `${j.nom} ${j.tops}`).join(" · ") || t("personne")));
+    tr.appendChild(qui);
+    tr.addEventListener("click", () => {
+      $("voile-parties").hidden = true;
+      // LE REJEU EXISTE DEJA et ne demande rien de neuf : la page se pose
+      // par-dessus le salon, et le retour la retire sans qu'on l'ait quitte.
+      void ouvrirLaPartie(p.id, 1, "historique", () => { $("join").hidden = true; });
+    });
+    corps.appendChild(tr);
+  }
+  table.appendChild(corps);
+  $("sp-liste").replaceChildren(table);
+
+  const lignes = d.cumul ?? [];
+  if (lignes.length === 0) {
+    $("sp-classement").replaceChildren(el("div", "none", t("personne encore")));
+    return;
+  }
+  const tc = el("table");
+  const tete2 = el("tr");
+  for (const [texte, classe] of [[t("Joueur"), "g"], [t("Parties"), ""], [t("Tops"), ""]] as [string, string][]) {
+    tete2.appendChild(el("th", classe, texte));
+  }
+  tc.appendChild(el("thead")).appendChild(tete2);
+  const corps2 = el("tbody");
+  for (const l of lignes) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "g", l.nom));
+    tr.appendChild(el("td", "", chiffres(l.parties)));
+    tr.appendChild(el("td", "", chiffres(l.tops)));
+    corps2.appendChild(tr);
+  }
+  tc.appendChild(corps2);
+  $("sp-classement").replaceChildren(tc);
+}
+
+$("sp-close").addEventListener("click", () => { $("voile-parties").hidden = true; });
+$("voile-parties").addEventListener("click", (e) => {
+  if (e.target === $("voile-parties")) $("voile-parties").hidden = true;
+});
+
 function peindreLeTypeDePartie(): void {
   const b = $("type-partie") as HTMLButtonElement;
   b.replaceChildren();

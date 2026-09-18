@@ -808,7 +808,7 @@ button.word:hover { color: var(--accent); border-color: transparent; }
    `.roadmap`) : la fenetre d'invitation s'ouvre depuis son bouton, la
    confirmation depuis les boutons d'abandon -- les deux doivent rester
    au-dessus de tout ce qui etait deja ouvert, reglages compris. */
-#voile-confirmer { z-index: 41; }
+#voile-choix, #voile-confirmer { z-index: 41; }
 .voile[hidden] { display: none; }
 .pseudo { width: min(460px, 94vw); padding: 30px 32px 26px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 8px 30px var(--shadow); font-size: 14.5px; }
 .pseudo h2 { font-family: "Baloo 2", Archivo, sans-serif; font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -.005em; text-transform: none; color: var(--ink); }
@@ -1625,6 +1625,52 @@ button.vert:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 
 .bar .type-partie { padding: 3px 9px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--ink-soft); font-size: 12px; font-family: var(--mono); }
 .bar .type-partie:hover { color: var(--ink); background: var(--hover); }
 .bar .type-partie[hidden] { display: none; }
+/* LE NUMERO DE LA PARTIE, a cote du type (SPEC.md §31). Il ne parait que sur un
+   salon qui enchaine ses parties, et s'ouvre sur leur liste. */
+.bar .numero-partie { color: var(--accent); border-color: var(--accent); }
+.bar .numero-partie:hover { background: var(--accent-bg); color: var(--accent); }
+
+/* LES INTERRUPTEURS DE L'ADMINISTRATION, dans les reglages du salon
+   (SPEC.md §31). Une bande a part, sous une regle : ce sont des reglages DU
+   LIEU, ils agissent sur-le-champ, et rien ne les applique. */
+.rg-admin { border-top: 1px solid var(--rule); padding-top: 12px; }
+.rg-admin-tete { margin-bottom: 8px; font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); }
+.rg-admin-cases { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.rg-admin-nom { display: flex; gap: 8px; margin-top: 12px; }
+.rg-admin-nom input { flex: 1; min-width: 0; }
+.rg-admin-nom button { flex: none; }
+/* UN SALON PERMANENT NE SE REREGLE PAS. Le panneau s'y ouvre pour la seule
+   bande de l'administration -- c'est la qu'on decoche la case qui l'a rendu
+   permanent -- et ce qui regle la PARTIE s'y lit sans se changer. Le pied garde
+   ses gestes : sans cela, on ne pourrait plus refermer la fenetre. */
+#reglages.gele .rg-corps > .reglage:not(.rg-admin):not(.rg-fin) { opacity: .45; pointer-events: none; }
+#reglages.gele #r-appliquer { display: none; }
+/* LE GEL NE PORTE QUE SUR CE QUE « Go » APPLIQUE. « Salon prive » et « Inviter
+   des joueurs » sont des reglages DU LIEU : ils agissent sur-le-champ, sans
+   relancer la partie, et un salon permanent n'a aucune raison de les fermer.
+   Ils vivent au milieu des reglages de partie, d'ou cette exception nommee. */
+#reglages.gele #r-inviter, #reglages.gele #r-prive-case { opacity: 1; pointer-events: auto; }
+
+/* LES PARTIES D'UN SALON QUI ENCHAINE (SPEC.md §31) : la liste a gauche, le
+   classement qui ne se remet pas a zero a droite. */
+.fenetre-parties { width: min(940px, 96vw); padding: 20px 24px 18px; }
+.sp-colonnes { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 18px; }
+.sp-colonnes h3 { margin: 0 0 6px; font-size: 11.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+.sp-colonnes .pr-route { max-height: calc(100vh - 230px); overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--rule); border-radius: 4px; }
+.sp-colonnes .pr-route table { font-size: 13px; }
+.sp-colonnes .pr-route th { padding: 5px 8px; position: sticky; top: 0; z-index: 1; }
+.sp-colonnes .pr-route td { padding: 3px 8px; line-height: 1.5; }
+.sp-colonnes .pr-route tbody tr.ouvrable { cursor: pointer; }
+.sp-colonnes .pr-route tbody tr.ouvrable:hover td { background: var(--hover); }
+.sp-colonnes .pr-route tr.encours td { color: var(--accent); }
+.sp-qui { color: var(--ink-faint); font-size: 11.5px; }
+.fenetre-parties .valider { width: auto; margin-top: 12px; padding: 8px 20px; }
+@media (max-width: 760px) { .sp-colonnes { grid-template-columns: minmax(0, 1fr); } }
+
+/* Une ligne d'en-tete au classement du salon : deux colonnes de nombres, et
+   rien ne disait laquelle comptait la partie et laquelle comptait le salon. */
+.prow.entete { color: var(--ink-faint); cursor: default; font-size: calc(10.5px * var(--z, 1)); letter-spacing: .06em; text-transform: uppercase; }
+.prow.entete:hover { background: transparent; }
 /* NOMMEE AVEC SON ELEMENT : `.cp-partie button` a la meme specificite, et
    habillait ce lien en gros bouton. */
 button.primes-libres, span.primes-libres { display: inline; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
@@ -2445,6 +2491,32 @@ button.primes-libres:hover { background: none; color: var(--accent); }
   </div>
 </div>
 
+<!-- LES PARTIES D'UN SALON QUI ENCHAINE (SPEC.md §31). Une fenetre et non une
+     page : on la consulte depuis le salon, et en sortir pour lire un tableau
+     serait payer cher un renseignement.
+
+     La partie en cours y figure et ne s'ouvre pas : montrer ses paliers, c'est
+     donner les reponses (§20). -->
+<div class="voile" id="voile-parties" hidden>
+  <div class="pseudo fenetre-parties">
+    <div class="fr-tete">
+      <h2 id="sp-titre">Parties</h2>
+      <span class="pr-detail" id="sp-detail"></span>
+    </div>
+    <div class="sp-colonnes">
+      <div>
+        <h3>Parties</h3>
+        <div class="pr-route" id="sp-liste"></div>
+      </div>
+      <div>
+        <h3>Classement du salon</h3>
+        <div class="pr-route" id="sp-classement"></div>
+      </div>
+    </div>
+    <button class="valider" id="sp-close" type="button">Fermer</button>
+  </div>
+</div>
+
 <!-- LA TABLEE D'UNE PARTIE, quand elle ne tient pas dans sa cellule. -->
 <div class="voile" id="voile-tablee" hidden>
   <div class="pseudo tablee">
@@ -2585,6 +2657,9 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 <div class="bar">
   <button class="wordmark" id="accueil" title="Revenir aux salons">Topping <em>infini</em></button>
   <button type="button" class="type-partie" id="type-partie" hidden></button>
+  <!-- LE NUMERO DE LA PARTIE EN COURS, sur un salon qui enchaine ses parties
+       (SPEC.md §31). Il s'ouvre sur la liste de toutes les parties du salon. -->
+  <button type="button" class="type-partie numero-partie" id="numero-partie" hidden></button>
   <div class="who">
     <button class="lien" id="bug-jeu">Signaler un bug</button>
     <button class="lien" id="reglages-open" hidden>Réglages</button>
@@ -2652,6 +2727,12 @@ button.primes-libres:hover { background: none; color: var(--accent); }
     <div class="panel" id="panel-live">
       <div class="block" id="lancer-wrap" hidden>
         <button id="lancer">Lancer la partie</button>
+      </div>
+      <!-- « PRET.E » (SPEC.md §31) : une phrase, pas un etat. Rien ne
+           l'attend et rien ne le compte -- c'est l'hote qui lance. Il ne parait
+           que pour qui n'est pas l'hote, et quand aucune partie ne tourne. -->
+      <div class="block" id="pret-wrap" hidden>
+        <button type="button" id="pret-salon">Prêt.e</button>
       </div>
       <div class="block fin" id="fin" hidden>Partie terminée</div>
       <!-- LA RENCONTRE DE TOURNOI (SPEC.md §29) : contre qui l'on joue, ou en
@@ -3002,7 +3083,7 @@ button.primes-libres:hover { background: none; color: var(--accent); }
 
       <div class="reglage cote-a-cote">
         <label class="case"><input type="checkbox" id="r-decompte"> Décompte</label>
-        <label class="case"><input type="checkbox" id="r-prive"> Salon privé</label>
+        <label class="case" id="r-prive-case"><input type="checkbox" id="r-prive"> Salon privé</label>
         <label class="case" id="r-topping-collab-case"><input type="checkbox" id="r-topping-collab"> Topping collaboratif</label>
       </div>
 
@@ -3015,7 +3096,23 @@ button.primes-libres:hover { background: none; color: var(--accent); }
         </div>
       </div>
 
-      <div class="reglage">
+      <!-- LES INTERRUPTEURS DE L'ADMINISTRATION (SPEC.md §31). Reglages DU
+           LIEU et non de la partie : ils agissent sur-le-champ, sans relance ni
+           archivage, et s'ecrivent au registre des salons. -->
+      <div class="reglage rg-admin" id="r-admin" hidden>
+        <div class="rg-admin-tete">Administration</div>
+        <div class="rg-admin-cases">
+          <label class="case"><input type="checkbox" id="r-permanent"> Rendre ce salon permanent</label>
+          <label class="case"><input type="checkbox" id="r-masque"> Masquer ce salon</label>
+          <label class="case"><input type="checkbox" id="r-enchaine"> Enchaîner les parties</label>
+        </div>
+        <div class="rg-admin-nom">
+          <input id="r-nom" maxlength="40" placeholder="Nom du salon" autocomplete="off">
+          <button type="button" id="r-renommer">Renommer</button>
+        </div>
+      </div>
+
+      <div class="reglage rg-fin">
         <div class="alerte" id="r-alerte" hidden></div>
         <div class="join-error" id="r-error" hidden></div>
         <div class="rg-pied">

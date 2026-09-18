@@ -20,7 +20,8 @@ import {
   ouvrirSalon, relancer, archiver, salon, tousLesSalons, resume,
   salonsEnregistres, fermerSalon, identifiantPris, slug, nomAuHasard,
   confierLesReglages, comptedesInfinies, meriteDEtreGardee, peutEntrerDans,
-  MAX_SALONS, MAX_INFINIES, type Salon,
+  inscrireLeReglage,
+  MAX_SALONS, MAX_INFINIES, type Salon, type SuiteDuSalon,
 } from "./salons.ts";
 import { LAYOUTS } from "../../engine/src/bonus.ts";
 import {
@@ -76,6 +77,7 @@ import {
 } from "./notifications.ts";
 import {
   ecrireUnePartie, lignesDesJoueurs, ouvrirLHistorique, partieDeLHistorique, partiesDe,
+  partiesDuSalon, partieTopee, cumulDuSalon, type LigneDeCumul,
 } from "./historique.ts";
 import {
   LEXIQUES_DU_JOUR, configDuModele, consigneRecevable, decalerLeJour, instantDeParis, jourDe, jourValide,
@@ -228,8 +230,78 @@ const REJEU_OUVERT = new Set(
 const PERMANENTS = new Set(
   arg("permanentes", "top-leger").split(",").map((s) => s.trim()).filter((s) => s !== ""),
 );
+/**
+ * Ce salon est-il permanent ?
+ *
+ * Trois reponses, dans cet ordre (SPEC.md §31) :
+ *
+ * - la grille mondiale l'est par nature : personne ne la possede ;
+ * - la case des reglages tranche des qu'on y a touche ;
+ * - a defaut, la liste de lancement `--permanentes`.
+ *
+ * L'ordre compte. Sans lui, decocher la case sur un salon nomme en ligne de
+ * commande n'aurait aucun effet, en silence -- exactement le genre de reglage
+ * qu'on croit passe et qui ne l'est pas.
+ */
 const estPermanent = (s: Salon): boolean =>
-  s.proprietaire === null || PERMANENTS.has(s.id);
+  s.proprietaire === null || (s.permanent ?? PERMANENTS.has(s.id));
+
+/**
+ * L'IDENTIFIANT DU SALON QUI ENCHAINE SES PARTIES (SPEC.md §31).
+ *
+ * Il s'ouvre une fois, au premier demarrage qui ne le trouve pas au registre ;
+ * ensuite il en revient comme les autres salons, avec ses reglages.
+ */
+const SALON_PATIENCE = "topping-de-la-patience";
+const NOM_PATIENCE = "Topping de la patience";
+
+/**
+ * Ce qu'un salon qui enchaine ses parties ajoute a sa vignette (SPEC.md §31) :
+ * ses parties topees, et les coups deja joues avant celle du moment.
+ *
+ * `undefined` pour tous les autres : une vignette ordinaire n'a rien a compter
+ * au-dela de sa partie.
+ */
+function suiteDuSalon(s: Salon): SuiteDuSalon | undefined {
+  if (!s.enchaine) return undefined;
+  const les = partiesDuSalon(s.id);
+  return {
+    parties: les.filter(partieTopee).length,
+    coups: les.reduce((a, p) => a + p.coups, 0),
+  };
+}
+
+/**
+ * LE NUMERO DE LA PARTIE EN COURS : le nombre de parties terminees de ce salon,
+ * plus une (SPEC.md §31).
+ *
+ * Il ne se compte pas, il se LIT -- dans le journal de l'historique, qui ecrit
+ * une ligne par partie finie. Une partie abandonnee en cours de route n'a donc
+ * jamais eu de numero, et n'en laisse pas de trou.
+ */
+function numeroDeLaPartie(s: Salon): number {
+  return partiesDuSalon(s.id).length + 1;
+}
+
+/**
+ * Le classement cumule d'un salon qui enchaine ses parties, ou `null`.
+ *
+ * Il se calcule dans `historique.ts`, aupres du journal qui le porte : c'est le
+ * seul endroit ou il puisse etre eprouve sans ouvrir un serveur.
+ */
+function cumulDeCeSalon(s: Salon): LigneDeCumul[] | null {
+  return s.enchaine ? cumulDuSalon(s.id) : null;
+}
+
+/** Le cumul du salon, reduit a ceux dont le panneau montre une ligne. */
+function cumulDesPresents(s: Salon): Record<string, number> | null {
+  const lignes = cumulDeCeSalon(s);
+  if (lignes === null) return null;
+  const vus = new Set([...occupants(s.id), ...Object.keys(s.partie.players)]);
+  const out: Record<string, number> = {};
+  for (const l of lignes) if (vus.has(l.nom)) out[l.nom] = l.tops;
+  return out;
+}
 
 /** « top-leger » se lit mieux « Top leger ». */
 const joliNom = (id: string): string =>
@@ -503,6 +575,22 @@ function publicState(s: Salon) {
     rejeuOuvert: REJEU_OUVERT.has(s.id),
     /** Grille permanente : ni supprimee, ni relancee. */
     permanent: estPermanent(s),
+    /** Range hors de la liste des salons pour qui n'est pas administrateur. */
+    masque: s.masque,
+    /** Il relance sa partie tout seul, deux secondes apres la fin (SPEC.md §31). */
+    enchaine: s.enchaine,
+    /** Le numero de la partie en cours, sur un salon qui enchaine. `null` sinon. */
+    numeroPartie: s.enchaine ? numeroDeLaPartie(s) : null,
+    /**
+     * LE CUMUL DE CEUX QUI SONT LA, et d'eux seuls.
+     *
+     * L'etat du salon part a chaque changement : y joindre le classement entier
+     * -- des centaines de lignes au bout d'un an -- serait quelques kilo-octets
+     * par coup pour des noms que personne ne regarde. Le panneau n'affiche que
+     * les presents et les joueurs de la partie en cours ; le classement complet
+     * s'ouvre a part, avec la liste des parties.
+     */
+    cumulDesTops: cumulDesPresents(s),
     // LA PARTIE D'EPREUVE QUE CE SALON SERT (SPEC.md §29), ou `null`.
     epreuve: epreuvePublique(s),
     // LA RENCONTRE DE TOURNOI QUE CE SALON SERT (SPEC.md §29), ou `null` :
@@ -619,6 +707,10 @@ function surveiller(s: Salon): void {
   // ET L'HISTORIQUE DU JOUEUR (SPEC.md §30), qui n'a pas les memes conditions
   // que les records : une grille sans fin et un duplicate y entrent aussi.
   s.partie.onFin((raison) => ecrireLHistoriqueDuSalon(s, raison));
+  // ET LA PARTIE SUIVANTE, sur un salon qui enchaine (SPEC.md §31). APRES la
+  // ligne d'historique, qui est ce qui donne son numero a la partie qui
+  // commence : l'ordre des rappels est celui de leur pose.
+  s.partie.onFin(() => enchainerLaPartieSuivante(s));
   // CE QUE LES SPECTATEURS ONT ECRIT PENDANT LA PARTIE arrive maintenant
   // (SPEC.md §29). Sur une grille sans fin, qui ne finit jamais, la retenue se
   // lache au coup suivant.
@@ -645,7 +737,16 @@ function surveiller(s: Salon): void {
  * de toute facon les raisons qui ne sont pas une fin (`FINS_COMPLETES`).
  */
 function ecrireLHistoriqueDuSalon(s: Salon, raison: RaisonDeFin): void {
-  if (s.epreuve !== null || estPermanent(s)) return;
+  // LE REFUS PORTE SUR LA GRILLE SANS BORD, ET NON SUR LE SALON PERMANENT
+  // (SPEC.md §31).
+  //
+  // La raison tenait a la grille mondiale : elle dure depuis des mois et ne
+  // finit jamais, ce n'est pas une partie qu'on a jouee, c'est un lieu. Elle
+  // vaut toujours -- pour une grille SANS BORD. Un salon permanent qui enchaine
+  // des parties bornees de vingt-cinq coups en joue de vraies : elles
+  // finissent, on les a jouees, et c'est d'elles que le salon tire son numero,
+  // sa liste et son classement cumule.
+  if (s.epreuve !== null || s.partie.cfg.bornes === null) return;
   ecrireUnePartie({
     salon: s.id, graine: s.partie.seed, nomSalon: s.nom, fin: raison,
     cfg: s.partie.cfg, coups: s.partie.moves,
@@ -1442,6 +1543,33 @@ async function relancerEtDiffuser(s: Salon, cfg: ConfigPartie): Promise<string[]
 }
 
 /**
+ * LA PARTIE SUIVANTE PART D'ELLE-MEME, deux secondes apres la fin de la
+ * precedente (SPEC.md §31).
+ *
+ * Le meme geste que l'etape suivante d'une montante, et le meme delai : le
+ * dernier top vient d'etre diffuse, et sans ces deux secondes le message de
+ * relance arriverait avant que le caramel ne se pose a l'ecran.
+ *
+ * LE MINUTEUR REVERIFIE TOUT EN SE DECLENCHANT. Deux secondes suffisent a
+ * decocher la case, a fermer le salon ou a relancer soi-meme : le salon qu'on
+ * retrouve peut n'etre plus le meme, et relancer une partie dans un salon ferme
+ * rouvrirait des fichiers qu'on vient de retirer.
+ */
+function enchainerLaPartieSuivante(s: Salon): void {
+  if (!s.enchaine || !s.partie.finie) return;
+  setTimeout(() => {
+    void (async () => {
+      if (salon(s.id) !== s || !s.enchaine || !s.partie.finie) return;
+      // LA MEME VARIANTE, toujours : un salon qui enchaine joue la meme partie
+      // encore et encore, c'est ce qui rend ses parties comparables et son
+      // classement cumulable.
+      await relancerEtDiffuser(s, s.partie.cfg);
+      console.log(`[salon] "${s.nom}" enchaine la partie ${numeroDeLaPartie(s)}`);
+    })();
+  }, DELAI_ENTRE_ETAPES_MS);
+}
+
+/**
  * L'etape d'une montante vient de se terminer.
  *
  * ELLE NE PASSE PAS A LA SUIVANTE ICI : c'est l'hote qui lance la suite. Ce qui
@@ -1601,12 +1729,55 @@ async function ouvrirLesSalons(): Promise<void> {
         prive: e["prive"] === true, layout: (e["layout"] ?? LAYOUT) as LayoutName,
         cfg: e["config"] ? deserialiser(e["config"]) : configParDefaut(),
         nouveau: false, creeLe: e["creeLe"],
+        // LES REGLAGES DU LIEU REVIENNENT AVEC LUI (SPEC.md §31). Une cle
+        // absente veut dire « on n'a jamais touche a la case » : le salon suit
+        // alors la liste de lancement.
+        permanent: typeof e["permanent"] === "boolean" ? e["permanent"] : null,
+        masque: e["masque"] === true,
+        enchaine: e["enchaine"] === true,
       });
       surveiller(s);
+      // UN SALON QUI ENCHAINE NE S'ARRETE PAS A UN REDEMARRAGE. Sa partie
+      // reprend la ou elle en etait sans attendre le geste de personne, et si
+      // le serveur s'est arrete entre la fin de l'une et le debut de la
+      // suivante, la suivante part.
+      if (s.enchaine) {
+        enchainerLaPartieSuivante(s);
+        if (!s.partie.finie) await s.partie.demarrer();
+      }
     } catch (err) {
       console.warn(`[salon] "${e["id"]}" non rouvert : ${(err as Error).message}`);
     }
   }
+  // LE SALON QUI ENCHAINE SES PARTIES (SPEC.md §31). Ouvert une seule fois, au
+  // premier demarrage qui ne le trouve pas au registre ; ensuite il en revient
+  // comme les autres, avec ses reglages et sa partie en cours.
+  //
+  // SA VARIANTE EST CELLE DE LA PARTIE NORMALE, sans chrono : 15x15, 7 sur 7,
+  // sac de 102, primes du jeu. C'est la configuration qui porte les records, et
+  // « temps infini » veut dire qu'un coup dure ce qu'il faut pour etre trouve.
+  if (salon(SALON_PATIENCE) === undefined) {
+    try {
+      const s = await ouvrirSalon({
+        id: SALON_PATIENCE, nom: NOM_PATIENCE,
+        proprietaire: ADMINS[0] ?? "admin", prive: false,
+        layout: LAYOUT, cfg: avec(configDeDepart(false, "fr"), { chrono: null }),
+        nouveau: true, permanent: true, enchaine: true,
+      });
+      surveiller(s);
+      // IL DEMARRE TOUT SEUL, et c'est le contraire de la grille permanente :
+      // celle-ci attend le geste du jour du lancement, parce que son premier
+      // tirage doit tomber devant du monde et qu'elle ne recommencera jamais.
+      // Un salon qui enchaine, lui, recommence sans cesse -- lui demander un
+      // clic pour la premiere partie et pour aucune des suivantes n'aurait
+      // aucun sens.
+      await s.partie.demarrer();
+      console.log(`[salon] "${s.nom}" (${s.id}) ouvert : permanent, enchaîne ses parties`);
+    } catch (e) {
+      console.error(`[salon] "${NOM_PATIENCE}" indisponible : ${(e as Error).message}`);
+    }
+  }
+
   // --rouvrir : une partie du disque reprend sa place DANS UN SALON, et non a
   // celle de la grille permanente. C'est ce qu'on veut presque toujours quand on
   // revient sur une ancienne partie : la revoir sans deloger le jeu du site.
@@ -1638,7 +1809,7 @@ async function ouvrirLesSalons(): Promise<void> {
   // Sans cela, la seance d'hier laissait sa liste de salons morts a celle d'
   // aujourd'hui.
   for (const s of tousLesSalons()) {
-    if (s.proprietaire !== null && s.partie.cfg.bornes !== null) rangerPlusTard(s.id);
+    if (s.proprietaire !== null) rangerPlusTard(s.id);
   }
 
   pret = true;
@@ -2885,12 +3056,49 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   }
 
   if (url === "/api/salons" && req.method === "GET") {
+    const admin = quiParle(req)?.admin === true;
     json(res, 200, {
       pret,
       salons: tousLesSalons()
         .filter((s) => !s.prive)
-        .map((s) => resume(s, toutLeMonde(s.id).length, estPermanent(s))),
+        // UN SALON MASQUE NE FIGURE PAS DANS LA LISTE, mais son adresse
+        // fonctionne toujours (SPEC.md §31) : prive est une porte, masque est
+        // un rangement. L'administration les voit tous.
+        .filter((s) => admin || !s.masque)
+        .map((s) => resume(s, toutLeMonde(s.id).length, estPermanent(s), suiteDuSalon(s))),
       max: MAX_SALONS,
+    });
+    return;
+  }
+
+  // LES PARTIES D'UN SALON QUI ENCHAINE (SPEC.md §31), de la plus recente a la
+  // plus ancienne. Chaque ligne terminee mene a son rejeu, qui existe deja et
+  // n'a rien a apprendre : `/api/historique/partie/<salon>~<graine>`.
+  //
+  // AVANT la route generique `/api/salon/<id>`, qui prend tout ce qui commence
+  // par ce chemin.
+  if (url.startsWith("/api/salon/") && url.endsWith("/parties") && req.method === "GET") {
+    const id = decodeURIComponent(url.slice("/api/salon/".length, -"/parties".length));
+    const s = salon(id);
+    if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
+    const les = partiesDuSalon(id);
+    json(res, 200, {
+      salon: id,
+      nom: s.nom,
+      // LA PARTIE EN COURS FIGURE DANS LA LISTE ET NE S'OUVRE PAS : montrer ses
+      // paliers, c'est donner les reponses (SPEC.md §20).
+      encours: {
+        numero: les.length + 1, coups: s.partie.moveNumber,
+        cumul: s.partie.cumul, finie: s.partie.finie,
+      },
+      parties: les.map((p, i) => ({
+        numero: i + 1, id: `${p.salon}~${p.graine}`, at: p.at,
+        coups: p.coups, cumul: p.cumul ?? null, topee: partieTopee(p),
+        joueurs: p.joueurs
+          .filter((j) => j.tops > 0)
+          .map((j) => ({ nom: j.nom, tops: j.tops, invite: j.invite })),
+      })).reverse(),
+      cumul: cumulDeCeSalon(s),
     });
     return;
   }
@@ -2899,7 +3107,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   if (url.startsWith("/api/salon/") && req.method === "GET") {
     const s = salon(decodeURIComponent(url.slice("/api/salon/".length)));
     if (s === undefined) { json(res, 404, { erreur: "salon introuvable" }); return; }
-    json(res, 200, resume(s, toutLeMonde(s.id).length, estPermanent(s)));
+    json(res, 200, resume(s, toutLeMonde(s.id).length, estPermanent(s), suiteDuSalon(s)));
     return;
   }
 
@@ -2921,7 +3129,7 @@ const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       surveiller(s);
       console.log(`[salon] "${s.nom}" (${s.id}) ouvert par ${proprietaire} : ` +
         `${nomDeLaGrille(s.partie.cfg.bornes)}`);
-      json(res, 200, resume(s, 0, estPermanent(s)));
+      json(res, 200, resume(s, 0, estPermanent(s), suiteDuSalon(s)));
     } catch (e) {
       json(res, 400, { erreur: (e as Error).message });
     }
@@ -3784,6 +3992,88 @@ wss.on("connection", (ws, req) => {
       return;
     }
 
+    // ------------------------------- les reglages DU LIEU, reserves a l'administration
+    //
+    // Permanent, masque, enchaine, et le nom (SPEC.md §31). Comme la case
+    // « salon prive » juste au-dessus, ils agissent sur-le-champ, sans relance
+    // ni archivage ; a la difference d'elle, ils s'ecrivent au registre et
+    // survivent donc a un redemarrage.
+    if (msg.t === "salonPermanent" || msg.t === "salonMasque"
+        || msg.t === "salonEnchaine" || msg.t === "salonRenomme") {
+      const estAdmin = compte(clients.get(ws)?.compte ?? "")?.admin === true;
+      if (!estAdmin) {
+        send(ws, { t: "result", ok: false, message: "réservé à l'administration" });
+        return;
+      }
+      // LA GRILLE MONDIALE NE SE REGLE PAS. Personne ne la possede, et la
+      // retirer de la liste reviendrait a fermer le site sans le dire.
+      if (s.proprietaire === null) {
+        send(ws, { t: "result", ok: false, message: "cette grille ne se règle pas" });
+        return;
+      }
+      if (s.epreuve !== null) {
+        send(ws, { t: "result", ok: false, message: "les réglages d'une partie du jour ne changent pas" });
+        return;
+      }
+      if (msg.t === "salonPermanent") {
+        s.permanent = msg.permanent === true;
+        inscrireLeReglage(s.id, { permanent: s.permanent });
+        // UN SALON QUI REDEVIENT ORDINAIRE SE RANGE COMME LES AUTRES, meme s'il
+        // est deja vide : sans cela il attendrait un depart qui n'aura pas lieu.
+        if (!estPermanent(s) && toutLeMonde(s.id).length === 0) rangerPlusTard(s.id);
+        console.log(`[salon] "${s.nom}" ${s.permanent ? "devient" : "n'est plus"} permanent (${moi.nom})`);
+      }
+      if (msg.t === "salonMasque") {
+        s.masque = msg.masque === true;
+        inscrireLeReglage(s.id, { masque: s.masque });
+        console.log(`[salon] "${s.nom}" ${s.masque ? "masqué" : "rendu visible"} (${moi.nom})`);
+      }
+      if (msg.t === "salonEnchaine") {
+        s.enchaine = msg.enchaine === true;
+        inscrireLeReglage(s.id, { enchaine: s.enchaine });
+        // COCHEE SUR UNE PARTIE DEJA FINIE, la case lance la suivante : sinon
+        // rien ne se passerait jusqu'a ce qu'on relance a la main.
+        if (s.enchaine) enchainerLaPartieSuivante(s);
+        console.log(`[salon] "${s.nom}" ${s.enchaine ? "enchaîne" : "n'enchaîne plus"} ses parties (${moi.nom})`);
+      }
+      if (msg.t === "salonRenomme") {
+        const nom = String(msg.nom ?? "").trim().slice(0, 40);
+        if (nom === "") {
+          send(ws, { t: "result", ok: false, message: "il faut un nom" });
+          return;
+        }
+        // LE NOM CHANGE, L'IDENTIFIANT JAMAIS. C'est lui qui nomme les fichiers
+        // de la partie sur le disque et qui figure dans l'adresse : le changer
+        // perdrait le journal en cours et casserait les liens deja partages
+        // (SPEC.md §31).
+        console.log(`[salon] "${s.nom}" renommé « ${nom} » par ${moi.nom}`);
+        s.nom = nom;
+        inscrireLeReglage(s.id, { nom });
+      }
+      broadcast(s.id, { t: "state", state: publicState(s) });
+      return;
+    }
+
+    /**
+     * « PRET.E » (SPEC.md §31) : une phrase, pas un etat.
+     *
+     * Rien ne l'attend, rien ne le compte, rien ne se declenche quand tout le
+     * monde a clique -- c'est l'hote qui lance, comme avant. Le bouton remplace
+     * une phrase qu'on tapait, il ne remplace pas l'hote. C'est ce qui le
+     * distingue du « Je suis prêt » d'une rencontre de tournoi, ou le clic des
+     * deux camps lance effectivement la manche.
+     */
+    if (msg.t === "pretDuSalon") {
+      // Un salon qui enchaine n'attend personne, et une partie qui tourne n'a
+      // rien a attendre non plus.
+      if (s.enchaine) return;
+      if (s.partie.demarree && !s.partie.finie) return;
+      // L'hote n'a personne a prevenir : c'est lui qu'on previent.
+      if (s.gerant === moi.nom) return;
+      s.partie.say(moi.nom, "Je suis prêt.e à en découdre");
+      return;
+    }
+
     if (msg.t === "inviter") {
       // Une manche lancee ne prend plus personne : ses joueurs sont fixes.
       if (s.epreuve !== null && s.epreuve.manche !== null) return;
@@ -3994,7 +4284,10 @@ wss.on("connection", (ws, req) => {
       if (s.proprietaire !== null) {
         s.partie.endormir();
         console.log(`[salon] "${s.nom}" s'endort, plus personne`);
-        if (s.partie.cfg.bornes !== null) rangerPlusTard(s.id);
+        // LE RANGEMENT VAUT AUSSI POUR LES GRILLES SANS BORD (SPEC.md §31) :
+        // c'est `rangerPlusTard` qui choisit le delai selon la grille, et
+        // `estPermanent` qui protege les salons qui ne se rangent pas.
+        rangerPlusTard(s.id);
       }
     }
     broadcast(s.id, { t: "state", state: publicState(s) });
@@ -4016,19 +4309,41 @@ wss.on("connection", (ws, req) => {
  * disparait avant qu'on ait pense a y revenir, et c'est ce qu'on veut.
  */
 const DELAI_DE_RANGEMENT = 90_000;
+
+/**
+ * Le meme rangement, pour une grille SANS BORD : dix minutes (SPEC.md §31).
+ *
+ * Il ne s'armait pas du tout sur ces grilles-la : valider « Infinie » dans les
+ * reglages rendait le salon immortel. Son fil de calcul restait ouvert pour
+ * personne, et surtout il occupait l'une des dix grilles sans bord simultanees
+ * -- dix salons abandonnes, et plus personne ne pouvait en ouvrir une.
+ *
+ * DIX MINUTES ET NON QUATRE-VINGT-DIX SECONDES, parce que les deux delais
+ * disent la meme chose sur deux objets differents. Quatre-vingt-dix secondes
+ * suffisent a un rechargement de page sur une partie bornee, qui tient dans une
+ * seance ; une grille sans bord se construit sur des heures, et une pause n'est
+ * pas un abandon.
+ */
+const DELAI_DE_RANGEMENT_INFINI = 600_000;
 const rangements = new Map<string, ReturnType<typeof setTimeout>>();
 
 function rangerPlusTard(id: string): void {
+  const avant = salon(id);
+  if (avant === undefined) return;
   const dejaPrevu = rangements.get(id);
   if (dejaPrevu !== undefined) clearTimeout(dejaPrevu);
+  const delai = avant.partie.cfg.bornes === null
+    ? DELAI_DE_RANGEMENT_INFINI : DELAI_DE_RANGEMENT;
   rangements.set(id, setTimeout(() => {
     rangements.delete(id);
     const s = salon(id);
-    if (s === undefined || s.proprietaire === null) return;
+    // UN SALON PERMANENT NE SE RANGE PAS, quelle que soit sa grille : c'est sa
+    // definition. La grille mondiale en fait partie, elle n'a pas de
+    // proprietaire.
+    if (s === undefined || estPermanent(s)) return;
     if (toutLeMonde(id).length > 0) return;   // quelqu'un est revenu
-    if (s.partie.cfg.bornes === null) return;
     void fermerSalon(id);
-  }, DELAI_DE_RANGEMENT));
+  }, delai));
 }
 
 // ---------------------------------------------------------------- arret

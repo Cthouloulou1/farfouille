@@ -1876,6 +1876,7 @@ pas un outil.
 | **Le choix de l'isotop joué** | Aujourd'hui tiré au sort parmi les isotops (§5). Il pourrait se choisir sur ce qu'il **prépare** : `BODIES` pour ouvrir `TUR-BODIES-EL`, ou `BOIDES` pour `AMI-BOIDES`. Aucune raison n'est encore établie de préférer l'un à l'autre. **En arbitrage, il se choisit à la main** (§22). |
 | **Le mode arbitrage** | Un duplicate dont les tirages sont saisis et non tirés, conduit par le gérant du salon : arbitrer un tournoi, préparer une partie, ou saisir une partie jouée sur papier. Spécifié au §22, avec le **top des tops** qui l'accompagne et sert aussi en rejeu. |
 | **Le compétitif** | Une page à part : les parties du jour, les tournois de topping et de battle, et les défis sur une partie déjà jouée. Spécifié au §29. |
+| **Les salons permanents** | Quatre interrupteurs d'administration — permanent, masqué, renommé, parties enchaînées —, la règle de rangement des grilles sans bord, et un salon qui relance sa partie tout seul avec un classement qui ne se remet jamais à zéro. Spécifié au §31. |
 | **Les équipes WU et QI** | Un pari d'avant-partie sur le mot qui sortira le plus souvent en top sur la grille mondiale, `WU` ou `QI` (exactement — ni `WUS` ni `QIS`). Sur les 16 632 premiers coups de `top-leger` : QI 48, WU 41. Rien à gagner, tout à suivre. Le compteur qui les départage est spécifié au §23. |
 
 ### Vu, pas expliqué
@@ -7115,3 +7116,339 @@ faute de mieux, quand le rejeu a été ouvert depuis lui ou depuis une adresse.
 |---|---|
 | **Le rejeu** | L'historique ouvre le rejeu des parties archivées (§23). Le rejeu d'un salon est plus riche — on y clique une sous-solution et elle se pose sur la grille — mais il demande un salon ouvert. Le premier a reçu le clic sur les sous-solutions ; le reste attend. |
 | **Les statistiques** | La page ne porte qu'une liste. Les moyennes, les séries, les records personnels restent à décider. |
+---
+
+## 31. Les salons permanents, et les parties qui s'enchaînent
+
+Un salon est un lieu, une partie est ce qui tourne dedans (§16). Jusqu'ici, le
+lieu ne survivait à ses occupants que dans un cas — la grille permanente — et
+seule la ligne de commande pouvait en désigner d'autres. Cette section ouvre
+quatre interrupteurs à l'administration, corrige la règle de rangement des
+grilles sans bord, et décrit un salon qui **relance sa partie tout seul** dès que
+la précédente est terminée.
+
+### Ce qui change pour les grilles sans bord
+
+**Un salon vide se range au bout de quatre-vingt-dix secondes.** C'est la règle
+en place (§16), mais elle ne s'arme que sur une grille bornée : le minuteur n'est
+même pas posé quand la grille est sans bord. Valider « Infinie » dans les
+réglages rendait donc le salon immortel, et c'est un défaut :
+
+- son fil de calcul reste ouvert pour personne ;
+- surtout, il occupe l'une des **dix grilles sans bord simultanées** (§16). Dix
+  salons abandonnés, et plus personne ne peut en ouvrir une.
+
+**La règle vaut désormais pour les grilles sans bord, avec dix minutes au lieu de
+quatre-vingt-dix secondes.** Les deux délais disent la même chose sur deux objets
+différents. Quatre-vingt-dix secondes suffisent à un rechargement de page sur une
+partie bornée, qui tient dans une séance et que personne ne reprend le lendemain ;
+une grille sans bord se construit sur des heures, et une pause n'est pas un
+abandon. Passé dix minutes sans personne, c'en est un.
+
+**Ce que le salon emporte en se refermant ne change pas.** Une grille sans bord
+n'est jamais gardée (§21) : elle n'a pas de fin, donc rien ne s'y analyse après
+coup, elle n'entre à aucun tableau, et la conserver revient à accumuler des
+mégaoctets que personne ne rouvrira. C'est la politique en place, et elle tient.
+Le site enregistre les parties de grille finie ; les grilles sans bord sont un
+lieu où l'on joue, pas une collection.
+
+**Les salons permanents ne se rangent jamais**, quelle que soit leur grille :
+c'est leur définition.
+
+### Les quatre interrupteurs de l'administration
+
+Ils vivent dans les réglages du salon et **n'apparaissent qu'à l'administration**.
+Comme la case *Salon privé* (§26), ce sont des réglages **du lieu** et non de la
+partie : ils agissent sur-le-champ, sans relance et sans archivage.
+
+Ils s'écrivent au registre des salons, en ajout seul, sous la forme d'événements
+`reglage` rejoués dans l'ordre par-dessus l'événement `ouvert`. Un salon retrouve
+donc son état après un redémarrage, contrairement à sa liste d'invités, qui reste
+une donnée de séance (§26).
+
+#### Rendre ce salon permanent
+
+Un salon permanent ne se supprime pas, ne se relance pas, et ne se range pas tout
+seul. C'était jusqu'ici une propriété de la grille mondiale, ou une liste donnée
+en ligne de commande (`--permanentes`). C'est maintenant **une case**.
+
+**La ligne de commande donne la valeur de départ, la case tranche ensuite.** Un
+salon dont la case n'a jamais été touchée suit la liste de lancement ; dès qu'on
+l'a cochée ou décochée, c'est le registre qui décide. Sans cela, décocher un
+salon nommé en ligne de commande n'aurait eu aucun effet, en silence.
+
+**Décocher rend tout d'un coup** : le salon redevient supprimable, relançable,
+rangeable. C'est aussi la seule soupape d'un salon qui enchaîne ses parties (voir
+plus bas) : ses réglages sont gelés tant que la case est cochée, et la décocher
+est la façon de les rouvrir.
+
+**L'administration garde donc la porte des réglages sur un salon permanent**,
+alors qu'elle était fermée à tout le monde. Sans elle, une case qu'on ne peut
+cocher qu'une fois ne serait pas une case. Le panneau s'y ouvre **gelé** : les
+réglages de la partie s'y lisent sans se changer, le bouton qui valide n'y est
+pas, et seule la bande de l'administration y agit.
+
+**Le gel ne porte que sur ce que « Go » applique.** *Salon privé* et *Inviter des
+joueurs* restent vivants : ce sont des réglages du lieu eux aussi (§26), ils
+agissent sans relancer la partie, et un salon permanent n'a aucune raison de les
+fermer. Ils vivent au milieu des réglages de partie, d'où cette exception.
+
+#### Masquer ce salon
+
+Un salon masqué **ne figure plus dans la liste** pour qui n'est pas de
+l'administration. Son adresse continue de fonctionner.
+
+C'est la différence avec un salon privé (§26), et elle est volontaire : privé est
+**une porte**, masqué est **un rangement**. On masque un salon d'essai, un salon
+oublié, un salon dont le nom encombre le mur ; on ne masque pas pour interdire.
+Qui veut interdire coche *Salon privé*.
+
+**Une grille permanente en vedette ne se masque pas.** C'est la partie que le
+site vient faire jouer : la retirer du mur reviendrait à fermer le site sans le
+dire.
+
+#### Renommer ce salon
+
+Un champ, un bouton. Le nom change pour tout le monde sur-le-champ.
+
+**L'identifiant ne change jamais.** C'est lui qui nomme les fichiers de la partie
+sur le disque et qui figure dans l'adresse : le changer perdrait le journal de la
+partie en cours et casserait tous les liens déjà partagés. Le nom est ce qui
+s'affiche, l'identifiant est ce qui désigne — ils ont été confondus une fois, à
+la création, et ne le sont plus jamais après.
+
+#### Enchaîner les parties
+
+C'est le sujet de la deuxième moitié de cette section.
+
+**C'est une case, et non un salon particulier.** Le salon décrit plus bas aurait
+pu être câblé dans le code sous son nom ; ce serait un cas spécial de plus à
+porter, pour exactement le même travail. Une case se coche sur n'importe quel
+salon, et l'administration peut en ouvrir un deuxième le jour où elle le voudra.
+
+### Le bouton « Prêt.e »
+
+Dans le panneau latéral, sous les gestes de la partie : un bouton **Prêt.e**, qui
+écrit au chat **« Je suis prêt.e à en découdre »**.
+
+Il n'apparaît **que** quand les trois conditions sont réunies : on n'est pas
+l'hôte, aucune partie ne tourne (elle n'a pas démarré, ou elle est terminée), et
+le salon n'enchaîne pas ses parties — un salon qui enchaîne n'attend personne.
+
+**Ce n'est pas un état, c'est une phrase.** Rien ne l'attend, rien ne le compte,
+rien ne se déclenche quand tout le monde a cliqué : c'est l'hôte qui lance, comme
+avant. Le bouton remplace une phrase qu'on tapait, il ne remplace pas l'hôte.
+C'est ce qui le distingue du « Je suis prêt » d'une rencontre de tournoi (§29),
+où le clic des deux camps lance effectivement la manche.
+
+### La fenêtre d'invitation passe devant les réglages
+
+Corrigé. La règle qui fait monter cette fenêtre au-dessus du panneau des réglages
+visait `#voile-inviter`, un identifiant disparu le jour où la même fenêtre s'est
+mise à servir aussi à défier et à convier à un tournoi : elle s'appelle
+`#voile-choix` depuis. Le commentaire décrivait toujours le bon comportement, le
+sélecteur ne désignait plus rien, et la fenêtre s'ouvrait donc derrière.
+
+Leçon, parce qu'elle vaut au-delà de ce cas : **renommer un élément demande de
+chercher son identifiant dans la feuille de style**, et pas seulement dans le
+code qui le manipule. Rien n'échoue quand un sélecteur ne correspond plus à rien.
+
+### Les parties qui s'enchaînent
+
+Un salon dont la case est cochée **relance sa partie deux secondes après la fin
+de la précédente**. Personne ne clique, personne n'attend : la grille se vide, le
+premier tirage de la partie suivante tombe, et l'on rejoue.
+
+**Il démarre tout seul**, et c'est le contraire de la grille permanente. Celle-ci
+attend le geste du jour du lancement, parce que son premier tirage doit tomber
+devant du monde et qu'elle ne recommencera jamais. Un salon qui enchaîne, lui,
+recommence sans cesse : lui demander un clic pour la première partie et pour
+aucune des suivantes n'aurait aucun sens. Il ne calcule pourtant rien tant que
+personne n'est là -- sa partie est *démarrée* mais endormie, et le premier tirage
+se sert à l'arrivée du premier joueur.
+
+**Deux secondes, et le mécanisme de la montante.** La montante enchaîne déjà ses
+six étapes de cette façon (§23), avec ce délai exact. Le minuteur **revérifie
+tout en se déclenchant** — le salon existe encore, la case est encore cochée, la
+partie est bien celle qui vient de finir : deux secondes suffisent à fermer un
+salon, et relancer une partie dans un salon fermé rouvrirait des fichiers qu'on
+vient de retirer.
+
+#### Un coup ne se saute pas
+
+C'est la règle de ce salon, et elle passe avant le confort : **si personne ne
+trouve le top, la partie n'avance pas.** Une fin de partie fermée fait partie du
+jeu. Le veto qui refuse déjà « passer le tour » et « abandonner la partie » sur un
+salon permanent (§24, §25) vaut ici sans exception, l'administration comprise.
+
+Une partie sans chrono attend donc son top aussi longtemps qu'il le faut, et le
+salon n'y perd rien : sans chrono, aucun minuteur n'est armé, la partie dort, et
+le coût machine d'un salon où personne ne joue est nul.
+
+La soupape, s'il en faut une un jour, n'est pas un bouton : c'est la case
+*permanent*, qu'on décoche pour rendre au salon ses gestes ordinaires.
+
+#### Le numéro de la partie
+
+À gauche du bandeau, à côté du bouton qui nomme le type de partie : **Partie
+numéro 365**. Cliquer dessus ouvre la liste des parties du salon.
+
+**Le numéro est le nombre de parties terminées de ce salon, plus une.** Il ne se
+compte pas, il se lit : une partie abandonnée en cours de route n'a jamais eu de
+numéro, et n'en laisse pas de trou.
+
+#### Aucun journal de plus
+
+Le numéro, la liste et le classement cumulé se lisent tous les trois dans un
+journal qui existe déjà : **`historique.journal.jsonl`** (§30). Il écrit une ligne
+par partie finie, avec son salon, sa graine, sa date, ses coups, et ce que chacun
+y a fait — tops, score, négatif. C'est exactement ce qu'il faut, et un quatrième
+journal n'apporterait rien qu'un deuxième endroit où se tromper.
+
+**Une seule chose change de son côté :** il refusait les salons permanents, au
+motif qu'une grille permanente « dure depuis des mois et ne finit jamais ; ce
+n'est pas une partie qu'on a jouée, c'est un lieu » (§30). Ce motif tient pour la
+grille mondiale, qui est sans bord. Il ne tient pas pour un salon qui enchaîne
+des parties bornées de vingt-cinq coups : celles-là finissent, on les a bien
+jouées, et ce sont les mêmes que partout ailleurs. **Le refus porte désormais sur
+la grille sans bord, et non sur le salon permanent.**
+
+Les trois garde-fous de l'historique (§30) restent en place et ne gênent pas : un
+salon qui enchaîne joue des parties entièrement topées, où chaque coup a reçu une
+proposition de quelqu'un.
+
+#### La liste des parties, et leur rejeu
+
+Une fenêtre, comme la feuille de route — pas une page : on la consulte depuis le
+salon, et en sortir pour lire un tableau serait payer cher un renseignement.
+
+Une ligne par partie, de la plus récente à la plus ancienne : le numéro, la date,
+les coups, le cumul, et qui a topé combien de coups. Cliquer une ligne ouvre son
+**rejeu**, qui existe déjà et n'a rien à apprendre : `/api/historique/partie/` sert
+les parties archivées d'un salon depuis leur journal, avec leurs paliers refaits à
+la demande sur un fil de solveur partagé (§23, §30).
+
+**La partie en cours figure dans la liste, et ne s'ouvre pas.** Montrer ses
+paliers, c'est donner les réponses (§20).
+
+#### Le classement ne se remet pas à zéro
+
+Le panneau *Classement* montre aujourd'hui ce que la partie en cours a donné,
+recalculé depuis ses coups. Dans un salon qui enchaîne, il montre **les deux** :
+ce que chacun a trouvé dans la partie en cours, et son **total depuis l'ouverture
+du salon**. C'est le second qui fait l'intérêt du lieu — on y vient pour un
+compteur qui monte, et un joueur assidu doit pouvoir afficher des milliers de
+tops.
+
+Le total s'additionne à chaque fin de partie, depuis les lignes du journal de
+l'historique. Il se refait entièrement à la relecture de ce journal : rien n'est
+gardé ailleurs, donc rien ne peut diverger.
+
+**Seuls les comptes cumulent.** Un pseudo d'invité n'est adossé à rien et
+n'importe qui peut le reprendre demain : des milliers de tops inscrits sous un
+nom repris ne voudraient rien dire. C'est la même précaution que le journal des
+records, qui fige déjà `invite: true` au moment où il écrit, pour qu'ouvrir un
+compte demain sous le pseudo qu'un invité portait hier n'en fasse pas hériter
+(§23).
+
+**Un invité qui trouve un top est nommé quand même**, sur le coup, à la feuille de
+route et dans le classement de la partie en cours. Il faut bien que quelqu'un ait
+trouvé le top. Ce qu'il ne reçoit pas, c'est une ligne au cumul.
+
+#### Ce que ces parties écrivent ailleurs
+
+**Elles comptent aux records, comme n'importe quelle partie.** La configuration
+demandée est exactement celle de la catégorie *normale* (§23), et rien ne
+justifierait qu'une partie jouée là vaille moins qu'ailleurs. Les règles du
+tableau s'appliquent telles quelles :
+
+- **on n'y figure qu'en ayant trouvé au moins un top.** C'est déjà la règle :
+  seuls les joueurs qui ont gagné un coup entrent dans la colonne *joueurs* d'une
+  manche ;
+- **cent lignes par tableau**, pas une de plus. Le journal garde toutes les
+  parties, le tableau en montre cent ;
+- **le tableau du chrono les ignore**, puisqu'il écarte les parties sans chrono :
+  un temps illimité n'est pas une contrainte de temps ;
+- **le tableau du temps ne les verra pas** : leur temps est celui d'une partie
+  sans chrono, compté en minutes par coup ;
+- **les tableaux de la partie la plus chère et la plus longue les accueillent**,
+  et c'est voulu : ceux-là ne dépendent pas du temps, et une grosse partie reste
+  une grosse partie.
+
+### Le salon demandé
+
+Un salon à créer une fois pour toutes, en section française. Il s'appelle
+**Topping de la patience**, et son identifiant est `topping-de-la-patience`.
+
+| Réglage | Valeur |
+|---|---|
+| Grille | 15×15, plateau du commerce |
+| Format | 7 sur 7 |
+| Mode | topping |
+| Pioche | sac de 102, qui s'épuise |
+| Primes | celles du jeu, intactes |
+| Temps par coup | aucun |
+| Lexique | ODS |
+| Permanent | oui |
+| Enchaîne ses parties | oui |
+
+**Il n'apparaît qu'en section française**, sans rien à régler pour cela : la
+langue d'un salon se lit dans son lexique, et le filtre du mur s'en sert déjà.
+
+**Sa feuille de route montre les coups de la partie en cours**, comme dans
+n'importe quel salon. C'est déjà le comportement, il n'y a rien à faire.
+
+### Ce que cela pèse
+
+Mesuré sur les parties réelles du dossier de données.
+
+**Le disque.** Une 15×15 en 7 sur 7 sur sac de 102 fait vingt à vingt-cinq coups,
+et son journal cinq à huit kilo-octets. Avec l'instantané et son secours,
+l'archive d'une partie tient en trois fichiers et une quinzaine de kilo-octets.
+**Trois cent soixante-cinq parties, c'est cinq mégaoctets et onze cents
+fichiers.** On peut descendre à deux mégaoctets et demi et un seul fichier par
+partie en n'archivant que le journal, qui suffit au rejeu et qui fait foi de
+toute façon (§21) ; ce n'est pas fait, et rien ne presse.
+
+**Le calcul : aucun surcoût par coup.** Chaque coup demande déjà un top complet,
+que le salon enchaîne ou non. L'enchaînement ajoute un calcul de premier coup sur
+grille vide, mesuré à dix-sept millisecondes (§15).
+
+**Et rien du tout quand la salle est vide.** Sans chrono, aucun minuteur n'est
+armé : la partie attend son top sans rien calculer. Un salon qui enchaîne ne
+coûte que pendant qu'on y joue.
+
+**La vraie borne du serveur n'est pas le nombre de fonctionnalités, c'est le
+nombre de salons ouverts** : un fil de calcul par partie, cinquante salons au
+plus (§16). Ce salon en occupe un, pour toujours.
+
+**Une fuite réparée au passage : les sous-tops d'une grille sans fin.** Une
+partie ouverte avant le réglage de §20 garde quarante paliers par coup, parce que
+son en-tête ne porte pas le champ qui dit le contraire. La grille permanente
+française est dans ce cas : 3,3 Ko par coup là où la règle actuelle en écrirait
+soixante et un, et son annexe se serait remise à grossir dès sa reprise.
+`top-leger`, même cas, y a laissé 2,9 Mo et 89 Mo de journal pour 32 444 coups.
+
+**Une grille sans bord ni terme ne garde donc plus ses sous-tops, quoi qu'en dise
+son en-tête.** La raison de les garder est l'analyse d'après-coup, et une grille
+qui ne se termine jamais n'en a pas. Une grille **limitée** -- sans bord, mais
+avec un terme en coups ou en temps -- se termine, elle, et garde son annexe comme
+avant. Le rejeu n'y perd rien : le palier du top reste au journal pendant la
+partie, et le reste se refait à la demande.
+
+**Le poids du site, lui, est ailleurs**, et il ne dépend d'aucune fonctionnalité.
+Mesuré : `index.html` 215 Ko, `app.js` 513 Ko, `dawg.bin` 453 Ko, soit **1,18 Mo
+à la première visite**. Le serveur ne compresse rien et le client n'est pas
+minifié. Compressés et minifiés, les mêmes fichiers font 51, 100 et 285 Ko, soit
+**436 Ko**. Une fonctionnalité de plus pèse deux kilo-octets compressés ;
+l'absence de compression en pèse sept cents.
+
+### Ce qui reste ouvert
+
+| Sujet | Question |
+|---|---|
+| **La compression des fichiers servis** | Quinze lignes dans le service des fichiers statiques, et `minify` à la compilation. Sans rapport avec cette section, mais c'est le seul endroit où le site est lourd. |
+| **Les journaux déjà écrits** | La correction des sous-tops ne vaut que pour ce qui s'écrira. Les 89 Mo de `top-leger` et les 845 Ko de la grille permanente restent tels quels : on n'y touche pas, c'est le journal qui fait foi. |
+| **Le classement cumulé d'un salon renommé** | Le cumul suit l'identifiant, pas le nom. Renommer un salon ne le remet donc pas à zéro, ce qui est voulu, mais rien ne le dit à l'écran. |
+| **Retirer une partie de la liste** | Rien ne permet d'effacer une partie ratée de la liste d'un salon qui enchaîne. C'est cohérent avec le reste du site, où l'on n'efface pas une partie jouée ; à revoir si la liste devient illisible. |
+| **Le deuxième salon qui enchaîne** | La case le permet. Rien n'est prévu pour comparer deux salons entre eux, ni pour additionner leurs classements. |
